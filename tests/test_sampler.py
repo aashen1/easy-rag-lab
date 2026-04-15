@@ -106,11 +106,12 @@ class TestDetermineSample:
     @patch("src.sampler.count_pdf_pages")
     def test_pages_mode_basic(self, mock_count_pages):
         page_counts = [100, 200, 150, 50, 300]
-        mock_count_pages.side_effect = page_counts
         pdf_files = [Path(f"file_{i}.pdf") for i in range(5)]
+        page_map = {str(f): c for f, c in zip(pdf_files, page_counts)}
+        mock_count_pages.side_effect = lambda f: page_map[str(f)]
         config = SamplingConfig(mode="pages", value=500)
         result = determine_sample(pdf_files, config)
-        total_pages = sum(page_counts[: len(result)])
+        total_pages = sum(page_map[str(f)] for f in result)
         assert total_pages >= 500
         assert len(result) <= 5
 
