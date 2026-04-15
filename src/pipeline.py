@@ -63,13 +63,8 @@ class RAGPipeline:
             input_dir=parser_config["input_dir"],
             output_dir=parser_config["output_dir"],
             force=force_parse,
+            sample_size=sample_size,
         )
-
-        if sample_size and len(parse_results) > sample_size:
-            logger.info(f"Sampling {sample_size} files for testing...")
-            import random
-
-            parse_results = random.sample(parse_results, sample_size)
 
         logger.info("Step 2: Chunking documents...")
         chunk_results = process_parsed_files(
