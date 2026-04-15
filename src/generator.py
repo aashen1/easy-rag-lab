@@ -18,7 +18,7 @@ class Generator:
         self.max_tokens = max_tokens
 
         try:
-            logger.info(f"Initializing Anthropic client for model: {model_name}")
+            logger.info("Initializing Anthropic client")
 
             self.client = Anthropic(
                 api_key="dummy",

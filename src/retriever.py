@@ -29,11 +29,12 @@ class Retriever:
 
             query_embedding = self.embedder.embed_query(query)
 
-            search_results = self.indexer.client.search(
+            search_results = self.indexer.client.query_points(
                 collection_name=self.indexer.collection_name,
-                query_vector=query_embedding.tolist(),
+                query=query_embedding.tolist(),
                 limit=self.top_k,
-            )
+                with_payload=True,
+            ).points
 
             results = []
             for result in search_results:
