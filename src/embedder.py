@@ -1,9 +1,9 @@
-from typing import List, Optional
+from typing import List
 
 import numpy as np
 import torch
-from FlagEmbedding import FlagModel
 from loguru import logger
+from transformers import AutoModel, AutoTokenizer
 
 
 class Embedder:
@@ -24,13 +24,17 @@ class Embedder:
                 logger.warning("CUDA not available, falling back to CPU")
                 self.device = "cpu"
 
-            self.model = FlagModel(
-                model_name,
-                normalize_embeddings=True,
-                use_fp16=use_fp16 if self.device == "cuda" else False,
-            )
+            self._tokenizer = AutoTokenizer.from_pretrained(model_name)
+            self._model = AutoModel.from_pretrained(model_name)
 
-            self.embedding_dim = self.model.model.config.hidden_size
+            self._model.to(self.device)
+
+            if self.use_fp16 and self.device == "cuda":
+                self._model = self._model.half()
+
+            self._model.eval()
+
+            self.embedding_dim = self._model.config.hidden_size
 
             logger.success(
                 f"Model loaded successfully. Embedding dimension: {self.embedding_dim}"
@@ -40,6 +44,39 @@ class Embedder:
             error_msg = f"Failed to load embedding model {model_name}: {str(e)}"
             logger.error(error_msg)
             raise Exception(error_msg)
+
+    def _encode_batch(
+        self, texts: List[str], batch_size: int, max_length: int = 512
+    ) -> np.ndarray:
+        all_embeddings = []
+
+        for i in range(0, len(texts), batch_size):
+            batch_texts = texts[i : i + batch_size]
+
+            encoded = self._tokenizer(
+                batch_texts,
+                padding=True,
+                truncation=True,
+                max_length=max_length,
+                return_tensors="pt",
+            )
+
+            input_ids = encoded["input_ids"].to(self.device)
+            attention_mask = encoded["attention_mask"].to(self.device)
+
+            with torch.no_grad():
+                outputs = self._model(
+                    input_ids=input_ids, attention_mask=attention_mask
+                )
+
+                last_hidden_state = outputs.last_hidden_state
+                cls_embeddings = last_hidden_state[:, 0, :]
+
+                embeddings = torch.nn.functional.normalize(cls_embeddings, p=2, dim=1)
+
+                all_embeddings.append(embeddings.cpu().numpy())
+
+        return np.vstack(all_embeddings)
 
     def embed_texts(
         self, texts: List[str], batch_size: int = 32, show_progress: bool = False
@@ -56,13 +93,7 @@ class Embedder:
         try:
             logger.info(f"Embedding {len(texts)} texts with batch size {batch_size}")
 
-            embeddings = self.model.encode(
-                texts,
-                batch_size=batch_size,
-                max_length=512,
-                return_numpy=True,
-                convert_to_numpy=True,
-            )
+            embeddings = self._encode_batch(texts, batch_size)
 
             logger.success(f"Successfully embedded {len(texts)} texts")
 
@@ -82,17 +113,11 @@ class Embedder:
         try:
             logger.debug(f"Embedding query: {query[:50]}...")
 
-            embedding = self.model.encode(
-                [query],
-                batch_size=1,
-                max_length=512,
-                return_numpy=True,
-                convert_to_numpy=True,
-            )
+            embeddings = self._encode_batch([query], batch_size=1)
 
             logger.debug("Query embedded successfully")
 
-            return embedding[0]
+            return embeddings[0]
 
         except Exception as e:
             error_msg = f"Failed to embed query: {str(e)}"
