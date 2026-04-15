@@ -1,0 +1,82 @@
+## 项目简介
+
+- **功能**：金融研报 RAG 问答系统
+- **文档来源**：企业年报 PDF、行业研报 PDF，位于`data/raw/`
+- **开发目标**：学习 RAG 核心原理，系统性探究超参数与技术选型对回答质量的影响
+
+---
+
+## 开发规范
+
+### 版本控制
+- 每个开发步骤独立提交，commit message 须清晰描述变更内容
+- **commit message 仅允许英文 ASCII 字符**，遵循 Conventional Commits 格式（如 `feat:`、`fix:`、`docs:`）
+
+### 测试
+- 使用 Red/Green TDD 进行开发
+- 每步开发必须附带 pytest 测试，确保行为符合预期
+- 测试文件与源文件保持对应关系（如 `src/parser.py` → `tests/test_parser.py`）
+
+### 代码质量
+- **日志**：使用 `loguru`，禁止使用 `print`
+- **类型标注**：所有公共函数必须标注参数类型与返回值类型
+- **Docstring**：所有公共函数须包含功能描述、参数说明（Args）、返回值说明（Returns）、异常说明（Raises）
+- **异常处理**：所有 IO 操作（PDF 读取、网络请求、文件写入）必须有 `try/except`，捕获异常后记录日志并优雅降级，禁止让程序直接崩溃
+- **代码格式化**：使用 `autopep8` 自动格式化；如需固定 import 顺序，使用 `# noqa` 标注
+
+### 配置与环境
+- **超参数与配置**：所有超参数、模型名、路径等均写入 `config.yaml`，禁止在代码中硬编码
+- **环境变量**：变量命名参考 `.env.example`，敏感信息（API Key 等）不得提交至仓库
+- **依赖选型**：如需变更任何依赖或技术选型，须先告知，不得擅自替换
+
+### 持久化
+- 文档解析结果、向量索引等中间产物必须落盘，避免每次启动时重建
+
+### 开发手记
+- 每个开发阶段在 `notes/` 目录下新建命名清晰的 `.md` 文件
+- 内容须覆盖：做了什么、为什么这样做、遇到的问题与解决思路
+
+------
+
+## 当前目标
+
+**阶段：MVP RAG + Baseline 评测**
+
+目标是跑通最小可运行的 RAG 链路，拿到可量化的 baseline 评测结果，为后续优化提供对照基准。**本阶段不引入任何优化手段**，所有技术选型以"能跑、够简单"为准则。
+
+注：`pixi.toml`中可能带有一些不在当前计划中的依赖库，无需关注也不要使用。
+
+### 交付范围
+
+**链路（Pipeline）**
+
+- PDF 解析（`pymupdf4llm`） → 固定长度分块（fixed-size chunk，指定`overlap=0`）→ Embedding（`BAAI/bge-large-zh-v1.5`） → 向量存储（`qdrant`） → Top-K 检索 → LLM 生成回答
+- （基座模型使用Anthropic SDK调用LongCat在线API，调用方式参考 [LongCat-API适配性分析.md](plgd\ref-info\LongCat-API适配性分析.md) ）
+
+**评测（Evaluation）**
+
+- 构造一批覆盖典型问题类型的问答对作为测试集（Q&A pairs），问题来自真实研报场景
+- 对每条问题跑完整链路，记录检索结果与生成回答
+- 计算以下指标，输出结构化评测报告：
+  - **检索质量**：Hit Rate、MRR（可选 NDCG）
+  - **生成质量**：RAGAS 中的 Faithfulness、Answer Relevancy（不依赖人工标注）
+- 评测脚本独立可复现，结果落盘到 `eval/results/`
+
+### 本阶段明确不做
+
+- 混合检索（BM25 + 向量）
+- 重排（Reranker）
+- 语义分块、滑动窗口、父子 chunk 等 chunk 策略
+- 查询改写、HyDE、Multi-Query
+- 任何 Prompt 工程优化
+
+> 上述内容列入 Backlog，待 baseline 结果出来后按收益优先级逐步引入。
+
+### 完成标准
+
+1. `python main.py --query "..."` 能端到端返回回答
+2. `python eval/run_eval.py` 能自动跑完测试集并输出报告
+3. 评测报告（含各项指标数值）提交至 `notes/` 作为 baseline 存档
+
+----
+
