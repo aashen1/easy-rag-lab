@@ -1,15 +1,17 @@
+from src.utils import load_config, setup_logger
+from src.pipeline import RAGPipeline
+from eval.metrics import calculate_hit_rate, calculate_mrr, calculate_ndcg
+from loguru import logger
 import json
 import random
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
-from loguru import logger
-
-from eval.metrics import calculate_hit_rate, calculate_mrr, calculate_ndcg
-from src.pipeline import RAGPipeline
-from src.utils import load_config, setup_logger
+project_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(project_root))
 
 
 def run_evaluation(
@@ -123,16 +125,16 @@ def run_evaluation(
 
 def print_summary(summary: Dict[str, Any]) -> None:
     print("\n" + "=" * 60)
-    print("📊 EVALUATION SUMMARY")
+    print("EVALUATION SUMMARY")
     print("=" * 60)
     print(f"Timestamp: {summary['timestamp']}")
     print(f"Total test cases: {summary['total_test_cases']}")
     print(f"Total time: {summary['total_time_seconds']:.2f}s")
     print(f"Avg time per case: {summary['avg_time_per_case']:.2f}s")
-    print("\n📈 Retrieval Metrics:")
-    print(f"  • Hit Rate: {summary['retrieval_metrics']['avg_hit_rate']:.4f}")
-    print(f"  • MRR:      {summary['retrieval_metrics']['avg_mrr']:.4f}")
-    print(f"  • NDCG:     {summary['retrieval_metrics']['avg_ndcg']:.4f}")
+    print("\nRetrieval Metrics:")
+    print(f"  Hit Rate: {summary['retrieval_metrics']['avg_hit_rate']:.4f}")
+    print(f"  MRR:      {summary['retrieval_metrics']['avg_mrr']:.4f}")
+    print(f"  NDCG:     {summary['retrieval_metrics']['avg_ndcg']:.4f}")
     print("=" * 60)
 
 
