@@ -2,6 +2,10 @@
 
 一个简单易学的 RAG（检索增强生成）系统，用于金融研报的智能问答。
 
+![Version](https://img.shields.io/badge/version-v0.1.0-blue)![Status](https://img.shields.io/badge/status-MVP-orange)![License](https://img.shields.io/badge/license-MIT-green)
+
+> **⚠️ Note**: 这是一个 **Minimum Viable Product (MVP)** demo.
+
 ## 🎯 项目简介
 
 本项目旨在构建一个最小可运行的 RAG 系统，用于金融研报的智能问答，并建立 baseline 评测基准。
@@ -27,14 +31,15 @@
 ## 📦 安装与配置
 
 ### 1. 环境准备
-项目使用 pixi 管理 Python 环境：
+项目使用 pixi 管理 Python 环境。
 
 参考官方文档：https://pixi.prefix.dev/latest/installation/
 
 ```bash
 # 安装 pixi（如果尚未安装）
-# Windows （官网也提供有安装程序）
+# Windows 
 powershell -ExecutionPolicy Bypass -c "irm -useb https://pixi.sh/install.ps1 | iex"
+# （官网也提供有一键安装程序）
 
 # Linux & MacOS
 curl -fsSL https://pixi.sh/install.sh | sh
@@ -42,6 +47,8 @@ curl -fsSL https://pixi.sh/install.sh | sh
 # or
 
 wget -qO- https://pixi.sh/install.sh | sh
+
+# 检查 pixi.toml 并配置正确的 torch+cuda wheel
 
 # 初始化环境
 pixi install
@@ -80,7 +87,7 @@ data/raw/
 
 ## ⚡ 三步上手
 
-> （如果你觉得后文的;“快速开始”仍然不好读，希望这一节更直白）
+> （如果你觉得后文的“快速开始”不够易读，希望这一节会更直白）
 
 ### 1️⃣ 单次问答
 
@@ -107,7 +114,7 @@ Sources:
 ...
 ```
 
-### 2️⃣ 运行评测
+### 2️⃣ ~~运行评测~~（有bug）
 
 测试系统性能，获得评测分数：
 
@@ -440,9 +447,17 @@ MIT License
 
 ---
 
+## 📌 版本历史
+
+完整的变更、错误修复及即将推出的功能列表，请查阅 [CHANGELOG.md](CHANGELOG.md)。
+
+---
+
+
 ## 🙏 致谢
 
 - [pymupdf4llm](https://github.com/pymupdf/PyMuPDF4LLM) - PDF 解析
-- [FlagEmbedding](https://github.com/FlagOpen/FlagEmbedding) - Embedding 模型
+- [transformers](https://huggingface.co/docs/transformers/) - Embedding 模型
 - [Qdrant](https://qdrant.tech/) - 向量数据库
 - [LongCat](https://longcat.chat/) - LLM API
+
