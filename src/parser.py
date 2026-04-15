@@ -36,7 +36,7 @@ def parse_all_pdfs(
     output_dir: str,
     category_mapping: Optional[Dict[str, str]] = None,
     force: bool = False,
-    sample_size: Optional[int] = None,
+    pdf_files: Optional[List[Path]] = None,
 ) -> List[Dict[str, str]]:
     input_path = Path(input_dir)
     output_path = ensure_dir(output_dir)
@@ -46,16 +46,14 @@ def parse_all_pdfs(
         logger.error(error_msg)
         raise FileNotFoundError(error_msg)
 
-    pdf_files = list(input_path.rglob("*.pdf"))
+    if pdf_files is not None:
+        logger.info(f"Using provided list of {len(pdf_files)} PDF files")
+    else:
+        pdf_files = list(input_path.rglob("*.pdf"))
 
     if not pdf_files:
         logger.warning(f"No PDF files found in {input_dir}")
         return []
-
-    if sample_size and sample_size < len(pdf_files):
-        import random
-        logger.info(f"Sampling {sample_size} PDFs from {len(pdf_files)} total")
-        pdf_files = random.sample(pdf_files, sample_size)
 
     logger.info(f"Found {len(pdf_files)} PDF files to parse")
 
