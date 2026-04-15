@@ -30,7 +30,7 @@ pymupdf4llm 将 PDF 转为 Markdown，保留标题层级与表格结构。
 
 重新生成：
 ```bash
-python src/parser.py
+pixi run python src/parser.py
 ```
 
 ------
@@ -58,7 +58,7 @@ chunk 字段结构：
 重新生成：
 
 ```bash
-python src/chunker.py
+pixi run python src/chunker.py
 ```
 
 ------
@@ -72,7 +72,7 @@ Qdrant 本地持久化目录，由 `src/indexer.py` 在首次运行时自动创�
 重新生成（**会清空现有索引**）：
 
 ```bash
-python src/indexer.py --rebuild
+pixi run python src/indexer.py --rebuild
 ```
 
 ------
@@ -82,9 +82,9 @@ python src/indexer.py --rebuild
 ```bash
 # 1. 确保 raw/ 中已放入 PDF
 # 2. 按顺序执行
-python src/parser.py
-python src/chunker.py
-python src/indexer.py --rebuild
+pixi run python src/parser.py
+pixi run python src/chunker.py
+pixi run python src/indexer.py --rebuild
 ```
 
 各步骤产物落盘后，后续启动无需重建。

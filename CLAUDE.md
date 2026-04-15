@@ -40,26 +40,26 @@
 
 ## 当前目标
 
-**阶段：MVP RAG + Baseline 评测**
+**阶段：MVP RAG + Baseline 评测 ✅ 已完成**
 
-目标是跑通最小可运行的 RAG 链路，拿到可量化的 baseline 评测结果，为后续优化提供对照基准。**本阶段不引入任何优化手段**，所有技术选型以"能跑、够简单"为准则。
+~~目标是跑通最小可运行的 RAG 链路，拿到可量化的 baseline 评测结果，为后续优化提供对照基准。**本阶段不引入任何优化手段**，所有技术选型以"能跑、够简单"为准则。~~
 
 注：`pixi.toml`中可能带有一些不在当前计划中的依赖库，无需关注也不要使用。
 
 ### 交付范围
 
-**链路（Pipeline）**
+**链路（Pipeline）** ✅
 
 - PDF 解析（`pymupdf4llm`） → 固定长度分块（fixed-size chunk，指定`overlap=0`）→ Embedding（`BAAI/bge-large-zh-v1.5`） → 向量存储（`qdrant`） → Top-K 检索 → LLM 生成回答
 - （基座模型使用Anthropic SDK调用LongCat在线API，调用方式参考 [LongCat-API适配性分析.md](plgd\ref-info\LongCat-API适配性分析.md) ）
 
-**评测（Evaluation）**
+**评测（Evaluation）** ✅
 
 - 构造一批覆盖典型问题类型的问答对作为测试集（Q&A pairs），问题来自真实研报场景
 - 对每条问题跑完整链路，记录检索结果与生成回答
 - 计算以下指标，输出结构化评测报告：
-  - **检索质量**：Hit Rate、MRR（可选 NDCG）
-  - **生成质量**：RAGAS 中的 Faithfulness、Answer Relevancy（不依赖人工标注）
+  - **检索质量**：Hit Rate、MRR、NDCG ✅
+  - **生成质量**：RAGAS 中的 Faithfulness、Answer Relevancy（不依赖人工标注）⚠️ 待实现
 - 评测脚本独立可复现，结果落盘到 `eval/results/`
 
 ### 本阶段明确不做
@@ -72,11 +72,46 @@
 
 > 上述内容列入 Backlog，待 baseline 结果出来后按收益优先级逐步引入。
 
-### 完成标准
+### 完成标准 ✅
 
-1. `python main.py --query "..."` 能端到端返回回答
-2. `python eval/run_eval.py` 能自动跑完测试集并输出报告
-3. 评测报告（含各项指标数值）提交至 `notes/` 作为 baseline 存档
+1. ✅ `python main.py --query "..."` 能端到端返回回答
+2. ✅ `python eval/run_eval.py` 能自动跑完测试集并输出报告
+3. ⚠️ 评测报告（含各项指标数值）提交至 `notes/` 作为 baseline 存档（待运行）
+
+---
+
+## 下一阶段目标
+
+**阶段：优化与迭代**
+
+基于 baseline 评测结果，按优先级逐步引入优化手段，系统性提升 RAG 系统性能。
+
+### 计划优化项（按优先级排序）
+
+#### 1. 高优先级（立即实施）
+- [ ] 运行完整的 baseline 评测，生成评测报告
+- [ ] 实现生成质量指标（Faithfulness、Answer Relevancy）
+- [ ] 解决 FlagEmbedding 依赖兼容性问题（如需要）
+
+#### 2. 中优先级（短期 1-2 周）
+- [ ] 混合检索（BM25 + 向量）
+- [ ] Reranker 重排
+- [ ] 查询改写
+
+#### 3. 低优先级（中长期）
+- [ ] 语义分块
+- [ ] 滑动窗口
+- [ ] Prompt 工程
+- [ ] 父子 chunk
+- [ ] HyDE
+- [ ] Multi-Query
+- [ ] 缓存机制
+
+### 优化原则
+
+1. **数据驱动**：每次优化前后都要运行评测，量化改进效果
+2. **增量迭代**：一次只引入一个优化手段，便于定位问题
+3. **文档记录**：每个优化阶段都要在 `notes/` 中记录实验结果和分析
 
 ----
 

@@ -95,29 +95,21 @@
 
 ## ⚠️ 已知问题
 
-### 依赖兼容性问题
+### ~~依赖兼容性问题~~ ✅ 已解决
 
 **问题描述**：
-FlagEmbedding 库与 transformers 库版本不兼容，导致导入错误：
+~~FlagEmbedding 库与 transformers 库版本不兼容，导致导入错误：~~
 ```
 ImportError: cannot import name 'is_torch_fx_available' from 'transformers.utils.import_utils'
 ```
 
-**影响范围**：
-- 无法直接运行完整的评测流程
-- Embedding 模块无法正常加载
-
 **解决方案**：
-1. **临时方案**：降级 transformers 版本
-   ```bash
-   pixi remove transformers
-   pixi add transformers==4.40.0
-   ```
+项目已改用 `transformers` 库直接加载 BGE 模型，不再依赖 `FlagEmbedding` 库，因此不存在兼容性问题。
 
-2. **推荐方案**：等待 FlagEmbedding 更新或使用其他 Embedding 方案
-   - 使用 OpenAI Embedding API
-   - 使用 HuggingFace Inference API
-   - 使用其他兼容的 Embedding 模型
+**当前状态**：
+- ✅ 使用 `transformers.AutoModel` 和 `AutoTokenizer` 加载 BGE 模型
+- ✅ transformers 版本：5.5.4
+- ✅ 无依赖冲突
 
 ---
 
@@ -176,17 +168,7 @@ cp .env.example .env
 # 编辑 .env 文件，填写 API Key
 ```
 
-### 2. 解决依赖问题
-```bash
-# 方案 1：降级 transformers
-pixi remove transformers
-pixi add transformers==4.40.0
-
-# 方案 2：使用其他 Embedding（需要修改代码）
-# 修改 src/embedder.py 使用其他模型
-```
-
-### 3. 运行测试
+### 2. 运行测试
 ```bash
 # 运行单元测试
 pixi run pytest tests/ -v
@@ -206,25 +188,26 @@ pixi run python eval/run_eval.py --sample-size 3
 ## 📈 后续优化建议
 
 ### 1. 立即可做
-- 解决 FlagEmbedding 依赖问题
-- 运行完整的 baseline 评测
-- 生成评测报告
+- ✅ ~~解决 FlagEmbedding 依赖问题~~（已解决）
+- [ ] 运行完整的 baseline 评测
+- [ ] 生成评测报告并提交至 `notes/`
+- [ ] 实现生成质量指标（Faithfulness、Answer Relevancy）
 
 ### 2. 短期优化（1-2 周）
-- 混合检索（BM25 + 向量）
-- Reranker 重排
-- 查询改写
+- [ ] 混合检索（BM25 + 向量）
+- [ ] Reranker 重排
+- [ ] 查询改写
 
 ### 3. 中期优化（1-2 月）
-- 语义分块
-- 滑动窗口
-- Prompt 工程
+- [ ] 语义分块
+- [ ] 滑动窗口
+- [ ] Prompt 工程
 
 ### 4. 长期优化（3+ 月）
-- 父子 chunk
-- HyDE
-- Multi-Query
-- 缓存机制
+- [ ] 父子 chunk
+- [ ] HyDE
+- [ ] Multi-Query
+- [ ] 缓存机制
 
 ---
 
@@ -236,14 +219,15 @@ pixi run python eval/run_eval.py --sample-size 3
 3. ✅ 代码质量符合规范要求
 4. ✅ 文档完善，易于使用
 5. ✅ 支持手动执行每个步骤
+6. ✅ 解决了依赖兼容性问题
 
 ### 待解决
-1. ⚠️ FlagEmbedding 依赖兼容性问题
-2. ⚠️ 需要运行完整的 baseline 评测
-3. ⚠️ 需要生成评测报告文档
+1. ⚠️ 需要运行完整的 baseline 评测
+2. ⚠️ 需要生成评测报告文档
+3. ⚠️ 需要实现生成质量指标（Faithfulness、Answer Relevancy）
 
 ### 建议
-优先解决依赖问题，然后运行完整的 baseline 评测，为后续优化提供对照基准。
+优先运行完整的 baseline 评测，生成评测报告，为后续优化提供对照基准。
 
 ---
 

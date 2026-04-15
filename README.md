@@ -127,8 +127,7 @@ pixi run python eval/run_eval.py --build-index
 - **MRR**：平均倒数排名，衡量第一个正确文档的排名
 - **NDCG**：归一化折损累积增益，综合考虑排序位置
 
-**生成质量指标**：
-- 基于检索结果的回答质量评估
+> **注**：生成质量指标（Faithfulness、Answer Relevancy）计划在后续版本中实现。
 
 ### 查看评测结果
 
@@ -245,8 +244,15 @@ llm_presets:
     api_key: "LLM_API_KEY"
     base_url: "LLM_BASE_URL"
 
+# PDF 解析配置
+parser:
+  input_dir: "data/raw"
+  output_dir: "data/parsed"
+
 # 分块配置
 chunker:
+  input_dir: "data/parsed"
+  output_dir: "data/chunks"
   chunk_size: 512        # 每块最大 token 数
   chunk_overlap: 0       # 相邻块重叠 token 数
 
@@ -256,9 +262,26 @@ embedding:
   device: "cuda"         # 或 "cpu"
   batch_size: 32
 
+# 向量存储配置
+vector_store:
+  type: "qdrant"
+  collection_name: "financial_reports"
+  persist_dir: "data/vector_store"
+  distance: "Cosine"
+
 # 检索配置
 retrieval:
   top_k: 5               # 检索返回块数
+
+# 评测配置
+evaluation:
+  test_data_path: "eval/test_data.json"
+  results_dir: "eval/results"
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
 ```
 
 ---
