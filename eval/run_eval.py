@@ -1,17 +1,18 @@
+import sys
+from pathlib import Path
+
+project_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(project_root))
+
 from src.utils import load_config, setup_logger
 from src.pipeline import RAGPipeline
 from eval.metrics import calculate_hit_rate, calculate_mrr, calculate_ndcg
 from loguru import logger
 import json
 import random
-import sys
 import time
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Dict, List
-
-project_root = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(project_root))
 
 
 def run_evaluation(
@@ -171,9 +172,17 @@ if __name__ == "__main__":
 
     pipeline = RAGPipeline(config_path=args.config, llm_preset=args.llm_preset)
 
-    if args.build_index or args.rebuild:
-        logger.info("Building index...")
-        pipeline.build_index(rebuild=args.rebuild)
+    collection_info = pipeline.indexer.get_collection_info()
+    index_exists = collection_info is not None and collection_info.get("points_count", 0) > 0
+
+    if args.rebuild:
+        logger.info("Rebuilding index from scratch...")
+        pipeline.build_index(rebuild=True, sample_size=args.sample_size)
+        logger.success("Index rebuilt successfully")
+    elif args.build_index or not index_exists:
+        if not index_exists:
+            logger.warning("Vector index is empty or does not exist. Building index automatically...")
+        pipeline.build_index(sample_size=args.sample_size)
         logger.success("Index built successfully")
 
     summary = run_evaluation(
