@@ -7,6 +7,7 @@ sys.path.insert(0, str(project_root))
 from src.utils import load_config, setup_logger
 from src.pipeline import RAGPipeline
 from src.sampler import SamplingConfig
+from src.meal import MealManager, MealStatus
 from eval.metrics import calculate_hit_rate, calculate_mrr, calculate_ndcg
 from loguru import logger
 import json
@@ -21,6 +22,7 @@ def run_evaluation(
     test_data_path: str,
     output_dir: str,
     sample_size: int = None,
+    meal_uuid: str = None,
 ) -> Dict[str, Any]:
     test_data_path = Path(test_data_path)
     output_dir = Path(output_dir)
@@ -108,6 +110,7 @@ def run_evaluation(
 
     summary = {
         "timestamp": datetime.now().isoformat(),
+        "meal_uuid": meal_uuid,
         "total_test_cases": len(test_cases),
         "total_time_seconds": total_time,
         "avg_time_per_case": total_time / len(test_cases),
@@ -130,6 +133,8 @@ def print_summary(summary: Dict[str, Any]) -> None:
     print("EVALUATION SUMMARY")
     print("=" * 60)
     print(f"Timestamp: {summary['timestamp']}")
+    if summary.get("meal_uuid"):
+        print(f"Meal UUID: {summary['meal_uuid']}")
     print(f"Total test cases: {summary['total_test_cases']}")
     print(f"Total time: {summary['total_time_seconds']:.2f}s")
     print(f"Avg time per case: {summary['avg_time_per_case']:.2f}s")
@@ -171,11 +176,51 @@ if __name__ == "__main__":
     parser.add_argument(
         "--llm-preset", type=str, help="LLM preset name (default, opus, sonnet, haiku)"
     )
+    parser.add_argument(
+        "--meal", type=str, help="Use specified meal for evaluation"
+    )
+    parser.add_argument(
+        "--test-set", type=str,
+        help="Test set name within the meal (without .json extension)"
+    )
 
     args = parser.parse_args()
 
     config = load_config(args.config)
     setup_logger(config)
+
+    meal_uuid = None
+    test_data_path = args.test_data
+    output_dir = args.output_dir
+
+    if args.meal:
+        meal_manager = MealManager(config)
+        meal_config = meal_manager.load_meal(args.meal)
+        meal_uuid = meal_config.uuid
+
+        status, issues = meal_manager.check_meal_status(args.meal)
+        if status != MealStatus.AVAILABLE:
+            logger.warning(
+                f"Meal '{args.meal}' status: {status.value}. "
+                "Some PDFs may be missing or changed."
+            )
+
+        test_sets_dir = meal_manager.get_meal_dir(args.meal) / "test_sets"
+        if args.test_set:
+            test_set_path = test_sets_dir / f"{args.test_set}.json"
+        else:
+            jsonl_files = sorted(test_sets_dir.glob("*.json")) if test_sets_dir.exists() else []
+            if not jsonl_files:
+                logger.error(
+                    f"No test sets found for meal '{args.meal}'. "
+                    "Generate one with: python main.py --generate-test-set {args.meal}"
+                )
+                sys.exit(1)
+            test_set_path = jsonl_files[0]
+            logger.info(f"Using test set: {test_set_path.stem}")
+
+        test_data_path = str(test_set_path)
+        output_dir = str(meal_manager.get_meal_dir(args.meal))
 
     sampling_config = None
     sample_modes = [
@@ -194,25 +239,31 @@ if __name__ == "__main__":
         mode, value = active_modes[0]
         sampling_config = SamplingConfig(mode=mode, value=value)
 
-    pipeline = RAGPipeline(config_path=args.config, llm_preset=args.llm_preset)
+    pipeline = RAGPipeline(
+        config_path=args.config,
+        llm_preset=args.llm_preset,
+        meal_name=args.meal,
+    )
 
-    collection_info = pipeline.indexer.get_collection_info()
-    index_exists = collection_info is not None and collection_info.get("points_count", 0) > 0
+    if not args.meal:
+        collection_info = pipeline.indexer.get_collection_info()
+        index_exists = collection_info is not None and collection_info.get("points_count", 0) > 0
 
-    if args.rebuild:
-        logger.info("Rebuilding index from scratch...")
-        pipeline.build_index(rebuild=True, sampling_config=sampling_config)
-        logger.success("Index rebuilt successfully")
-    elif args.build_index or not index_exists:
-        if not index_exists:
-            logger.warning("Vector index is empty or does not exist. Building index automatically...")
-        pipeline.build_index(sampling_config=sampling_config)
-        logger.success("Index built successfully")
+        if args.rebuild:
+            logger.info("Rebuilding index from scratch...")
+            pipeline.build_index(rebuild=True, sampling_config=sampling_config)
+            logger.success("Index rebuilt successfully")
+        elif args.build_index or not index_exists:
+            if not index_exists:
+                logger.warning("Vector index is empty or does not exist. Building index automatically...")
+            pipeline.build_index(sampling_config=sampling_config)
+            logger.success("Index built successfully")
 
     summary = run_evaluation(
         pipeline=pipeline,
-        test_data_path=args.test_data,
-        output_dir=args.output_dir,
+        test_data_path=test_data_path,
+        output_dir=output_dir,
+        meal_uuid=meal_uuid,
     )
 
     print_summary(summary)
