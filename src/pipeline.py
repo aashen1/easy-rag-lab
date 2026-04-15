@@ -14,9 +14,11 @@ from src.utils import get_llm_config, load_config, setup_logger
 
 
 class RAGPipeline:
-    def __init__(self, config_path: str = "config.yaml", llm_preset: str = None):
+    def __init__(self, config_path: str = "config.yaml", llm_preset: str = None, meal_name: str = None):
         self.config = load_config(config_path)
         setup_logger(self.config)
+        self.meal_name = meal_name
+        self.meal_config = None
 
         logger.info("Initializing RAG Pipeline")
 
@@ -27,9 +29,18 @@ class RAGPipeline:
         )
 
         vector_store_config = self.config["vector_store"]
+        collection_name = vector_store_config["collection_name"]
+
+        if meal_name is not None:
+            from src.meal import MealManager
+            meal_manager = MealManager(self.config)
+            self.meal_config = meal_manager.load_meal(meal_name)
+            collection_name = self.meal_config.collection_name
+            logger.info(f"Using meal '{meal_name}' (collection: {collection_name})")
+
         self.indexer = VectorIndexer(
             persist_dir=vector_store_config["persist_dir"],
-            collection_name=vector_store_config["collection_name"],
+            collection_name=collection_name,
             distance=vector_store_config["distance"],
         )
 
@@ -121,6 +132,27 @@ class RAGPipeline:
         )
 
         logger.success("Vector index built successfully")
+
+    def use_meal(self, meal_name: str):
+        from src.meal import MealManager
+
+        meal_manager = MealManager(self.config)
+        self.meal_config = meal_manager.load_meal(meal_name)
+        self.meal_name = meal_name
+
+        vector_store_config = self.config["vector_store"]
+        self.indexer = VectorIndexer(
+            persist_dir=vector_store_config["persist_dir"],
+            collection_name=self.meal_config.collection_name,
+            distance=vector_store_config["distance"],
+        )
+        self.retriever = Retriever(
+            indexer=self.indexer,
+            embedder=self.embedder,
+            top_k=self.config["retrieval"]["top_k"],
+        )
+        logger.info(f"Switched to meal '{meal_name}' (collection: {self.meal_config.collection_name})")
+        return self.meal_config
 
     def query(
         self, question: str, return_contexts: bool = True
