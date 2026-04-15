@@ -139,7 +139,7 @@ class VectorIndexer:
             logger.error(error_msg)
             raise FileNotFoundError(error_msg)
 
-        jsonl_files = list(chunks_path.glob("*.jsonl"))
+        jsonl_files = list(chunks_path.rglob("*.jsonl"))
 
         if not jsonl_files:
             logger.warning(f"No JSONL files found in {chunks_dir}")
