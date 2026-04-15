@@ -242,8 +242,8 @@ llm_presets:
     model_name: "LLM_MODEL_ID"
     temperature: 0.0
     max_tokens: 1024
-    api_key_env_var: "LLM_API_KEY"
-    base_url_env_var: "LLM_BASE_URL"
+    api_key: "LLM_API_KEY"
+    base_url: "LLM_BASE_URL"
 
 # 分块配置
 chunker:

@@ -5,29 +5,29 @@ llm_presets:
     model_name: "LLM_MODEL_ID"
     temperature: 0.0
     max_tokens: 1024
-    api_key_env_var: "LLM_API_KEY"
-    base_url_env_var: "LLM_BASE_URL"
+    api_key: "LLM_API_KEY"
+    base_url: "LLM_BASE_URL"
 
   opus:
     model_name: "claude-3-opus-20240229"
     temperature: 0.7
     max_tokens: 4096
-    api_key_env_var: "LLM_KEY_OPUS"
-    base_url_env_var: "LLM_URL_OPUS"
+    api_key: "LLM_KEY_OPUS"
+    base_url: "LLM_URL_OPUS"
 
   sonnet:
     model_name: "claude-3-5-sonnet-20241022"
     temperature: 0.0
     max_tokens: 1024
-    api_key_env_var: "LLM_KEY_SONNET"
-    base_url_env_var: "LLM_URL_SONNET"
+    api_key: "LLM_KEY_SONNET"
+    base_url: "LLM_URL_SONNET"
 
   haiku:
     model_name: "claude-3-haiku-20240307"
     temperature: 0.0
     max_tokens: 1024
-    api_key_env_var: "LLM_KEY_HAIKU"
-    base_url_env_var: "LLM_URL_HAIKU"
+    api_key: "LLM_KEY_HAIKU"
+    base_url: "LLM_URL_HAIKU"
 
 parser:
   input_dir: "data/raw"
