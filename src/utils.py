@@ -50,6 +50,38 @@ def setup_logger(config: Dict[str, Any]) -> None:
     logger.info("Logger initialized")
 
 
+def get_llm_config(config: Dict[str, Any], preset_name: str = None) -> Dict[str, Any]:
+    if preset_name is None:
+        preset_name = config.get("active_mode", "default")
+
+    llm_presets = config.get("llm_presets", {})
+    preset_config = llm_presets.get(preset_name)
+
+    if not preset_config:
+        logger.warning(f"LLM preset '{preset_name}' not found, using default")
+        preset_config = llm_presets.get("default", {})
+
+    model_name = get_env_var(preset_config.get("api_key_env_var", "LLM_MODEL_ID"))
+    if not model_name:
+        model_name = get_env_var("LLM_MODEL_ID", "LongCat-Flash-Lite")
+
+    api_key = get_env_var(preset_config.get("api_key_env_var", "LLM_API_KEY"))
+    if not api_key:
+        api_key = get_env_var("LLM_API_KEY", required=True)
+
+    base_url = get_env_var(preset_config.get("base_url_env_var", "LLM_BASE_URL"))
+    if not base_url:
+        base_url = get_env_var("LLM_BASE_URL", "https://api.longcat.chat/")
+
+    return {
+        "model_name": model_name,
+        "temperature": preset_config.get("temperature", 0.0),
+        "max_tokens": preset_config.get("max_tokens", 1024),
+        "api_key": api_key,
+        "base_url": base_url.rstrip("/") + "/anthropic",
+    }
+
+
 def get_env_var(key: str, default: str = None, required: bool = False) -> str:
     value = os.getenv(key, default)
 
