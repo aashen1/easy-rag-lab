@@ -49,7 +49,9 @@ class RAGPipeline:
 
         logger.success("RAG Pipeline initialized successfully")
 
-    def build_index(self, rebuild: bool = False, sample_size: int = None) -> None:
+    def build_index(
+        self, rebuild: bool = False, force_parse: bool = False, sample_size: int = None
+    ) -> None:
         logger.info("Building vector index...")
 
         parser_config = self.config["parser"]
@@ -60,6 +62,7 @@ class RAGPipeline:
         parse_results = parse_all_pdfs(
             input_dir=parser_config["input_dir"],
             output_dir=parser_config["output_dir"],
+            force=force_parse,
         )
 
         if sample_size and len(parse_results) > sample_size:
@@ -138,6 +141,11 @@ if __name__ == "__main__":
         "--rebuild", action="store_true", help="Rebuild index from scratch"
     )
     parser.add_argument(
+        "--force-parse",
+        action="store_true",
+        help="Force re-parse PDFs even if output exists",
+    )
+    parser.add_argument(
         "--sample-size", type=int, help="Sample size for testing (number of PDFs)"
     )
     parser.add_argument(
@@ -152,7 +160,11 @@ if __name__ == "__main__":
     pipeline = RAGPipeline(config_path=args.config, llm_preset=args.llm_preset)
 
     if args.build_index or args.rebuild:
-        pipeline.build_index(rebuild=args.rebuild, sample_size=args.sample_size)
+        pipeline.build_index(
+            rebuild=args.rebuild,
+            force_parse=args.force_parse,
+            sample_size=args.sample_size,
+        )
         logger.info("Index built successfully")
 
     if args.query:

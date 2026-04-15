@@ -152,3 +152,45 @@ class TestParseAllPdfs:
 
         assert success_count == 1
         assert failed_count == 1
+
+    @patch("src.parser.pymupdf4llm.to_markdown")
+    def test_parse_all_pdfs_skip_existing(self, mock_to_markdown, tmp_path):
+        mock_to_markdown.return_value = "# Test Document\n\nThis is test content."
+
+        input_dir = tmp_path / "input"
+        output_dir = tmp_path / "output"
+        input_dir.mkdir()
+
+        pdf_file = input_dir / "test.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4\ntest pdf content")
+
+        output_file = output_dir / "test.md"
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        output_file.write_text("# Existing content\n\nAlready parsed.")
+
+        results = parse_all_pdfs(str(input_dir), str(output_dir), force=False)
+
+        assert len(results) == 1
+        assert results[0]["status"] == "skipped"
+        assert mock_to_markdown.call_count == 0
+
+    @patch("src.parser.pymupdf4llm.to_markdown")
+    def test_parse_all_pdfs_force_reparse(self, mock_to_markdown, tmp_path):
+        mock_to_markdown.return_value = "# Test Document\n\nThis is test content."
+
+        input_dir = tmp_path / "input"
+        output_dir = tmp_path / "output"
+        input_dir.mkdir()
+
+        pdf_file = input_dir / "test.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4\ntest pdf content")
+
+        output_file = output_dir / "test.md"
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        output_file.write_text("# Existing content\n\nAlready parsed.")
+
+        results = parse_all_pdfs(str(input_dir), str(output_dir), force=True)
+
+        assert len(results) == 1
+        assert results[0]["status"] == "success"
+        assert mock_to_markdown.call_count == 1

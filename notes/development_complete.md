@@ -17,6 +17,7 @@
 - ✅ **PDF 解析模块** (`src/parser.py`)
   - 使用 pymupdf4llm 将 PDF 转换为 Markdown
   - 支持批量处理和自动分类
+  - 支持 `force` 参数控制是否跳过已解析文件
   - 完整的异常处理和日志记录
   - 单元测试覆盖
 

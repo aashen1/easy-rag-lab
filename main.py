@@ -14,6 +14,11 @@ def main():
         "--rebuild", action="store_true", help="Rebuild index from scratch"
     )
     parser.add_argument(
+        "--force-parse",
+        action="store_true",
+        help="Force re-parse PDFs even if output exists",
+    )
+    parser.add_argument(
         "--sample-size", type=int, help="Sample size for testing (number of PDFs)"
     )
     parser.add_argument(
@@ -32,7 +37,11 @@ def main():
     pipeline = RAGPipeline(config_path=args.config, llm_preset=args.llm_preset)
 
     if args.build_index or args.rebuild:
-        pipeline.build_index(rebuild=args.rebuild, sample_size=args.sample_size)
+        pipeline.build_index(
+            rebuild=args.rebuild,
+            force_parse=args.force_parse,
+            sample_size=args.sample_size,
+        )
         logger.info("✅ Index built successfully")
 
     if args.query:

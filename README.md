@@ -77,14 +77,20 @@ data/raw/
 首次使用需要构建向量索引：
 
 ```bash
-# 构建完整索引
+# 构建完整索引（跳过已解析的 PDF）
 pixi run python main.py --build-index
 
 # 或使用采样进行快速测试（仅处理 5 个 PDF）
 pixi run python main.py --build-index --sample-size 5
 
-# 重建索引（清空现有数据）
+# 强制重新解析所有 PDF
+pixi run python main.py --build-index --force-parse
+
+# 重建向量索引（清空现有索引，不重解析 PDF）
 pixi run python main.py --rebuild
+
+# 完全重建（重解析 PDF + 重建索引）
+pixi run python main.py --rebuild --force-parse
 ```
 
 ### 2. 执行问答

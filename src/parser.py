@@ -35,6 +35,7 @@ def parse_all_pdfs(
     input_dir: str,
     output_dir: str,
     category_mapping: Optional[Dict[str, str]] = None,
+    force: bool = False,
 ) -> List[Dict[str, str]]:
     input_path = Path(input_dir)
     output_path = ensure_dir(output_dir)
@@ -56,10 +57,34 @@ def parse_all_pdfs(
 
     for pdf_file in pdf_files:
         try:
-            md_text = parse_pdf(str(pdf_file))
-
             relative_path = pdf_file.relative_to(input_path)
             output_file = output_path / (relative_path.stem + ".md")
+
+            if not force and output_file.exists():
+                logger.info(f"Skipping (already parsed): {pdf_file.name}")
+                category = "unknown"
+                if category_mapping:
+                    for key, cat in category_mapping.items():
+                        if key in str(pdf_file):
+                            category = cat
+                            break
+                else:
+                    if "annual_report" in str(pdf_file) or "年报" in str(pdf_file):
+                        category = "annual_report"
+                    elif "research_report" in str(pdf_file) or "研报" in str(pdf_file):
+                        category = "research_report"
+
+                results.append(
+                    {
+                        "source": str(pdf_file),
+                        "output": str(output_file),
+                        "category": category,
+                        "status": "skipped",
+                    }
+                )
+                continue
+
+            md_text = parse_pdf(str(pdf_file))
 
             output_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -103,9 +128,10 @@ def parse_all_pdfs(
 
     success_count = sum(1 for r in results if r["status"] == "success")
     failed_count = sum(1 for r in results if r["status"] == "failed")
+    skipped_count = sum(1 for r in results if r["status"] == "skipped")
 
     logger.info(
-        f"Parsing completed: {success_count} succeeded, {failed_count} failed out of {len(pdf_files)} total"
+        f"Parsing completed: {success_count} succeeded, {skipped_count} skipped, {failed_count} failed out of {len(pdf_files)} total"
     )
 
     return results
