@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Replaced `--sample-size` CLI parameter with three mutually exclusive sampling modes:
+  - `--sample-count N`: sample N PDFs
+  - `--sample-pages N`: sample PDFs until total page count reaches N
+  - `--sample-ratio R`: sample R fraction of total PDFs (0.0-1.0)
+- Sampling now applies end-to-end across all pipeline stages (parsing → chunking → indexing) via `source_filter` mechanism, instead of only affecting the parsing step
+- Sampling automatically forces index rebuild to prevent stale data contamination
+
+### Added
+
+- `src/sampler.py` module with `SamplingConfig` dataclass and `determine_sample()` function
+- `source_filter` parameter to `process_parsed_files()` and `VectorIndexer.build_index()` for filtering files by relative path
+- `pdf_files` parameter to `parse_all_pdfs()` allowing explicit file list instead of directory scan
+- Unit tests for sampler module and source_filter functionality
+
 ## [0.1.0] - 2026-04-16
 
 ### Added

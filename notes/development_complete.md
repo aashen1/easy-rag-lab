@@ -174,13 +174,13 @@ cp .env.example .env
 pixi run pytest tests/ -v
 
 # 构建索引（采样测试）
-pixi run python main.py --build-index --sample-size 5
+pixi run python main.py --build-index --sample-count 5
 
 # 执行查询
 pixi run python main.py --query "贵州茅台2023年的营业收入是多少？"
 
 # 运行评测
-pixi run python eval/run_eval.py --sample-size 3
+pixi run python eval/run_eval.py --sample-count 3
 ```
 
 ---

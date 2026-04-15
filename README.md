@@ -120,7 +120,7 @@ Sources:
 
 ```bash
 # 快速评测（采样 3 个问题）
-pixi run python eval/run_eval.py --sample-size 3
+pixi run python eval/run_eval.py --sample-count 3
 
 # 完整评测（所有测试问题）
 pixi run python eval/run_eval.py
@@ -185,7 +185,13 @@ pixi run python interactive.py
 pixi run python main.py --build-index
 
 # 或使用采样进行快速测试（仅处理 5 个 PDF）
-pixi run python main.py --build-index --sample-size 5
+pixi run python main.py --build-index --sample-count 5
+
+# 按总页数抽样（随机抽取直到总页数 ≥ 5000）
+pixi run python main.py --build-index --sample-pages 5000
+
+# 按比例抽样（只处理 10% 的文档）
+pixi run python main.py --build-index --sample-ratio 0.1
 
 # 强制重新解析所有 PDF
 pixi run python main.py --build-index --force-parse
@@ -218,7 +224,7 @@ pixi run python main.py --query "工商银行2024年的净利润是多少？" --
 pixi run python eval/run_eval.py
 
 # 快速评测（采样 5 个问题）
-pixi run python eval/run_eval.py --sample-size 5
+pixi run python eval/run_eval.py --sample-count 5
 
 # 构建索引后立即评测
 pixi run python eval/run_eval.py --build-index
@@ -408,7 +414,7 @@ pixi run pytest tests/test_embedder.py -v
 
 ## 📈 性能优化建议
 
-1. **采样测试**：使用 `--sample-size` 参数进行快速测试
+1. **采样测试**：使用 `--sample-count`、`--sample-pages` 或 `--sample-ratio` 参数进行快速测试
 2. **GPU 加速**：确保 `embedding.device` 设置为 `cuda`
 3. **批处理**：调整 `embedding.batch_size` 以优化性能
 4. **索引持久化**：向量索引会自动保存，无需每次重建
@@ -427,7 +433,7 @@ A: 修改 `config.yaml` 中的 `retrieval.top_k` 参数。
 
 ### Q: 如何处理大量 PDF？
 
-A: 使用 `--sample-size` 参数进行采样测试，或分批处理。
+A: 使用 `--sample-count`（按文档数）、`--sample-pages`（按总页数）或 `--sample-ratio`（按比例）参数进行采样测试，或分批处理。
 
 ---
 
