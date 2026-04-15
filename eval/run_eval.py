@@ -6,6 +6,7 @@ sys.path.insert(0, str(project_root))
 
 from src.utils import load_config, setup_logger
 from src.pipeline import RAGPipeline
+from src.sampler import SamplingConfig
 from eval.metrics import calculate_hit_rate, calculate_mrr, calculate_ndcg
 from loguru import logger
 import json
@@ -150,7 +151,13 @@ if __name__ == "__main__":
         "--output-dir", type=str, default="data/eval", help="Output directory"
     )
     parser.add_argument(
-        "--sample-size", type=int, help="Sample size for quick evaluation"
+        "--sample-count", type=int, help="Sample N PDFs for testing"
+    )
+    parser.add_argument(
+        "--sample-pages", type=int, help="Sample PDFs until total pages reach N"
+    )
+    parser.add_argument(
+        "--sample-ratio", type=float, help="Sample ratio of total PDFs (0.0-1.0)"
     )
     parser.add_argument(
         "--build-index", action="store_true", help="Build index before evaluation"
@@ -170,6 +177,23 @@ if __name__ == "__main__":
     config = load_config(args.config)
     setup_logger(config)
 
+    sampling_config = None
+    sample_modes = [
+        ("count", args.sample_count),
+        ("pages", args.sample_pages),
+        ("ratio", args.sample_ratio),
+    ]
+    active_modes = [(m, v) for m, v in sample_modes if v is not None]
+    if len(active_modes) > 1:
+        logger.error(
+            "Only one sampling mode can be specified at a time "
+            f"(got: {', '.join(m for m, _ in active_modes)})"
+        )
+        sys.exit(1)
+    if active_modes:
+        mode, value = active_modes[0]
+        sampling_config = SamplingConfig(mode=mode, value=value)
+
     pipeline = RAGPipeline(config_path=args.config, llm_preset=args.llm_preset)
 
     collection_info = pipeline.indexer.get_collection_info()
@@ -177,19 +201,18 @@ if __name__ == "__main__":
 
     if args.rebuild:
         logger.info("Rebuilding index from scratch...")
-        pipeline.build_index(rebuild=True, sample_size=args.sample_size)
+        pipeline.build_index(rebuild=True, sampling_config=sampling_config)
         logger.success("Index rebuilt successfully")
     elif args.build_index or not index_exists:
         if not index_exists:
             logger.warning("Vector index is empty or does not exist. Building index automatically...")
-        pipeline.build_index(sample_size=args.sample_size)
+        pipeline.build_index(sampling_config=sampling_config)
         logger.success("Index built successfully")
 
     summary = run_evaluation(
         pipeline=pipeline,
         test_data_path=args.test_data,
         output_dir=args.output_dir,
-        sample_size=args.sample_size,
     )
 
     print_summary(summary)
