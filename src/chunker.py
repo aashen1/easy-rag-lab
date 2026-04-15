@@ -18,6 +18,11 @@ def chunk_text(
         logger.warning("Empty text provided for chunking")
         return []
 
+    if overlap >= chunk_size:
+        error_msg = f"Overlap ({overlap}) must be less than chunk_size ({chunk_size})"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+
     try:
         encoding = tiktoken.get_encoding(encoding_name)
     except Exception as e:
@@ -60,10 +65,11 @@ def chunk_text(
         )
 
         chunk_index += 1
-        start = end - overlap if overlap > 0 else end
-
-        if overlap > 0 and start >= total_tokens:
+        
+        if end >= total_tokens:
             break
+        
+        start = end - overlap if overlap > 0 else end
 
     logger.info(f"Created {len(chunks)} chunks from text with {total_tokens} tokens")
     return chunks
