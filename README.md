@@ -27,13 +27,21 @@
 ## 📦 安装与配置
 
 ### 1. 环境准备
-
 项目使用 pixi 管理 Python 环境：
+
+参考官方文档：https://pixi.prefix.dev/latest/installation/
 
 ```bash
 # 安装 pixi（如果尚未安装）
-# Windows:
-winget install prefix-dev.pixi
+# Windows （官网也提供有安装程序）
+powershell -ExecutionPolicy Bypass -c "irm -useb https://pixi.sh/install.ps1 | iex"
+
+# Linux & MacOS
+curl -fsSL https://pixi.sh/install.sh | sh
+
+# or
+
+wget -qO- https://pixi.sh/install.sh | sh
 
 # 初始化环境
 pixi install
