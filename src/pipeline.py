@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
@@ -8,6 +9,7 @@ from src.generator import Generator
 from src.indexer import VectorIndexer
 from src.parser import parse_all_pdfs
 from src.retriever import Retriever
+from src.sampler import SamplingConfig, determine_sample
 from src.utils import get_llm_config, load_config, setup_logger
 
 
@@ -50,7 +52,10 @@ class RAGPipeline:
         logger.success("RAG Pipeline initialized successfully")
 
     def build_index(
-        self, rebuild: bool = False, force_parse: bool = False, sample_size: int = None
+        self,
+        rebuild: bool = False,
+        force_parse: bool = False,
+        sampling_config: Optional[SamplingConfig] = None,
     ) -> None:
         logger.info("Building vector index...")
 
@@ -58,13 +63,34 @@ class RAGPipeline:
         chunker_config = self.config["chunker"]
         embedding_config = self.config["embedding"]
 
+        if sampling_config is not None:
+            rebuild = True
+            logger.info("Sampling enabled - forcing index rebuild")
+
+        sampled_pdf_files = None
+        if sampling_config is not None:
+            input_path = Path(parser_config["input_dir"])
+            all_pdfs = list(input_path.rglob("*.pdf"))
+            sampled_pdf_files = determine_sample(all_pdfs, sampling_config)
+            logger.info(f"Sampled {len(sampled_pdf_files)} PDFs from {len(all_pdfs)} total")
+
         logger.info("Step 1: Parsing PDFs...")
         parse_results = parse_all_pdfs(
             input_dir=parser_config["input_dir"],
             output_dir=parser_config["output_dir"],
             force=force_parse,
-            sample_size=sample_size,
+            pdf_files=sampled_pdf_files,
         )
+
+        source_filter_md = None
+        if sampling_config is not None:
+            source_filter_md = set()
+            for r in parse_results:
+                if r.get("output"):
+                    output_path = Path(r["output"])
+                    parsed_dir = Path(parser_config["output_dir"])
+                    source_filter_md.add(str(output_path.relative_to(parsed_dir)))
+            logger.info(f"Source filter for chunker: {len(source_filter_md)} files")
 
         logger.info("Step 2: Chunking documents...")
         chunk_results = process_parsed_files(
@@ -72,7 +98,18 @@ class RAGPipeline:
             output_dir=chunker_config["output_dir"],
             chunk_size=chunker_config["chunk_size"],
             overlap=chunker_config["chunk_overlap"],
+            source_filter=source_filter_md,
         )
+
+        source_filter_jsonl = None
+        if sampling_config is not None:
+            source_filter_jsonl = set()
+            for r in chunk_results:
+                if r.get("output"):
+                    output_path = Path(r["output"])
+                    chunks_dir = Path(chunker_config["output_dir"])
+                    source_filter_jsonl.add(str(output_path.relative_to(chunks_dir)))
+            logger.info(f"Source filter for indexer: {len(source_filter_jsonl)} files")
 
         logger.info("Step 3: Building vector index...")
         self.indexer.build_index(
@@ -80,6 +117,7 @@ class RAGPipeline:
             embedder=self.embedder,
             batch_size=embedding_config["batch_size"],
             rebuild=rebuild,
+            source_filter=source_filter_jsonl,
         )
 
         logger.success("Vector index built successfully")
@@ -128,6 +166,7 @@ class RAGPipeline:
 
 if __name__ == "__main__":
     import argparse
+    import sys
 
     parser = argparse.ArgumentParser(description="RAG Pipeline CLI")
     parser.add_argument("--query", type=str, help="Query question")
@@ -141,7 +180,13 @@ if __name__ == "__main__":
         help="Force re-parse PDFs even if output exists",
     )
     parser.add_argument(
-        "--sample-size", type=int, help="Sample size for testing (number of PDFs)"
+        "--sample-count", type=int, help="Sample N PDFs for testing"
+    )
+    parser.add_argument(
+        "--sample-pages", type=int, help="Sample PDFs until total pages reach N"
+    )
+    parser.add_argument(
+        "--sample-ratio", type=float, help="Sample ratio of total PDFs (0.0-1.0)"
     )
     parser.add_argument(
         "--config", type=str, default="config.yaml", help="Config file path"
@@ -155,10 +200,27 @@ if __name__ == "__main__":
     pipeline = RAGPipeline(config_path=args.config, llm_preset=args.llm_preset)
 
     if args.build_index or args.rebuild:
+        sampling_config = None
+        sample_modes = [
+            ("count", args.sample_count),
+            ("pages", args.sample_pages),
+            ("ratio", args.sample_ratio),
+        ]
+        active_modes = [(m, v) for m, v in sample_modes if v is not None]
+        if len(active_modes) > 1:
+            logger.error(
+                "Only one sampling mode can be specified at a time "
+                f"(got: {', '.join(m for m, _ in active_modes)})"
+            )
+            sys.exit(1)
+        if active_modes:
+            mode, value = active_modes[0]
+            sampling_config = SamplingConfig(mode=mode, value=value)
+
         pipeline.build_index(
             rebuild=args.rebuild,
             force_parse=args.force_parse,
-            sample_size=args.sample_size,
+            sampling_config=sampling_config,
         )
         logger.info("Index built successfully")
 
