@@ -1,0 +1,72 @@
+[
+  {
+    "id": "q001",
+    "question": "贵州茅台2023年的营业收入是多少？",
+    "category": "fact_extraction",
+    "expected_sources": ["贵州茅台2023年年度报告.pdf", "贵州茅台2023年年度报告_英文版_.pdf"],
+    "expected_answer": "贵州茅台2023年营业收入约为1505.60亿元。"
+  },
+  {
+    "id": "q002",
+    "question": "工商银行2024年的净利润是多少？",
+    "category": "fact_extraction",
+    "expected_sources": ["工商银行2024年度报告.pdf", "工商银行2024年度报告摘要.pdf"],
+    "expected_answer": "工商银行2024年净利润约为XXX亿元。"
+  },
+  {
+    "id": "q003",
+    "question": "比亚迪2023年研发投入情况如何？",
+    "category": "fact_extraction",
+    "expected_sources": ["2023年年度报告.pdf", "2023年年度报告摘要.pdf"],
+    "expected_answer": "比亚迪2023年研发投入约为XXX亿元。"
+  },
+  {
+    "id": "q004",
+    "question": "白酒行业2026年的发展趋势是什么？",
+    "category": "summary",
+    "expected_sources": ["2026年中国白酒行业信用观察.pdf"],
+    "expected_answer": "白酒行业2026年发展趋势包括..."
+  },
+  {
+    "id": "q005",
+    "question": "光伏行业2026年的市场前景如何？",
+    "category": "summary",
+    "expected_sources": ["2026年光伏行业分析.pdf", "202603光伏行业月度报告：1-2月光伏新增装机同降17.7%，组件、逆变器出口额同比下降.pdf"],
+    "expected_answer": "光伏行业2026年市场前景..."
+  },
+  {
+    "id": "q006",
+    "question": "宁德时代2024年营业收入和净利润分别是多少？",
+    "category": "comparison",
+    "expected_sources": ["2024年年度报告.pdf", "2024年年度报告摘要.pdf"],
+    "expected_answer": "宁德时代2024年营业收入为XXX亿元，净利润为XXX亿元。"
+  },
+  {
+    "id": "q007",
+    "question": "招商银行2025年的资产规模如何？",
+    "category": "fact_extraction",
+    "expected_sources": ["招商银行股份有限公司2025年度报告.pdf", "招商银行股份有限公司2025年度报告摘要.pdf"],
+    "expected_answer": "招商银行2025年资产规模约为XXX万亿元。"
+  },
+  {
+    "id": "q008",
+    "question": "半导体行业2026年有哪些发展机遇？",
+    "category": "analysis",
+    "expected_sources": ["半导体行业3月份月报：AI算力驱动上游代工增长，GTC大会发布Vera Rubin AI计算平台.pdf", "半导体行业双周报：半导体板块25Q4业绩预喜.pdf"],
+    "expected_answer": "半导体行业2026年发展机遇包括..."
+  },
+  {
+    "id": "q009",
+    "question": "美的集团2023年海外业务占比是多少？",
+    "category": "fact_extraction",
+    "expected_sources": ["2023年年度报告.pdf", "2023年年度报告_英文版_.pdf"],
+    "expected_answer": "美的集团2023年海外业务占比约为XX%。"
+  },
+  {
+    "id": "q010",
+    "question": "银行业2026年面临哪些挑战和机遇？",
+    "category": "analysis",
+    "expected_sources": ["银行业二季度投资策略："绩优成长"与"稳健红利"双主线并举.pdf", "银行行业月报：信贷投放节奏更加均衡.pdf"],
+    "expected_answer": "银行业2026年面临的挑战和机遇包括..."
+  }
+]
