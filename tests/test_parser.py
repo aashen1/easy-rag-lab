@@ -194,3 +194,31 @@ class TestParseAllPdfs:
         assert len(results) == 1
         assert results[0]["status"] == "success"
         assert mock_to_markdown.call_count == 1
+
+    @patch("src.parser.pymupdf4llm.to_markdown")
+    def test_parse_all_pdfs_preserves_directory_structure(self, mock_to_markdown, tmp_path):
+        mock_to_markdown.return_value = "# Test Document\n\nThis is test content."
+
+        input_dir = tmp_path / "input"
+        output_dir = tmp_path / "output"
+        
+        nested_dir = input_dir / "annual_reports" / "2023" / "五粮液"
+        nested_dir.mkdir(parents=True)
+        
+        pdf_file = nested_dir / "2023年度报告_英文_.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4\ntest pdf content")
+
+        results = parse_all_pdfs(str(input_dir), str(output_dir))
+
+        assert len(results) == 1
+        assert results[0]["status"] == "success"
+        
+        expected_output = output_dir / "annual_reports" / "2023" / "五粮液" / "2023年度报告_英文_.md"
+        actual_output = Path(results[0]["output"])
+        
+        assert actual_output == expected_output
+        assert actual_output.exists()
+        
+        with open(actual_output, "r", encoding="utf-8") as f:
+            content = f.read()
+        assert "Test Document" in content

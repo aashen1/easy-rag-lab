@@ -116,7 +116,9 @@ def process_parsed_files(
             elif "research_report" in str(md_file) or "研报" in str(md_file):
                 category = "research_report"
 
-            output_file = output_path / (source_name + ".jsonl")
+            output_file = output_path / relative_path.with_suffix(".jsonl")
+
+            output_file.parent.mkdir(parents=True, exist_ok=True)
 
             with open(output_file, "w", encoding="utf-8") as f:
                 for chunk in chunks:
@@ -126,7 +128,7 @@ def process_parsed_files(
                         "chunk_id": chunk_id,
                         "text": chunk["text"],
                         "metadata": {
-                            "source": md_file.name,
+                            "source": str(relative_path),
                             "category": category,
                             "chunk_index": chunk["metadata"]["chunk_index"],
                             "char_count": chunk["metadata"]["char_count"],

@@ -58,7 +58,7 @@ def parse_all_pdfs(
     for pdf_file in pdf_files:
         try:
             relative_path = pdf_file.relative_to(input_path)
-            output_file = output_path / (relative_path.stem + ".md")
+            output_file = output_path / relative_path.with_suffix(".md")
 
             if not force and output_file.exists():
                 logger.info(f"Skipping (already parsed): {pdf_file.name}")
