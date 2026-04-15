@@ -208,3 +208,74 @@ class TestProcessParsedFiles:
             expected_source_parts = ["annual_reports", "2023", "五粮液", "2023年度报告_英文_.md"]
             expected_source = str(Path(*expected_source_parts))
             assert chunk_data["metadata"]["source"] == expected_source
+
+    def test_process_parsed_files_with_source_filter(self, tmp_path):
+        input_dir = tmp_path / "input"
+        output_dir = tmp_path / "output"
+        input_dir.mkdir()
+
+        md_file1 = input_dir / "keep.md"
+        md_file1.write_text("# Keep\n\nThis file should be kept.")
+
+        md_file2 = input_dir / "skip.md"
+        md_file2.write_text("# Skip\n\nThis file should be skipped.")
+
+        source_filter = {"keep.md"}
+        results = process_parsed_files(
+            str(input_dir), str(output_dir), source_filter=source_filter
+        )
+
+        assert len(results) == 1
+        assert results[0]["status"] == "success"
+        assert "keep" in results[0]["source"]
+
+    def test_process_parsed_files_with_source_filter_nested(self, tmp_path):
+        input_dir = tmp_path / "input"
+        output_dir = tmp_path / "output"
+
+        nested_dir = input_dir / "subdir"
+        nested_dir.mkdir(parents=True)
+
+        md_file1 = nested_dir / "keep.md"
+        md_file1.write_text("# Keep\n\nThis file should be kept.")
+
+        md_file2 = input_dir / "skip.md"
+        md_file2.write_text("# Skip\n\nThis file should be skipped.")
+
+        source_filter = {str(Path("subdir") / "keep.md")}
+        results = process_parsed_files(
+            str(input_dir), str(output_dir), source_filter=source_filter
+        )
+
+        assert len(results) == 1
+        assert results[0]["status"] == "success"
+
+    def test_process_parsed_files_with_source_filter_no_match(self, tmp_path):
+        input_dir = tmp_path / "input"
+        output_dir = tmp_path / "output"
+        input_dir.mkdir()
+
+        md_file = input_dir / "test.md"
+        md_file.write_text("# Test\n\nContent.")
+
+        source_filter = {"nonexistent.md"}
+        results = process_parsed_files(
+            str(input_dir), str(output_dir), source_filter=source_filter
+        )
+
+        assert len(results) == 0
+
+    def test_process_parsed_files_without_source_filter(self, tmp_path):
+        input_dir = tmp_path / "input"
+        output_dir = tmp_path / "output"
+        input_dir.mkdir()
+
+        md_file1 = input_dir / "file1.md"
+        md_file1.write_text("# File 1\n\nContent 1.")
+
+        md_file2 = input_dir / "file2.md"
+        md_file2.write_text("# File 2\n\nContent 2.")
+
+        results = process_parsed_files(str(input_dir), str(output_dir))
+
+        assert len(results) == 2

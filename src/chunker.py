@@ -81,6 +81,7 @@ def process_parsed_files(
     chunk_size: int = 512,
     overlap: int = 0,
     encoding_name: str = "cl100k_base",
+    source_filter: Optional[set] = None,
 ) -> List[Dict[str, Any]]:
     input_path = Path(input_dir)
     output_path = ensure_dir(output_dir)
@@ -95,6 +96,15 @@ def process_parsed_files(
     if not md_files:
         logger.warning(f"No Markdown files found in {input_dir}")
         return []
+
+    if source_filter is not None:
+        original_count = len(md_files)
+        md_files = [
+            f for f in md_files if str(f.relative_to(input_path)) in source_filter
+        ]
+        logger.info(
+            f"Source filter applied: {len(md_files)}/{original_count} files matched"
+        )
 
     logger.info(f"Found {len(md_files)} Markdown files to process")
 
