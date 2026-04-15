@@ -55,7 +55,7 @@ retrieval:
 
 evaluation:
   test_data_path: "eval/test_data.json"
-  results_dir: "eval/results"
+  results_dir: "data/eval"
   metrics:
     retrieval:
       - "hit_rate"

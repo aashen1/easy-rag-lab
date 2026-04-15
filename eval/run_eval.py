@@ -147,7 +147,7 @@ if __name__ == "__main__":
         "--test-data", type=str, default="eval/test_data.json", help="Test data path"
     )
     parser.add_argument(
-        "--output-dir", type=str, default="eval/results", help="Output directory"
+        "--output-dir", type=str, default="data/eval", help="Output directory"
     )
     parser.add_argument(
         "--sample-size", type=int, help="Sample size for quick evaluation"
