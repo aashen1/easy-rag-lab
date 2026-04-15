@@ -1,0 +1,49 @@
+parser:
+  input_dir: "data/raw"
+  output_dir: "data/parsed"
+
+chunker:
+  input_dir: "data/parsed"
+  output_dir: "data/chunks"
+  chunk_size: 512
+  chunk_overlap: 0
+
+embedding:
+  model_name: "BAAI/bge-large-zh-v1.5"
+  device: "cuda"
+  batch_size: 32
+
+vector_store:
+  type: "qdrant"
+  collection_name: "financial_reports"
+  persist_dir: "data/vector_store"
+  distance: "Cosine"
+
+retrieval:
+  top_k: 5
+
+llm:
+  provider: "anthropic"
+  model: "claude-3-5-sonnet-20241022"
+  api_base: "https://api.longcat.ai/v1"
+  temperature: 0.0
+  max_tokens: 1024
+
+evaluation:
+  test_data_path: "eval/test_data.json"
+  results_dir: "eval/results"
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+
+logging:
+  level: "INFO"
+  format: "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+  log_dir: "logs"
+  rotation: "10 MB"
+  retention: "7 days"
