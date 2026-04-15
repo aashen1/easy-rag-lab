@@ -131,6 +131,7 @@ class VectorIndexer:
         embedder: Embedder,
         batch_size: int = 32,
         rebuild: bool = False,
+        source_filter: Optional[set] = None,
     ) -> None:
         chunks_path = Path(chunks_dir)
 
@@ -144,6 +145,15 @@ class VectorIndexer:
         if not jsonl_files:
             logger.warning(f"No JSONL files found in {chunks_dir}")
             return
+
+        if source_filter is not None:
+            original_count = len(jsonl_files)
+            jsonl_files = [
+                f for f in jsonl_files if str(f.relative_to(chunks_path)) in source_filter
+            ]
+            logger.info(
+                f"Source filter applied: {len(jsonl_files)}/{original_count} files matched"
+            )
 
         logger.info(f"Found {len(jsonl_files)} JSONL files")
 
