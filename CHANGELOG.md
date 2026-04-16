@@ -23,6 +23,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `pdf_files` parameter to `parse_all_pdfs()` allowing explicit file list instead of directory scan
 - Unit tests for sampler module and source_filter functionality
 
+#### Meal Data Management System
+
+- `src/meal.py` module with `MealConfig` dataclass, `MealManager`, and `ArtifactCache`
+- Data version management via config hash tracking — same data + config automatically reuses Qdrant collection
+- Intermediate artifact caching (parsed markdown, chunked JSONL) with deduplication across meals
+- Meal CLI operations: create, load, delete, rename, copy, repair, check_status
+- `--meal` parameter in `main.py` for meal-based pipeline initialization
+
+#### Test Set Generator
+
+- `src/test_generator.py` module with LLM-assisted question generation
+- Three question strategies: `factual` (single-chunk facts), `boundary` (cross-boundary), `multi_hop` (multi-source reasoning)
+- Configurable retry mechanism (max_retries=3) and seed-based reproducibility
+- Test sets persisted to meal directory under `test_sets/` subdirectory
+
+#### Experiment System
+
+- `src/experiment.py` module with `ExperimentConfig` dataclass for experiment configuration management
+- `eval/run_experiment.py` full experiment runner supporting multi-variant comparison experiments
+- Automatic data preparation: meal creation if missing, test set generation if missing
+- Experiment snapshots: manifest, config_snapshot, meal_snapshot, test_sets persisted to `data/exp_reports/`
+- `eval/experiment_reporter.py` for report generation: template-based Markdown reports and optional LLM-generated analysis reports
+- Experiment management CLI: `--list`, `--info`, `--compare`, `--reproduce`
+- Experiment config files in `exp_configs/`: baseline, baseline_v01x, chunk_comparison, quicktest
+- `pixi run exp <name>` pixi task for quick experiment execution
+
+#### Testing
+
+- Unit tests for meal, test_generator, experiment, experiment_reporter, run_eval, run_experiment modules
+- End-to-end experiment test (`tests/test_e2e_experiment.py`)
+- `conftest.py` with mock transformers for test isolation
+
+### Known Issues
+
+1. **Source Path Format Mismatch in Metrics**: Retrieved sources use relative markdown paths (e.g., `annual_report/xxx.md`) while expected sources use PDF filenames (e.g., `xxx.pdf`), causing all retrieval metrics (Hit Rate, MRR, NDCG) to always return 0
+2. **Invalid Strategy Name in chunk_comparison.yaml**: Uses `"complex"` strategy which is not supported by `test_generator.py` (only `factual`, `boundary`, `multi_hop`), causing runtime `ValueError`
+3. **Generator system_prompt Not Using API `system` Parameter**: `Generator.generate()` concatenates system prompt into user message instead of using Anthropic API's dedicated `system` parameter, reducing instruction-following quality
+4. **Indexer Resource Not Automatically Released**: `RAGPipeline` does not call `VectorIndexer.close()`, potentially causing resource leaks and file locking issues on Windows
+5. **Meal total_chunks Off-by-One**: `total_chunks` is initialized to file count instead of 0, inflating the count by the number of JSONL files
+6. **Test Data Placeholders**: Some `expected_answer` fields in test data contain placeholder values ("XXX亿元")
+7. **Missing Generation Metrics**: Faithfulness and Answer Relevancy metrics not implemented
+8. **Incomplete Test Coverage**: No unit tests for indexer, retriever, generator, or pipeline modules
+
 ## [0.1.0] - 2026-04-16
 
 ### Added
@@ -119,9 +162,26 @@ ash-easy-rag/
 
 Planned improvements for future versions:
 
-- Establish stable baseline evaluation metrics
-- Implement generation quality metrics (Faithfulness, Answer Relevancy)
-- Expand test dataset
+#### Bug Fixes (High Priority)
+
+- Fix source path format mismatch in retrieval metrics evaluation (metrics always return 0)
+- Fix invalid `"complex"` strategy name in `chunk_comparison.yaml`
+- Fix `Generator.generate()` to use Anthropic API `system` parameter instead of concatenating into user message
+- Fix `RAGPipeline` to properly release `VectorIndexer` resources (add context manager / `close()`)
+- Fix `Meal` `total_chunks` off-by-one error (initialized to file count instead of 0)
+
+#### Feature Improvements (Medium Priority)
+
+- Implement generation quality metrics (Faithfulness, Answer Relevancy) using `ragas`
+- Fill in placeholder values in test data (`expected_answer` fields with "XXX亿元")
+- Add token statistics feature (tiktoken counting + per-model cost coefficients in config)
+- Add regression testing to prevent breakage during updates
+- Expand test dataset beyond 10 questions
+- Optimize LLM report prompt to remove conversational artifacts ("好的……")
+
+#### RAG Optimizations (Lower Priority)
+
+- Establish stable baseline evaluation metrics and archive report to `notes/`
 - Hybrid retrieval (BM25 + vector)
 - Reranker integration
 - Query rewriting
@@ -130,4 +190,3 @@ Planned improvements for future versions:
 - Prompt engineering
 - Parent-child chunking
 - HyDE / Multi-Query
-- ......
