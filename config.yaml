@@ -69,6 +69,9 @@ meals:
   dir: "data/meals"
   collection_prefix: "m_"
 
+artifacts:
+  dir: "data/artifacts"
+
 test_generation:
   default_strategy: "factual"
   default_num_questions: 20
