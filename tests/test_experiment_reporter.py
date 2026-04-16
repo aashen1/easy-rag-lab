@@ -344,10 +344,10 @@ class TestExperimentReporter:
         reporter = ExperimentReporter()
         prompt = reporter._build_llm_prompt(sample_result)
 
-        assert "Experiment Time" in prompt
+        assert "实验时间" in prompt
         assert "2026-04-16T10:00:00" in prompt
-        assert "Data ID" in prompt
-        assert "Total Test Cases" in prompt
+        assert "数据ID" in prompt
+        assert "测试用例总数" in prompt
         assert "5" in prompt
 
     def test_llm_report_fallback_on_error(self, sample_result, tmp_path):
@@ -485,10 +485,10 @@ class TestExperimentReporter:
 
 class TestLLMPromptTemplate:
     def test_template_contains_required_sections(self):
-        assert "Experiment Overview" in LLM_REPORT_PROMPT_TEMPLATE
-        assert "Data Source" in LLM_REPORT_PROMPT_TEMPLATE
-        assert "Technical Configuration" in LLM_REPORT_PROMPT_TEMPLATE
-        assert "Evaluation Results" in LLM_REPORT_PROMPT_TEMPLATE
+        assert "实验概览" in LLM_REPORT_PROMPT_TEMPLATE
+        assert "数据来源" in LLM_REPORT_PROMPT_TEMPLATE
+        assert "技术配置" in LLM_REPORT_PROMPT_TEMPLATE
+        assert "评测结果" in LLM_REPORT_PROMPT_TEMPLATE
 
     def test_template_contains_analysis_requirements(self):
         assert "实验概述" in LLM_REPORT_PROMPT_TEMPLATE

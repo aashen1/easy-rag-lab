@@ -95,48 +95,48 @@ class ExperimentResult:
         )
 
 
-LLM_REPORT_PROMPT_TEMPLATE = """You are an expert RAG system analyst. Please write a comprehensive experiment report based on the following data.
+LLM_REPORT_PROMPT_TEMPLATE = """你是一位专业的RAG系统分析师。请根据以下数据撰写一份全面的实验报告。
 
-## Experiment Overview
-- Experiment Time: {timestamp}
-- Data ID: {data_id}
-- Total Test Cases: {total_test_cases}
+## 实验概览
+- 实验时间：{timestamp}
+- 数据ID：{data_id}
+- 测试用例总数：{total_test_cases}
 
-## Data Source
+## 数据来源
 {data_section}
 
-## Technical Configuration
+## 技术配置
 {config_section}
 
-## Evaluation Results
+## 评测结果
 {results_section}
 
-## Requirements
-Please write a professional experiment report in Chinese (Simplified) with the following sections:
+## 要求
+请撰写一份专业的实验报告，包含以下章节：
 
 ### 1. 实验概述
-- Describe the purpose and hypothesis of this experiment
-- Explain the significance of the evaluation
+- 描述本实验的目的和假设
+- 说明评测的意义
 
 ### 2. 数据来源分析
-- Analyze the data characteristics
-- Discuss potential impact of data on results
+- 分析数据特征
+- 讨论数据对结果的潜在影响
 
 ### 3. 技术选型分析
-- Evaluate the chosen technologies and models
-- Discuss potential strengths and limitations
+- 评估所选技术和模型
+- 讨论潜在的优势和局限
 
 ### 4. 评测结果分析
-- Interpret the retrieval metrics (Hit Rate, MRR, NDCG)
-- Analyze performance patterns across different question types
-- Identify potential bottlenecks or issues
+- 解读检索指标（Hit Rate、MRR、NDCG）
+- 分析不同问题类型的表现差异
+- 识别潜在的瓶颈或问题
 
 ### 5. 结论与建议
-- Summarize key findings
-- Provide actionable recommendations for improvement
-- Suggest next steps for optimization
+- 总结关键发现
+- 提出可行的改进建议
+- 建议下一步优化方向
 
-Please write the report in a professional, objective tone with specific data references.
+报告须以专业、客观的语气撰写，引用具体数据。直接以报告正文开头，禁止使用"好的"、"当然"、"我来"等对话性用语开头。
 """
 
 
@@ -880,42 +880,42 @@ class ExperimentReporter:
             variant_results, meal_info, config_snapshot
         )
 
-        prompt = f"""You are an expert RAG system analyst. Please write a comprehensive experiment report in Chinese (Simplified) based on the following experiment data.
+        prompt = f"""你是一位专业的RAG系统分析师。请根据以下实验数据撰写一份全面的实验报告。
 
-## Experiment Data
+## 实验数据
 
 {template_report}
 
-## Requirements
+## 要求
 
-Please write a professional experiment report with the following sections:
+请撰写一份专业的实验报告，包含以下章节：
 
 ### 1. 实验概述
-- Describe the purpose and setup of this experiment
-- Explain the variants being compared
-- Summarize the overall findings
+- 描述本实验的目的和设置
+- 说明正在对比的各变体
+- 总结整体发现
 
 ### 2. 性能分析
-- Analyze the retrieval metrics (Hit Rate, MRR, NDCG) for each variant
-- Compare performance across different variants
-- Identify strengths and weaknesses of each configuration
+- 分析各变体的检索指标（Hit Rate、MRR、NDCG）
+- 对比不同变体之间的性能差异
+- 识别各配置的优势和不足
 
 ### 3. 问题类型分析
-- Analyze performance patterns across different question types (factual, boundary, multi-hop)
-- Identify which question types are more challenging
-- Discuss potential reasons for performance differences
+- 分析不同问题类型（factual、boundary、multi-hop）的表现差异
+- 识别哪些问题类型更具挑战性
+- 讨论性能差异的潜在原因
 
 ### 4. 配置影响分析
-- Evaluate the impact of different configuration choices
-- Discuss how chunk size, overlap, and other parameters affect performance
-- Provide insights on optimal configuration choices
+- 评估不同配置选择的影响
+- 讨论分块大小、重叠率等参数如何影响性能
+- 提供最优配置选择的见解
 
 ### 5. 结论与建议
-- Summarize key findings
-- Provide actionable recommendations for improvement
-- Suggest next steps for optimization
+- 总结关键发现
+- 提出可行的改进建议
+- 建议下一步优化方向
 
-Please write the report in a professional, objective tone with specific data references. Use markdown formatting for better readability.
+报告须以专业、客观的语气撰写，引用具体数据。使用markdown格式以提高可读性。直接以报告正文开头，禁止使用"好的"、"当然"、"我来"等对话性用语开头。
 """
         return prompt
 

@@ -58,19 +58,18 @@ class Generator:
 1. 回答要准确、简洁、专业
 2. 如果参考资料中有相关信息，请基于资料回答
 3. 如果参考资料中没有相关信息，请明确说明"根据提供的参考资料，我无法回答这个问题"
-4. 回答时请引用具体的来源（如"根据贵州茅台2023年年度报告..."）"""
+4. 回答时请引用具体的来源（如"根据贵州茅台2023年年度报告..."）
+5. 直接以回答内容开头，禁止使用"好的"、"当然"、"我来"等对话性用语开头"""
 
             context_text = "\n\n".join(
                 [f"参考资料 {i+1}:\n{ctx}" for i, ctx in enumerate(contexts)]
             )
 
-            user_message = f"""{system_prompt}
-
-{context_text}
+            user_message = f"""{context_text}
 
 用户问题：{query}
 
-请提供回答："""
+请基于参考资料回答上述问题："""
 
             logger.info(f"Generating answer for query: {query[:50]}...")
 
@@ -78,6 +77,7 @@ class Generator:
                 model=self.model_name,
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
+                system=system_prompt,
                 messages=[
                     {
                         "role": "user",
