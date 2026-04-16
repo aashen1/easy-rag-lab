@@ -54,7 +54,8 @@ class MealConfig:
                 f"Loading legacy manifest with UUID '{data['uuid']}', "
                 "migrating to data_id-based identity"
             )
-            sorted_hashes = sorted(f["sha256"] for f in data.get("pdf_files", []))
+            sorted_hashes = sorted(f["sha256"]
+                                   for f in data.get("pdf_files", []))
             combined = "|".join(sorted_hashes)
             data_id = hashlib.sha256(combined.encode()).hexdigest()
         else:
@@ -96,7 +97,8 @@ def compute_parser_config_hash(parser_config: Dict) -> str:
 
 
 def compute_chunker_config_hash(chunker_config: Dict) -> str:
-    overlap = chunker_config.get("chunk_overlap", chunker_config.get("overlap", 0))
+    overlap = chunker_config.get(
+        "chunk_overlap", chunker_config.get("overlap", 0))
     relevant = {
         "chunk_size": chunker_config["chunk_size"],
         "overlap": overlap,
@@ -134,6 +136,91 @@ def validate_meal_name(name: str) -> bool:
 
 def generate_timestamp_name() -> str:
     return f"meal_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+
+def build_chunks_if_needed(
+    parsed_dir: Path,
+    chunks_dir: Path,
+    chunker_config: Dict[str, Any],
+) -> None:
+    """
+    Build chunks from parsed files if no chunk files exist.
+
+    Args:
+        parsed_dir: Directory containing parsed files (.md).
+        chunks_dir: Target directory for chunked files (.jsonl).
+        chunker_config: Chunker configuration dictionary.
+    """
+    from src.chunker import process_parsed_files
+
+    if chunks_dir.exists() and any(chunks_dir.rglob("*.jsonl")):
+        return
+
+    logger.info("Chunking documents...")
+
+    source_filter_md = set()
+    if parsed_dir.exists():
+        for md_file in parsed_dir.rglob("*.md"):
+            rel = str(md_file.relative_to(parsed_dir))
+            source_filter_md.add(rel)
+
+    process_parsed_files(
+        input_dir=str(parsed_dir),
+        output_dir=str(chunks_dir),
+        chunk_size=chunker_config.get("chunk_size", 512),
+        overlap=chunker_config.get("chunk_overlap", 0),
+        source_filter=source_filter_md,
+    )
+
+
+def build_index_from_chunks(
+    chunks_dir: Path,
+    embedding_config: Dict[str, Any],
+    vector_store_config: Dict[str, Any],
+    collection_name: str,
+) -> "VectorIndexer":
+    """
+    Build vector index from chunks directory.
+
+    Args:
+        chunks_dir: Directory containing chunked files (.jsonl).
+        embedding_config: Embedding configuration dictionary.
+        vector_store_config: Vector store configuration dictionary.
+        collection_name: Name of the collection to create/use.
+
+    Returns:
+        Configured VectorIndexer instance with index built.
+    """
+    from src.embedder import Embedder
+    from src.indexer import VectorIndexer
+
+    source_filter_jsonl = set()
+    if chunks_dir.exists():
+        for jsonl_file in chunks_dir.rglob("*.jsonl"):
+            rel = str(jsonl_file.relative_to(chunks_dir))
+            source_filter_jsonl.add(rel)
+
+    embedder = Embedder(
+        model_name=embedding_config.get("model_name"),
+        device=embedding_config.get("device", "cpu"),
+    )
+
+    indexer = VectorIndexer(
+        persist_dir=vector_store_config.get(
+            "persist_dir", "data/vector_store"),
+        collection_name=collection_name,
+        distance=vector_store_config.get("distance", "Cosine"),
+    )
+
+    indexer.build_index(
+        chunks_dir=str(chunks_dir),
+        embedder=embedder,
+        batch_size=embedding_config.get("batch_size", 32),
+        rebuild=True,
+        source_filter=source_filter_jsonl,
+    )
+
+    return indexer
 
 
 class ArtifactCache:
@@ -197,8 +284,10 @@ class MealManager:
         meals_config = config.get("meals", {})
         self.meals_dir = Path(meals_config.get("dir", "data/meals"))
         self.collection_prefix = meals_config.get("collection_prefix", "m_")
-        self.raw_dir = Path(config.get("parser", {}).get("input_dir", "data/raw"))
-        self.chunks_dir = Path(config.get("chunker", {}).get("output_dir", "data/chunks"))
+        self.raw_dir = Path(config.get(
+            "parser", {}).get("input_dir", "data/raw"))
+        self.chunks_dir = Path(config.get(
+            "chunker", {}).get("output_dir", "data/chunks"))
 
         artifacts_config = config.get("artifacts", {})
         artifacts_base = artifacts_config.get("dir", "data/artifacts")
@@ -297,7 +386,8 @@ class MealManager:
         data_id = compute_data_id(meal_files)
         config_snapshot, config_hashes = self._build_config_snapshot_and_hashes()
         index_key = compute_index_key(data_id, config_hashes)
-        collection_name = generate_collection_name(index_key, self.collection_prefix)
+        collection_name = generate_collection_name(
+            index_key, self.collection_prefix)
 
         chunker_hash = config_hashes["chunker"]
         expected_md_names = [
@@ -307,9 +397,6 @@ class MealManager:
         parsed_dir, chunks_dir = self.cache.ensure_dirs(data_id, chunker_hash)
 
         from src.parser import parse_all_pdfs
-        from src.chunker import process_parsed_files
-        from src.embedder import Embedder
-        from src.indexer import VectorIndexer
 
         parser_config = self.config.get("parser", {})
         chunker_config = self.config.get("chunker", {})
@@ -319,64 +406,46 @@ class MealManager:
         cache_hit_chunk = False
 
         if not force_parse and self.cache.parsed_exists(data_id, expected_md_names):
-            logger.info(f"Cache HIT: Parsed artifacts exist for data_id={data_id[:12]}")
+            logger.info(
+                f"Cache HIT: Parsed artifacts exist for data_id={data_id[:12]}")
             cache_hit_parse = True
         else:
-            logger.info(f"Step 1: Parsing {len(sampled_pdfs)} PDFs for meal '{name}'...")
-            parse_results = parse_all_pdfs(
+            logger.info(
+                f"Step 1: Parsing {len(sampled_pdfs)} PDFs for meal '{name}'...")
+            parse_all_pdfs(
                 input_dir=parser_config["input_dir"],
                 output_dir=str(parsed_dir),
                 force=True,
                 pdf_files=sampled_pdfs,
             )
 
-        source_filter_md = set()
-        md_files_in_cache = list(parsed_dir.rglob("*.md"))
-        for md_file in md_files_in_cache:
-            rel = str(md_file.relative_to(parsed_dir))
-            source_filter_md.add(rel)
-
         expected_jsonl_names = [
             Path(md_name).with_suffix(".jsonl").name for md_name in expected_md_names
         ]
 
         if self.cache.chunks_exist(data_id, chunker_hash, expected_jsonl_names):
-            logger.info(f"Cache HIT: Chunked artifacts exist for chunker_hash={chunker_hash}")
+            logger.info(
+                f"Cache HIT: Chunked artifacts exist for chunker_hash={chunker_hash}")
             cache_hit_chunk = True
         else:
-            logger.info(f"Step 2: Chunking {len(source_filter_md)} files for meal '{name}'...")
-            chunk_results = process_parsed_files(
-                input_dir=str(parsed_dir),
-                output_dir=str(chunks_dir),
-                chunk_size=chunker_config["chunk_size"],
-                overlap=chunker_config["chunk_overlap"],
-                source_filter=source_filter_md,
-            )
+            logger.info(f"Step 2: Chunking files for meal '{name}'...")
+            build_chunks_if_needed(parsed_dir, chunks_dir, chunker_config)
+
+        logger.info(
+            f"Step 3: Building vector index for meal '{name}' (collection: {collection_name})...")
+
+        indexer = build_index_from_chunks(
+            chunks_dir=chunks_dir,
+            embedding_config=embedding_config,
+            vector_store_config=self.config.get("vector_store", {}),
+            collection_name=collection_name,
+        )
 
         source_filter_jsonl = set()
-        jsonl_files_in_cache = list(chunks_dir.rglob("*.jsonl"))
-        for jsonl_file in jsonl_files_in_cache:
-            rel = str(jsonl_file.relative_to(chunks_dir))
-            source_filter_jsonl.add(rel)
-
-        logger.info(f"Step 3: Building vector index for meal '{name}' (collection: {collection_name})...")
-
-        embedder = Embedder(
-            model_name=embedding_config["model_name"],
-            device=embedding_config["device"],
-        )
-        indexer = VectorIndexer(
-            persist_dir=self.config.get("vector_store", {}).get("persist_dir", "data/vector_store"),
-            collection_name=collection_name,
-            distance=self.config.get("vector_store", {}).get("distance", "Cosine"),
-        )
-        indexer.build_index(
-            chunks_dir=str(chunks_dir),
-            embedder=embedder,
-            batch_size=embedding_config["batch_size"],
-            rebuild=True,
-            source_filter=source_filter_jsonl,
-        )
+        if chunks_dir.exists():
+            for jsonl_file in chunks_dir.rglob("*.jsonl"):
+                rel = str(jsonl_file.relative_to(chunks_dir))
+                source_filter_jsonl.add(rel)
 
         total_chunks = len(source_filter_jsonl)
         for jsonl_rel in source_filter_jsonl:
@@ -445,7 +514,8 @@ class MealManager:
         manifest_path = meal_dir / "manifest.json"
 
         if not manifest_path.exists():
-            raise FileNotFoundError(f"Meal '{name}' not found (manifest missing)")
+            raise FileNotFoundError(
+                f"Meal '{name}' not found (manifest missing)")
 
         try:
             with open(manifest_path, "r", encoding="utf-8") as f:
@@ -475,7 +545,8 @@ class MealManager:
                             data = json.load(f)
                         meals.append(MealConfig.from_dict(data))
                     except Exception as e:
-                        logger.warning(f"Failed to load meal from {item}: {str(e)}")
+                        logger.warning(
+                            f"Failed to load meal from {item}: {str(e)}")
         return meals
 
     def delete_meal(self, name: str) -> None:
@@ -486,14 +557,18 @@ class MealManager:
 
         try:
             indexer = VectorIndexer(
-                persist_dir=self.config.get("vector_store", {}).get("persist_dir", "data/vector_store"),
+                persist_dir=self.config.get("vector_store", {}).get(
+                    "persist_dir", "data/vector_store"),
                 collection_name=meal_config.collection_name,
-                distance=self.config.get("vector_store", {}).get("distance", "Cosine"),
+                distance=self.config.get("vector_store", {}).get(
+                    "distance", "Cosine"),
             )
-            shared = self._is_collection_shared(meal_config.collection_name, exclude_name=name)
+            shared = self._is_collection_shared(
+                meal_config.collection_name, exclude_name=name)
             if not shared:
                 indexer.delete_collection()
-                logger.info(f"Deleted Qdrant collection '{meal_config.collection_name}'")
+                logger.info(
+                    f"Deleted Qdrant collection '{meal_config.collection_name}'")
             else:
                 logger.info(
                     f"Collection '{meal_config.collection_name}' is shared with other meals, skipping deletion"
@@ -525,7 +600,8 @@ class MealManager:
         with open(manifest_path, "w", encoding="utf-8") as f:
             json.dump(meal_config.to_dict(), f, ensure_ascii=False, indent=2)
 
-        logger.success(f"Meal renamed from '{old_name}' to '{new_name}' (data_id unchanged: {meal_config.data_id[:12]})")
+        logger.success(
+            f"Meal renamed from '{old_name}' to '{new_name}' (data_id unchanged: {meal_config.data_id[:12]})")
         return meal_config
 
     def copy_meal(self, source_name: str, target_name: str) -> MealConfig:
@@ -620,9 +696,11 @@ class MealManager:
                         sha256=new_sha256,
                         size_bytes=new_size,
                     ))
-                    logger.info(f"Replaced: {meal_file.path} -> {new_rel_path}")
+                    logger.info(
+                        f"Replaced: {meal_file.path} -> {new_rel_path}")
                 else:
-                    logger.warning(f"Replacement file not found: {new_rel_path}, keeping original")
+                    logger.warning(
+                        f"Replacement file not found: {new_rel_path}, keeping original")
                     new_pdf_files.append(meal_file)
             else:
                 file_path = self.raw_dir / meal_file.path
@@ -631,9 +709,11 @@ class MealManager:
                     if current_sha256 == meal_file.sha256:
                         new_pdf_files.append(meal_file)
                     else:
-                        logger.warning(f"File changed but no replacement specified: {meal_file.path}, skipping")
+                        logger.warning(
+                            f"File changed but no replacement specified: {meal_file.path}, skipping")
                 else:
-                    logger.warning(f"File missing and no replacement specified: {meal_file.path}, skipping")
+                    logger.warning(
+                        f"File missing and no replacement specified: {meal_file.path}, skipping")
 
         if not new_pdf_files:
             raise ValueError("No valid PDF files remain after repair")
@@ -641,7 +721,8 @@ class MealManager:
         new_data_id = compute_data_id(new_pdf_files)
         config_snapshot, config_hashes = self._build_config_snapshot_and_hashes()
         index_key = compute_index_key(new_data_id, config_hashes)
-        new_collection_name = generate_collection_name(index_key, self.collection_prefix)
+        new_collection_name = generate_collection_name(
+            index_key, self.collection_prefix)
 
         if create_new:
             target_name = new_name or f"{name}_repaired"
@@ -655,63 +736,39 @@ class MealManager:
             )
 
         from src.parser import parse_all_pdfs
-        from src.chunker import process_parsed_files
-        from src.embedder import Embedder
-        from src.indexer import VectorIndexer
 
         parser_config = self.config.get("parser", {})
         chunker_config = self.config.get("chunker", {})
         embedding_config = self.config.get("embedding", {})
 
         chunker_hash = config_hashes["chunker"]
-        parsed_dir, chunks_dir = self.cache.ensure_dirs(new_data_id, chunker_hash)
+        parsed_dir, chunks_dir = self.cache.ensure_dirs(
+            new_data_id, chunker_hash)
 
         sampled_pdfs = [self.raw_dir / f.path for f in new_pdf_files]
 
         logger.info(f"Rebuilding index for repaired meal '{target_name}'...")
-        parse_results = parse_all_pdfs(
+        parse_all_pdfs(
             input_dir=parser_config["input_dir"],
             output_dir=str(parsed_dir),
             force=True,
             pdf_files=sampled_pdfs,
         )
 
-        source_filter_md = set()
-        md_files_in_cache = list(parsed_dir.rglob("*.md"))
-        for md_file in md_files_in_cache:
-            rel = str(md_file.relative_to(parsed_dir))
-            source_filter_md.add(rel)
+        build_chunks_if_needed(parsed_dir, chunks_dir, chunker_config)
 
-        chunk_results = process_parsed_files(
-            input_dir=str(parsed_dir),
-            output_dir=str(chunks_dir),
-            chunk_size=chunker_config["chunk_size"],
-            overlap=chunker_config["chunk_overlap"],
-            source_filter=source_filter_md,
+        indexer = build_index_from_chunks(
+            chunks_dir=chunks_dir,
+            embedding_config=embedding_config,
+            vector_store_config=self.config.get("vector_store", {}),
+            collection_name=new_collection_name,
         )
 
         source_filter_jsonl = set()
-        jsonl_files_in_cache = list(chunks_dir.rglob("*.jsonl"))
-        for jsonl_file in jsonl_files_in_cache:
-            rel = str(jsonl_file.relative_to(chunks_dir))
-            source_filter_jsonl.add(rel)
-
-        embedder = Embedder(
-            model_name=embedding_config["model_name"],
-            device=embedding_config["device"],
-        )
-        indexer = VectorIndexer(
-            persist_dir=self.config.get("vector_store", {}).get("persist_dir", "data/vector_store"),
-            collection_name=new_collection_name,
-            distance=self.config.get("vector_store", {}).get("distance", "Cosine"),
-        )
-        indexer.build_index(
-            chunks_dir=str(chunks_dir),
-            embedder=embedder,
-            batch_size=embedding_config["batch_size"],
-            rebuild=True,
-            source_filter=source_filter_jsonl,
-        )
+        if chunks_dir.exists():
+            for jsonl_file in chunks_dir.rglob("*.jsonl"):
+                rel = str(jsonl_file.relative_to(chunks_dir))
+                source_filter_jsonl.add(rel)
 
         total_pages = 0
         total_chunks = 0
@@ -761,11 +818,14 @@ class MealManager:
         else:
             try:
                 old_indexer = VectorIndexer(
-                    persist_dir=self.config.get("vector_store", {}).get("persist_dir", "data/vector_store"),
+                    persist_dir=self.config.get("vector_store", {}).get(
+                        "persist_dir", "data/vector_store"),
                     collection_name=meal_config.collection_name,
-                    distance=self.config.get("vector_store", {}).get("distance", "Cosine"),
+                    distance=self.config.get("vector_store", {}).get(
+                        "distance", "Cosine"),
                 )
-                shared = self._is_collection_shared(meal_config.collection_name, exclude_name=name)
+                shared = self._is_collection_shared(
+                    meal_config.collection_name, exclude_name=name)
                 if not shared:
                     old_indexer.delete_collection()
             except Exception as e:

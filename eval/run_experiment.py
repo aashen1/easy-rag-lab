@@ -20,6 +20,14 @@ from src.experiment import (
     merge_config,
 )
 from src.meal import MealManager, MealStatus, compute_file_sha256
+from src.meal import (
+    ArtifactCache,
+    build_chunks_if_needed,
+    build_index_from_chunks,
+    compute_chunker_config_hash,
+    compute_index_key,
+    generate_collection_name,
+)
 from src.pipeline import RAGPipeline
 from src.sampler import SamplingConfig
 from src.test_generator import TestSetGenerator
@@ -400,6 +408,193 @@ def prepare_test_sets(
     return test_sets
 
 
+def prepare_index_for_variant(
+    merged_config: Dict[str, Any],
+    meal_config: "MealConfig",
+    variant_name: str,
+) -> "VectorIndexer":
+    """
+    Prepare or retrieve index for a variant.
+
+    Checks if the index already exists for the variant's configuration.
+    If not, builds chunks and index from scratch.
+
+    Args:
+        merged_config: Merged configuration dictionary.
+        meal_config: Meal configuration object.
+        variant_name: Name of the variant.
+
+    Returns:
+        Configured VectorIndexer instance.
+    """
+    from src.indexer import VectorIndexer
+
+    chunker_config = merged_config.get("chunker", {})
+    embedding_config = merged_config.get("embedding", {})
+    vector_store_config = merged_config.get("vector_store", {})
+
+    chunker_hash = compute_chunker_config_hash(chunker_config)
+    config_hashes = {
+        "parser": meal_config.config_hashes.get("parser", ""),
+        "chunker": chunker_hash,
+        "embedding": meal_config.config_hashes.get("embedding", ""),
+    }
+    index_key = compute_index_key(meal_config.data_id, config_hashes)
+    collection_name = generate_collection_name(
+        index_key,
+        merged_config.get("meals", {}).get("collection_prefix", "m_"),
+    )
+
+    logger.info(f"Using collection: {collection_name}")
+
+    indexer = VectorIndexer(
+        persist_dir=vector_store_config.get("persist_dir", "data/vector_store"),
+        collection_name=collection_name,
+        distance=vector_store_config.get("distance", "Cosine"),
+    )
+
+    collection_info = indexer.get_collection_info()
+    index_exists = collection_info is not None and collection_info.get("points_count", 0) > 0
+
+    if not index_exists:
+        logger.info(f"Building index for variant '{variant_name}'...")
+
+        artifacts_config = merged_config.get("artifacts") or {}
+        artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
+        cache = ArtifactCache(artifacts_dir)
+
+        parsed_dir = cache.get_parsed_dir(meal_config.data_id)
+        chunks_dir = cache.get_chunks_dir(meal_config.data_id, chunker_hash)
+
+        build_chunks_if_needed(parsed_dir, chunks_dir, chunker_config)
+
+        indexer = build_index_from_chunks(
+            chunks_dir=chunks_dir,
+            embedding_config=embedding_config,
+            vector_store_config=vector_store_config,
+            collection_name=collection_name,
+        )
+
+        logger.success(f"Index built for variant '{variant_name}'")
+    else:
+        logger.info(
+            f"Index already exists for variant '{variant_name}' "
+            f"({collection_info.get('points_count')} points)"
+        )
+
+    return indexer
+
+
+def evaluate_test_set(
+    pipeline: RAGPipeline,
+    test_set: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    """
+    Evaluate a single test set against the pipeline.
+
+    Args:
+        pipeline: Configured RAG pipeline.
+        test_set: Test set dictionary with questions.
+
+    Returns:
+        List of evaluation result dictionaries.
+    """
+    test_set_name = test_set.get("name", "unknown")
+    questions = test_set.get("questions", [])
+
+    logger.info(f"Evaluating test set '{test_set_name}' ({len(questions)} questions)...")
+
+    results = []
+    for i, question_data in enumerate(questions, 1):
+        question_id = question_data.get("id", f"q{i}")
+        question_text = question_data.get("question", "")
+        expected_sources = question_data.get("source_files", [])
+
+        if not question_text:
+            logger.warning(f"Question {question_id} has no text, skipping")
+            continue
+
+        logger.info(f"Processing question {i}/{len(questions)}: {question_id}")
+
+        case_start_time = time.time()
+        try:
+            response = pipeline.query(question_text)
+            case_time = time.time() - case_start_time
+
+            retrieved_sources = response.get("sources", [])
+
+            hit_rate = calculate_hit_rate(retrieved_sources, expected_sources)
+            mrr = calculate_mrr(retrieved_sources, expected_sources)
+            ndcg = calculate_ndcg(retrieved_sources, expected_sources, k=5)
+
+            result = {
+                "id": question_id,
+                "question": question_text,
+                "answer": response.get("answer"),
+                "retrieval": {
+                    "hit_rate": hit_rate,
+                    "mrr": mrr,
+                    "ndcg": ndcg,
+                },
+                "sources": retrieved_sources,
+                "expected_sources": expected_sources,
+                "time_seconds": case_time,
+                "test_set": test_set_name,
+                "category": question_data.get("category"),
+                "difficulty": question_data.get("difficulty"),
+            }
+
+            logger.success(
+                f"Question {question_id}: HR={hit_rate:.4f}, MRR={mrr:.4f}, "
+                f"NDCG={ndcg:.4f} ({case_time:.2f}s)"
+            )
+
+        except Exception as e:
+            case_time = time.time() - case_start_time
+            logger.error(f"Question {question_id} failed: {str(e)}")
+            result = {
+                "id": question_id,
+                "question": question_text,
+                "answer": None,
+                "error": str(e),
+                "expected_sources": expected_sources,
+                "time_seconds": case_time,
+                "test_set": test_set_name,
+                "category": question_data.get("category"),
+            }
+
+        results.append(result)
+
+    return results
+
+
+def compute_aggregate_metrics(results: List[Dict[str, Any]]) -> Dict[str, float]:
+    """
+    Compute aggregate retrieval metrics from evaluation results.
+
+    Args:
+        results: List of evaluation result dictionaries.
+
+    Returns:
+        Dictionary containing average hit_rate, mrr, and ndcg.
+    """
+    valid_results = [r for r in results if "retrieval" in r]
+    if valid_results:
+        avg_hit_rate = sum(r["retrieval"]["hit_rate"] for r in valid_results) / len(valid_results)
+        avg_mrr = sum(r["retrieval"]["mrr"] for r in valid_results) / len(valid_results)
+        avg_ndcg = sum(r["retrieval"]["ndcg"] for r in valid_results) / len(valid_results)
+    else:
+        avg_hit_rate = 0.0
+        avg_mrr = 0.0
+        avg_ndcg = 0.0
+
+    return {
+        "avg_hit_rate": avg_hit_rate,
+        "avg_mrr": avg_mrr,
+        "avg_ndcg": avg_ndcg,
+    }
+
+
 def run_variant_evaluation(
     system_config: Dict[str, Any],
     exp_config: ExperimentConfig,
@@ -455,171 +650,22 @@ def run_variant_evaluation(
         )
         pipeline.config = merged_config
 
-        from src.chunker import process_parsed_files
-        from src.embedder import Embedder
-        from src.indexer import VectorIndexer
-        from src.meal import compute_chunker_config_hash, generate_collection_name, compute_index_key
-
-        chunker_config = merged_config.get("chunker", {})
-        embedding_config = merged_config.get("embedding", {})
-        vector_store_config = merged_config.get("vector_store", {})
-
-        chunker_hash = compute_chunker_config_hash(chunker_config)
-        config_hashes = {
-            "parser": meal_config.config_hashes.get("parser", ""),
-            "chunker": chunker_hash,
-            "embedding": meal_config.config_hashes.get("embedding", ""),
-        }
-        index_key = compute_index_key(meal_config.data_id, config_hashes)
-        collection_name = generate_collection_name(index_key, merged_config.get("meals", {}).get("collection_prefix", "m_"))
-
-        logger.info(f"Using collection: {collection_name}")
-
         if hasattr(pipeline, 'indexer') and pipeline.indexer is not None:
             pipeline.indexer.close()
 
-        indexer = VectorIndexer(
-            persist_dir=vector_store_config.get("persist_dir", "data/vector_store"),
-            collection_name=collection_name,
-            distance=vector_store_config.get("distance", "Cosine"),
-        )
-
-        collection_info = indexer.get_collection_info()
-        index_exists = collection_info is not None and collection_info.get("points_count", 0) > 0
-
-        if not index_exists:
-            logger.info(f"Building index for variant '{variant_name}'...")
-
-            from src.meal import ArtifactCache
-
-            artifacts_config = merged_config.get("artifacts") or {}
-            artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
-            cache = ArtifactCache(artifacts_dir)
-
-            parsed_dir = cache.get_parsed_dir(meal_config.data_id)
-            chunks_dir = cache.get_chunks_dir(meal_config.data_id, chunker_hash)
-
-            if not chunks_dir.exists():
-                logger.info("Chunking documents with variant configuration...")
-                source_filter_md = set()
-                if parsed_dir.exists():
-                    for md_file in parsed_dir.rglob("*.md"):
-                        rel = str(md_file.relative_to(parsed_dir))
-                        source_filter_md.add(rel)
-
-                process_parsed_files(
-                    input_dir=str(parsed_dir),
-                    output_dir=str(chunks_dir),
-                    chunk_size=chunker_config.get("chunk_size", 512),
-                    overlap=chunker_config.get("chunk_overlap", 0),
-                    source_filter=source_filter_md,
-                )
-
-            embedder = Embedder(
-                model_name=embedding_config.get("model_name"),
-                device=embedding_config.get("device", "cpu"),
-            )
-
-            source_filter_jsonl = set()
-            if chunks_dir.exists():
-                for jsonl_file in chunks_dir.rglob("*.jsonl"):
-                    rel = str(jsonl_file.relative_to(chunks_dir))
-                    source_filter_jsonl.add(rel)
-
-            indexer.build_index(
-                chunks_dir=str(chunks_dir),
-                embedder=embedder,
-                batch_size=embedding_config.get("batch_size", 32),
-                rebuild=True,
-                source_filter=source_filter_jsonl,
-            )
-            logger.success(f"Index built for variant '{variant_name}'")
-        else:
-            logger.info(f"Index already exists for variant '{variant_name}' ({collection_info.get('points_count')} points)")
-
+        indexer = prepare_index_for_variant(merged_config, meal_config, variant_name)
         pipeline.indexer = indexer
         pipeline.retriever.indexer = indexer
 
-        all_results = []
         total_start_time = time.time()
-
+        all_results = []
         for test_set in test_sets:
-            test_set_name = test_set.get("name", "unknown")
-            questions = test_set.get("questions", [])
-
-            logger.info(f"Evaluating test set '{test_set_name}' ({len(questions)} questions)...")
-
-            for i, question_data in enumerate(questions, 1):
-                question_id = question_data.get("id", f"q{i}")
-                question_text = question_data.get("question", "")
-                expected_sources = question_data.get("source_files", [])
-
-                if not question_text:
-                    logger.warning(f"Question {question_id} has no text, skipping")
-                    continue
-
-                logger.info(f"Processing question {i}/{len(questions)}: {question_id}")
-
-                case_start_time = time.time()
-                try:
-                    response = pipeline.query(question_text)
-                    case_time = time.time() - case_start_time
-
-                    retrieved_sources = response.get("sources", [])
-
-                    hit_rate = calculate_hit_rate(retrieved_sources, expected_sources)
-                    mrr = calculate_mrr(retrieved_sources, expected_sources)
-                    ndcg = calculate_ndcg(retrieved_sources, expected_sources, k=5)
-
-                    result = {
-                        "id": question_id,
-                        "question": question_text,
-                        "answer": response.get("answer"),
-                        "retrieval": {
-                            "hit_rate": hit_rate,
-                            "mrr": mrr,
-                            "ndcg": ndcg,
-                        },
-                        "sources": retrieved_sources,
-                        "expected_sources": expected_sources,
-                        "time_seconds": case_time,
-                        "test_set": test_set_name,
-                        "category": question_data.get("category"),
-                        "difficulty": question_data.get("difficulty"),
-                    }
-
-                    logger.success(
-                        f"Question {question_id}: HR={hit_rate:.4f}, MRR={mrr:.4f}, "
-                        f"NDCG={ndcg:.4f} ({case_time:.2f}s)"
-                    )
-
-                except Exception as e:
-                    case_time = time.time() - case_start_time
-                    logger.error(f"Question {question_id} failed: {str(e)}")
-                    result = {
-                        "id": question_id,
-                        "question": question_text,
-                        "answer": None,
-                        "error": str(e),
-                        "expected_sources": expected_sources,
-                        "time_seconds": case_time,
-                        "test_set": test_set_name,
-                        "category": question_data.get("category"),
-                    }
-
-                all_results.append(result)
+            results = evaluate_test_set(pipeline, test_set)
+            all_results.extend(results)
 
         total_time = time.time() - total_start_time
 
-        valid_results = [r for r in all_results if "retrieval" in r]
-        if valid_results:
-            avg_hit_rate = sum(r["retrieval"]["hit_rate"] for r in valid_results) / len(valid_results)
-            avg_mrr = sum(r["retrieval"]["mrr"] for r in valid_results) / len(valid_results)
-            avg_ndcg = sum(r["retrieval"]["ndcg"] for r in valid_results) / len(valid_results)
-        else:
-            avg_hit_rate = 0.0
-            avg_mrr = 0.0
-            avg_ndcg = 0.0
+        metrics = compute_aggregate_metrics(all_results)
 
         variant_result = {
             "variant_name": variant_name,
@@ -628,18 +674,15 @@ def run_variant_evaluation(
             "total_questions": len(all_results),
             "total_time_seconds": total_time,
             "avg_time_per_question": total_time / len(all_results) if all_results else 0,
-            "retrieval_metrics": {
-                "avg_hit_rate": avg_hit_rate,
-                "avg_mrr": avg_mrr,
-                "avg_ndcg": avg_ndcg,
-            },
+            "retrieval_metrics": metrics,
             "config_snapshot": config_snapshot,
             "results": all_results,
         }
 
         logger.success(
             f"Variant '{variant_name}' evaluation completed: "
-            f"HR={avg_hit_rate:.4f}, MRR={avg_mrr:.4f}, NDCG={avg_ndcg:.4f}"
+            f"HR={metrics['avg_hit_rate']:.4f}, MRR={metrics['avg_mrr']:.4f}, "
+            f"NDCG={metrics['avg_ndcg']:.4f}"
         )
 
         return variant_result
