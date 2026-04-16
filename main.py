@@ -52,6 +52,9 @@ def main():
         "--list-meals", action="store_true", help="List all meals with status"
     )
     meal_group.add_argument(
+        "--meal-info", type=str, help="Show detailed info for a meal"
+    )
+    meal_group.add_argument(
         "--delete-meal", type=str, help="Delete specified meal"
     )
     meal_group.add_argument(
@@ -92,6 +95,7 @@ def main():
         or args.rebuild
         or args.create_meal is not None
         or args.list_meals
+        or args.meal_info
         or args.delete_meal
         or args.rename_meal
         or args.copy_meal
@@ -108,6 +112,10 @@ def main():
 
     if args.list_meals:
         _handle_list_meals(meal_manager)
+        return
+
+    if args.meal_info:
+        _handle_meal_info(meal_manager, args.meal_info)
         return
 
     if args.delete_meal:
@@ -187,6 +195,60 @@ def _build_sampling_config(args) -> object:
         mode, value = active_modes[0]
         sampling_config = SamplingConfig(mode=mode, value=value)
     return sampling_config
+
+
+def _handle_meal_info(meal_manager: MealManager, name: str):
+    if not meal_manager.meal_exists(name):
+        logger.error(f"Meal '{name}' not found")
+        sys.exit(1)
+
+    meal = meal_manager.load_meal(name)
+    status, issues = meal_manager.check_meal_status(name)
+
+    print(f"\n{'='*60}")
+    print(f"Meal: {meal.name}")
+    print(f"{'='*60}")
+    print(f"Data ID:       {meal.data_id}")
+    print(f"Collection:    {meal.collection_name}")
+    print(f"Status:        {status.value}")
+    print(f"Created:       {meal.created_at}")
+
+    if meal.config_snapshot:
+        print(f"\nConfig Snapshot:")
+        for stage, cfg in meal.config_snapshot.items():
+            print(f"  {stage}: {cfg}")
+
+    if meal.config_hashes:
+        print(f"\nConfig Hashes:")
+        for stage, h in meal.config_hashes.items():
+            print(f"  {stage}: {h}")
+
+    print(f"\nStats:")
+    for k, v in meal.stats.items():
+        print(f"  {k}: {v}")
+
+    print(f"\nPDF Files ({len(meal.pdf_files)}):")
+    for mf in meal.pdf_files:
+        file_path = meal_manager.raw_dir / mf.path
+        exists = file_path.exists()
+        status_icon = "✅" if exists else "❌"
+        print(f"  {status_icon} {mf.path}  (sha256: {mf.sha256[:16]}..., size: {mf.size_bytes} bytes)")
+
+    if issues:
+        print(f"\nIssues:")
+        for issue in issues:
+            print(f"  ⚠️ {issue}")
+
+    equivalents = meal_manager.find_equivalent_meals(meal.data_id)
+    other_equivalents = [m for m in equivalents if m.name != meal.name]
+    if other_equivalents:
+        print(f"\nEquivalent meals (same data_id):")
+        for eq in other_equivalents:
+            print(f"  - {eq.name} (collection: {eq.collection_name})")
+    else:
+        print(f"\nNo other meals share this data group.")
+
+    print()
 
 
 def _handle_list_meals(meal_manager: MealManager):
