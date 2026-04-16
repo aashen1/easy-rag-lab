@@ -8,13 +8,14 @@ from src.utils import load_config, setup_logger
 from src.pipeline import RAGPipeline
 from src.sampler import SamplingConfig
 from src.meal import MealManager, MealStatus
+from src.experiment import ExperimentConfig, load_experiment_config, merge_config
 from eval.metrics import calculate_hit_rate, calculate_mrr, calculate_ndcg
 from loguru import logger
 import json
 import random
 import time
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 def run_evaluation(
@@ -189,6 +190,16 @@ if __name__ == "__main__":
         "--test-set", type=str,
         help="Test set name within the meal (without .json extension)"
     )
+    parser.add_argument(
+        "--exp-config", type=str,
+        help="Path to experiment configuration YAML file. If specified, "
+             "meal and test-set parameters will be loaded from the experiment config."
+    )
+    parser.add_argument(
+        "--variant", type=str,
+        help="Variant name to use from experiment config (only valid with --exp-config). "
+             "If not specified, uses the first variant."
+    )
 
     args = parser.parse_args()
 
@@ -198,35 +209,120 @@ if __name__ == "__main__":
     meal_data_id = None
     test_data_path = args.test_data
     output_dir = args.output_dir
+    exp_config: Optional[ExperimentConfig] = None
+    variant_config: Optional[Dict[str, Any]] = None
 
-    if args.meal:
+    if args.exp_config:
+        logger.info(f"Loading experiment configuration from {args.exp_config}")
+        exp_config = load_experiment_config(args.exp_config)
+
+        if args.meal or args.test_set:
+            logger.warning(
+                "--meal and --test-set arguments are ignored when --exp-config is specified. "
+                "Using values from experiment configuration."
+            )
+
+        meal_name = exp_config.data.get("meal")
+        if not meal_name:
+            logger.error("Experiment configuration must specify a meal name in data.meal field")
+            sys.exit(1)
+
+        if args.variant:
+            variant_config = None
+            for v in exp_config.variants:
+                if v.get("name") == args.variant:
+                    variant_config = v
+                    break
+            if variant_config is None:
+                available_variants = [v.get("name") for v in exp_config.variants]
+                logger.error(
+                    f"Variant '{args.variant}' not found. "
+                    f"Available variants: {available_variants}"
+                )
+                sys.exit(1)
+        else:
+            variant_config = exp_config.variants[0] if exp_config.variants else None
+            if variant_config:
+                logger.info(f"Using first variant: {variant_config.get('name')}")
+
+        config = merge_config(config, exp_config, variant_config)
+
         meal_manager = MealManager(config)
-        meal_config = meal_manager.load_meal(args.meal)
+        meal_config = meal_manager.load_meal(meal_name)
         meal_data_id = meal_config.data_id
 
-        status, issues = meal_manager.check_meal_status(args.meal)
+        status, issues = meal_manager.check_meal_status(meal_name)
         if status != MealStatus.AVAILABLE:
             logger.warning(
-                f"Meal '{args.meal}' status: {status.value}. "
+                f"Meal '{meal_name}' status: {status.value}. "
                 "Some PDFs may be missing or changed."
             )
 
-        test_sets_dir = meal_manager.get_meal_dir(args.meal) / "test_sets"
-        if args.test_set:
-            test_set_path = test_sets_dir / f"{args.test_set}.json"
+        test_sets_dir = meal_manager.get_meal_dir(meal_name) / "test_sets"
+        test_set_configs = exp_config.test_sets
+
+        if test_set_configs:
+            first_test_set = test_set_configs[0]
+            strategy = first_test_set.get("strategy", "factual")
+            test_set_path = test_sets_dir / f"auto_{strategy}.json"
+
+            if not test_set_path.exists():
+                test_set_files = sorted(test_sets_dir.glob("*.json")) if test_sets_dir.exists() else []
+                if test_set_files:
+                    test_set_path = test_set_files[0]
+                    logger.info(f"Specified test set not found, using: {test_set_path.stem}")
+                else:
+                    logger.error(
+                        f"No test sets found for meal '{meal_name}'. "
+                        "Generate one with: python main.py --generate-test-set {meal_name}"
+                    )
+                    sys.exit(1)
         else:
             test_set_files = sorted(test_sets_dir.glob("*.json")) if test_sets_dir.exists() else []
             if not test_set_files:
                 logger.error(
-                    f"No test sets found for meal '{args.meal}'. "
-                    "Generate one with: python main.py --generate-test-set {args.meal}"
+                    f"No test sets found for meal '{meal_name}'. "
+                    "Generate one with: python main.py --generate-test-set {meal_name}"
                 )
                 sys.exit(1)
             test_set_path = test_set_files[0]
             logger.info(f"Using test set: {test_set_path.stem}")
 
         test_data_path = str(test_set_path)
-        output_dir = str(meal_manager.get_meal_dir(args.meal))
+        output_dir = str(meal_manager.get_meal_dir(meal_name))
+
+        llm_preset = exp_config.evaluation.get("llm_preset", args.llm_preset)
+    else:
+        if args.meal:
+            meal_manager = MealManager(config)
+            meal_config = meal_manager.load_meal(args.meal)
+            meal_data_id = meal_config.data_id
+
+            status, issues = meal_manager.check_meal_status(args.meal)
+            if status != MealStatus.AVAILABLE:
+                logger.warning(
+                    f"Meal '{args.meal}' status: {status.value}. "
+                    "Some PDFs may be missing or changed."
+                )
+
+            test_sets_dir = meal_manager.get_meal_dir(args.meal) / "test_sets"
+            if args.test_set:
+                test_set_path = test_sets_dir / f"{args.test_set}.json"
+            else:
+                test_set_files = sorted(test_sets_dir.glob("*.json")) if test_sets_dir.exists() else []
+                if not test_set_files:
+                    logger.error(
+                        f"No test sets found for meal '{args.meal}'. "
+                        "Generate one with: python main.py --generate-test-set {args.meal}"
+                    )
+                    sys.exit(1)
+                test_set_path = test_set_files[0]
+                logger.info(f"Using test set: {test_set_path.stem}")
+
+            test_data_path = str(test_set_path)
+            output_dir = str(meal_manager.get_meal_dir(args.meal))
+
+        llm_preset = args.llm_preset
 
     sampling_config = None
     sample_modes = [
@@ -245,13 +341,22 @@ if __name__ == "__main__":
         mode, value = active_modes[0]
         sampling_config = SamplingConfig(mode=mode, value=value)
 
+    meal_name_for_pipeline = None
+    if args.exp_config:
+        meal_name_for_pipeline = exp_config.data.get("meal")
+    elif args.meal:
+        meal_name_for_pipeline = args.meal
+
     pipeline = RAGPipeline(
         config_path=args.config,
-        llm_preset=args.llm_preset,
-        meal_name=args.meal,
+        llm_preset=llm_preset,
+        meal_name=meal_name_for_pipeline,
     )
 
-    if not args.meal:
+    if args.exp_config:
+        pipeline.config = config
+
+    if not meal_name_for_pipeline:
         collection_info = pipeline.indexer.get_collection_info()
         index_exists = collection_info is not None and collection_info.get("points_count", 0) > 0
 
