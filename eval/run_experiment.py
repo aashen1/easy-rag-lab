@@ -357,7 +357,7 @@ def prepare_test_sets(
         num_questions = test_set_config.get("num_questions", 20)
         seed = test_set_config.get("seed")
 
-        filename = f"auto_{strategy}"
+        filename = f"auto_{strategy}_n{num_questions}"
         test_set_path = test_sets_dir / f"{filename}.json"
 
         if test_set_path.exists():
@@ -367,15 +367,16 @@ def prepare_test_sets(
                     test_set_data = json.load(f)
 
                 existing_count = len(test_set_data.get("questions", []))
-                if existing_count < num_questions:
+                if existing_count != num_questions:
                     logger.warning(
                         f"Existing test set has {existing_count} questions, "
-                        f"but {num_questions} requested. Using existing set."
+                        f"but {num_questions} requested. Regenerating."
                     )
-
-                test_sets.append(test_set_data)
-                logger.success(f"Test set '{filename}' loaded ({existing_count} questions)")
-                continue
+                    test_set_path.unlink()
+                else:
+                    test_sets.append(test_set_data)
+                    logger.success(f"Test set '{filename}' loaded ({existing_count} questions)")
+                    continue
             except Exception as e:
                 logger.warning(f"Failed to load test set '{filename}': {str(e)}, will regenerate")
 

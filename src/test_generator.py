@@ -101,7 +101,8 @@ class TestSetGenerator:
         )
 
         chunk_groups = self._select_chunks(grouped, strategy, num_questions)
-        logger.info(f"Selected {len(chunk_groups)} chunk groups for question generation")
+        logger.info(
+            f"Selected {len(chunk_groups)} chunk groups for question generation")
 
         from src.generator import Generator
 
@@ -117,26 +118,29 @@ class TestSetGenerator:
         questions = []
         for i, chunk_group in enumerate(chunk_groups):
             logger.info(f"Generating question {i + 1}/{len(chunk_groups)}...")
-            qa = self._generate_question_with_llm(chunk_group, strategy, generator)
+            qa = self._generate_question_with_llm(
+                chunk_group, strategy, generator)
             if qa is not None:
                 source_files = list({
                     c.get("metadata", {}).get("source", "unknown")
                     for c in chunk_group
                 })
-                source_chunks = [c.get("chunk_id", f"chunk_{i}") for c in chunk_group]
+                source_chunks = [
+                    c.get("chunk_id", f"chunk_{i}") for c in chunk_group]
                 qa["id"] = f"q{i + 1:03d}"
                 qa["source_chunks"] = source_chunks
                 qa["source_files"] = source_files
                 qa["category"] = strategy
                 questions.append(qa)
             else:
-                logger.warning(f"Failed to generate question {i + 1}, skipping")
+                logger.warning(
+                    f"Failed to generate question {i + 1}, skipping")
 
         if not questions:
             raise ValueError("No questions could be generated")
 
         test_set = {
-            "name": f"auto_{strategy}",
+            "name": f"auto_{strategy}_n{num_questions}",
             "meal_data_id": meal_config.data_id,
             "meal_name": meal_name,
             "strategy": strategy,
@@ -149,7 +153,7 @@ class TestSetGenerator:
             "questions": questions,
         }
 
-        filename = f"auto_{strategy}"
+        filename = f"auto_{strategy}_n{num_questions}"
         self._save_test_set(meal_name, test_set, filename)
 
         logger.success(
@@ -159,7 +163,8 @@ class TestSetGenerator:
         return test_set
 
     def _load_meal_chunks(self, meal_config) -> List[Dict[str, Any]]:
-        chunks_dir = Path(self.config.get("chunker", {}).get("output_dir", "data/chunks"))
+        chunks_dir = Path(self.config.get(
+            "chunker", {}).get("output_dir", "data/chunks"))
         if not chunks_dir.exists():
             return []
 
@@ -173,7 +178,8 @@ class TestSetGenerator:
 
         for jsonl_file in jsonl_files:
             try:
-                rel_path = str(jsonl_file.relative_to(chunks_dir)).replace("\\", "/")
+                rel_path = str(jsonl_file.relative_to(
+                    chunks_dir)).replace("\\", "/")
                 jsonl_md_path = rel_path.rsplit(".", 1)[0] + ".md"
 
                 if source_filter and jsonl_md_path not in source_filter:
@@ -246,12 +252,14 @@ class TestSetGenerator:
         for source, chunks in grouped_chunks.items():
             for i in range(len(chunks) - 1):
                 idx_i = chunks[i].get("metadata", {}).get("chunk_index", i)
-                idx_next = chunks[i + 1].get("metadata", {}).get("chunk_index", i + 1)
+                idx_next = chunks[i + 1].get("metadata",
+                                             {}).get("chunk_index", i + 1)
                 if idx_next == idx_i + 1:
                     pairs.append([chunks[i], chunks[i + 1]])
 
         if not pairs:
-            logger.warning("No adjacent chunk pairs found for boundary strategy")
+            logger.warning(
+                "No adjacent chunk pairs found for boundary strategy")
             return []
 
         return random.sample(pairs, min(num_questions, len(pairs)))
@@ -267,7 +275,8 @@ class TestSetGenerator:
                         groups.append([chunks[i], chunks[j]])
 
         if not groups:
-            logger.warning("No non-adjacent chunk groups found for multi_hop strategy")
+            logger.warning(
+                "No non-adjacent chunk groups found for multi_hop strategy")
             return []
 
         return random.sample(groups, min(num_questions, len(groups)))
@@ -280,11 +289,13 @@ class TestSetGenerator:
     ) -> Optional[Dict[str, Any]]:
         normalized_strategy = strategy.replace("-", "_")
         if normalized_strategy == "factual":
-            prompt = FACTUAL_PROMPT.format(chunk_text=chunks[0].get("text", ""))
+            prompt = FACTUAL_PROMPT.format(
+                chunk_text=chunks[0].get("text", ""))
         elif normalized_strategy == "boundary":
             prompt = BOUNDARY_PROMPT.format(
                 chunk1_text=chunks[0].get("text", ""),
-                chunk2_text=chunks[1].get("text", "") if len(chunks) > 1 else "",
+                chunk2_text=chunks[1].get(
+                    "text", "") if len(chunks) > 1 else "",
             )
         elif normalized_strategy == "multi_hop":
             chunk_texts = "\n\n---\n\n".join(
@@ -307,7 +318,8 @@ class TestSetGenerator:
                 if qa is not None:
                     return qa
 
-                logger.debug(f"Attempt {attempt + 1}: failed to parse LLM response")
+                logger.debug(
+                    f"Attempt {attempt + 1}: failed to parse LLM response")
             except Exception as e:
                 logger.warning(f"Attempt {attempt + 1} failed: {str(e)}")
 

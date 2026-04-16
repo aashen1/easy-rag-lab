@@ -1,21 +1,20 @@
+from typing import Any, Dict, List, Optional
+from datetime import datetime
+import time
+import random
+import json
+from loguru import logger
+from eval.metrics import calculate_hit_rate, calculate_mrr, calculate_ndcg
+from src.experiment import ExperimentConfig, load_experiment_config, merge_config
+from src.meal import MealManager, MealStatus
+from src.sampler import SamplingConfig
+from src.pipeline import RAGPipeline
+from src.utils import load_config, setup_logger
 import sys
 from pathlib import Path
 
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
-
-from src.utils import load_config, setup_logger
-from src.pipeline import RAGPipeline
-from src.sampler import SamplingConfig
-from src.meal import MealManager, MealStatus
-from src.experiment import ExperimentConfig, load_experiment_config, merge_config
-from eval.metrics import calculate_hit_rate, calculate_mrr, calculate_ndcg
-from loguru import logger
-import json
-import random
-import time
-from datetime import datetime
-from typing import Any, Dict, List, Optional
 
 
 def run_evaluation(
@@ -224,7 +223,8 @@ if __name__ == "__main__":
 
         meal_name = exp_config.data.get("meal")
         if not meal_name:
-            logger.error("Experiment configuration must specify a meal name in data.meal field")
+            logger.error(
+                "Experiment configuration must specify a meal name in data.meal field")
             sys.exit(1)
 
         if args.variant:
@@ -234,7 +234,8 @@ if __name__ == "__main__":
                     variant_config = v
                     break
             if variant_config is None:
-                available_variants = [v.get("name") for v in exp_config.variants]
+                available_variants = [v.get("name")
+                                      for v in exp_config.variants]
                 logger.error(
                     f"Variant '{args.variant}' not found. "
                     f"Available variants: {available_variants}"
@@ -243,7 +244,8 @@ if __name__ == "__main__":
         else:
             variant_config = exp_config.variants[0] if exp_config.variants else None
             if variant_config:
-                logger.info(f"Using first variant: {variant_config.get('name')}")
+                logger.info(
+                    f"Using first variant: {variant_config.get('name')}")
 
         config = merge_config(config, exp_config, variant_config)
 
@@ -264,13 +266,17 @@ if __name__ == "__main__":
         if test_set_configs:
             first_test_set = test_set_configs[0]
             strategy = first_test_set.get("strategy", "factual")
-            test_set_path = test_sets_dir / f"auto_{strategy}.json"
+            num_questions = first_test_set.get("num_questions", 20)
+            test_set_path = test_sets_dir / \
+                f"auto_{strategy}_n{num_questions}.json"
 
             if not test_set_path.exists():
-                test_set_files = sorted(test_sets_dir.glob("*.json")) if test_sets_dir.exists() else []
+                test_set_files = sorted(test_sets_dir.glob(
+                    "*.json")) if test_sets_dir.exists() else []
                 if test_set_files:
                     test_set_path = test_set_files[0]
-                    logger.info(f"Specified test set not found, using: {test_set_path.stem}")
+                    logger.info(
+                        f"Specified test set not found, using: {test_set_path.stem}")
                 else:
                     logger.error(
                         f"No test sets found for meal '{meal_name}'. "
@@ -278,7 +284,8 @@ if __name__ == "__main__":
                     )
                     sys.exit(1)
         else:
-            test_set_files = sorted(test_sets_dir.glob("*.json")) if test_sets_dir.exists() else []
+            test_set_files = sorted(test_sets_dir.glob(
+                "*.json")) if test_sets_dir.exists() else []
             if not test_set_files:
                 logger.error(
                     f"No test sets found for meal '{meal_name}'. "
@@ -309,7 +316,8 @@ if __name__ == "__main__":
             if args.test_set:
                 test_set_path = test_sets_dir / f"{args.test_set}.json"
             else:
-                test_set_files = sorted(test_sets_dir.glob("*.json")) if test_sets_dir.exists() else []
+                test_set_files = sorted(test_sets_dir.glob(
+                    "*.json")) if test_sets_dir.exists() else []
                 if not test_set_files:
                     logger.error(
                         f"No test sets found for meal '{args.meal}'. "
@@ -358,7 +366,8 @@ if __name__ == "__main__":
 
     if not meal_name_for_pipeline:
         collection_info = pipeline.indexer.get_collection_info()
-        index_exists = collection_info is not None and collection_info.get("points_count", 0) > 0
+        index_exists = collection_info is not None and collection_info.get(
+            "points_count", 0) > 0
 
         if args.rebuild:
             logger.info("Rebuilding index from scratch...")
@@ -366,7 +375,8 @@ if __name__ == "__main__":
             logger.success("Index rebuilt successfully")
         elif args.build_index or not index_exists:
             if not index_exists:
-                logger.warning("Vector index is empty or does not exist. Building index automatically...")
+                logger.warning(
+                    "Vector index is empty or does not exist. Building index automatically...")
             pipeline.build_index(sampling_config=sampling_config)
             logger.success("Index built successfully")
 
