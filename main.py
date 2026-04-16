@@ -478,6 +478,18 @@ def _print_query_result(result: dict):
             zip(result["sources"], result["scores"]), 1
         ):
             print(f"{i}. {source} (relevance: {score:.4f})")
+    if "token_usage" in result and result["token_usage"]:
+        tu = result["token_usage"]
+        print(f"\n{'='*60}")
+        print("Token Usage:")
+        print(f"{'='*60}")
+        print(f"  Input:  {tu['input_tokens']:,}")
+        print(f"  Output: {tu['output_tokens']:,}")
+        print(f"  Total:  {tu['total_tokens']:,}")
+        if tu.get("system_prompt_tokens"):
+            print(f"    System Prompt: {tu['system_prompt_tokens']:,}")
+            print(f"    Contexts:      {tu['contexts_tokens']:,}")
+            print(f"    Query:         {tu['query_tokens']:,}")
 
 
 def _interactive_qa(pipeline: RAGPipeline, meal_name: str):
@@ -494,12 +506,19 @@ def _interactive_qa(pipeline: RAGPipeline, meal_name: str):
         if not question:
             continue
         if question.lower() in ("quit", "exit", "q"):
+            tracker = pipeline.token_tracker
+            if tracker and tracker.record_count > 0:
+                total = tracker.get_total()
+                print(f"\nSession Token Usage: in={total.input_tokens:,} out={total.output_tokens:,} total={total.total_tokens:,}")
             print("Exiting.")
             break
 
         try:
             result = pipeline.query(question)
             print(f"\nA: {result['answer']}")
+            if "token_usage" in result and result["token_usage"]:
+                tu = result["token_usage"]
+                print(f"  Tokens: in={tu['input_tokens']:,} out={tu['output_tokens']:,} total={tu['total_tokens']:,}")
             if "sources" in result:
                 sources = result["sources"]
                 scores = result["scores"]

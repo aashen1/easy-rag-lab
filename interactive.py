@@ -24,12 +24,20 @@ def interactive_chat(pipeline: RAGPipeline) -> None:
                 continue
 
             if query.lower() in ["quit", "exit", "q"]:
+                tracker = pipeline.token_tracker
+                if tracker and tracker.record_count > 0:
+                    total = tracker.get_total()
+                    print(f"\n📊 Session Token Usage: in={total.input_tokens:,} out={total.output_tokens:,} total={total.total_tokens:,}")
                 print("👋 再见！\n")
                 break
 
             result = pipeline.query(query)
 
             print(f"\n🤖 Assistant: {result['answer']}\n")
+
+            if "token_usage" in result and result["token_usage"]:
+                tu = result["token_usage"]
+                print(f"📊 Tokens: in={tu['input_tokens']:,} out={tu['output_tokens']:,} total={tu['total_tokens']:,}\n")
 
             if "sources" in result and result["sources"]:
                 print("📚 参考来源：")
