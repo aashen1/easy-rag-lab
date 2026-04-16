@@ -475,6 +475,9 @@ def run_variant_evaluation(
 
         logger.info(f"Using collection: {collection_name}")
 
+        if hasattr(pipeline, 'indexer') and pipeline.indexer is not None:
+            pipeline.indexer.close()
+
         indexer = VectorIndexer(
             persist_dir=vector_store_config.get("persist_dir", "data/vector_store"),
             collection_name=collection_name,
@@ -763,7 +766,23 @@ def run_experiment(
                 meal_info=meal_info,
                 config_snapshot=config_snapshot,
                 output_filename="experiment_report.md",
+                use_llm=False,
             )
+
+            if use_llm_report:
+                logger.info("Generating LLM-enhanced report...")
+                try:
+                    reporter.generate_variant_comparison_report(
+                        exp_dir=exp_dir,
+                        variant_results=all_variant_results,
+                        meal_info=meal_info,
+                        config_snapshot=config_snapshot,
+                        output_filename="experiment_report_llm.md",
+                        use_llm=True,
+                    )
+                    logger.success("LLM-enhanced report generated successfully")
+                except Exception as e:
+                    logger.warning(f"Failed to generate LLM report: {str(e)}")
 
         exp_manager.update_manifest_status(exp_dir, "completed")
         logger.success(f"Experiment completed successfully: {exp_dir}")

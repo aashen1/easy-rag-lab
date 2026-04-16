@@ -208,6 +208,14 @@ class VectorIndexer:
             logger.error(error_msg)
             raise Exception(error_msg)
 
+    def close(self) -> None:
+        try:
+            if hasattr(self, 'client') and self.client is not None:
+                self.client.close()
+                logger.info(f"Qdrant client closed for collection: {self.collection_name}")
+        except Exception as e:
+            logger.warning(f"Error closing Qdrant client: {str(e)}")
+
 
 if __name__ == "__main__":
     from src.utils import load_config, setup_logger

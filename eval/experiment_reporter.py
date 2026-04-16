@@ -185,6 +185,7 @@ class ExperimentReporter:
         meal_info: Optional[Dict[str, Any]] = None,
         config_snapshot: Optional[Dict[str, Any]] = None,
         output_filename: str = "experiment_report.md",
+        use_llm: bool = False,
     ) -> str:
         """
         Generate a multi-variant comparison report.
@@ -195,13 +196,19 @@ class ExperimentReporter:
             meal_info: Meal information dictionary.
             config_snapshot: Configuration snapshot dictionary.
             output_filename: Output filename.
+            use_llm: If True, use LLM to enhance the report.
 
         Returns:
             Generated report content.
         """
-        report = self._generate_variant_comparison_template(
-            variant_results, meal_info, config_snapshot
-        )
+        if use_llm:
+            report = self._generate_variant_comparison_llm(
+                variant_results, meal_info, config_snapshot
+            )
+        else:
+            report = self._generate_variant_comparison_template(
+                variant_results, meal_info, config_snapshot
+            )
 
         output_path = Path(exp_dir) / output_filename
         try:
@@ -231,6 +238,26 @@ class ExperimentReporter:
             self._generate_variant_recommendations_section(variant_results),
         ]
         return "\n\n".join(s for s in sections if s)
+
+    def _generate_variant_comparison_llm(
+        self,
+        variant_results: List[Dict[str, Any]],
+        meal_info: Optional[Dict[str, Any]] = None,
+        config_snapshot: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        try:
+            prompt = self._build_variant_comparison_llm_prompt(
+                variant_results, meal_info, config_snapshot
+            )
+            llm_response = self._call_llm(prompt)
+            return self._format_variant_comparison_llm_report(
+                variant_results, meal_info, llm_response
+            )
+        except Exception as e:
+            logger.warning(f"LLM report generation failed, falling back to template: {str(e)}")
+            return self._generate_variant_comparison_template(
+                variant_results, meal_info, config_snapshot
+            )
 
     def _generate_variant_header(
         self, meal_info: Optional[Dict[str, Any]] = None
@@ -842,3 +869,66 @@ class ExperimentReporter:
             "",
         ]
         return "\n".join([header, ""] + meta_info + [llm_response])
+
+    def _build_variant_comparison_llm_prompt(
+        self,
+        variant_results: List[Dict[str, Any]],
+        meal_info: Optional[Dict[str, Any]] = None,
+        config_snapshot: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        template_report = self._generate_variant_comparison_template(
+            variant_results, meal_info, config_snapshot
+        )
+
+        prompt = f"""You are an expert RAG system analyst. Please write a comprehensive experiment report in Chinese (Simplified) based on the following experiment data.
+
+## Experiment Data
+
+{template_report}
+
+## Requirements
+
+Please write a professional experiment report with the following sections:
+
+### 1. 实验概述
+- Describe the purpose and setup of this experiment
+- Explain the variants being compared
+- Summarize the overall findings
+
+### 2. 性能分析
+- Analyze the retrieval metrics (Hit Rate, MRR, NDCG) for each variant
+- Compare performance across different variants
+- Identify strengths and weaknesses of each configuration
+
+### 3. 问题类型分析
+- Analyze performance patterns across different question types (factual, boundary, multi-hop)
+- Identify which question types are more challenging
+- Discuss potential reasons for performance differences
+
+### 4. 配置影响分析
+- Evaluate the impact of different configuration choices
+- Discuss how chunk size, overlap, and other parameters affect performance
+- Provide insights on optimal configuration choices
+
+### 5. 结论与建议
+- Summarize key findings
+- Provide actionable recommendations for improvement
+- Suggest next steps for optimization
+
+Please write the report in a professional, objective tone with specific data references. Use markdown formatting for better readability.
+"""
+        return prompt
+
+    def _format_variant_comparison_llm_report(
+        self,
+        variant_results: List[Dict[str, Any]],
+        llm_response: str,
+        meal_info: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        header = self._generate_variant_header(meal_info)
+        meta_info = [
+            "",
+            f"> Generated with LLM assistance at {datetime.now().isoformat()}",
+            "",
+        ]
+        return "\n".join([header] + meta_info + [llm_response])
