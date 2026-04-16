@@ -100,6 +100,26 @@ test_generation:
   default_num_questions: 20
   max_retries: 3
 
+# Token 成本配置：各模型的定价和折算系数
+token_cost:
+  models:
+    LongCat-Flash-Lite:
+      input_price_per_1k: 0.001
+      output_price_per_1k: 0.002
+      conversion_factor: 1.0
+    claude-3-opus-20240229:
+      input_price_per_1k: 0.015
+      output_price_per_1k: 0.075
+      conversion_factor: 15.0
+    claude-3-5-sonnet-20241022:
+      input_price_per_1k: 0.003
+      output_price_per_1k: 0.015
+      conversion_factor: 3.0
+    claude-3-haiku-20240307:
+      input_price_per_1k: 0.00025
+      output_price_per_1k: 0.00125
+      conversion_factor: 0.25
+
 # 日志配置
 logging:
   level: "INFO"
