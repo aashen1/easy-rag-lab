@@ -137,7 +137,7 @@ class TestSetGenerator:
 
         test_set = {
             "name": f"auto_{strategy}",
-            "meal_uuid": meal_config.uuid,
+            "meal_data_id": meal_config.data_id,
             "meal_name": meal_name,
             "strategy": strategy,
             "created_at": datetime.now().isoformat(),

@@ -22,7 +22,7 @@ def run_evaluation(
     test_data_path: str,
     output_dir: str,
     sample_size: int = None,
-    meal_uuid: str = None,
+    meal_data_id: str = None,
 ) -> Dict[str, Any]:
     test_data_path = Path(test_data_path)
     output_dir = Path(output_dir)
@@ -110,7 +110,7 @@ def run_evaluation(
 
     summary = {
         "timestamp": datetime.now().isoformat(),
-        "meal_uuid": meal_uuid,
+        "meal_data_id": meal_data_id,
         "total_test_cases": len(test_cases),
         "total_time_seconds": total_time,
         "avg_time_per_case": total_time / len(test_cases),
@@ -133,8 +133,8 @@ def print_summary(summary: Dict[str, Any]) -> None:
     print("EVALUATION SUMMARY")
     print("=" * 60)
     print(f"Timestamp: {summary['timestamp']}")
-    if summary.get("meal_uuid"):
-        print(f"Meal UUID: {summary['meal_uuid']}")
+    if summary.get("meal_data_id"):
+        print(f"Meal Data ID: {summary['meal_data_id']}")
     print(f"Total test cases: {summary['total_test_cases']}")
     print(f"Total time: {summary['total_time_seconds']:.2f}s")
     print(f"Avg time per case: {summary['avg_time_per_case']:.2f}s")
@@ -189,14 +189,14 @@ if __name__ == "__main__":
     config = load_config(args.config)
     setup_logger(config)
 
-    meal_uuid = None
+    meal_data_id = None
     test_data_path = args.test_data
     output_dir = args.output_dir
 
     if args.meal:
         meal_manager = MealManager(config)
         meal_config = meal_manager.load_meal(args.meal)
-        meal_uuid = meal_config.uuid
+        meal_data_id = meal_config.data_id
 
         status, issues = meal_manager.check_meal_status(args.meal)
         if status != MealStatus.AVAILABLE:
@@ -263,7 +263,7 @@ if __name__ == "__main__":
         pipeline=pipeline,
         test_data_path=test_data_path,
         output_dir=output_dir,
-        meal_uuid=meal_uuid,
+        meal_data_id=meal_data_id,
     )
 
     print_summary(summary)

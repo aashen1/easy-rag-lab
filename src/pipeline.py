@@ -36,7 +36,7 @@ class RAGPipeline:
             meal_manager = MealManager(self.config)
             self.meal_config = meal_manager.load_meal(meal_name)
             collection_name = self.meal_config.collection_name
-            logger.info(f"Using meal '{meal_name}' (collection: {collection_name})")
+            logger.info(f"Using meal '{meal_name}' (data_id: {self.meal_config.data_id[:12]}, collection: {collection_name})")
 
         self.indexer = VectorIndexer(
             persist_dir=vector_store_config["persist_dir"],
@@ -151,7 +151,7 @@ class RAGPipeline:
             embedder=self.embedder,
             top_k=self.config["retrieval"]["top_k"],
         )
-        logger.info(f"Switched to meal '{meal_name}' (collection: {self.meal_config.collection_name})")
+        logger.info(f"Switched to meal '{meal_name}' (data_id: {self.meal_config.data_id[:12]}, collection: {self.meal_config.collection_name})")
         return self.meal_config
 
     def query(
