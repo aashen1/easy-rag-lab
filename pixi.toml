@@ -7,6 +7,29 @@ version = "0.1.0"
 
 [tasks]
 
+
+
+[tasks._run-exp]
+args = ["config"]
+cmd = "python eval/run_experiment.py --config {{ config }}"
+
+[tasks.exp]
+args = ["name"]
+depends-on = [
+  { task = "_run-exp", args = [
+    "exp_configs/{{ name if '.yaml' in name else name + '.yaml' }}"
+  ]}
+]
+
+# # same as above
+# [tasks.exp]
+# args = ["config"]
+# cmd = """
+# python eval/run_experiment.py --config exp_configs/{{
+#     config if ".yaml" in config else config + ".yaml"
+# }}
+# """
+
 [system-requirements]
 cuda = "12.6"
 

@@ -241,7 +241,11 @@ pixi run python eval/run_eval.py --build-index
 #### 快速开始
 
 ```bash
-# 运行实验
+# 运行实验（便捷写法 - 推荐）
+pixi run exp baseline.yaml        # 自动补全为 exp_configs/baseline.yaml
+pixi run exp baseline             # 也支持省略 .yaml 后缀
+
+# 运行实验（完整写法）
 pixi run python eval/run_experiment.py --config exp_configs/baseline.yaml
 
 # 列出所有实验
