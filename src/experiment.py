@@ -729,14 +729,14 @@ class ExperimentManager:
             status: New status value (running, completed, failed).
 
         Raises:
-            FileNotFoundError: If manifest file does not exist.
             OSError: If file writing fails.
         """
         import json
 
         manifest_path = exp_dir / "manifest.json"
         if not manifest_path.exists():
-            raise FileNotFoundError(f"Manifest file not found: {manifest_path}")
+            logger.warning(f"Manifest file not found: {manifest_path}, skipping status update")
+            return
 
         try:
             with open(manifest_path, "r", encoding="utf-8") as f:
