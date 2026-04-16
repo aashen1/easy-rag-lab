@@ -23,6 +23,7 @@ variants:
 
 evaluation:
   llm_preset: "default"
+  llm_report: true
   metrics:
     retrieval:
       - "hit_rate"

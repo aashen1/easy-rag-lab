@@ -251,7 +251,7 @@ class ExperimentReporter:
             )
             llm_response = self._call_llm(prompt)
             return self._format_variant_comparison_llm_report(
-                variant_results, meal_info, llm_response
+                variant_results, llm_response, meal_info
             )
         except Exception as e:
             logger.warning(f"LLM report generation failed, falling back to template: {str(e)}")

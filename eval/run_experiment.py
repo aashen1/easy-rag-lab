@@ -31,7 +31,7 @@ from src.meal import (
 from src.pipeline import RAGPipeline
 from src.sampler import SamplingConfig
 from src.test_generator import TestSetGenerator
-from src.utils import load_config, setup_logger
+from src.utils import get_llm_config, load_config, setup_logger
 from eval.metrics import calculate_hit_rate, calculate_mrr, calculate_ndcg
 from eval.experiment_reporter import ExperimentReporter
 
@@ -799,9 +799,13 @@ def run_experiment(
         logger.info("Step 4: Generating experiment report...")
 
         if all_variant_results:
+            llm_preset_name = exp_config.evaluation.get("llm_preset", "default")
+            llm_config = get_llm_config(system_config, llm_preset_name)
+
             reporter = ExperimentReporter(
-                llm_api_key=system_config.get("llm_presets", {}).get("default", {}).get("api_key"),
-                llm_base_url=system_config.get("llm_presets", {}).get("default", {}).get("base_url"),
+                llm_api_key=llm_config.get("api_key"),
+                llm_base_url=llm_config.get("base_url"),
+                llm_model_name=llm_config.get("model_name"),
             )
 
             reporter.generate_variant_comparison_report(
@@ -813,7 +817,7 @@ def run_experiment(
                 use_llm=False,
             )
 
-            if use_llm_report:
+            if use_llm_report or exp_config.evaluation.get("llm_report", False):
                 logger.info("Generating LLM-enhanced report...")
                 try:
                     reporter.generate_variant_comparison_report(
