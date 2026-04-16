@@ -257,27 +257,48 @@ def _handle_list_meals(meal_manager: MealManager):
         print("No meals found.")
         return
 
-    print(f"\n{'Name':<20} {'UUID':<10} {'Status':<16} {'PDFs':>5} {'Pages':>7} {'Chunks':>8} {'Created'}")
-    print("-" * 90)
+    from collections import defaultdict
+    data_groups = defaultdict(list)
     for meal in meals:
-        status, issues = meal_manager.check_meal_status(meal.name)
-        status_str = status.value
-        if status == MealStatus.AVAILABLE:
-            status_str = "✅ available"
-        elif status == MealStatus.FILES_MISSING:
-            status_str = f"⚠️ {len(issues)} missing"
-        elif status == MealStatus.FILES_CHANGED:
-            status_str = f"❌ {len(issues)} changed"
-        elif status == MealStatus.MIXED:
-            status_str = f"❌ {len(issues)} issues"
+        data_groups[meal.data_id].append(meal)
 
-        print(
-            f"{meal.name:<20} {meal.uuid[:8]:<10} {status_str:<16} "
-            f"{meal.stats.get('total_pdfs', '?'):>5} "
-            f"{meal.stats.get('total_pages', '?'):>7} "
-            f"{meal.stats.get('total_chunks', '?'):>8} "
-            f"{meal.created_at[:16]}"
-        )
+    print(f"\n{'Name':<20} {'DataID':<14} {'Status':<16} {'PDFs':>5} {'Pages':>7} {'Chunks':>8} {'Config':<20} {'Created'}")
+    print("-" * 115)
+
+    for data_id, group_meals in data_groups.items():
+        for i, meal in enumerate(group_meals):
+            status, issues = meal_manager.check_meal_status(meal.name)
+            status_str = status.value
+            if status == MealStatus.AVAILABLE:
+                status_str = "✅ available"
+            elif status == MealStatus.FILES_MISSING:
+                status_str = f"⚠️ {len(issues)} missing"
+            elif status == MealStatus.FILES_CHANGED:
+                status_str = f"❌ {len(issues)} changed"
+            elif status == MealStatus.MIXED:
+                status_str = f"❌ {len(issues)} issues"
+
+            config_str = ""
+            if meal.config_snapshot and "chunker" in meal.config_snapshot:
+                cs = meal.config_snapshot["chunker"]
+                config_str = f"sz={cs.get('chunk_size','?')} ov={cs.get('overlap','?')}"
+
+            data_id_str = data_id[:12]
+            if len(group_meals) > 1 and i > 0:
+                data_id_str = f"  └─{data_id[:10]}"
+
+            print(
+                f"{meal.name:<20} {data_id_str:<14} {status_str:<16} "
+                f"{meal.stats.get('total_pdfs', '?'):>5} "
+                f"{meal.stats.get('total_pages', '?'):>7} "
+                f"{meal.stats.get('total_chunks', '?'):>8} "
+                f"{config_str:<20} "
+                f"{meal.created_at[:16]}"
+            )
+
+        if len(group_meals) > 1:
+            print(f"  ↳ Same data group ({len(group_meals)} meals share data_id={data_id[:12]})")
+
     print()
 
 
