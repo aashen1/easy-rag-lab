@@ -214,11 +214,12 @@ class TestSetGenerator:
         strategy: str,
         num_questions: int,
     ) -> List[List[Dict]]:
-        if strategy == "factual":
+        normalized_strategy = strategy.replace("-", "_")
+        if normalized_strategy == "factual":
             return self._select_chunks_for_factual(grouped_chunks, num_questions)
-        elif strategy == "boundary":
+        elif normalized_strategy == "boundary":
             return self._select_chunks_for_boundary(grouped_chunks, num_questions)
-        elif strategy == "multi_hop":
+        elif normalized_strategy == "multi_hop":
             return self._select_chunks_for_multi_hop(grouped_chunks, num_questions)
         else:
             raise ValueError(f"Unknown strategy: {strategy}")
@@ -277,14 +278,15 @@ class TestSetGenerator:
         strategy: str,
         generator,
     ) -> Optional[Dict[str, Any]]:
-        if strategy == "factual":
+        normalized_strategy = strategy.replace("-", "_")
+        if normalized_strategy == "factual":
             prompt = FACTUAL_PROMPT.format(chunk_text=chunks[0].get("text", ""))
-        elif strategy == "boundary":
+        elif normalized_strategy == "boundary":
             prompt = BOUNDARY_PROMPT.format(
                 chunk1_text=chunks[0].get("text", ""),
                 chunk2_text=chunks[1].get("text", "") if len(chunks) > 1 else "",
             )
-        elif strategy == "multi_hop":
+        elif normalized_strategy == "multi_hop":
             chunk_texts = "\n\n---\n\n".join(
                 f"片段{i + 1}:\n{c.get('text', '')}"
                 for i, c in enumerate(chunks)
