@@ -217,7 +217,11 @@ pixi run python main.py --query "工商银行2024年的净利润是多少？" --
 
 ## 📊 评测系统
 
-### 运行评测
+项目提供两种评测方式：**基础评测**和**自动化实验系统**。
+
+### 基础评测
+
+适用于快速验证系统功能。
 
 ```bash
 # 运行完整评测
@@ -230,6 +234,83 @@ pixi run python eval/run_eval.py --sample-count 5
 pixi run python eval/run_eval.py --build-index
 ```
 
+### 自动化实验系统
+
+适用于系统性对比不同配置的效果。
+
+#### 快速开始
+
+```bash
+# 运行实验
+pixi run python eval/run_experiment.py --config exp_configs/baseline.yaml
+
+# 列出所有实验
+pixi run python eval/run_experiment.py --list
+
+# 查看实验详情
+pixi run python eval/run_experiment.py --info exp_20250416_120000
+
+# 对比多个实验
+pixi run python eval/run_experiment.py --compare exp_001 exp_002
+
+# 复现实验
+pixi run python eval/run_experiment.py --reproduce data/exp_reports/exp_20250416_120000
+```
+
+#### 实验配置
+
+实验配置文件位于 `exp_configs/` 目录，采用 YAML 格式：
+
+```yaml
+name: "experiment_name"
+description: "实验描述"
+
+data:
+  meal: "meal_name"  # 数据集名称
+  create_if_missing:  # 如果不存在，自动创建
+    sample_ratio: 0.1  # 采样比例
+
+test_sets:
+  - strategy: "factual"  # 问题策略
+    num_questions: 20
+
+variants:
+  - name: "variant_1"
+    description: "配置描述"
+    config_overrides:
+      chunker:
+        chunk_size: 512
+        chunk_overlap: 0
+
+evaluation:
+  llm_preset: "default"
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+```
+
+#### 核心功能
+
+- **多 Variant 对比**: 在一个实验中对比多种配置
+- **自动数据准备**: 自动创建数据集和测试集
+- **实验复现**: 完整保存配置和数据，支持复现
+- **自动报告生成**: 生成结构化的实验报告
+
+#### 实验结果
+
+实验结果保存在 `data/exp_reports/` 目录：
+
+```
+data/exp_reports/exp_20250416_120000/
+├── manifest.json           # 实验元数据
+├── config_snapshot.yaml    # 配置快照
+├── meal_snapshot.json      # 数据集快照
+├── results/                # 各 variant 结果
+└── experiment_report.md    # 实验报告
+```
+
 ### 评测指标
 
 **检索质量指标**：
@@ -237,11 +318,13 @@ pixi run python eval/run_eval.py --build-index
 - **MRR**：平均倒数排名，衡量第一个正确文档的排名
 - **NDCG**：归一化折损累积增益，综合考虑排序位置
 
-> **注**：生成质量指标（Faithfulness、Answer Relevancy）计划在后续版本中实现。
+**生成质量指标**（计划中）：
+- **Faithfulness**：回答的忠实度
+- **Answer Relevancy**：回答的相关性
 
 ### 查看评测结果
 
-评测结果保存在 `eval/results/baseline_report.json`：
+**基础评测结果**保存在 `eval/results/baseline_report.json`：
 
 ```json
 {
@@ -255,6 +338,8 @@ pixi run python eval/run_eval.py --build-index
   }
 }
 ```
+
+**实验结果**保存在 `data/exp_reports/exp_*/experiment_report.md`，包含详细的对比分析和优化建议。
 
 ---
 

@@ -80,6 +80,116 @@
 
 ---
 
+## 自动化评测系统
+
+项目已实现完整的自动化评测系统，支持多 variant 对比实验、自动数据准备、实验复现等功能。
+
+### 核心组件
+
+1. **实验运行器** (`eval/run_experiment.py`)
+   - 支持多 variant 对比实验
+   - 自动创建 Meal 和测试集
+   - 实验结果持久化
+   - 支持实验复现和对比
+
+2. **实验配置** (`exp_configs/*.yaml`)
+   - YAML 格式的实验配置文件
+   - 支持定义多个 variant
+   - 支持多种测试集策略
+
+3. **Meal 系统** (`src/meal.py`)
+   - 数据版本管理
+   - 自动化数据预处理
+   - 配置哈希追踪
+
+4. **测试集生成器** (`src/test_generator.py`)
+   - 自动生成测试问题
+   - 支持多种问题策略（factual, boundary 等）
+   - LLM 辅助生成
+
+### 快速开始
+
+```bash
+# 运行实验
+pixi run python eval/run_experiment.py --config exp_configs/baseline.yaml
+
+# 列出所有实验
+pixi run python eval/run_experiment.py --list
+
+# 查看实验详情
+pixi run python eval/run_experiment.py --info exp_20250416_120000
+
+# 对比多个实验
+pixi run python eval/run_experiment.py --compare exp_001 exp_002
+
+# 复现实验
+pixi run python eval/run_experiment.py --reproduce data/exp_reports/exp_20250416_120000
+```
+
+### 实验配置说明
+
+实验配置文件位于 `exp_configs/` 目录，采用 YAML 格式：
+
+```yaml
+name: "experiment_name"
+description: "实验描述"
+
+data:
+  meal: "meal_name"  # Meal 名称
+  create_if_missing:  # 如果 Meal 不存在，自动创建
+    sample_ratio: 0.1  # 采样比例
+    seed: 42
+
+test_sets:
+  - strategy: "factual"  # 问题策略
+    num_questions: 20
+    seed: 100
+
+variants:
+  - name: "variant_name"
+    description: "variant 描述"
+    config_overrides:  # 配置覆盖
+      chunker:
+        chunk_size: 512
+        chunk_overlap: 0
+
+evaluation:
+  llm_preset: "default"
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+```
+
+### 实验结果
+
+实验结果保存在 `data/exp_reports/` 目录：
+
+```
+data/exp_reports/exp_20250416_120000/
+├── manifest.json           # 实验元数据
+├── config_snapshot.yaml    # 配置快照
+├── meal_snapshot.json      # Meal 快照
+├── results/                # 各 variant 结果
+│   ├── variant_1.json
+│   └── variant_2.json
+└── experiment_report.md    # 实验报告
+```
+
+### 评测指标
+
+**检索质量指标**：
+- **Hit Rate**：命中率，检索结果中包含正确文档的比例
+- **MRR**：平均倒数排名，衡量第一个正确文档的排名
+- **NDCG**：归一化折损累积增益，综合考虑排序位置
+
+**生成质量指标**（计划中）：
+- Faithfulness：回答的忠实度
+- Answer Relevancy：回答的相关性
+
+---
+
 ## 下一阶段目标
 
 **阶段：优化与迭代**
@@ -89,7 +199,7 @@
 ### 计划优化项（按优先级排序）
 
 #### 1. 高优先级（立即实施）
-- [ ] 运行完整的 baseline 评测，生成评测报告
+- [x] 运行完整的 baseline 评测，生成评测报告
 - [ ] 实现生成质量指标（Faithfulness、Answer Relevancy）
 - [ ] 解决 FlagEmbedding 依赖兼容性问题（如需要）
 
