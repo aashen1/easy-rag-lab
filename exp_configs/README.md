@@ -233,7 +233,7 @@ test_sets:
   - strategy: "boundary"
     num_questions: 25
     seed: 201
-  - strategy: "complex"
+  - strategy: "multi-hop"
     num_questions: 15
     seed: 202
 
@@ -333,7 +333,7 @@ test_sets:
   - strategy: "boundary"
     num_questions: 20
     seed: 301
-  - strategy: "complex"
+  - strategy: "multi-hop"
     num_questions: 10
     seed: 302
 
@@ -657,13 +657,13 @@ diff data/exp_reports/exp_xxx/results/variant_1.json data/exp_reports/exp_xxx/re
 |----------|-------|--------------|---------|----------|
 | factual  | 30    | 0.8500       | 0.7500  | 0.8000   |
 | boundary | 25    | 0.7200       | 0.6000  | 0.6500   |
-| complex  | 15    | 0.6000       | 0.5000  | 0.5500   |
+| multi-hop | 15    | 0.6000       | 0.5000  | 0.5500   |
 ```
 
 **分析要点**：
 - `factual` 问题通常表现最好
 - `boundary` 问题受分块策略影响大
-- `complex` 问题需要综合多个文档
+- `multi-hop` 问题需要综合多个文档
 
 ### 如何根据结果优化
 
@@ -926,7 +926,12 @@ test_sets:
 **支持的问题策略**：
 - `factual`: 事实性问题，从单个 chunk 中提取信息
 - `boundary`: 边界问题，测试跨 chunk 信息检索
-- `complex`: 复杂问题，需要综合多个 chunk 的信息
+- `multi-hop`: 多跳问题，需要综合多个非相邻 chunk 的信息
+
+**命名规范**：
+- 配置文件中使用 **kebab-case**（连字符），如 `multi-hop`
+- 代码内部自动转换为 **snake_case**（下划线），如 `multi_hop`
+- 新增策略时请遵循此规范，确保配置文件中使用 kebab-case
 
 ### 4. 超参数变体 (variants)
 
