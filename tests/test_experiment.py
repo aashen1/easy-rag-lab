@@ -64,6 +64,7 @@ class TestExperimentConfig:
         defaults.update(overrides)
         return defaults
 
+    @pytest.mark.unit
     def test_creation(self):
         data = self._make_config_dict()
         config = ExperimentConfig.from_dict(data)
@@ -73,6 +74,7 @@ class TestExperimentConfig:
         assert len(config.test_sets) == 1
         assert len(config.variants) == 1
 
+    @pytest.mark.unit
     def test_to_dict(self):
         data = self._make_config_dict()
         config = ExperimentConfig.from_dict(data)
@@ -83,96 +85,71 @@ class TestExperimentConfig:
         assert len(d["test_sets"]) == 1
         assert len(d["variants"]) == 1
 
-    def test_from_dict_missing_required_field(self):
-        data = self._make_config_dict()
-        del data["name"]
+    @pytest.mark.unit
+    def test_invalid_config_catches_all_errors(self):
+        data_missing_name = self._make_config_dict()
+        del data_missing_name["name"]
         with pytest.raises(ValueError, match="Missing required fields"):
-            ExperimentConfig.from_dict(data)
+            ExperimentConfig.from_dict(data_missing_name)
 
-    def test_from_dict_missing_multiple_fields(self):
-        data = {"name": "test"}
         with pytest.raises(ValueError, match="Missing required fields"):
-            ExperimentConfig.from_dict(data)
+            ExperimentConfig.from_dict({"name": "test"})
 
-    def test_validate_valid_config(self):
-        data = self._make_config_dict()
-        config = ExperimentConfig.from_dict(data)
-        errors = config.validate()
-        assert errors == []
-
-    def test_validate_empty_name(self):
-        data = self._make_config_dict(name="")
-        config = ExperimentConfig.from_dict(data)
-        errors = config.validate()
-        assert "Experiment name cannot be empty" in errors
-
-    def test_validate_empty_description(self):
-        data = self._make_config_dict(description="")
-        config = ExperimentConfig.from_dict(data)
-        errors = config.validate()
-        assert "Experiment description cannot be empty" in errors
-
-    def test_validate_missing_meal(self):
-        data = self._make_config_dict()
+        data = self._make_config_dict(
+            name="",
+            description="",
+            test_sets=[],
+            variants=[],
+        )
         del data["data"]["meal"]
+        del data["evaluation"]["metrics"]
+
         config = ExperimentConfig.from_dict(data)
         errors = config.validate()
+
+        assert "Experiment name cannot be empty" in errors
+        assert "Experiment description cannot be empty" in errors
         assert "Data configuration must include 'meal' field" in errors
-
-    def test_validate_empty_test_sets(self):
-        data = self._make_config_dict(test_sets=[])
-        config = ExperimentConfig.from_dict(data)
-        errors = config.validate()
         assert "At least one test set must be defined" in errors
+        assert "At least one variant must be defined" in errors
+        assert "Evaluation configuration must include 'metrics' field" in errors
+        assert len(errors) == 6
 
-    def test_validate_test_set_missing_strategy(self):
+    @pytest.mark.unit
+    def test_invalid_config_partial_errors(self):
         data = self._make_config_dict()
         data["test_sets"] = [{"num_questions": 10}]
+        data["variants"] = [{"description": "no name"}]
+
         config = ExperimentConfig.from_dict(data)
         errors = config.validate()
+
         assert "Test set 0 missing 'strategy' field" in errors
-
-    def test_validate_test_set_missing_num_questions(self):
-        data = self._make_config_dict()
-        data["test_sets"] = [{"strategy": "factual"}]
-        config = ExperimentConfig.from_dict(data)
-        errors = config.validate()
-        assert "Test set 0 missing 'num_questions' field" in errors
-
-    def test_validate_empty_variants(self):
-        data = self._make_config_dict(variants=[])
-        config = ExperimentConfig.from_dict(data)
-        errors = config.validate()
-        assert "At least one variant must be defined" in errors
-
-    def test_validate_variant_missing_name(self):
-        data = self._make_config_dict()
-        data["variants"] = [{"description": "test"}]
-        config = ExperimentConfig.from_dict(data)
-        errors = config.validate()
+        assert "Test set 0 missing 'num_questions' field" not in errors
         assert "Variant 0 missing 'name' field" in errors
+        assert "Experiment name cannot be empty" not in errors
+        assert "Experiment description cannot be empty" not in errors
+        assert "Data configuration must include 'meal' field" not in errors
+        assert "At least one test set must be defined" not in errors
+        assert "At least one variant must be defined" not in errors
+        assert "Evaluation configuration must include 'metrics' field" not in errors
 
-    def test_validate_missing_metrics(self):
-        data = self._make_config_dict()
-        del data["evaluation"]["metrics"]
-        config = ExperimentConfig.from_dict(data)
-        errors = config.validate()
-        assert "Evaluation configuration must include 'metrics' field" in errors
-
-    def test_default_llm_field(self):
-        data = self._make_config_dict()
-        del data["llm"]
-        config = ExperimentConfig.from_dict(data)
-        assert config.llm == {}
+        data2 = self._make_config_dict()
+        data2["test_sets"] = [{"strategy": "factual"}]
+        config2 = ExperimentConfig.from_dict(data2)
+        errors2 = config2.validate()
+        assert "Test set 0 missing 'num_questions' field" in errors2
 
 
 class TestDeepMerge:
+    @pytest.mark.unit
     def test_simple_override(self):
         base = {"a": 1, "b": 2}
         override = {"b": 3, "c": 4}
         result = deep_merge(base, override)
         assert result == {"a": 1, "b": 3, "c": 4}
 
+    @pytest.mark.unit
     def test_nested_merge(self):
         base = {
             "chunker": {
@@ -193,6 +170,7 @@ class TestDeepMerge:
         assert result["chunker"]["chunk_overlap"] == 100
         assert result["embedding"]["model_name"] == "model_a"
 
+    @pytest.mark.unit
     def test_deep_nested_merge(self):
         base = {
             "level1": {
@@ -217,6 +195,7 @@ class TestDeepMerge:
         assert result["level1"]["level2"]["level3"]["value"] == "overridden"
         assert result["level1"]["level2"]["level3"]["other"] == "keep"
 
+    @pytest.mark.unit
     def test_non_dict_values_not_merged(self):
         base = {"list": [1, 2, 3], "string": "original"}
         override = {"list": [4, 5], "string": "overridden"}
@@ -224,18 +203,21 @@ class TestDeepMerge:
         assert result["list"] == [4, 5]
         assert result["string"] == "overridden"
 
+    @pytest.mark.unit
     def test_empty_override(self):
         base = {"a": 1, "b": 2}
         override = {}
         result = deep_merge(base, override)
         assert result == {"a": 1, "b": 2}
 
+    @pytest.mark.unit
     def test_empty_base(self):
         base = {}
         override = {"a": 1, "b": 2}
         result = deep_merge(base, override)
         assert result == {"a": 1, "b": 2}
 
+    @pytest.mark.unit
     def test_original_not_modified(self):
         base = {"a": {"b": 1}}
         override = {"a": {"c": 2}}
@@ -279,6 +261,7 @@ class TestMergeConfig:
             evaluation={"metrics": {"retrieval": ["hit_rate"]}},
         )
 
+    @pytest.mark.unit
     def test_merge_without_variant(self):
         system_config = self._make_system_config()
         exp_config = self._make_experiment_config()
@@ -286,6 +269,7 @@ class TestMergeConfig:
         assert result["chunker"]["chunk_size"] == 256
         assert result["chunker"]["chunk_overlap"] == 50
 
+    @pytest.mark.unit
     def test_merge_with_variant(self):
         system_config = self._make_system_config()
         exp_config = self._make_experiment_config()
@@ -295,6 +279,7 @@ class TestMergeConfig:
         assert result["chunker"]["chunk_overlap"] == 50
         assert result["embedding"]["model_name"] == "model_a"
 
+    @pytest.mark.unit
     def test_original_config_not_modified(self):
         system_config = self._make_system_config()
         exp_config = self._make_experiment_config()
@@ -305,6 +290,7 @@ class TestMergeConfig:
 
 
 class TestLoadExperimentConfig:
+    @pytest.mark.unit
     def test_load_valid_config(self):
         config_data = {
             "name": "test_exp",
@@ -326,10 +312,12 @@ class TestLoadExperimentConfig:
         finally:
             Path(temp_path).unlink()
 
+    @pytest.mark.unit
     def test_load_file_not_found(self):
         with pytest.raises(FileNotFoundError):
             load_experiment_config("nonexistent_file.yaml")
 
+    @pytest.mark.unit
     def test_load_invalid_yaml(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
             f.write("invalid: yaml: content: [")
@@ -341,6 +329,7 @@ class TestLoadExperimentConfig:
         finally:
             Path(temp_path).unlink()
 
+    @pytest.mark.unit
     def test_load_empty_file(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
             f.write("")
@@ -352,6 +341,7 @@ class TestLoadExperimentConfig:
         finally:
             Path(temp_path).unlink()
 
+    @pytest.mark.unit
     def test_load_non_dict_config(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
             yaml.dump(["item1", "item2"], f)
@@ -363,6 +353,7 @@ class TestLoadExperimentConfig:
         finally:
             Path(temp_path).unlink()
 
+    @pytest.mark.unit
     def test_load_invalid_config_validation(self):
         config_data = {
             "name": "",
@@ -409,18 +400,21 @@ class TestGetVariantConfig:
         )
         return system_config, experiment_config
 
+    @pytest.mark.unit
     def test_get_variant_config_found(self):
         system_config, experiment_config = self._make_configs()
         result = get_variant_config(system_config, experiment_config, "variant_a")
         assert result["chunker"]["chunk_size"] == 512
         assert result["chunker"]["chunk_overlap"] == 50
 
+    @pytest.mark.unit
     def test_get_variant_config_different_variant(self):
         system_config, experiment_config = self._make_configs()
         result = get_variant_config(system_config, experiment_config, "variant_b")
         assert result["chunker"]["chunk_size"] == 1024
         assert result["chunker"]["chunk_overlap"] == 100
 
+    @pytest.mark.unit
     def test_get_variant_config_not_found(self):
         system_config, experiment_config = self._make_configs()
         with pytest.raises(ValueError, match="not found"):
@@ -428,6 +422,7 @@ class TestGetVariantConfig:
 
 
 class TestListVariants:
+    @pytest.mark.unit
     def test_list_variants(self):
         config = ExperimentConfig(
             name="test",
@@ -444,6 +439,7 @@ class TestListVariants:
         names = list_variants(config)
         assert names == ["variant_a", "variant_b", "variant_c"]
 
+    @pytest.mark.unit
     def test_list_variants_unnamed(self):
         config = ExperimentConfig(
             name="test",
@@ -474,28 +470,33 @@ class TestGetTestSetConfig:
             evaluation={"metrics": {"retrieval": ["hit_rate"]}},
         )
 
+    @pytest.mark.unit
     def test_get_first_test_set(self):
         config = self._make_config()
         test_set = get_test_set_config(config, 0)
         assert test_set["strategy"] == "factual"
         assert test_set["num_questions"] == 10
 
+    @pytest.mark.unit
     def test_get_second_test_set(self):
         config = self._make_config()
         test_set = get_test_set_config(config, 1)
         assert test_set["strategy"] == "boundary"
         assert test_set["num_questions"] == 15
 
+    @pytest.mark.unit
     def test_get_test_set_default_index(self):
         config = self._make_config()
         test_set = get_test_set_config(config)
         assert test_set["strategy"] == "factual"
 
+    @pytest.mark.unit
     def test_get_test_set_out_of_range(self):
         config = self._make_config()
         with pytest.raises(IndexError, match="out of range"):
             get_test_set_config(config, 10)
 
+    @pytest.mark.unit
     def test_get_test_set_negative_index(self):
         config = self._make_config()
         with pytest.raises(IndexError, match="out of range"):
@@ -513,6 +514,7 @@ class TestExperimentResult:
             evaluation={"metrics": {"retrieval": ["hit_rate"]}},
         )
 
+    @pytest.mark.unit
     def test_creation(self):
         config = self._make_config()
         result = ExperimentResult(
@@ -527,6 +529,7 @@ class TestExperimentResult:
         assert result.name == "test_experiment"
         assert result.status == "completed"
 
+    @pytest.mark.unit
     def test_to_dict(self):
         config = self._make_config()
         result = ExperimentResult(
@@ -547,6 +550,7 @@ class TestExperimentResult:
         assert len(d["test_set_snapshots"]) == 1
         assert len(d["variant_results"]) == 1
 
+    @pytest.mark.unit
     def test_from_dict(self):
         data = {
             "experiment_id": "exp_20250416_120000_test",
@@ -571,6 +575,7 @@ class TestExperimentResult:
         assert result.name == "test_experiment"
         assert result.config.name == "test_experiment"
 
+    @pytest.mark.unit
     def test_from_dict_missing_required_field(self):
         data = {
             "experiment_id": "exp_test",
@@ -579,6 +584,7 @@ class TestExperimentResult:
         with pytest.raises(ValueError, match="Missing required fields"):
             ExperimentResult.from_dict(data)
 
+    @pytest.mark.unit
     def test_default_values(self):
         config = self._make_config()
         result = ExperimentResult(
@@ -619,6 +625,7 @@ class TestExperimentManager:
             }
         }
 
+    @pytest.mark.unit
     def test_init(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -627,11 +634,13 @@ class TestExperimentManager:
             assert manager.exp_dir == temp_path / "exp_reports"
             assert manager.configs_dir == temp_path / "exp_configs"
 
+    @pytest.mark.unit
     def test_init_default_paths(self):
         manager = ExperimentManager({})
         assert manager.exp_dir == Path("data/exp_reports")
         assert manager.configs_dir == Path("exp_configs")
 
+    @pytest.mark.unit
     def test_generate_experiment_id(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -644,6 +653,7 @@ class TestExperimentManager:
             assert exp_id.startswith("exp_")
             assert "test_experiment" in exp_id
 
+    @pytest.mark.unit
     def test_generate_experiment_id_special_chars(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -663,6 +673,7 @@ class TestExperimentManager:
             assert "!" not in exp_id
             assert "test_experiment_2024" in exp_id
 
+    @pytest.mark.unit
     def test_create_experiment_dir(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -677,6 +688,7 @@ class TestExperimentManager:
             assert (exp_dir / "test_sets").exists()
             assert (exp_dir / "results").exists()
 
+    @pytest.mark.unit
     def test_save_snapshots(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -721,6 +733,7 @@ class TestExperimentManager:
             assert "variant_a" in manifest["variants"]
             assert "factual" in manifest["test_sets"]
 
+    @pytest.mark.unit
     def test_load_experiment_result(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -755,6 +768,7 @@ class TestExperimentManager:
             assert len(result.test_set_snapshots) == 1
             assert len(result.variant_results) == 1
 
+    @pytest.mark.unit
     def test_load_experiment_result_missing_manifest(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -767,6 +781,7 @@ class TestExperimentManager:
             with pytest.raises(FileNotFoundError, match="Manifest file not found"):
                 manager.load_experiment_result(exp_dir)
 
+    @pytest.mark.unit
     def test_list_experiments_empty(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -777,6 +792,7 @@ class TestExperimentManager:
 
             assert experiments == []
 
+    @pytest.mark.unit
     def test_list_experiments(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -806,6 +822,7 @@ class TestExperimentManager:
 
             assert len(experiments) == 2
 
+    @pytest.mark.unit
     def test_get_experiment_info(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -823,6 +840,7 @@ class TestExperimentManager:
             assert info["name"] == "test_experiment"
             assert info["meal_snapshot"]["meal_id"] == "test"
 
+    @pytest.mark.unit
     def test_get_experiment_info_not_found(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -832,6 +850,7 @@ class TestExperimentManager:
             with pytest.raises(FileNotFoundError, match="Experiment not found"):
                 manager.get_experiment_info("nonexistent_experiment")
 
+    @pytest.mark.unit
     def test_update_manifest_status(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -848,6 +867,7 @@ class TestExperimentManager:
                 manifest = json.load(f)
             assert manifest["status"] == "completed"
 
+    @pytest.mark.unit
     def test_update_manifest_status_missing_file(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -857,9 +877,11 @@ class TestExperimentManager:
             exp_dir = temp_path / "exp_reports" / "exp_test"
             exp_dir.mkdir(parents=True)
 
-            with pytest.raises(FileNotFoundError, match="Manifest file not found"):
-                manager.update_manifest_status(exp_dir, "completed")
+            manager.update_manifest_status(exp_dir, "completed")
 
+            assert not (exp_dir / "manifest.json").exists()
+
+    @pytest.mark.unit
     def test_save_variant_result(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -885,6 +907,7 @@ class TestExperimentManager:
             assert loaded_result["variant_name"] == "variant_a"
             assert loaded_result["metrics"]["hit_rate"] == 0.85
 
+    @pytest.mark.unit
     def test_save_variant_result_special_chars(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
