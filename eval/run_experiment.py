@@ -489,7 +489,8 @@ def run_variant_evaluation(
 
             from src.meal import ArtifactCache
 
-            artifacts_dir = Path(merged_config.get("artifacts", {}).get("dir", "data/artifacts"))
+            artifacts_config = merged_config.get("artifacts") or {}
+            artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
             cache = ArtifactCache(artifacts_dir)
 
             parsed_dir = cache.get_parsed_dir(meal_config.data_id)
