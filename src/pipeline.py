@@ -10,15 +10,17 @@ from src.indexer import VectorIndexer
 from src.parser import parse_all_pdfs
 from src.retriever import Retriever
 from src.sampler import SamplingConfig, determine_sample
+from src.token_tracker import DetailedTokenUsage, TokenTracker
 from src.utils import get_llm_config, load_config, setup_logger
 
 
 class RAGPipeline:
-    def __init__(self, config_path: str = "config.yaml", llm_preset: str = None, meal_name: str = None):
+    def __init__(self, config_path: str = "config.yaml", llm_preset: str = None, meal_name: str = None, token_tracker: Optional[TokenTracker] = None):
         self.config = load_config(config_path)
         setup_logger(self.config)
         self.meal_name = meal_name
         self.meal_config = None
+        self.token_tracker = token_tracker if token_tracker is not None else TokenTracker()
 
         logger.info("Initializing RAG Pipeline")
 
@@ -58,6 +60,7 @@ class RAGPipeline:
             base_url=llm_config["base_url"],
             temperature=llm_config["temperature"],
             max_tokens=llm_config["max_tokens"],
+            token_tracker=self.token_tracker,
         )
 
         logger.success("RAG Pipeline initialized successfully")
@@ -186,6 +189,9 @@ class RAGPipeline:
                 response["contexts"] = contexts
                 response["scores"] = scores
                 response["sources"] = sources
+
+            if self.generator.last_token_usage is not None:
+                response["token_usage"] = self.generator.last_token_usage.to_dict()
 
             logger.success("Query processed successfully")
             return response
