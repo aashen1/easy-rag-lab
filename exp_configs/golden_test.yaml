@@ -1,0 +1,32 @@
+name: "golden_test"
+description: "Golden test suite for RAG system regression testing"
+
+data:
+  meal: "golden_test"
+  create_if_missing:
+    sample_ratio: 0.03
+    seed: 42
+
+test_sets:
+  - strategy: "factual"
+    num_questions: 5
+    seed: 100
+  - strategy: "boundary"
+    num_questions: 3
+    seed: 101
+  - strategy: "multi_hop"
+    num_questions: 2
+    seed: 102
+
+variants:
+  - name: "baseline"
+    description: "Baseline configuration for golden test"
+    config_overrides: {}
+
+evaluation:
+  llm_preset: "default"
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"

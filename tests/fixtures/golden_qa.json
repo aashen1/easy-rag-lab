@@ -1,0 +1,18 @@
+[
+  {
+    "id": "golden_001",
+    "category": "factual",
+    "question": "贵州茅台2023年的营业收入是多少？",
+    "expected_sources": ["贵州茅台2023年年度报告.md"],
+    "expected_keywords": ["营业收入", "茅台"],
+    "description": "验证基础事实提取能力"
+  },
+  {
+    "id": "golden_002",
+    "category": "factual",
+    "question": "该公司2023年净利润同比增长多少？",
+    "expected_sources": ["贵州茅台2023年年度报告.md"],
+    "expected_keywords": ["净利润", "同比增长"],
+    "description": "验证财务指标提取能力"
+  }
+]
