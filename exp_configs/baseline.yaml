@@ -1,0 +1,36 @@
+name: "baseline_evaluation"
+description: "基线评测 - 固定长度分块，无优化"
+
+data:
+  meal: "meal_baseline"
+  create_if_missing:
+    sample_ratio: 0.1
+    seed: 42
+
+test_sets:
+  - strategy: "factual"
+    num_questions: 20
+    seed: 100
+  - strategy: "boundary"
+    num_questions: 15
+    seed: 101
+
+variants:
+  - name: "chunk_512_overlap_0"
+    description: "chunk_size=512, overlap=0"
+    config_overrides:
+      chunker:
+        chunk_size: 512
+        chunk_overlap: 0
+
+evaluation:
+  llm_preset: "default"
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+
+llm:
+  question_generation: "sonnet"
+  answering: "default"
