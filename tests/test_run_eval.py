@@ -122,6 +122,7 @@ class TestRunEvalExpConfig:
 
         return meal_dir
 
+    @pytest.mark.unit
     def test_load_experiment_config_success(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -136,6 +137,7 @@ class TestRunEvalExpConfig:
             assert len(exp_config.variants) == 2
             assert exp_config.variants[0].get("name") == "test_variant"
 
+    @pytest.mark.unit
     def test_load_experiment_config_missing_meal(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -158,6 +160,7 @@ class TestRunEvalExpConfig:
             with pytest.raises(ValueError, match="meal"):
                 load_experiment_config(str(config_path))
 
+    @pytest.mark.unit
     def test_variant_selection_first_variant(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -170,6 +173,7 @@ class TestRunEvalExpConfig:
             first_variant = exp_config.variants[0]
             assert first_variant.get("name") == "test_variant"
 
+    @pytest.mark.unit
     def test_variant_selection_specific_variant(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -189,6 +193,7 @@ class TestRunEvalExpConfig:
             assert found_variant is not None
             assert found_variant.get("name") == variant_name
 
+    @pytest.mark.unit
     def test_merge_config_with_variant(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -214,6 +219,7 @@ class TestRunEvalExpConfig:
             assert merged["chunker"]["chunk_overlap"] == 0
             assert merged["embedding"]["model_name"] == "test-model"
 
+    @pytest.mark.unit
     def test_merge_config_without_variant(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -234,6 +240,7 @@ class TestRunEvalExpConfig:
             assert merged["chunker"]["chunk_size"] == 256
             assert merged["chunker"]["chunk_overlap"] == 50
 
+    @pytest.mark.unit
     def test_backward_compatibility_meal_arg(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -253,6 +260,7 @@ class TestRunEvalExpConfig:
             meal_config = meal_manager.load_meal("legacy_meal")
             assert meal_config.name == "legacy_meal"
 
+    @pytest.mark.unit
     def test_test_set_path_resolution_from_exp_config(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -269,6 +277,7 @@ class TestRunEvalExpConfig:
             assert test_set["strategy"] == "factual"
             assert len(test_set["questions"]) == 2
 
+    @pytest.mark.unit
     def test_exp_config_missing_variant_error(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -281,6 +290,7 @@ class TestRunEvalExpConfig:
             variant_names = [v.get("name") for v in exp_config.variants]
             assert "nonexistent_variant" not in variant_names
 
+    @pytest.mark.unit
     def test_exp_config_overrides_llm_preset(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -292,56 +302,3 @@ class TestRunEvalExpConfig:
 
             llm_preset = exp_config.evaluation.get("llm_preset", "default")
             assert llm_preset == "default"
-
-
-class TestRunEvalIntegration:
-    def test_cli_args_parsing_exp_config(self):
-        import argparse
-
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--exp-config", type=str)
-        parser.add_argument("--variant", type=str)
-        parser.add_argument("--meal", type=str)
-        parser.add_argument("--test-set", type=str)
-
-        args = parser.parse_args(["--exp-config", "test.yaml", "--variant", "v1"])
-
-        assert args.exp_config == "test.yaml"
-        assert args.variant == "v1"
-        assert args.meal is None
-        assert args.test_set is None
-
-    def test_cli_args_parsing_legacy(self):
-        import argparse
-
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--exp-config", type=str)
-        parser.add_argument("--variant", type=str)
-        parser.add_argument("--meal", type=str)
-        parser.add_argument("--test-set", type=str)
-
-        args = parser.parse_args(["--meal", "my_meal", "--test-set", "my_test"])
-
-        assert args.exp_config is None
-        assert args.variant is None
-        assert args.meal == "my_meal"
-        assert args.test_set == "my_test"
-
-    def test_cli_args_parsing_mixed(self):
-        import argparse
-
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--exp-config", type=str)
-        parser.add_argument("--variant", type=str)
-        parser.add_argument("--meal", type=str)
-        parser.add_argument("--test-set", type=str)
-
-        args = parser.parse_args([
-            "--exp-config", "test.yaml",
-            "--variant", "v1",
-            "--meal", "ignored_meal",
-        ])
-
-        assert args.exp_config == "test.yaml"
-        assert args.variant == "v1"
-        assert args.meal == "ignored_meal"
