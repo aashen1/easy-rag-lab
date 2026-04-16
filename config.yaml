@@ -1,5 +1,11 @@
+# ============================================================
+# 系统配置
+# ============================================================
+
+# 当前激活的 LLM 预设名称
 active_mode: "default"
 
+# LLM 预设配置：定义不同的模型配置方案
 llm_presets:
   default:
     model_name: "LLM_MODEL_ID"
@@ -29,54 +35,72 @@ llm_presets:
     api_key: "LLM_KEY_HAIKU"
     base_url: "LLM_URL_HAIKU"
 
+# ============================================================
+# 数据处理配置
+# ============================================================
+
+# PDF 解析配置
 parser:
   input_dir: "data/raw"
   output_dir: "data/parsed"
 
+# 文本分块配置
 chunker:
   input_dir: "data/parsed"
   output_dir: "data/chunks"
   chunk_size: 512
   chunk_overlap: 0
 
+# 向量化配置
 embedding:
   model_name: "BAAI/bge-large-zh-v1.5"
   device: "cuda"
   batch_size: 32
 
+# 向量存储配置
 vector_store:
   type: "qdrant"
   collection_name: "financial_reports"
   persist_dir: "data/vector_store"
   distance: "Cosine"
 
+# 检索配置
 retrieval:
   top_k: 5
 
-evaluation:
-  test_data_path: "eval/test_data.json"
-  results_dir: "data/eval"
-  metrics:
-    retrieval:
-      - "hit_rate"
-      - "mrr"
-      - "ndcg"
-    generation:
-      - "faithfulness"
-      - "answer_relevancy"
+# ============================================================
+# 实验管理配置
+# ============================================================
 
+# 实验相关配置：管理实验报告和配置文件
+experiments:
+  dir: "data/exp_reports"  # 实验报告存放目录
+  configs_dir: "exp_configs"  # 实验配置文件目录
+
+# ============================================================
+# 数据管理配置
+# ============================================================
+
+# Meal 数据管理配置
 meals:
   dir: "data/meals"
   collection_prefix: "m_"
 
+# Artifacts 存储配置
 artifacts:
   dir: "data/artifacts"
 
+# ============================================================
+# 测试与日志配置
+# ============================================================
+
+# 测试集生成配置
 test_generation:
   default_strategy: "factual"
   default_num_questions: 20
   max_retries: 3
 
+# 日志配置
 logging:
   level: "INFO"
   format: "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
