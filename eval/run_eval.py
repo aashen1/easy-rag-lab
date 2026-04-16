@@ -29,7 +29,15 @@ def run_evaluation(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     with open(test_data_path, "r", encoding="utf-8") as f:
-        test_cases = json.load(f)
+        test_data = json.load(f)
+
+    if isinstance(test_data, list):
+        test_cases = test_data
+    elif isinstance(test_data, dict) and "questions" in test_data:
+        test_cases = test_data["questions"]
+    else:
+        logger.error(f"Unsupported test data format: {type(test_data)}")
+        sys.exit(1)
 
     if sample_size and sample_size < len(test_cases):
         logger.info(f"Sampling {sample_size} test cases for quick evaluation")
@@ -51,15 +59,13 @@ def run_evaluation(
 
             retrieved_sources = response.get("sources", [])
 
-            hit_rate = calculate_hit_rate(
-                retrieved_sources, test_case.get("expected_sources", [])
-            )
-            mrr = calculate_mrr(
-                retrieved_sources, test_case.get("expected_sources", [])
-            )
-            ndcg = calculate_ndcg(
-                retrieved_sources, test_case.get("expected_sources", []), k=5
-            )
+            expected_sources = test_case.get("expected_sources", [])
+            if not expected_sources:
+                expected_sources = test_case.get("source_files", [])
+
+            hit_rate = calculate_hit_rate(retrieved_sources, expected_sources)
+            mrr = calculate_mrr(retrieved_sources, expected_sources)
+            ndcg = calculate_ndcg(retrieved_sources, expected_sources, k=5)
 
             result = {
                 "id": test_case["id"],
@@ -209,14 +215,14 @@ if __name__ == "__main__":
         if args.test_set:
             test_set_path = test_sets_dir / f"{args.test_set}.json"
         else:
-            jsonl_files = sorted(test_sets_dir.glob("*.json")) if test_sets_dir.exists() else []
-            if not jsonl_files:
+            test_set_files = sorted(test_sets_dir.glob("*.json")) if test_sets_dir.exists() else []
+            if not test_set_files:
                 logger.error(
                     f"No test sets found for meal '{args.meal}'. "
                     "Generate one with: python main.py --generate-test-set {args.meal}"
                 )
                 sys.exit(1)
-            test_set_path = jsonl_files[0]
+            test_set_path = test_set_files[0]
             logger.info(f"Using test set: {test_set_path.stem}")
 
         test_data_path = str(test_set_path)
