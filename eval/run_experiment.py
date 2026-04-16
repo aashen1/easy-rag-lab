@@ -31,6 +31,7 @@ from src.meal import (
 from src.pipeline import RAGPipeline
 from src.sampler import SamplingConfig
 from src.test_generator import TestSetGenerator
+from src.token_tracker import TokenTracker
 from src.utils import get_llm_config, load_config, setup_logger
 from eval.metrics import calculate_hit_rate, calculate_mrr, calculate_ndcg
 from eval.experiment_reporter import ExperimentReporter
@@ -326,6 +327,7 @@ def prepare_test_sets(
     exp_config: ExperimentConfig,
     meal_info: Dict[str, Any],
     skip_preprocessing: bool = False,
+    token_tracker: Optional[TokenTracker] = None,
 ) -> List[Dict[str, Any]]:
     """
     Prepare test sets for experiment.
@@ -398,6 +400,7 @@ def prepare_test_sets(
                 num_questions=num_questions,
                 llm_preset=llm_preset,
                 seed=seed,
+                token_tracker=token_tracker,
             )
 
             test_sets.append(test_set_data)
@@ -543,6 +546,7 @@ def evaluate_test_set(
                 "test_set": test_set_name,
                 "category": question_data.get("category"),
                 "difficulty": question_data.get("difficulty"),
+                "token_usage": response.get("token_usage"),
             }
 
             logger.success(
@@ -603,6 +607,7 @@ def run_variant_evaluation(
     meal_info: Dict[str, Any],
     test_sets: List[Dict[str, Any]],
     exp_dir: Path,
+    test_generation_tracker: Optional[TokenTracker] = None,
 ) -> Dict[str, Any]:
     """
     Run evaluation for a single variant.
@@ -614,6 +619,7 @@ def run_variant_evaluation(
         meal_info: Meal information dictionary.
         test_sets: List of test set dictionaries.
         exp_dir: Experiment directory path.
+        test_generation_tracker: TokenTracker from test set generation phase.
 
     Returns:
         Evaluation result dictionary.
@@ -644,10 +650,13 @@ def run_variant_evaluation(
     llm_preset = exp_config.evaluation.get("llm_preset", "default")
 
     try:
+        variant_tracker = TokenTracker()
+
         pipeline = RAGPipeline(
             config_path=None,
             llm_preset=llm_preset,
             meal_name=meal_name,
+            token_tracker=variant_tracker,
         )
         pipeline.config = merged_config
 
@@ -668,6 +677,10 @@ def run_variant_evaluation(
 
         metrics = compute_aggregate_metrics(all_results)
 
+        token_usage_data = variant_tracker.to_dict()
+        if test_generation_tracker is not None and test_generation_tracker.record_count > 0:
+            token_usage_data["test_generation"] = test_generation_tracker.to_dict()
+
         variant_result = {
             "variant_name": variant_name,
             "variant_description": variant.get("description", ""),
@@ -678,12 +691,20 @@ def run_variant_evaluation(
             "retrieval_metrics": metrics,
             "config_snapshot": config_snapshot,
             "results": all_results,
+            "token_usage": token_usage_data,
         }
 
         logger.success(
             f"Variant '{variant_name}' evaluation completed: "
             f"HR={metrics['avg_hit_rate']:.4f}, MRR={metrics['avg_mrr']:.4f}, "
             f"NDCG={metrics['avg_ndcg']:.4f}"
+        )
+
+        token_total = variant_tracker.get_total()
+        logger.info(
+            f"Token usage for variant '{variant_name}': "
+            f"in={token_total.input_tokens:,}, out={token_total.output_tokens:,}, "
+            f"total={token_total.total_tokens:,}"
         )
 
         return variant_result
@@ -736,8 +757,13 @@ def run_experiment(
         logger.info("Step 1: Preparing meal...")
         meal_info = prepare_meal(system_config, exp_config, skip_preprocessing)
 
+        test_generation_tracker = TokenTracker()
+
         logger.info("Step 2: Preparing test sets...")
-        test_sets = prepare_test_sets(system_config, exp_config, meal_info, skip_preprocessing)
+        test_sets = prepare_test_sets(
+            system_config, exp_config, meal_info, skip_preprocessing,
+            token_tracker=test_generation_tracker,
+        )
 
         meal_snapshot = meal_info["config"].to_dict()
 
@@ -768,6 +794,7 @@ def run_experiment(
 
         logger.info("Step 3: Running variant evaluations...")
         all_variant_results = []
+        experiment_tracker = TokenTracker()
 
         for i, variant in enumerate(exp_config.variants, 1):
             variant_name = variant.get("name", f"variant_{i}")
@@ -781,10 +808,29 @@ def run_experiment(
                     meal_info=meal_info,
                     test_sets=test_sets,
                     exp_dir=exp_dir,
+                    test_generation_tracker=test_generation_tracker,
                 )
 
                 exp_manager.save_variant_result(exp_dir, variant_name, variant_result)
                 all_variant_results.append(variant_result)
+
+                if "token_usage" in variant_result:
+                    variant_tracker = TokenTracker()
+                    for rec_data in variant_result["token_usage"].get("records", []):
+                        from src.token_tracker import DetailedTokenUsage, TokenRecord
+                        usage = DetailedTokenUsage(
+                            input_tokens=rec_data["usage"]["input_tokens"],
+                            output_tokens=rec_data["usage"]["output_tokens"],
+                            system_prompt_tokens=rec_data["usage"].get("system_prompt_tokens", 0),
+                            contexts_tokens=rec_data["usage"].get("contexts_tokens", 0),
+                            query_tokens=rec_data["usage"].get("query_tokens", 0),
+                        )
+                        variant_tracker.record(
+                            category=rec_data["category"],
+                            model_name=rec_data["model_name"],
+                            usage=usage,
+                        )
+                    experiment_tracker.merge(variant_tracker)
 
             except Exception as e:
                 logger.error(f"Variant '{variant_name}' failed: {str(e)}")
@@ -796,6 +842,8 @@ def run_experiment(
                 exp_manager.save_variant_result(exp_dir, variant_name, error_result)
                 all_variant_results.append(error_result)
 
+        experiment_tracker.merge(test_generation_tracker)
+
         logger.info("Step 4: Generating experiment report...")
 
         if all_variant_results:
@@ -806,6 +854,7 @@ def run_experiment(
                 llm_api_key=llm_config.get("api_key"),
                 llm_base_url=llm_config.get("base_url"),
                 llm_model_name=llm_config.get("model_name"),
+                token_tracker=experiment_tracker,
             )
 
             reporter.generate_variant_comparison_report(
@@ -833,6 +882,19 @@ def run_experiment(
                     logger.warning(f"Failed to generate LLM report: {str(e)}")
 
         exp_manager.update_manifest_status(exp_dir, "completed")
+
+        total_token_usage = experiment_tracker.get_total()
+        token_cost_config = system_config.get("token_cost", {})
+        cost_info = experiment_tracker.estimate_cost(token_cost_config)
+
+        print("\n" + experiment_tracker.get_detailed_table())
+
+        if cost_info["total_cost"] > 0:
+            print(f"\nEstimated Cost (model: {cost_info['model']}):")
+            print(f"  Input:  ${cost_info['input_cost']:.4f}")
+            print(f"  Output: ${cost_info['output_cost']:.4f}")
+            print(f"  Total:  ${cost_info['total_cost']:.4f}")
+
         logger.success(f"Experiment completed successfully: {exp_dir}")
 
         return {
@@ -846,6 +908,8 @@ def run_experiment(
             },
             "test_sets": test_set_snapshots,
             "variant_results": all_variant_results,
+            "token_usage": experiment_tracker.to_dict(),
+            "estimated_cost": cost_info,
         }
 
     except Exception as e:

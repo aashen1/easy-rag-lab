@@ -148,11 +148,13 @@ class ExperimentReporter:
         llm_api_key: Optional[str] = None,
         llm_base_url: Optional[str] = None,
         llm_model_name: Optional[str] = None,
+        token_tracker: Optional[Any] = None,
     ):
         self.llm_api_key = llm_api_key
         self.llm_base_url = llm_base_url
         self.llm_model_name = llm_model_name
         self._llm_client = None
+        self.token_tracker = token_tracker
 
     def generate_markdown_report(
         self,
@@ -836,6 +838,24 @@ class ExperimentReporter:
                 temperature=0.3,
                 messages=[{"role": "user", "content": prompt}],
             )
+
+            api_input_tokens = getattr(message.usage, "input_tokens", 0) or 0
+            api_output_tokens = getattr(message.usage, "output_tokens", 0) or 0
+
+            if self.token_tracker is not None:
+                from src.token_tracker import DetailedTokenUsage
+
+                usage = DetailedTokenUsage(
+                    input_tokens=api_input_tokens,
+                    output_tokens=api_output_tokens,
+                    query_tokens=api_input_tokens,
+                )
+                self.token_tracker.record(
+                    category="report_generation",
+                    model_name=self.llm_model_name or "LongCat-Flash-Lite",
+                    usage=usage,
+                )
+
             return message.content[0].text
         except Exception as e:
             logger.error(f"LLM call failed: {str(e)}")

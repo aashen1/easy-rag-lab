@@ -76,6 +76,7 @@ class TestSetGenerator:
         num_questions: int = None,
         llm_preset: str = "default",
         seed: Optional[int] = None,
+        token_tracker: Optional[Any] = None,
     ) -> Dict[str, Any]:
         strategy = strategy or self.default_strategy
         num_questions = num_questions or self.default_num_questions
@@ -113,6 +114,7 @@ class TestSetGenerator:
             base_url=llm_config["base_url"],
             temperature=0.7,
             max_tokens=512,
+            token_tracker=token_tracker,
         )
 
         questions = []
@@ -312,6 +314,7 @@ class TestSetGenerator:
                     query=prompt,
                     contexts=[],
                     system_prompt="你是一个测试数据生成器。请严格按照要求的JSON格式输出，不要输出任何其他内容。",
+                    category="test_generation",
                 )
 
                 qa = self._parse_llm_response(response)
