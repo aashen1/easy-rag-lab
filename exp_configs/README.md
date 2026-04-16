@@ -408,6 +408,7 @@ pixi run python eval/run_experiment.py --config exp_configs/multi_variant.yaml
    ```
 
 2. **复现特定实验**
+   
    ```bash
    # 完整复现（包含 PDF 哈希验证）
    pixi run python eval/run_experiment.py --reproduce data/exp_reports/exp_20250416_103500_baseline
@@ -418,7 +419,7 @@ pixi run python eval/run_experiment.py --config exp_configs/multi_variant.yaml
    # 跳过所有验证
    pixi run python eval/run_experiment.py --reproduce data/exp_reports/exp_20250416_103500_baseline --skip-verification
    ```
-
+   
 3. **对比原实验与复现实验**
    ```bash
    pixi run python eval/run_experiment.py --compare exp_20250416_103500_baseline exp_20250416_110000_baseline_reproduced
@@ -572,9 +573,9 @@ Hit Rate = (包含正确答案的查询数) / (总查询数)
 **定义**：正确答案在检索结果中排名的倒数平均值。
 
 **计算公式**：
-```
+\```
 MRR = (1/N) * Σ(1 / rank_i)
-```
+\```
 
 **取值范围**：0.0 ~ 1.0
 
@@ -596,10 +597,10 @@ MRR = (1/N) * Σ(1 / rank_i)
 **定义**：考虑排序位置的检索质量指标，位置越靠前权重越高。
 
 **计算公式**：
-```
+\```
 DCG = Σ(rel_i / log2(i + 1))
 NDCG = DCG / IDCG
-```
+\```
 
 **取值范围**：0.0 ~ 1.0
 
