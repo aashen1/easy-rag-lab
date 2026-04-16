@@ -10,6 +10,8 @@ load_dotenv()
 
 
 def load_config(config_path: str = "config.yaml") -> Dict[str, Any]:
+    if config_path is None:
+        config_path = "config.yaml"
     with open(config_path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
     logger.info(f"Configuration loaded from {config_path}")
