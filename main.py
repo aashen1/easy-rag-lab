@@ -265,7 +265,7 @@ def _handle_create_meal(meal_manager: MealManager, args):
             force_parse=args.force_parse,
         )
         logger.success(
-            f"Meal '{meal.name}' created [{meal.uuid[:8]}] "
+            f"Meal '{meal.name}' created [{meal.data_id[:12]}] "
             f"({meal.stats.get('total_pdfs', 0)} PDFs, "
             f"{meal.stats.get('total_pages', 0)} pages, "
             f"{meal.stats.get('total_chunks', 0)} chunks)"
@@ -330,8 +330,8 @@ def _handle_repair_meal(meal_manager: MealManager, name: str):
                         replacements[mf.path] = new_path
 
     print("\nRepair mode:")
-    print("1. Create new meal (original preserved, new UUID)")
-    print("2. In-place repair (updates current meal, UUID will change)")
+    print("1. Create new meal (original preserved, new data_id)")
+    print("2. In-place repair (updates current meal, data_id will change)")
 
     mode = input("Select mode [1-2]: ").strip()
     create_new = mode != "2"
@@ -349,7 +349,7 @@ def _handle_repair_meal(meal_manager: MealManager, name: str):
             new_name=new_name,
         )
         logger.success(
-            f"Meal '{repaired.name}' repaired [{repaired.uuid[:8]}] "
+            f"Meal '{repaired.name}' repaired [{repaired.data_id[:12]}] "
             f"({repaired.stats.get('total_pdfs', 0)} PDFs)"
         )
     except (ValueError, FileNotFoundError) as e:
