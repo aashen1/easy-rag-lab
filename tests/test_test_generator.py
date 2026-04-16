@@ -234,11 +234,11 @@ class TestLoadMealChunks:
 
         from src.meal import MealConfig, MealFile
         meal_config = MealConfig(
-            uuid="test-uuid",
+            data_id="abc123" + "0" * 58,
             name="test_meal",
             created_at="2026-04-16T14:30:00",
             sampling_config=None,
-            collection_name="m_test-uu",
+            collection_name="m_test1234567",
             pdf_files=[
                 MealFile(path="reports/report_0.pdf", sha256="abc", size_bytes=100)
             ],
