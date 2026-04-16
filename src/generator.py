@@ -1,10 +1,33 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from anthropic import Anthropic
 from loguru import logger
 
+from src.token_tracker import (
+    DetailedTokenUsage,
+    TokenTracker,
+    compute_detailed_usage,
+)
+
 
 class Generator:
+    """LLM answer generator with token usage tracking.
+
+    Args:
+        model_name: Name of the LLM model.
+        api_key: API key for authentication.
+        base_url: Base URL for the API endpoint.
+        temperature: Sampling temperature.
+        max_tokens: Maximum tokens in the response.
+        token_tracker: Optional TokenTracker for recording usage.
+
+    Returns:
+        Generator instance.
+
+    Raises:
+        Exception: If Anthropic client initialization fails.
+    """
+
     def __init__(
         self,
         model_name: str = "LongCat-Flash-Lite",
@@ -12,10 +35,13 @@ class Generator:
         base_url: str = "https://api.longcat.chat/anthropic",
         temperature: float = 0.0,
         max_tokens: int = 1024,
+        token_tracker: Optional[TokenTracker] = None,
     ):
         self.model_name = model_name
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.token_tracker = token_tracker
+        self.last_token_usage: Optional[DetailedTokenUsage] = None
 
         try:
             logger.info("Initializing Anthropic client")
@@ -41,7 +67,25 @@ class Generator:
         query: str,
         contexts: List[str],
         system_prompt: str = None,
+        category: str = "rag_qa",
+        **metadata: Any,
     ) -> str:
+        """Generate an answer using the LLM.
+
+        Args:
+            query: The user's question.
+            contexts: List of retrieved context strings.
+            system_prompt: Optional system prompt override.
+            category: Token tracking category (default "rag_qa").
+            **metadata: Additional metadata for token tracking.
+
+        Returns:
+            Generated answer string.
+
+        Raises:
+            ValueError: If query is empty or not a string.
+            Exception: If LLM call fails.
+        """
         if not query or not isinstance(query, str):
             error_msg = "Query must be a non-empty string"
             logger.error(error_msg)
@@ -88,7 +132,30 @@ class Generator:
 
             answer = message.content[0].text
 
-            logger.success(f"Generated answer: {answer[:100]}...")
+            api_input_tokens = getattr(message.usage, "input_tokens", 0) or 0
+            api_output_tokens = getattr(message.usage, "output_tokens", 0) or 0
+
+            detailed_usage = compute_detailed_usage(
+                api_input_tokens=api_input_tokens,
+                api_output_tokens=api_output_tokens,
+                system_prompt=system_prompt,
+                contexts=contexts,
+                query=query,
+            )
+            self.last_token_usage = detailed_usage
+
+            if self.token_tracker is not None:
+                self.token_tracker.record(
+                    category=category,
+                    model_name=self.model_name,
+                    usage=detailed_usage,
+                    **metadata,
+                )
+
+            logger.success(
+                f"Generated answer: {answer[:100]}... "
+                f"(tokens: in={api_input_tokens}, out={api_output_tokens})"
+            )
             return answer
 
         except Exception as e:
