@@ -104,6 +104,11 @@ class TestCalculateMRR:
         expected = ["贵州茅台2023年年度报告.pdf"]
         assert calculate_mrr(retrieved, expected) == pytest.approx(1 / 2)
 
+    def test_duplicate_in_retrieved(self):
+        retrieved = ["doc1", "doc1", "doc2"]
+        expected = ["doc1"]
+        assert calculate_mrr(retrieved, expected) == 1.0
+
 
 @pytest.mark.unit
 class TestCalculateNDCG:
