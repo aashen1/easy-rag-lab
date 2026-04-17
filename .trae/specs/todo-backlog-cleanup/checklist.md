@@ -1,0 +1,13 @@
+- [ ] `pixi run pytest tests/ -m "not integration" -v` 无 PytestCollectionWarning
+- [ ] src/chunker.py 第 68 行无尾随空格
+- [ ] tests/test_e2e_experiment.py 无重复的本地 `temp_project_dir` fixture
+- [ ] tests/conftest.py mock_embedder 使用固定向量（非随机）
+- [ ] CHANGELOG.md Known Issues 中已修复项已移除
+- [ ] test-review-suggestions.md 每条建议已标注状态
+- [ ] test-future-directions.md 每个方向已标注状态
+- [ ] 02-code-quality-standards.md 每类问题已标注状态
+- [ ] 04-known-bugs-functional-issues.md 每个问题已标注状态
+- [ ] 05-open-source-readiness.md 每项已标注状态
+- [ ] TODO.md 所有待办项状态已更新（完成/延后批复）
+- [ ] `pixi run pytest tests/ -m "not integration" -v` 全部通过
+- [ ] 每个任务完成后均有独立 git commit，commit msg 为英文 ASCII
