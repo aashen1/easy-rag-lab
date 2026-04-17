@@ -9,6 +9,18 @@
 ## 2026-04-18
 
 - [x] 完成 [code-issues-fix-requirements.md](.trae\documents\code-issues-fix-requirements.md)  2:38 周六
+- [x] TODO Backlog 大清洗（本次对话）
+  - [x] 修复 PytestCollectionWarning（TestCaseResult 添加 `__test__ = False`）
+  - [x] 修复 src/chunker.py 尾随空格
+  - [x] 删除 test_e2e_experiment.py 重复的本地 temp_project_dir fixture
+  - [x] 修改 conftest.py mock_embedder 使用固定向量
+  - [x] 清洗 CHANGELOG.md，移除已修复的 Known Issues
+  - [x] 标注 test-review-suggestions.md 各建议状态
+  - [x] 标注 test-future-directions.md 各方向状态
+  - [x] 标注 02-code-quality-standards.md 各问题状态
+  - [x] 标注 04-known-bugs-functional-issues.md 各问题状态
+  - [x] 标注 05-open-source-readiness.md 各项状态
+  - [x] 更新 TODO.md
 
 
 ## 2026-04-17-[alldone]
@@ -48,20 +60,22 @@
 
 ## Backlog
 
-- [ ] 重写问题生成策略，与chunk解耦，看看考虑做成基于整个MD的
-- [ ] 实验报告`baseline.json`当中记录AI回答的`"sources"`字段，给出的来源都是大的总文件名，这策略没啥用感觉，看看能不能细化到标题头或者chunk啥的。这个不着急，跟问题生成策略一块重写
-- [ ] 现在的项目结构是不是有点乱？根目录里还放着两个`.py`文件
-- [ ] 优化“新用户”链路的性能。PDF→parse→chunk→embed这一条还是要测一下速，有些地方可以提速或者上GPU的也做一下
-- [ ] [test-future-directions.md](.trae\documents\test-future-directions.md)当中提到了“**可扩展性**：新功能上线只需向 `golden_qa.json` 添加条目”，验证一下，如果是换了问题生成策略是否也可以
-- [ ] 目前的日志系统似乎并不是“应记尽记”的，比如pytest有些就不会体现在日志里（例如`pixi run pytest tests/ -m "not integration" -v`就不会被记录），分析一下怎么做符合最佳实践
-- [ ] 完成 [test-review-suggestions.md](.trae\documents\test-suite\test-review-suggestions.md) 
-- [ ] 完成 [test-future-directions.md](.trae\documents\test-suite\test-future-directions.md) 
-- [ ] 全面更新文档，主要改善可读性，例如把README作为唯一且易读的文档入口，整理一些过时的文档，精简总的文档数目，重新组织目前文档的存放路径
-- [ ] `exp_configs`当中一些模板yaml是不是有可能已经不符合现在版本了？等实验系统新版做好可以整个整理一下。
-- [ ] `pixi run pytest tests/ -m "integration" -v` 需要`10 passed, 385 deselected, 1 warning in 182.32s (0:03:02)`，用的时间有点久啊，是不是测试策略不对？看看是否有优化空间
-- [ ]  [02-code-quality-standards.md](.trae\code_reviews\v0.1.5\02-code-quality-standards.md) 优化代码
-- [ ] 更新README和CLAUDE两份文件，同步到目前版本，并调整开发重心
-- [ ]  [04-known-bugs-functional-issues.md](.trae\code_reviews\v0.1.5\04-known-bugs-functional-issues.md) 核实并修复，不过这篇文档是根据CHANGELOG写的，里面很多可能已经修了，看来CHANGELOG还是不要写什么待办，下次提醒下AI
-- [ ] 把CHANGELOG清洗一下，只写做了的，不写bug和TODO
-- [ ] 核实 [05-open-source-readiness.md](.trae\code_reviews\v0.1.5\05-open-source-readiness.md) 
-- [ ] 实验资产包里有没有一并记录CLI里面打印的那个很漂亮的token summary，以及详细到每个问题消耗多少token的全部token消耗数据？一打眼好像都没看见
+> 以下各项已在对应文档中标注状态。建议开新对话以 plan/spec 模式逐项推进。
+
+- [ ] 重写问题生成策略，与chunk解耦，看看考虑做成基于整个MD的 📋 已安排（建议 spec 模式，规模大）
+- [ ] 实验报告`baseline.json`当中记录AI回答的`"sources"`字段，给出的来源都是大的总文件名，这策略没啥用感觉，看看能不能细化到标题头或者chunk啥的。这个不着急，跟问题生成策略一块重写 📋 已安排（与上一项耦合）
+- [ ] 现在的项目结构是不是有点乱？根目录里还放着两个`.py`文件 📋 已安排（建议 spec 模式，需评估影响范围）
+- [ ] 优化"新用户"链路的性能。PDF→parse→chunk→embed这一条还是要测一下速，有些地方可以提速或者上GPU的也做一下 📋 已安排（建议 plan 模式，需性能基准测试）
+- [ ] [test-future-directions.md](.trae\documents\test-suite\test-future-directions.md)当中提到了"**可扩展性**：新功能上线只需向 `golden_qa.json` 添加条目"，验证一下，如果是换了问题生成策略是否也可以 ⏳ 待定（依赖黄金测试集落地）
+- [ ] 目前的日志系统似乎并不是"应记尽记"的，比如pytest有些就不会体现在日志里（例如`pixi run pytest tests/ -m "not integration" -v`就不会被记录），分析一下怎么做符合最佳实践 📋 已安排（建议 plan 模式，需调研最佳实践）
+- [ ] 完成 [test-review-suggestions.md](.trae\documents\test-suite\test-review-suggestions.md) 📋 已安排（已标注状态：3项✅已修复，8项📋已安排，建议逐项 spec）
+- [ ] 完成 [test-future-directions.md](.trae\documents\test-suite\test-future-directions.md) 📋 已安排（已标注状态：1项⏳待定，5项📋已安排，建议逐项 spec）
+- [ ] 全面更新文档，主要改善可读性，例如把README作为唯一且易读的文档入口，整理一些过时的文档，精简总的文档数目，重新组织目前文档的存放路径 📋 已安排（建议 spec 模式，规模大）
+- [ ] `exp_configs`当中一些模板yaml是不是有可能已经不符合现在版本了？等实验系统新版做好可以整个整理一下。📋 已安排（建议 spec 模式）
+- [ ] `pixi run pytest tests/ -m "integration" -v` 需要`10 passed, 385 deselected, 1 warning in 182.32s (0:03:02)`，用的时间有点久啊，是不是测试策略不对？看看是否有优化空间 📋 已安排（建议 plan 模式，需分析瓶颈）
+- [ ] [02-code-quality-standards.md](.trae\code_reviews\v0.1.5\02-code-quality-standards.md) 优化代码 📋 已安排（已标注状态：2项✅已修复，5项📋已安排，建议 spec 模式）
+- [ ] 更新README和CLAUDE两份文件，同步到目前版本，并调整开发重心 📋 已安排（建议 plan 模式）
+- [ ] [04-known-bugs-functional-issues.md](.trae\code_reviews\v0.1.5\04-known-bugs-functional-issues.md) 核实并修复 📋 已安排（已标注状态：4项✅已修复，9项📋已安排，剩余项建议逐项 spec）
+- [x] 把CHANGELOG清洗一下，只写做了的，不写bug和TODO ✅ 已完成（2026-04-18）
+- [ ] 核实 [05-open-source-readiness.md](.trae\code_reviews\v0.1.5\05-open-source-readiness.md) 📋 已安排（已标注状态：3项✅已修复，4项❌已弃用，其余📋已安排）
+- [ ] 实验资产包里有没有一并记录CLI里面打印的那个很漂亮的token summary，以及详细到每个问题消耗多少token的全部token消耗数据？一打眼好像都没看见 📋 已安排（需了解现有资产包结构）
