@@ -84,12 +84,13 @@ def process_parsed_files(
     source_filter: Optional[set] = None,
 ) -> List[Dict[str, Any]]:
     input_path = Path(input_dir)
-    output_path = ensure_dir(output_dir)
 
     if not input_path.exists():
         error_msg = f"Input directory not found: {input_dir}"
         logger.error(error_msg)
         raise FileNotFoundError(error_msg)
+
+    output_path = ensure_dir(output_dir)
 
     md_files = list(input_path.rglob("*.md"))
 

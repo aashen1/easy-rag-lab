@@ -39,12 +39,13 @@ def parse_all_pdfs(
     pdf_files: Optional[List[Path]] = None,
 ) -> List[Dict[str, str]]:
     input_path = Path(input_dir)
-    output_path = ensure_dir(output_dir)
 
     if not input_path.exists():
         error_msg = f"Input directory not found: {input_dir}"
         logger.error(error_msg)
         raise FileNotFoundError(error_msg)
+
+    output_path = ensure_dir(output_dir)
 
     if pdf_files is not None:
         logger.info(f"Using provided list of {len(pdf_files)} PDF files")
