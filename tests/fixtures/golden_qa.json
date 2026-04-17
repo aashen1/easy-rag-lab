@@ -2,17 +2,81 @@
   {
     "id": "golden_001",
     "category": "factual",
-    "question": "贵州茅台2023年的营业收入是多少？",
-    "expected_sources": ["贵州茅台2023年年度报告.md"],
-    "expected_keywords": ["营业收入", "茅台"],
-    "description": "验证基础事实提取能力"
+    "question": "2026年全球光伏新增装机增速的韧性如何？",
+    "expected_sources": ["research_reports\\2026年光伏行业分析.md"],
+    "expected_keywords": ["光伏", "装机", "增速", "韧性"],
+    "description": "验证基础事实提取能力 - 光伏行业趋势"
   },
   {
     "id": "golden_002",
     "category": "factual",
-    "question": "该公司2023年净利润同比增长多少？",
-    "expected_sources": ["贵州茅台2023年年度报告.md"],
-    "expected_keywords": ["净利润", "同比增长"],
-    "description": "验证财务指标提取能力"
+    "question": "光模块测试可以分为哪两大类？",
+    "expected_sources": ["research_reports\\光模块设备行业深度：AI发展带动光模块需求爆发，看好封装测试设备商充分受益.md"],
+    "expected_keywords": ["光模块", "测试", "仪器仪表", "自动化"],
+    "description": "验证分类信息提取能力"
+  },
+  {
+    "id": "golden_003",
+    "category": "factual",
+    "question": "2024年普基精电光模块贴片设备的全球市场份额是多少？",
+    "expected_sources": ["research_reports\\光模块设备行业深度：AI发展带动光模块需求爆发，看好封装测试设备商充分受益.md"],
+    "expected_keywords": ["普基精电", "市场份额", "贴片设备", "21%"],
+    "description": "验证数值提取能力"
+  },
+  {
+    "id": "golden_004",
+    "category": "factual",
+    "question": "光模块封测设备市场有望实现翻倍扩容的主要原因是什么？",
+    "expected_sources": ["research_reports\\光模块设备行业深度：AI发展带动光模块需求爆发，看好封装测试设备商充分受益.md"],
+    "expected_keywords": ["封测设备", "扩容", "高端规格", "投入"],
+    "description": "验证因果关系推理能力"
+  },
+  {
+    "id": "golden_005",
+    "category": "factual",
+    "question": "奥特维光模块AOI设备的核心检测精度达到什么级别？",
+    "expected_sources": ["research_reports\\光模块设备行业深度：AI发展带动光模块需求爆发，看好封装测试设备商充分受益.md"],
+    "expected_keywords": ["奥特维", "AOI", "检测精度", "1μm"],
+    "description": "验证技术参数提取能力"
+  },
+  {
+    "id": "golden_006",
+    "category": "boundary",
+    "question": "天孚通信2026年光学引擎月产量预计达到多少万颗？",
+    "expected_sources": ["research_reports\\光模块设备行业深度：AI发展带动光模块需求爆发，看好封装测试设备商充分受益.md"],
+    "expected_keywords": ["天孚通信", "光学引擎", "月产量", "20-30万颗"],
+    "description": "验证数值范围提取能力 - 边界条件"
+  },
+  {
+    "id": "golden_007",
+    "category": "boundary",
+    "question": "快克智能和科瑞技术的盈利预测数据来源与其他公司有何不同？",
+    "expected_sources": ["research_reports\\光模块设备行业深度：AI发展带动光模块需求爆发，看好封装测试设备商充分受益.md"],
+    "expected_keywords": ["快克智能", "科瑞技术", "盈利预测", "Wind一致预期"],
+    "description": "验证对比分析能力 - 数据来源差异"
+  },
+  {
+    "id": "golden_008",
+    "category": "boundary",
+    "question": "当前数据中心Scale-up网络主要使用什么技术实现芯片间互联？",
+    "expected_sources": ["research_reports\\光模块设备行业深度：AI发展带动光模块需求爆发，看好封装测试设备商充分受益.md"],
+    "expected_keywords": ["Scale-up", "网络", "铜线", "铜缆", "PCIe", "NVLink"],
+    "description": "验证技术概念理解能力 - 网络架构"
+  },
+  {
+    "id": "golden_009",
+    "category": "multi_hop",
+    "question": "2026年全球800G及以上速率光模块的预计出货量是多少？",
+    "expected_sources": ["research_reports\\光模块设备行业深度：AI发展带动光模块需求爆发，看好封装测试设备商充分受益.md"],
+    "expected_keywords": ["800G", "1.6T", "出货量", "5200万支"],
+    "description": "验证多跳推理能力 - 市场预测"
+  },
+  {
+    "id": "golden_010",
+    "category": "multi_hop",
+    "question": "东吴证券对罗博特科的投资评级是什么？该评级面临哪些主要风险？",
+    "expected_sources": ["research_reports\\光模块设备行业深度：AI发展带动光模块需求爆发，看好封装测试设备商充分受益.md"],
+    "expected_keywords": ["罗博特科", "投资评级", "风险", "重点推荐"],
+    "description": "验证多跳推理能力 - 投资分析"
   }
 ]
