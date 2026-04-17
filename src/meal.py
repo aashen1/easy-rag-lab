@@ -447,7 +447,7 @@ class MealManager:
                 rel = str(jsonl_file.relative_to(chunks_dir))
                 source_filter_jsonl.add(rel)
 
-        total_chunks = len(source_filter_jsonl)
+        total_chunks = 0
         for jsonl_rel in source_filter_jsonl:
             jsonl_path = chunks_dir / jsonl_rel
             try:
