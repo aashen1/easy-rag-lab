@@ -64,3 +64,4 @@
 - [ ]  [04-known-bugs-functional-issues.md](.trae\code_reviews\v0.1.5\04-known-bugs-functional-issues.md) 核实并修复，不过这篇文档是根据CHANGELOG写的，里面很多可能已经修了，看来CHANGELOG还是不要写什么待办，下次提醒下AI
 - [ ] 把CHANGELOG清洗一下，只写做了的，不写bug和TODO
 - [ ] 核实 [05-open-source-readiness.md](.trae\code_reviews\v0.1.5\05-open-source-readiness.md) 
+- [ ] 实验资产包里有没有一并记录CLI里面打印的那个很漂亮的token summary，以及详细到每个问题消耗多少token的全部token消耗数据？一打眼好像都没看见
