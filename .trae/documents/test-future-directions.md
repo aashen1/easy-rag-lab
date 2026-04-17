@@ -31,7 +31,7 @@
 
 ```
 Step 1: 创建 golden_test Meal
-  pixi run python -c "from src.meal import MealManager; ..."
+  pixi run python main.py --create-meal golden_test --sample-ratio 0.03 --seed 42
   预期：ratio=0.03, seed=42 → 约 3-4 个 PDF, 300-500 chunks
 
 Step 2: 运行实验配置生成问题集
