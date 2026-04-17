@@ -75,7 +75,9 @@ class TestGenerator:
             question_id="q1",
         )
         assert tracker.record_count == 1
-        record = tracker._records[0]
+        records = tracker.get_records_by_category("rag_qa")
+        assert len(records) == 1
+        record = records[0]
         assert record.category == "rag_qa"
         assert record.model_name == "LongCat-Flash-Lite"
         assert record.usage.input_tokens == 100
