@@ -8,6 +8,7 @@ from loguru import logger
 
 @dataclass
 class TestCaseResult:
+    __test__ = False
     id: str
     question: str
     answer: Optional[str]
