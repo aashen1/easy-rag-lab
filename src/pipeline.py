@@ -38,7 +38,8 @@ class RAGPipeline:
             meal_manager = MealManager(self.config)
             self.meal_config = meal_manager.load_meal(meal_name)
             collection_name = self.meal_config.collection_name
-            logger.info(f"Using meal '{meal_name}' (data_id: {self.meal_config.data_id[:12]}, collection: {collection_name})")
+            logger.info(
+                f"Using meal '{meal_name}' (data_id: {self.meal_config.data_id[:12]}, collection: {collection_name})")
 
         self.indexer = VectorIndexer(
             persist_dir=vector_store_config["persist_dir"],
@@ -71,6 +72,23 @@ class RAGPipeline:
         force_parse: bool = False,
         sampling_config: Optional[SamplingConfig] = None,
     ) -> None:
+        """Build the vector index from raw PDFs through the full pipeline.
+
+        Executes three steps in order: PDF parsing, document chunking, and
+        vector index construction. When a sampling configuration is provided,
+        the index is always rebuilt and only the sampled PDFs are processed.
+
+        Args:
+            rebuild: Whether to recreate the vector collection from scratch.
+            force_parse: Whether to force re-parsing of PDFs even if parsed
+                output already exists.
+            sampling_config: Optional sampling configuration to select a subset
+                of PDFs. When provided, ``rebuild`` is forced to True.
+
+        Raises:
+            FileNotFoundError: If the configured input directory does not exist.
+            Exception: If any step (parse, chunk, index) fails.
+        """
         logger.info("Building vector index...")
 
         parser_config = self.config["parser"]
@@ -86,7 +104,8 @@ class RAGPipeline:
             input_path = Path(parser_config["input_dir"])
             all_pdfs = list(input_path.rglob("*.pdf"))
             sampled_pdf_files = determine_sample(all_pdfs, sampling_config)
-            logger.info(f"Sampled {len(sampled_pdf_files)} PDFs from {len(all_pdfs)} total")
+            logger.info(
+                f"Sampled {len(sampled_pdf_files)} PDFs from {len(all_pdfs)} total")
 
         logger.info("Step 1: Parsing PDFs...")
         parse_results = parse_all_pdfs(
@@ -103,8 +122,10 @@ class RAGPipeline:
                 if r.get("output"):
                     output_path = Path(r["output"])
                     parsed_dir = Path(parser_config["output_dir"])
-                    source_filter_md.add(str(output_path.relative_to(parsed_dir)))
-            logger.info(f"Source filter for chunker: {len(source_filter_md)} files")
+                    source_filter_md.add(
+                        str(output_path.relative_to(parsed_dir)))
+            logger.info(
+                f"Source filter for chunker: {len(source_filter_md)} files")
 
         logger.info("Step 2: Chunking documents...")
         chunk_results = process_parsed_files(
@@ -122,8 +143,10 @@ class RAGPipeline:
                 if r.get("output"):
                     output_path = Path(r["output"])
                     chunks_dir = Path(chunker_config["output_dir"])
-                    source_filter_jsonl.add(str(output_path.relative_to(chunks_dir)))
-            logger.info(f"Source filter for indexer: {len(source_filter_jsonl)} files")
+                    source_filter_jsonl.add(
+                        str(output_path.relative_to(chunks_dir)))
+            logger.info(
+                f"Source filter for indexer: {len(source_filter_jsonl)} files")
 
         logger.info("Step 3: Building vector index...")
         self.indexer.build_index(
@@ -153,7 +176,22 @@ class RAGPipeline:
         self.close()
         return False
 
-    def use_meal(self, meal_name: str):
+    def use_meal(self, meal_name: str) -> "MealConfig":
+        """Switch the pipeline to use a pre-built Meal's vector collection.
+
+        Closes the current indexer and creates a new one pointing to the
+        Meal's collection. The retriever is also re-created to reference the
+        new indexer.
+
+        Args:
+            meal_name: Name of the Meal to load.
+
+        Returns:
+            MealConfig: The configuration of the loaded Meal.
+
+        Raises:
+            Exception: If the Meal does not exist or fails to load.
+        """
         from src.meal import MealManager
 
         if hasattr(self, 'indexer') and self.indexer is not None:
@@ -174,12 +212,29 @@ class RAGPipeline:
             embedder=self.embedder,
             top_k=self.config["retrieval"]["top_k"],
         )
-        logger.info(f"Switched to meal '{meal_name}' (data_id: {self.meal_config.data_id[:12]}, collection: {self.meal_config.collection_name})")
+        logger.info(
+            f"Switched to meal '{meal_name}' (data_id: {self.meal_config.data_id[:12]}, collection: {self.meal_config.collection_name})")
         return self.meal_config
 
     def query(
         self, question: str, return_contexts: bool = True
     ) -> Dict[str, Any]:
+        """Execute a RAG query: retrieve relevant contexts and generate an answer.
+
+        Args:
+            question: The user question to answer. Must be a non-empty string.
+            return_contexts: Whether to include retrieved contexts, scores, and
+                sources in the response dictionary. Defaults to True.
+
+        Returns:
+            A dictionary containing at minimum ``question`` and ``answer`` keys.
+            When ``return_contexts`` is True, also includes ``contexts``,
+            ``scores``, ``sources``, and optionally ``token_usage``.
+
+        Raises:
+            ValueError: If ``question`` is empty or not a string.
+            Exception: If retrieval or generation fails.
+        """
         if not question or not isinstance(question, str):
             error_msg = "Question must be a non-empty string"
             logger.error(error_msg)
@@ -228,7 +283,8 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="RAG Pipeline CLI")
     parser.add_argument("--query", type=str, help="Query question")
-    parser.add_argument("--build-index", action="store_true", help="Build vector index")
+    parser.add_argument("--build-index", action="store_true",
+                        help="Build vector index")
     parser.add_argument(
         "--rebuild", action="store_true", help="Rebuild index from scratch"
     )

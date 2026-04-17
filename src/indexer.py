@@ -19,6 +19,17 @@ class VectorIndexer:
         collection_name: str = "financial_reports",
         distance: str = "Cosine",
     ):
+        """Initialize the VectorIndexer with a local Qdrant client.
+
+        Args:
+            persist_dir: Directory path for Qdrant data persistence.
+            collection_name: Name of the Qdrant collection to use.
+            distance: Distance metric for vector similarity. One of
+                ``"Cosine"``, ``"Euclidean"``, or ``"Dot"``.
+
+        Raises:
+            Exception: If the Qdrant client fails to initialize.
+        """
         self.persist_dir = Path(persist_dir)
         self.collection_name = collection_name
         self.distance = distance
@@ -39,6 +50,20 @@ class VectorIndexer:
     def create_collection(
         self, vector_size: int, recreate: bool = False
     ) -> None:
+        """Create a Qdrant collection with the specified vector size.
+
+        If the collection already exists and ``recreate`` is False, this
+        method is a no-op. If ``recreate`` is True, the existing collection
+        is deleted first.
+
+        Args:
+            vector_size: Dimensionality of the vectors to store.
+            recreate: Whether to delete and re-create the collection if it
+                already exists. Defaults to False.
+
+        Raises:
+            Exception: If collection creation or deletion fails.
+        """
         try:
             collections = self.client.get_collections().collections
             collection_names = [c.name for c in collections]
@@ -84,6 +109,20 @@ class VectorIndexer:
     def index_chunks(
         self, chunks: List[Dict[str, Any]], embeddings: np.ndarray, batch_size: int = 100
     ) -> None:
+        """Insert document chunks and their embeddings into the Qdrant collection.
+
+        Args:
+            chunks: List of chunk dictionaries, each containing at least a
+                ``text`` key and optionally ``chunk_id`` and ``metadata`` keys.
+            embeddings: Numpy array of shape ``(N, D)`` where N matches the
+                number of chunks and D is the embedding dimension.
+            batch_size: Number of points to upsert in each batch. Defaults to 100.
+
+        Raises:
+            ValueError: If the number of chunks does not match the number of
+                embeddings.
+            Exception: If the upsert operation fails.
+        """
         if not chunks or len(embeddings) == 0:
             logger.warning("No chunks or embeddings to index")
             return
@@ -133,6 +172,25 @@ class VectorIndexer:
         rebuild: bool = False,
         source_filter: Optional[set] = None,
     ) -> None:
+        """Load JSONL chunk files, embed their texts, and index them into Qdrant.
+
+        Reads all ``*.jsonl`` files from ``chunks_dir``, generates embeddings
+        via the provided embedder, creates (or re-creates) the collection, and
+        inserts the chunks.
+
+        Args:
+            chunks_dir: Directory containing JSONL chunk files.
+            embedder: Embedder instance used to generate vector embeddings.
+            batch_size: Batch size for the embedding call. Defaults to 32.
+            rebuild: Whether to re-create the collection from scratch.
+            source_filter: Optional set of relative file paths; only JSONL
+                files whose path relative to ``chunks_dir`` is in this set
+                will be processed.
+
+        Raises:
+            FileNotFoundError: If ``chunks_dir`` does not exist.
+            Exception: If embedding or indexing fails.
+        """
         chunks_path = Path(chunks_dir)
 
         if not chunks_path.exists():
@@ -187,6 +245,12 @@ class VectorIndexer:
         self.index_chunks(all_chunks, embeddings, batch_size=100)
 
     def get_collection_info(self) -> Optional[Dict[str, Any]]:
+        """Retrieve metadata about the current Qdrant collection.
+
+        Returns:
+            A dictionary with ``points_count`` and ``status`` keys, or None
+            if the collection does not exist or the query fails.
+        """
         try:
             info = self.client.get_collection(self.collection_name)
             return {
@@ -198,6 +262,11 @@ class VectorIndexer:
             return None
 
     def delete_collection(self) -> None:
+        """Delete the current Qdrant collection.
+
+        Raises:
+            Exception: If the collection deletion fails.
+        """
         try:
             logger.info(f"Deleting collection: {self.collection_name}")
             self.client.delete_collection(self.collection_name)
@@ -209,6 +278,7 @@ class VectorIndexer:
             raise Exception(error_msg)
 
     def close(self) -> None:
+        """Close the Qdrant client and release associated resources."""
         try:
             if hasattr(self, 'client') and self.client is not None:
                 self.client.close()

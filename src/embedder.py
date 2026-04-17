@@ -13,6 +13,18 @@ class Embedder:
         device: str = "cuda",
         use_fp16: bool = True,
     ):
+        """Initialize the Embedder by loading a transformer model and tokenizer.
+
+        Falls back to CPU automatically when CUDA is not available.
+
+        Args:
+            model_name: Hugging Face model identifier for the embedding model.
+            device: Device to run inference on (``"cuda"`` or ``"cpu"``).
+            use_fp16: Whether to use half-precision on CUDA. Ignored on CPU.
+
+        Raises:
+            Exception: If the model or tokenizer fails to load.
+        """
         self.model_name = model_name
         self.device = device
         self.use_fp16 = use_fp16
@@ -48,6 +60,20 @@ class Embedder:
     def _encode_batch(
         self, texts: List[str], batch_size: int, max_length: int = 512
     ) -> np.ndarray:
+        """Encode a list of texts into normalized CLS embeddings in batches.
+
+        Uses the model's CLS token representation and L2-normalizes the
+        output vectors.
+
+        Args:
+            texts: List of text strings to encode.
+            batch_size: Number of texts per forward pass.
+            max_length: Maximum token length for truncation. Defaults to 512.
+
+        Returns:
+            A numpy array of shape ``(len(texts), embedding_dim)`` with
+            L2-normalized row vectors.
+        """
         all_embeddings = []
 
         for i in range(0, len(texts), batch_size):
@@ -81,6 +107,21 @@ class Embedder:
     def embed_texts(
         self, texts: List[str], batch_size: int = 32, show_progress: bool = False
     ) -> np.ndarray:
+        """Generate embeddings for a list of document texts.
+
+        Args:
+            texts: List of text strings to embed. All items must be strings.
+            batch_size: Number of texts per encoding batch. Defaults to 32.
+            show_progress: Reserved for progress display (currently unused).
+
+        Returns:
+            A numpy array of shape ``(len(texts), embedding_dim)``. Returns an
+            empty array if ``texts`` is empty.
+
+        Raises:
+            ValueError: If any item in ``texts`` is not a string.
+            Exception: If the encoding process fails.
+        """
         if not texts:
             logger.warning("Empty text list provided for embedding")
             return np.array([])
@@ -105,6 +146,19 @@ class Embedder:
             raise Exception(error_msg)
 
     def embed_query(self, query: str) -> np.ndarray:
+        """Generate an embedding for a single query string.
+
+        Args:
+            query: The query text to embed. Must be a non-empty string.
+
+        Returns:
+            A 1-D numpy array of shape ``(embedding_dim,)`` representing the
+            L2-normalized query embedding.
+
+        Raises:
+            ValueError: If ``query`` is empty or not a string.
+            Exception: If the encoding process fails.
+        """
         if not query or not isinstance(query, str):
             error_msg = "Query must be a non-empty string"
             logger.error(error_msg)
@@ -125,6 +179,11 @@ class Embedder:
             raise Exception(error_msg)
 
     def get_embedding_dimension(self) -> int:
+        """Return the embedding dimension of the loaded model.
+
+        Returns:
+            The hidden size (embedding dimension) as an integer.
+        """
         return self.embedding_dim
 
 

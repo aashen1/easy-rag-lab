@@ -13,12 +13,35 @@ class Retriever:
         indexer: VectorIndexer,
         embedder: Embedder,
         top_k: int = 5,
-    ):
+    ) -> None:
+        """Initialize the Retriever with an indexer, embedder, and top-k setting.
+
+        Args:
+            indexer: VectorIndexer instance used to search the vector store.
+            embedder: Embedder instance used to convert queries into vectors.
+            top_k: Number of top results to return. Defaults to 5.
+        """
         self.indexer = indexer
         self.embedder = embedder
         self.top_k = top_k
 
     def retrieve(self, query: str) -> List[Dict[str, Any]]:
+        """Retrieve the top-k most relevant chunks for the given query.
+
+        Embeds the query and searches the vector store for the closest
+        matching document chunks.
+
+        Args:
+            query: The search query string. Must be non-empty.
+
+        Returns:
+            A list of dictionaries, each containing ``chunk_id``, ``text``,
+            ``metadata``, and ``score`` keys, sorted by descending relevance.
+
+        Raises:
+            ValueError: If ``query`` is empty or not a string.
+            Exception: If the embedding or search operation fails.
+        """
         if not query or not isinstance(query, str):
             error_msg = "Query must be a non-empty string"
             logger.error(error_msg)
