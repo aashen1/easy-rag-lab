@@ -143,18 +143,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Known Issues
 
 1. **Source Path Format Mismatch in Metrics**: Retrieved sources use relative markdown paths (e.g., `annual_report/xxx.md`) while expected sources use PDF filenames (e.g., `xxx.pdf`), causing all retrieval metrics (Hit Rate, MRR, NDCG) to always return 0
-2. **Invalid Strategy Name in chunk_comparison.yaml**: Uses `"complex"` strategy which is not supported by `test_generator.py` (only `factual`, `boundary`, `multi_hop`), causing runtime `ValueError`
-3. **Generator system_prompt Not Using API `system` Parameter**: `Generator.generate()` concatenates system prompt into user message instead of using Anthropic API's dedicated `system` parameter, reducing instruction-following quality
-4. **Indexer Resource Not Automatically Released**: `RAGPipeline` does not call `VectorIndexer.close()`, potentially causing resource leaks and file locking issues on Windows
-5. **Meal total_chunks Off-by-One**: `total_chunks` is initialized to file count instead of 0, inflating the count by the number of JSONL files
-6. **Test Data Placeholders**: Some `expected_answer` fields in test data contain placeholder values ("XXX亿元")
-7. **Missing Generation Metrics**: Faithfulness and Answer Relevancy metrics not implemented
-8. **Incomplete Test Coverage**: No unit tests for `indexer`, `retriever`, `generator`, `pipeline`, or `eval/metrics` modules; `test_test_generator.py` does not test the `generate_test_set` main entry method; `test_run_eval.py` only tests config loading, not evaluation execution
-9. **NDCG Simplified Implementation**: Current NDCG uses binary relevance (gain=1.0 for all hits), no graded relevance support
-10. **Hit Rate Definition Non-standard**: Current Hit Rate calculates "fraction of expected documents retrieved" (recall-oriented) rather than the standard "fraction of queries with at least one hit" (Hit Rate@K)
-11. **Evaluation Metrics Config Not Used**: `evaluation.metrics.retrieval` list in experiment config is declared but not dynamically applied; all three metrics are hardcoded
-12. **Category Logic Duplication**: Document category detection (annual_report/research_report) is hardcoded and duplicated in both `parser.py` and `chunker.py`
-13. **Embedder show_progress Unused**: `Embedder.embed_texts()` accepts `show_progress` parameter but does not implement progress display
+2. **Test Data Placeholders**: Some `expected_answer` fields in test data contain placeholder values ("XXX亿元")
+3. **Missing Generation Metrics**: Faithfulness and Answer Relevancy metrics not implemented
+4. **Incomplete Test Coverage**: No unit tests for `indexer`, `retriever`, `generator`, `pipeline`, or `eval/metrics` modules; `test_test_generator.py` does not test the `generate_test_set` main entry method; `test_run_eval.py` only tests config loading, not evaluation execution
+5. **NDCG Simplified Implementation**: Current NDCG uses binary relevance (gain=1.0 for all hits), no graded relevance support
+6. **Hit Rate Definition Non-standard**: Current Hit Rate calculates "fraction of expected documents retrieved" (recall-oriented) rather than the standard "fraction of queries with at least one hit" (Hit Rate@K)
+7. **Evaluation Metrics Config Not Used**: `evaluation.metrics.retrieval` list in experiment config is declared but not dynamically applied; all three metrics are hardcoded
+8. **Category Logic Duplication**: Document category detection (annual_report/research_report) is hardcoded and duplicated in both `parser.py` and `chunker.py`
+9. **Embedder show_progress Unused**: `Embedder.embed_texts()` accepts `show_progress` parameter but does not implement progress display
 
 ## [0.1.0] - 2026-04-16
 
@@ -202,12 +198,7 @@ These choices are **intentionally basic** to establish a baseline for future opt
 
 ### Known Issues
 
-1. **Evaluation Stability**: Evaluation script may encounter errors; no stable baseline metrics established yet
-2. **Limited Test Dataset**: Only 10 test questions; large-scale test dataset needed
-3. **Preprocessing Performance**: `PDF -> ... -> Qdrant` pipeline performance not optimized for large datasets. Given that preprocessing can be extremely slow on a personal PC, it is recommended not to prepare excessive data — for long documents such as corporate annual reports, no more than 10 files; for short documents like industry research reports, up to 50 files.
-4. **Missing Generation Metrics**: Faithfulness and Answer Relevancy metrics not implemented
-5. **Incomplete Test Coverage**: No unit tests for indexer, retriever, generator, or pipeline modules
-6. **Test Data Placeholders**: Some `expected_answer` fields in test data contain placeholder values ("XXX亿元")
+1. **Preprocessing Performance**: `PDF -> ... -> Qdrant` pipeline performance not optimized for large datasets. Given that preprocessing can be extremely slow on a personal PC, it is recommended not to prepare excessive data — for long documents such as corporate annual reports, no more than 10 files; for short documents like industry research reports, up to 50 files.
 
 ### Dependencies
 
@@ -255,19 +246,12 @@ Planned improvements for future versions:
 #### Bug Fixes (High Priority)
 
 - Fix source path format mismatch in retrieval metrics evaluation (metrics always return 0)
-- Fix invalid `"complex"` strategy name in `chunk_comparison.yaml`
-- Fix `Generator.generate()` to use Anthropic API `system` parameter instead of concatenating into user message
-- Fix `RAGPipeline` to properly release `VectorIndexer` resources (add context manager / `close()`)
-- Fix `Meal` `total_chunks` off-by-one error (initialized to file count instead of 0)
 
 #### Feature Improvements (Medium Priority)
 
 - Implement generation quality metrics (Faithfulness, Answer Relevancy) using `ragas`
 - Fill in placeholder values in test data (`expected_answer` fields with "XXX亿元")
-- Add token statistics feature (tiktoken counting + per-model cost coefficients in config)
-- Add regression testing to prevent breakage during updates
 - Expand test dataset beyond 10 questions
-- Optimize LLM report prompt to remove conversational artifacts ("好的……")
 
 #### RAG Optimizations (Lower Priority)
 
