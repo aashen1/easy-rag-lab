@@ -10,9 +10,11 @@ from src.utils import load_config, setup_logger
 
 
 def main():
-    parser = argparse.ArgumentParser(description="RAG System - Financial Report Q&A")
+    parser = argparse.ArgumentParser(
+        description="RAG System - Financial Report Q&A")
     parser.add_argument("--query", type=str, help="Query question")
-    parser.add_argument("--build-index", action="store_true", help="Build vector index")
+    parser.add_argument("--build-index", action="store_true",
+                        help="Build vector index")
     parser.add_argument(
         "--rebuild", action="store_true", help="Rebuild index from scratch"
     )
@@ -123,7 +125,8 @@ def main():
         return
 
     if args.rename_meal:
-        _handle_rename_meal(meal_manager, args.rename_meal[0], args.rename_meal[1])
+        _handle_rename_meal(
+            meal_manager, args.rename_meal[0], args.rename_meal[1])
         return
 
     if args.copy_meal:
@@ -144,7 +147,8 @@ def main():
 
     if args.build_index or args.rebuild:
         sampling_config = _build_sampling_config(args)
-        pipeline = RAGPipeline(config_path=args.config, llm_preset=args.llm_preset)
+        pipeline = RAGPipeline(config_path=args.config,
+                               llm_preset=args.llm_preset)
         pipeline.build_index(
             rebuild=args.rebuild,
             force_parse=args.force_parse,
@@ -172,12 +176,13 @@ def main():
         else:
             _interactive_qa(pipeline, args.meal)
     elif args.query:
-        pipeline = RAGPipeline(config_path=args.config, llm_preset=args.llm_preset)
+        pipeline = RAGPipeline(config_path=args.config,
+                               llm_preset=args.llm_preset)
         result = pipeline.query(args.query)
         _print_query_result(result)
 
 
-def _build_sampling_config(args) -> object:
+def _build_sampling_config(args: argparse.Namespace) -> Optional[SamplingConfig]:
     sampling_config = None
     sample_modes = [
         ("count", args.sample_count),
@@ -197,7 +202,7 @@ def _build_sampling_config(args) -> object:
     return sampling_config
 
 
-def _handle_meal_info(meal_manager: MealManager, name: str):
+def _handle_meal_info(meal_manager: MealManager, name: str) -> None:
     if not meal_manager.meal_exists(name):
         logger.error(f"Meal '{name}' not found")
         sys.exit(1)
@@ -232,7 +237,8 @@ def _handle_meal_info(meal_manager: MealManager, name: str):
         file_path = meal_manager.raw_dir / mf.path
         exists = file_path.exists()
         status_icon = "✅" if exists else "❌"
-        print(f"  {status_icon} {mf.path}  (sha256: {mf.sha256[:16]}..., size: {mf.size_bytes} bytes)")
+        print(
+            f"  {status_icon} {mf.path}  (sha256: {mf.sha256[:16]}..., size: {mf.size_bytes} bytes)")
 
     if issues:
         print(f"\nIssues:")
@@ -251,7 +257,7 @@ def _handle_meal_info(meal_manager: MealManager, name: str):
     print()
 
 
-def _handle_list_meals(meal_manager: MealManager):
+def _handle_list_meals(meal_manager: MealManager) -> None:
     meals = meal_manager.list_meals()
     if not meals:
         print("No meals found.")
@@ -281,7 +287,7 @@ def _handle_list_meals(meal_manager: MealManager):
             config_str = ""
             if meal.config_snapshot and "chunker" in meal.config_snapshot:
                 cs = meal.config_snapshot["chunker"]
-                config_str = f"sz={cs.get('chunk_size','?')} ov={cs.get('overlap','?')}"
+                config_str = f"sz={cs.get('chunk_size', '?')} ov={cs.get('overlap', '?')}"
 
             data_id_str = data_id[:12]
             if len(group_meals) > 1 and i > 0:
@@ -297,12 +303,13 @@ def _handle_list_meals(meal_manager: MealManager):
             )
 
         if len(group_meals) > 1:
-            print(f"  ↳ Same data group ({len(group_meals)} meals share data_id={data_id[:12]})")
+            print(
+                f"  ↳ Same data group ({len(group_meals)} meals share data_id={data_id[:12]})")
 
     print()
 
 
-def _handle_delete_meal(meal_manager: MealManager, name: str):
+def _handle_delete_meal(meal_manager: MealManager, name: str) -> None:
     if not meal_manager.meal_exists(name):
         logger.error(f"Meal '{name}' not found")
         sys.exit(1)
@@ -310,7 +317,7 @@ def _handle_delete_meal(meal_manager: MealManager, name: str):
     logger.success(f"Meal '{name}' deleted")
 
 
-def _handle_rename_meal(meal_manager: MealManager, old_name: str, new_name: str):
+def _handle_rename_meal(meal_manager: MealManager, old_name: str, new_name: str) -> None:
     if not validate_meal_name(new_name):
         logger.error(
             f"Invalid meal name '{new_name}'. "
@@ -320,7 +327,7 @@ def _handle_rename_meal(meal_manager: MealManager, old_name: str, new_name: str)
     meal_manager.rename_meal(old_name, new_name)
 
 
-def _handle_copy_meal(meal_manager: MealManager, source: str, target: str):
+def _handle_copy_meal(meal_manager: MealManager, source: str, target: str) -> None:
     if not validate_meal_name(target):
         logger.error(
             f"Invalid meal name '{target}'. "
@@ -330,10 +337,11 @@ def _handle_copy_meal(meal_manager: MealManager, source: str, target: str):
     meal_manager.copy_meal(source, target)
 
 
-def _handle_create_meal(meal_manager: MealManager, args):
+def _handle_create_meal(meal_manager: MealManager, args: argparse.Namespace) -> None:
     sampling_config = _build_sampling_config(args)
     if sampling_config is None:
-        logger.error("Sampling configuration required for meal creation (--sample-count/pages/ratio)")
+        logger.error(
+            "Sampling configuration required for meal creation (--sample-count/pages/ratio)")
         sys.exit(1)
 
     name = args.create_meal
@@ -358,7 +366,7 @@ def _handle_create_meal(meal_manager: MealManager, args):
         sys.exit(1)
 
 
-def _handle_repair_meal(meal_manager: MealManager, name: str):
+def _handle_repair_meal(meal_manager: MealManager, name: str) -> None:
     if not meal_manager.meal_exists(name):
         logger.error(f"Meal '{name}' not found")
         sys.exit(1)
@@ -422,7 +430,8 @@ def _handle_repair_meal(meal_manager: MealManager, name: str):
     new_name = None
     if create_new:
         default_name = f"{name}_repaired"
-        new_name = input(f"New meal name [{default_name}]: ").strip() or default_name
+        new_name = input(
+            f"New meal name [{default_name}]: ").strip() or default_name
 
     try:
         repaired = meal_manager.repair_meal(
@@ -440,7 +449,7 @@ def _handle_repair_meal(meal_manager: MealManager, name: str):
         sys.exit(1)
 
 
-def _handle_generate_test_set(meal_manager: MealManager, config: dict, args):
+def _handle_generate_test_set(meal_manager: MealManager, config: Dict[str, Any], args: argparse.Namespace) -> None:
     if not meal_manager.meal_exists(args.generate_test_set):
         logger.error(f"Meal '{args.generate_test_set}' not found")
         sys.exit(1)
@@ -465,7 +474,7 @@ def _handle_generate_test_set(meal_manager: MealManager, config: dict, args):
         sys.exit(1)
 
 
-def _print_query_result(result: dict):
+def _print_query_result(result: Dict[str, Any]) -> None:
     print(f"\n{'='*60}")
     print(f"Question: {result['question']}")
     print(f"{'='*60}")
@@ -492,7 +501,7 @@ def _print_query_result(result: dict):
             print(f"    Query:         {tu['query_tokens']:,}")
 
 
-def _interactive_qa(pipeline: RAGPipeline, meal_name: str):
+def _interactive_qa(pipeline: RAGPipeline, meal_name: str) -> None:
     print(f"\nInteractive Q&A mode (meal: {meal_name})")
     print("Type your question, or 'quit'/'exit'/'q' to exit.\n")
 
@@ -509,7 +518,8 @@ def _interactive_qa(pipeline: RAGPipeline, meal_name: str):
             tracker = pipeline.token_tracker
             if tracker and tracker.record_count > 0:
                 total = tracker.get_total()
-                print(f"\nSession Token Usage: in={total.input_tokens:,} out={total.output_tokens:,} total={total.total_tokens:,}")
+                print(
+                    f"\nSession Token Usage: in={total.input_tokens:,} out={total.output_tokens:,} total={total.total_tokens:,}")
             print("Exiting.")
             break
 
@@ -518,7 +528,8 @@ def _interactive_qa(pipeline: RAGPipeline, meal_name: str):
             print(f"\nA: {result['answer']}")
             if "token_usage" in result and result["token_usage"]:
                 tu = result["token_usage"]
-                print(f"  Tokens: in={tu['input_tokens']:,} out={tu['output_tokens']:,} total={tu['total_tokens']:,}")
+                print(
+                    f"  Tokens: in={tu['input_tokens']:,} out={tu['output_tokens']:,} total={tu['total_tokens']:,}")
             if "sources" in result:
                 sources = result["sources"]
                 scores = result["scores"]
