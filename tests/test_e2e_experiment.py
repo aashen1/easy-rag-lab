@@ -1,42 +1,9 @@
 import json
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 import yaml
-
-
-@pytest.fixture
-def temp_project_dir():
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir)
-
-        raw_dir = temp_path / "data" / "raw"
-        raw_dir.mkdir(parents=True)
-
-        parsed_dir = temp_path / "data" / "parsed"
-        parsed_dir.mkdir(parents=True)
-
-        chunks_dir = temp_path / "data" / "chunks"
-        chunks_dir.mkdir(parents=True)
-
-        artifacts_dir = temp_path / "data" / "artifacts"
-        artifacts_dir.mkdir(parents=True)
-
-        meals_dir = temp_path / "data" / "meals"
-        meals_dir.mkdir(parents=True)
-
-        exp_reports_dir = temp_path / "data" / "exp_reports"
-        exp_reports_dir.mkdir(parents=True)
-
-        vector_store_dir = temp_path / "data" / "vector_store"
-        vector_store_dir.mkdir(parents=True)
-
-        exp_configs_dir = temp_path / "exp_configs"
-        exp_configs_dir.mkdir(parents=True)
-
-        yield temp_path
 
 
 @pytest.fixture
