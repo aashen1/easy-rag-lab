@@ -14,7 +14,7 @@ test_sets:
   - strategy: "boundary"
     num_questions: 25
     seed: 201
-  - strategy: "complex"
+  - strategy: "multi_hop"
     num_questions: 15
     seed: 202
 
