@@ -1,6 +1,6 @@
 # 已知 Bug 与功能问题审查
 
-> **状态标注版本**（标注日期：2026-04-18）— 各问题标题前已添加状态标签：✅ 已修复 / 📋 已安排 / ⏳ 待定
+> **状态标注版本**（标注日期：2026-04-18，更新日期：2026-04-18）— 各问题标题前已添加状态标签：✅ 已修复 / 📋 已安排 / ⏳ 待定 / ❌ 不修
 
 审查日期：2026-04-18
 审查来源：CHANGELOG.md Known Issues、代码分析、测试结果
@@ -19,7 +19,7 @@
 
 ## 🔴 严重问题
 
-### 1. 📋 已安排 — 检索指标始终返回 0
+### 1. ✅ 已修复 — 检索指标始终返回 0
 
 **来源**：CHANGELOG.md Known Issues #1
 
@@ -35,6 +35,8 @@
 **修复方向**：
 - 统一 source 路径格式（建议统一为 PDF 文件名）
 - 或在指标计算时添加路径格式转换逻辑
+
+**修复状态**：已在 `eval/metrics.py` 中实现 `normalize_source()` 函数，通过 `Path(source).stem` 提取文件名主干，使 `annual_report/xxx.md` 与 `xxx.pdf` 均归一化为 `xxx`，路径格式不匹配问题已解决。单元测试 `tests/test_metrics.py::TestNormalizeSource` 覆盖了跨格式匹配场景。
 
 ---
 
@@ -112,7 +114,7 @@ response = client.messages.create(
 
 ---
 
-### 6. 📋 已安排 — 测试数据占位符未填充
+### 6. ❌ 不修 — 测试数据占位符未填充
 
 **来源**：CHANGELOG.md Known Issues #6
 
@@ -122,9 +124,11 @@ response = client.messages.create(
 
 **修复方向**：填充真实的 expected_answer 值。
 
+**不修理由**：占位符值（如 `"XXX亿元"`）需要从实际 PDF 文件中查阅真实财务数据后人工填入，无法通过代码自动化完成。此任务需要领域专家手动操作，不适合在本轮修复中处理。
+
 ---
 
-### 7. 📋 已安排 — 生成质量指标未实现
+### 7. ❌ 不修 — 生成质量指标未实现
 
 **来源**：CHANGELOG.md Known Issues #7
 
@@ -134,11 +138,13 @@ response = client.messages.create(
 
 **修复方向**：使用 `ragas` 库实现这两个指标（项目已添加 `ragas` 依赖）。
 
+**不修理由**：实现 Faithfulness 和 Answer Relevancy 需要集成 `ragas` 库，涉及大量新代码、API 适配和测试编写，规模过大，不适合在 bug 修复轮次中处理。建议单独开 spec 实施。
+
 ---
 
 ## 🟡 轻微问题
 
-### 8. 📋 已安排 — NDCG 简化实现
+### 8. ❌ 不修 — NDCG 简化实现
 
 **来源**：CHANGELOG.md Known Issues #9
 
@@ -146,9 +152,11 @@ response = client.messages.create(
 
 **影响**：NDCG 值可能不够精细，但对 baseline 评测影响有限。
 
+**不修理由**：二元相关性对 baseline 评测已足够。实现分级相关性需要为每个文档-查询对定义相关性等级，增加复杂度但当前阶段无明确收益，属于过度工程。
+
 ---
 
-### 9. 📋 已安排 — Hit Rate 定义非标准
+### 9. ❌ 不修 — Hit Rate 定义非标准
 
 **来源**：CHANGELOG.md Known Issues #10
 
@@ -156,9 +164,11 @@ response = client.messages.create(
 
 **影响**：与学术界标准定义不一致，可能影响与其他系统的对比。
 
+**不修理由**：当前实现实际计算的是 Recall@K（期望文档被检索到的比例），比标准 Hit Rate@K（仅判断是否至少命中一个）信息量更大。改名会破坏已有 baseline 对比数据。建议在文档中注明此差异，但保持实现不变。
+
 ---
 
-### 10. 📋 已安排 — 评测指标配置未动态应用
+### 10. ✅ 已修复 — 评测指标配置未动态应用
 
 **来源**：CHANGELOG.md Known Issues #11
 
@@ -166,9 +176,11 @@ response = client.messages.create(
 
 **影响**：无法通过配置灵活选择评测指标。
 
+**修复状态**：`eval/run_eval.py` 的 `run_evaluation()` 函数已新增 `metrics_config` 参数，支持根据实验配置动态选择评测指标。默认值为 `["hit_rate", "mrr", "ndcg"]` 保持向后兼容。CLI 路径已接入实验配置的 `evaluation.metrics.retrieval` 字段。单元测试 `tests/test_run_eval.py::TestMetricsConfig` 覆盖了默认、子集、空配置等场景。
+
 ---
 
-### 11. 📋 已安排 — 文档类别检测逻辑重复
+### 11. ✅ 已修复 — 文档类别检测逻辑重复
 
 **来源**：CHANGELOG.md Known Issues #12
 
@@ -176,9 +188,11 @@ response = client.messages.create(
 
 **影响**：维护成本高，修改时容易遗漏。
 
+**修复状态**：已在 `src/utils.py` 中提取 `detect_document_category()` 共享函数，`parser.py` 和 `chunker.py` 均改为调用该函数，消除了重复逻辑。单元测试 `tests/test_utils.py::TestDetectDocumentCategory` 覆盖了中英文路径检测、自定义映射等场景。
+
 ---
 
-### 12. 📋 已安排 — Embedder show_progress 参数未实现
+### 12. ✅ 已修复 — Embedder show_progress 参数未实现
 
 **来源**：CHANGELOG.md Known Issues #13
 
@@ -186,38 +200,44 @@ response = client.messages.create(
 
 **影响**：大批量 embedding 时无法看到进度。
 
+**修复状态**：已在 `src/embedder.py` 中使用 `tqdm` 库实现进度条。`_encode_batch()` 方法新增 `show_progress` 参数，当 `show_progress=True` 时在批处理循环上显示 tqdm 进度条。`embed_texts()` 将参数透传至 `_encode_batch()`。单元测试 `tests/test_embedder.py::TestEmbedder::test_embed_texts_show_progress` 验证了功能正确性。
+
 ---
 
 ## 测试覆盖问题
 
-### 13. 📋 已安排 — 测试覆盖不完整
+### 13. ✅ 已改善 — 测试覆盖不完整
 
 **来源**：CHANGELOG.md Known Issues #8
 
-**缺失的测试模块**：
+**原缺失的测试模块（已补充状态）**：
 
-| 模块 | 测试状态 |
-|------|----------|
-| `src/indexer.py` | 无单元测试 |
-| `src/retriever.py` | 无单元测试 |
-| `src/generator.py` | 无单元测试 |
-| `src/pipeline.py` | 无单元测试 |
-| `eval/metrics.py` | 无单元测试 |
-| `src/test_generator.py` | 未测试 `generate_test_set` 主入口 |
-| `eval/run_eval.py` | 仅测试配置加载，未测试评测执行 |
+| 模块 | 原测试状态 | 当前状态 |
+|------|----------|---------|
+| `src/indexer.py` | 无单元测试 | ✅ 已有 `tests/test_indexer.py`（13 个测试） |
+| `src/retriever.py` | 无单元测试 | ✅ 已有 `tests/test_retriever.py`（6 个测试） |
+| `src/generator.py` | 无单元测试 | ✅ 已有 `tests/test_generator.py`（7 个测试） |
+| `src/pipeline.py` | 无单元测试 | ✅ 已有 `tests/test_pipeline.py` |
+| `eval/metrics.py` | 无单元测试 | ✅ 已有 `tests/test_metrics.py`（含 `normalize_source` 测试） |
+| `src/test_generator.py` | 未测试 `generate_test_set` 主入口 | ✅ 已有 `tests/test_test_generator.py` |
+| `eval/run_eval.py` | 仅测试配置加载，未测试评测执行 | ✅ 已有 `tests/test_run_eval.py`（含动态指标配置测试） |
 
 ---
 
 ## 问题优先级排序
 
-| 优先级 | 问题编号 | 问题 | 修复难度 |
-|--------|---------|------|----------|
-| P0 | #1 | 检索指标始终返回 0 | 中等 |
-| P0 | #2 | chunk_comparison.yaml 无效策略名 | 简单 |
-| P1 | #3 | Generator 未使用 system 参数 | 简单 |
-| P1 | #4 | Indexer 资源未释放 | 中等 |
-| P1 | #5 | total_chunks 偏差 | 简单 |
-| P2 | #6 | 测试数据占位符 | 简单 |
-| P2 | #7 | 生成质量指标未实现 | 较难 |
-| P3 | #8-12 | 轻微问题 | 简单 |
-| P3 | #13 | 测试覆盖不完整 | 较难 |
+| 优先级 | 问题编号 | 问题 | 当前状态 | 备注 |
+|--------|---------|------|---------|------|
+| P0 | #1 | 检索指标始终返回 0 | ✅ 已修复 | `normalize_source()` 已实现 |
+| P0 | #2 | chunk_comparison.yaml 无效策略名 | ✅ 已修复 | |
+| P1 | #3 | Generator 未使用 system 参数 | ✅ 已修复 | |
+| P1 | #4 | Indexer 资源未释放 | ✅ 已修复 | |
+| P1 | #5 | total_chunks 偏差 | ✅ 已修复 | |
+| P2 | #6 | 测试数据占位符 | ❌ 不修 | 需人工从 PDF 查阅填入 |
+| P2 | #7 | 生成质量指标未实现 | ❌ 不修 | 规模过大，建议单独 spec |
+| P3 | #8 | NDCG 简化实现 | ❌ 不修 | 二元相关性对 baseline 足够 |
+| P3 | #9 | Hit Rate 定义非标准 | ❌ 不修 | 当前实现信息量更大，改名破坏 baseline |
+| P3 | #10 | 评测指标配置未动态应用 | ✅ 已修复 | `metrics_config` 参数已实现 |
+| P3 | #11 | 文档类别检测逻辑重复 | ✅ 已修复 | `detect_document_category()` 已提取 |
+| P3 | #12 | Embedder show_progress 未实现 | ✅ 已修复 | tqdm 进度条已实现 |
+| P3 | #13 | 测试覆盖不完整 | ✅ 已改善 | 所有模块已有单元测试 |
