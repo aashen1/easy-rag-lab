@@ -2,30 +2,32 @@
 
 > Date: 2026-04-17
 > 来源：测试套件重新设计的 Code Review
+>
+> **状态标注版** — 2026-04-18 附加各建议当前状态。标签说明：✅ 已修复 | 📋 已安排（建议 spec 模式） | ❌ 已弃用
 
 ---
 
 ## 建议总览
 
-| # | 优先级 | 类别 | 建议 | 所在文件 |
-|---|--------|------|------|---------|
-| 1 | 🟡 中 | 代码重复 | 删除本地 `temp_project_dir` fixture，使用 conftest 的 | test_e2e_experiment.py |
-| 2 | 🟡 中 | 测试质量 | 避免访问 TokenTracker 私有属性 `_records` | test_generator.py |
-| 3 | 🟡 中 | 警告清理 | 修复 PytestCollectionWarning | eval/experiment_reporter.py |
-| 4 | 🟢 低 | 覆盖缺口 | 添加 MRR 对 retrieved_sources 重复项的测试 | test_metrics.py |
-| 5 | 🟢 低 | 覆盖缺口 | 添加 `get_collection_info` 异常返回 None 的测试 | test_indexer.py |
-| 6 | 🟢 低 | 覆盖缺口 | 添加 `build_index` JSONL 加载失败优雅降级的测试 | test_indexer.py |
-| 7 | 🟢 低 | 覆盖缺口 | 添加 `get_llm_config` API key 缺失抛异常的测试 | test_utils.py |
-| 8 | 🟢 低 | 覆盖缺口 | 添加 `retrieve` 返回值 payload 默认值的测试 | test_retriever.py |
-| 9 | 🟢 低 | 代码优化 | 提取 Pipeline 测试的 7 层 @patch 为辅助函数 | test_pipeline.py |
-| 10 | 🟢 低 | 确定性 | mock_embedder fixture 使用固定向量替代随机向量 | conftest.py |
-| 11 | 🟢 低 | 规范一致性 | 为旧测试补齐 `@pytest.mark.unit` marker | 多个文件 |
+| # | 状态 | 优先级 | 类别 | 建议 | 所在文件 |
+|---|------|--------|------|------|---------|
+| 1 | ✅ 已修复 | 🟡 中 | 代码重复 | 删除本地 `temp_project_dir` fixture，使用 conftest 的 | test_e2e_experiment.py |
+| 2 | 📋 已安排 | 🟡 中 | 测试质量 | 避免访问 TokenTracker 私有属性 `_records` | test_generator.py |
+| 3 | ✅ 已修复 | 🟡 中 | 警告清理 | 修复 PytestCollectionWarning | eval/experiment_reporter.py |
+| 4 | 📋 已安排 | 🟢 低 | 覆盖缺口 | 添加 MRR 对 retrieved_sources 重复项的测试 | test_metrics.py |
+| 5 | 📋 已安排 | 🟢 低 | 覆盖缺口 | 添加 `get_collection_info` 异常返回 None 的测试 | test_indexer.py |
+| 6 | 📋 已安排 | 🟢 低 | 覆盖缺口 | 添加 `build_index` JSONL 加载失败优雅降级的测试 | test_indexer.py |
+| 7 | 📋 已安排 | 🟢 低 | 覆盖缺口 | 添加 `get_llm_config` API key 缺失抛异常的测试 | test_utils.py |
+| 8 | 📋 已安排 | 🟢 低 | 覆盖缺口 | 添加 `retrieve` 返回值 payload 默认值的测试 | test_retriever.py |
+| 9 | 📋 已安排 | 🟢 低 | 代码优化 | 提取 Pipeline 测试的 7 层 @patch 为辅助函数 | test_pipeline.py |
+| 10 | ✅ 已修复 | 🟢 低 | 确定性 | mock_embedder fixture 使用固定向量替代随机向量 | conftest.py |
+| 11 | 📋 已安排 | 🟢 低 | 规范一致性 | 为旧测试补齐 `@pytest.mark.unit` marker | 多个文件 |
 
 ---
 
 ## 🟡 中等优先级建议
 
-### 建议 1：删除 test_e2e_experiment.py 本地 fixture 重复
+### 建议 1：✅ 已修复 — 删除 test_e2e_experiment.py 本地 fixture 重复
 
 **解决的问题：** 代码重复（DRY 原则违反）
 
@@ -43,7 +45,7 @@
 
 ---
 
-### 建议 2：避免访问 TokenTracker 私有属性
+### 建议 2：📋 已安排 — 避免访问 TokenTracker 私有属性
 
 **解决的问题：** 测试与实现细节耦合（测试脆弱性）
 
@@ -70,7 +72,7 @@ assert records[0].model_name == "LongCat-Flash-Lite"
 
 ---
 
-### 建议 3：修复 PytestCollectionWarning
+### 建议 3：✅ 已修复 — 修复 PytestCollectionWarning
 
 **解决的问题：** 测试运行警告
 
@@ -103,7 +105,7 @@ python_classes = !TestCaseResult
 
 ## 🟢 低优先级建议
 
-### 建议 4：添加 MRR 对 retrieved_sources 重复项的测试
+### 建议 4：📋 已安排 — 添加 MRR 对 retrieved_sources 重复项的测试
 
 **解决的问题：** 隐含行为未显式验证
 
@@ -121,7 +123,7 @@ def test_duplicate_in_retrieved(self):
 
 ---
 
-### 建议 5：添加 `get_collection_info` 异常路径测试
+### 建议 5：📋 已安排 — 添加 `get_collection_info` 异常路径测试
 
 **解决的问题：** 异常路径覆盖缺口
 
@@ -140,7 +142,7 @@ def test_get_collection_info_error(self, mock_qdrant_class, mock_qdrant_client, 
 
 ---
 
-### 建议 6：添加 `build_index` JSONL 加载失败优雅降级测试
+### 建议 6：📋 已安排 — 添加 `build_index` JSONL 加载失败优雅降级测试
 
 **解决的问题：** 优雅降级行为未验证
 
@@ -170,7 +172,7 @@ def test_build_index_corrupted_jsonl(self, mock_qdrant_class, mock_qdrant_client
 
 ---
 
-### 建议 7：添加 `get_llm_config` API key 缺失测试
+### 建议 7：📋 已安排 — 添加 `get_llm_config` API key 缺失测试
 
 **解决的问题：** 关键错误路径未验证
 
@@ -191,7 +193,7 @@ def test_api_key_missing_raises_error(self, mock_getenv):
 
 ---
 
-### 建议 8：添加 `retrieve` 返回值 payload 默认值测试
+### 建议 8：📋 已安排 — 添加 `retrieve` 返回值 payload 默认值测试
 
 **解决的问题：** 默认值行为未验证
 
@@ -216,7 +218,7 @@ def test_retrieve_missing_payload_fields(self, mock_embedder, mock_qdrant_client
 
 ---
 
-### 建议 9：提取 Pipeline 测试的 @patch 辅助函数
+### 建议 9：📋 已安排 — 提取 Pipeline 测试的 @patch 辅助函数
 
 **解决的问题：** 视觉复杂度高，代码重复
 
@@ -254,7 +256,7 @@ def test_init_without_meal(self, mock_pipeline_deps):
 
 ---
 
-### 建议 10：mock_embedder fixture 使用固定向量
+### 建议 10：✅ 已修复 — mock_embedder fixture 使用固定向量
 
 **解决的问题：** 非确定性测试
 
@@ -280,7 +282,7 @@ embedder.embed_query.return_value = np.ones(1024, dtype=np.float32)
 
 ---
 
-### 建议 11：为旧测试补齐 `@pytest.mark.unit` marker
+### 建议 11：📋 已安排 — 为旧测试补齐 `@pytest.mark.unit` marker
 
 **解决的问题：** Marker 规范一致性
 
