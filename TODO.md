@@ -9,7 +9,7 @@
 ## 2026-04-18
 
 - [x] 完成 [code-issues-fix-requirements.md](.trae\documents\code-issues-fix-requirements.md)  2:38 周六
-- [x] TODO Backlog 大清洗（本次对话）
+- [x] TODO Backlog 大清洗（5:37 周六，本条由GLM-5.1生成）
   - [x] 修复 PytestCollectionWarning（TestCaseResult 添加 `__test__ = False`）
   - [x] 修复 src/chunker.py 尾随空格
   - [x] 删除 test_e2e_experiment.py 重复的本地 temp_project_dir fixture
