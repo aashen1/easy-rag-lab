@@ -140,6 +140,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Generator` tracks detailed token usage per call via `TokenTracker` integration
 - `main.py` expanded from simple query/index CLI to unified entry point covering meal management, test generation, and interactive QA
 
+### Fixed
+
+- Fix invalid `"complex"` strategy name in `chunk_comparison.yaml`
+- Fix `Generator.generate()` to use Anthropic API `system` parameter instead of concatenating into user message
+- Fix `RAGPipeline` to properly release `VectorIndexer` resources (add context manager / `close()`)
+- Fix `Meal` `total_chunks` off-by-one error (initialized to file count instead of 0)
+
 ### Known Issues
 
 1. **Source Path Format Mismatch in Metrics**: Retrieved sources use relative markdown paths (e.g., `annual_report/xxx.md`) while expected sources use PDF filenames (e.g., `xxx.pdf`), causing all retrieval metrics (Hit Rate, MRR, NDCG) to always return 0
@@ -198,7 +205,12 @@ These choices are **intentionally basic** to establish a baseline for future opt
 
 ### Known Issues
 
-1. **Preprocessing Performance**: `PDF -> ... -> Qdrant` pipeline performance not optimized for large datasets. Given that preprocessing can be extremely slow on a personal PC, it is recommended not to prepare excessive data — for long documents such as corporate annual reports, no more than 10 files; for short documents like industry research reports, up to 50 files.
+1. **Evaluation Stability**: Evaluation script may encounter errors; no stable baseline metrics established yet
+2. **Limited Test Dataset**: Only 10 test questions; large-scale test dataset needed
+3. **Preprocessing Performance**: `PDF -> ... -> Qdrant` pipeline performance not optimized for large datasets. Given that preprocessing can be extremely slow on a personal PC, it is recommended not to prepare excessive data — for long documents such as corporate annual reports, no more than 10 files; for short documents like industry research reports, up to 50 files.
+4. **Missing Generation Metrics**: Faithfulness and Answer Relevancy metrics not implemented
+5. **Incomplete Test Coverage**: No unit tests for indexer, retriever, generator, or pipeline modules
+6. **Test Data Placeholders**: Some `expected_answer` fields in test data contain placeholder values ("XXX亿元")
 
 ### Dependencies
 
@@ -246,12 +258,19 @@ Planned improvements for future versions:
 #### Bug Fixes (High Priority)
 
 - Fix source path format mismatch in retrieval metrics evaluation (metrics always return 0)
+- Fix invalid `"complex"` strategy name in `chunk_comparison.yaml`
+- Fix `Generator.generate()` to use Anthropic API `system` parameter instead of concatenating into user message
+- Fix `RAGPipeline` to properly release `VectorIndexer` resources (add context manager / `close()`)
+- Fix `Meal` `total_chunks` off-by-one error (initialized to file count instead of 0)
 
 #### Feature Improvements (Medium Priority)
 
 - Implement generation quality metrics (Faithfulness, Answer Relevancy) using `ragas`
 - Fill in placeholder values in test data (`expected_answer` fields with "XXX亿元")
+- Add token statistics feature (tiktoken counting + per-model cost coefficients in config)
+- Add regression testing to prevent breakage during updates
 - Expand test dataset beyond 10 questions
+- Optimize LLM report prompt to remove conversational artifacts ("好的……")
 
 #### RAG Optimizations (Lower Priority)
 
