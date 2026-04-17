@@ -65,7 +65,7 @@ def chunk_text(
         )
 
         chunk_index += 1
-        
+
         if end >= total_tokens:
             break
         
