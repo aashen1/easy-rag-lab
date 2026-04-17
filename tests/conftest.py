@@ -11,8 +11,8 @@ def mock_embedder():
     embedder = MagicMock()
     embedder.embedding_dim = 1024
     embedder.get_embedding_dimension.return_value = 1024
-    embedder.embed_query.return_value = np.random.randn(1024).astype(np.float32)
-    embedder.embed_texts.return_value = np.random.randn(3, 1024).astype(np.float32)
+    embedder.embed_query.return_value = np.ones(1024, dtype=np.float32)
+    embedder.embed_texts.return_value = np.ones((3, 1024), dtype=np.float32)
     return embedder
 
 
