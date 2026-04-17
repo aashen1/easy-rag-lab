@@ -96,3 +96,17 @@ class TestRetriever:
         assert results[1]["text"] == "second chunk"
         assert results[1]["metadata"] == {"source": "b.pdf", "page": 2}
         assert results[1]["score"] == 0.7
+
+    def test_retrieve_missing_payload_fields(self, mock_embedder, mock_qdrant_client):
+        indexer = self._make_mock_indexer(mock_qdrant_client)
+        mock_point = MagicMock()
+        mock_point.payload = {}
+        mock_point.score = 0.5
+        mock_result = MagicMock()
+        mock_result.points = [mock_point]
+        mock_qdrant_client.query_points.return_value = mock_result
+        retriever = Retriever(indexer=indexer, embedder=mock_embedder, top_k=5)
+        results = retriever.retrieve("test query")
+        assert results[0]["chunk_id"] == ""
+        assert results[0]["text"] == ""
+        assert results[0]["metadata"] == {}
