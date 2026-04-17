@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pytest
 import yaml
 
-from src.utils import ensure_dir, get_env_var, get_llm_config, load_config
+from src.utils import detect_document_category, ensure_dir, get_env_var, get_llm_config, load_config
 
 
 @pytest.mark.unit
@@ -200,3 +200,52 @@ class TestEnsureDir:
         assert isinstance(result, Path)
         assert result.exists()
         assert result.is_dir()
+
+
+@pytest.mark.unit
+class TestDetectDocumentCategory:
+    def test_annual_report_from_english_path(self):
+        result = detect_document_category("data/raw/annual_report/company_a.pdf")
+
+        assert result == "annual_report"
+
+    def test_annual_report_from_chinese_path(self):
+        result = detect_document_category("data/raw/年报/company_a.pdf")
+
+        assert result == "annual_report"
+
+    def test_research_report_from_english_path(self):
+        result = detect_document_category("data/raw/research_report/industry_b.pdf")
+
+        assert result == "research_report"
+
+    def test_research_report_from_chinese_path(self):
+        result = detect_document_category("data/raw/研报/industry_b.pdf")
+
+        assert result == "research_report"
+
+    def test_unknown_category(self):
+        result = detect_document_category("data/raw/other/document.pdf")
+
+        assert result == "unknown"
+
+    def test_custom_category_mapping(self):
+        custom_mapping = {"financial": "financial_report", "ESG": "esg_report"}
+
+        result = detect_document_category("data/raw/financial/company_c.pdf", custom_mapping)
+
+        assert result == "financial_report"
+
+    def test_custom_mapping_priority_over_default(self):
+        custom_mapping = {"annual_report": "custom_annual"}
+
+        result = detect_document_category("data/raw/annual_report/company_a.pdf", custom_mapping)
+
+        assert result == "custom_annual"
+
+    def test_custom_mapping_no_match_returns_unknown(self):
+        custom_mapping = {"financial": "financial_report"}
+
+        result = detect_document_category("data/raw/annual_report/company_a.pdf", custom_mapping)
+
+        assert result == "unknown"

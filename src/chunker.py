@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 import tiktoken
 from loguru import logger
 
-from src.utils import ensure_dir
+from src.utils import detect_document_category, ensure_dir
 
 
 def chunk_text(
@@ -167,11 +167,7 @@ def process_parsed_files(
             relative_path = md_file.relative_to(input_path)
             source_name = relative_path.stem
 
-            category = "unknown"
-            if "annual_report" in str(md_file) or "年报" in str(md_file):
-                category = "annual_report"
-            elif "research_report" in str(md_file) or "研报" in str(md_file):
-                category = "research_report"
+            category = detect_document_category(str(md_file))
 
             output_file = output_path / relative_path.with_suffix(".jsonl")
 

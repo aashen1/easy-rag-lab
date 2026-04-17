@@ -1,7 +1,7 @@
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import yaml
 from dotenv import load_dotenv
@@ -163,3 +163,39 @@ def ensure_dir(path: str) -> Path:
     dir_path.mkdir(parents=True, exist_ok=True)
     logger.debug(f"Ensured directory exists: {dir_path}")
     return dir_path
+
+
+DEFAULT_CATEGORY_MAPPING: Dict[str, str] = {
+    "annual_report": "annual_report",
+    "年报": "annual_report",
+    "research_report": "research_report",
+    "研报": "research_report",
+}
+
+
+def detect_document_category(
+    file_path: str,
+    category_mapping: Optional[Dict[str, str]] = None,
+) -> str:
+    """Detect the document category based on the file path string.
+
+    If a custom category_mapping is provided, it takes priority: each key
+    is checked against the file path and the first matching key's value
+    is returned.  When no mapping is supplied the built-in default mapping
+    is used, which recognises annual-report and research-report keywords
+    in both English and Chinese.
+
+    Args:
+        file_path: Path string of the document file.
+        category_mapping: Optional dict mapping path substrings to category
+            names.  Keys are matched against the file path using ``in``.
+
+    Returns:
+        The detected category string, or ``"unknown"`` if no keyword
+        matches.
+    """
+    mapping = category_mapping if category_mapping is not None else DEFAULT_CATEGORY_MAPPING
+    for key, category in mapping.items():
+        if key in str(file_path):
+            return category
+    return "unknown"

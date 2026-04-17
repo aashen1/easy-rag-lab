@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 import pymupdf4llm
 from loguru import logger
 
-from src.utils import ensure_dir
+from src.utils import detect_document_category, ensure_dir
 
 
 def parse_pdf(pdf_path: str) -> str:
@@ -102,17 +102,7 @@ def parse_all_pdfs(
 
             if not force and output_file.exists():
                 logger.info(f"Skipping (already parsed): {pdf_file.name}")
-                category = "unknown"
-                if category_mapping:
-                    for key, cat in category_mapping.items():
-                        if key in str(pdf_file):
-                            category = cat
-                            break
-                else:
-                    if "annual_report" in str(pdf_file) or "年报" in str(pdf_file):
-                        category = "annual_report"
-                    elif "research_report" in str(pdf_file) or "研报" in str(pdf_file):
-                        category = "research_report"
+                category = detect_document_category(str(pdf_file), category_mapping)
 
                 results.append(
                     {
@@ -131,17 +121,7 @@ def parse_all_pdfs(
             with open(output_file, "w", encoding="utf-8") as f:
                 f.write(md_text)
 
-            category = "unknown"
-            if category_mapping:
-                for key, cat in category_mapping.items():
-                    if key in str(pdf_file):
-                        category = cat
-                        break
-            else:
-                if "annual_report" in str(pdf_file) or "年报" in str(pdf_file):
-                    category = "annual_report"
-                elif "research_report" in str(pdf_file) or "研报" in str(pdf_file):
-                    category = "research_report"
+            category = detect_document_category(str(pdf_file), category_mapping)
 
             results.append(
                 {
