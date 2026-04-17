@@ -1,4 +1,5 @@
 import os
+import sys
 from pathlib import Path
 from typing import Any, Dict
 
@@ -10,6 +11,18 @@ load_dotenv()
 
 
 def load_config(config_path: str = "config.yaml") -> Dict[str, Any]:
+    """Load YAML configuration file and return its contents as a dictionary.
+
+    Args:
+        config_path: Path to the YAML configuration file. Defaults to "config.yaml".
+
+    Returns:
+        Parsed configuration as a dictionary.
+
+    Raises:
+        FileNotFoundError: If the configuration file does not exist.
+        yaml.YAMLError: If the file contains invalid YAML.
+    """
     if config_path is None:
         config_path = "config.yaml"
     with open(config_path, "r", encoding="utf-8") as f:
@@ -19,6 +32,16 @@ def load_config(config_path: str = "config.yaml") -> Dict[str, Any]:
 
 
 def setup_logger(config: Dict[str, Any]) -> None:
+    """Configure loguru logger with console and file sinks based on config.
+
+    Args:
+        config: Application configuration dictionary. Expected to contain
+            a "logging" key with optional sub-keys: log_dir, level, format,
+            rotation, and retention.
+
+    Returns:
+        None
+    """
     log_config = config.get("logging", {})
     log_dir = Path(log_config.get("log_dir", "logs"))
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -34,7 +57,7 @@ def setup_logger(config: Dict[str, Any]) -> None:
     logger.remove()
 
     logger.add(
-        sink=lambda msg: print(msg, end=""),
+        sink=lambda msg: sys.stdout.write(msg),
         format=log_format,
         level=log_level,
         colorize=True,
@@ -53,6 +76,18 @@ def setup_logger(config: Dict[str, Any]) -> None:
 
 
 def get_llm_config(config: Dict[str, Any], preset_name: str = None) -> Dict[str, Any]:
+    """Resolve LLM configuration from a named preset, reading secrets from environment variables.
+
+    Args:
+        config: Application configuration dictionary containing "llm_presets"
+            and optionally "active_mode".
+        preset_name: Name of the LLM preset to use. If None, falls back to
+            the "active_mode" value in config, then "default".
+
+    Returns:
+        Dictionary with keys: model_name, temperature, max_tokens, api_key,
+        and base_url (with "/anthropic" suffix appended).
+    """
     if preset_name is None:
         preset_name = config.get("active_mode", "default")
 
@@ -89,6 +124,19 @@ def get_llm_config(config: Dict[str, Any], preset_name: str = None) -> Dict[str,
 
 
 def get_env_var(key: str, default: str = None, required: bool = False) -> str:
+    """Retrieve an environment variable value with optional default and required check.
+
+    Args:
+        key: Name of the environment variable.
+        default: Default value to use if the variable is not set. Defaults to None.
+        required: If True and the variable is not set (and no default), raises ValueError.
+
+    Returns:
+        The environment variable value, or the default if not set.
+
+    Raises:
+        ValueError: If required is True and the variable is not set with no default.
+    """
     value = os.getenv(key, default)
 
     if required and value is None:
@@ -103,6 +151,14 @@ def get_env_var(key: str, default: str = None, required: bool = False) -> str:
 
 
 def ensure_dir(path: str) -> Path:
+    """Ensure a directory exists, creating it and parents if necessary.
+
+    Args:
+        path: Filesystem path to the directory.
+
+    Returns:
+        Path object representing the ensured directory.
+    """
     dir_path = Path(path)
     dir_path.mkdir(parents=True, exist_ok=True)
     logger.debug(f"Ensured directory exists: {dir_path}")

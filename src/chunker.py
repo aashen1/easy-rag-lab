@@ -14,6 +14,28 @@ def chunk_text(
     overlap: int = 0,
     encoding_name: str = "cl100k_base",
 ) -> List[Dict[str, Any]]:
+    """Split text into fixed-size chunks based on token count.
+
+    Uses the specified tiktoken encoding to tokenize the input text, then
+    slices the token sequence into overlapping or non-overlapping chunks.
+
+    Args:
+        text: The input text to chunk.
+        chunk_size: Maximum number of tokens per chunk. Defaults to 512.
+        overlap: Number of tokens to overlap between consecutive chunks.
+            Must be less than chunk_size. Defaults to 0.
+        encoding_name: Name of the tiktoken encoding to use. Defaults to
+            "cl100k_base".
+
+    Returns:
+        List of dictionaries, each with a "text" key containing the decoded
+        chunk and a "metadata" key with chunk_index, char_count, token_count,
+        start_token, and end_token.
+
+    Raises:
+        ValueError: If overlap is greater than or equal to chunk_size.
+        Exception: If the tiktoken encoding cannot be loaded.
+    """
     if not text or not text.strip():
         logger.warning("Empty text provided for chunking")
         return []
@@ -68,7 +90,7 @@ def chunk_text(
 
         if end >= total_tokens:
             break
-        
+
         start = end - overlap if overlap > 0 else end
 
     logger.info(f"Created {len(chunks)} chunks from text with {total_tokens} tokens")
@@ -83,6 +105,30 @@ def process_parsed_files(
     encoding_name: str = "cl100k_base",
     source_filter: Optional[set] = None,
 ) -> List[Dict[str, Any]]:
+    """Read parsed Markdown files, chunk them, and save results as JSONL.
+
+    Scans the input directory for .md files, applies optional source
+    filtering, chunks each file's text, and writes the chunked output
+    to JSONL files in the output directory.
+
+    Args:
+        input_dir: Directory containing parsed Markdown files.
+        output_dir: Directory where chunked JSONL files will be saved.
+        chunk_size: Maximum number of tokens per chunk. Defaults to 512.
+        overlap: Number of overlapping tokens between consecutive chunks.
+            Defaults to 0.
+        encoding_name: Name of the tiktoken encoding to use. Defaults to
+            "cl100k_base".
+        source_filter: Optional set of relative path strings; only files
+            whose relative path is in this set will be processed.
+
+    Returns:
+        List of result dictionaries, each containing source, output,
+        category, chunk_count, and status keys (plus error on failure).
+
+    Raises:
+        FileNotFoundError: If input_dir does not exist.
+    """
     input_path = Path(input_dir)
 
     if not input_path.exists():

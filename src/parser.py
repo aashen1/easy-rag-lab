@@ -8,6 +8,19 @@ from src.utils import ensure_dir
 
 
 def parse_pdf(pdf_path: str) -> str:
+    """Parse a single PDF file and convert its content to Markdown text.
+
+    Args:
+        pdf_path: Path to the PDF file.
+
+    Returns:
+        Markdown-formatted string extracted from the PDF.
+
+    Raises:
+        FileNotFoundError: If the PDF file does not exist.
+        ValueError: If the file is not a PDF (wrong extension).
+        Exception: If the PDF parsing fails for any other reason.
+    """
     pdf_file = Path(pdf_path)
 
     if not pdf_file.exists():
@@ -38,6 +51,28 @@ def parse_all_pdfs(
     force: bool = False,
     pdf_files: Optional[List[Path]] = None,
 ) -> List[Dict[str, str]]:
+    """Parse all PDF files in a directory and save their Markdown output.
+
+    Skips files that have already been parsed unless force is True. Each
+    parsed result is categorized based on the file path or the provided
+    category_mapping.
+
+    Args:
+        input_dir: Directory containing PDF files to parse.
+        output_dir: Directory where parsed Markdown files will be saved.
+        category_mapping: Optional mapping from path substrings to category
+            names. If None, categories are inferred from path keywords.
+        force: If True, re-parse files even if output already exists.
+        pdf_files: Optional explicit list of PDF paths to parse. If None,
+            all PDFs under input_dir are discovered automatically.
+
+    Returns:
+        List of result dictionaries, each containing source, output,
+        category, and status keys (plus error on failure).
+
+    Raises:
+        FileNotFoundError: If input_dir does not exist.
+    """
     input_path = Path(input_dir)
 
     if not input_path.exists():
