@@ -45,3 +45,4 @@
 - [ ] 现在的项目结构是不是有点乱？根目录里还放着两个`.py`文件
 - [ ] 优化“新用户”链路的性能。PDF→parse→chunk→embed这一条还是要测一下速，有些地方可以提速或者上GPU的也做一下
 - [ ] [test-future-directions.md](.trae\documents\test-future-directions.md)当中提到了“**可扩展性**：新功能上线只需向 `golden_qa.json` 添加条目”，验证一下，如果是换了问题生成策略是否也可以
+- [ ] 目前的日志系统似乎并不是“应记尽记”的，比如pytest有些就不会体现在日志里（例如`pixi run pytest tests/ -m "not integration" -v`就不会被记录）
