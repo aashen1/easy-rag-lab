@@ -302,3 +302,166 @@ class TestRunEvalExpConfig:
 
             llm_preset = exp_config.evaluation.get("llm_preset", "default")
             assert llm_preset == "default"
+
+
+class TestMetricsConfig:
+    def _create_test_data(self, temp_dir: Path) -> Path:
+        test_data = [
+            {
+                "id": "q1",
+                "question": "What is the revenue?",
+                "source_files": ["report_a.pdf"],
+            },
+            {
+                "id": "q2",
+                "question": "What is the profit?",
+                "source_files": ["report_b.pdf"],
+            },
+        ]
+        test_data_path = temp_dir / "test_data.json"
+        with open(test_data_path, "w", encoding="utf-8") as f:
+            json.dump(test_data, f)
+        return test_data_path
+
+    def _create_mock_pipeline(self) -> MagicMock:
+        pipeline = MagicMock()
+        pipeline.query.side_effect = [
+            {
+                "answer": "Revenue is 100M.",
+                "sources": ["report_a.pdf", "report_c.pdf"],
+            },
+            {
+                "answer": "Profit is 50M.",
+                "sources": ["report_b.pdf"],
+            },
+        ]
+        return pipeline
+
+    @pytest.mark.unit
+    def test_default_metrics_when_none(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            test_data_path = self._create_test_data(temp_path)
+            output_dir = temp_path / "output"
+            pipeline = self._create_mock_pipeline()
+
+            from eval.run_eval import run_evaluation
+
+            summary = run_evaluation(
+                pipeline=pipeline,
+                test_data_path=str(test_data_path),
+                output_dir=str(output_dir),
+                metrics_config=None,
+            )
+
+            for result in summary["results"]:
+                assert "hit_rate" in result["retrieval"]
+                assert "mrr" in result["retrieval"]
+                assert "ndcg" in result["retrieval"]
+
+            assert "avg_hit_rate" in summary["retrieval_metrics"]
+            assert "avg_mrr" in summary["retrieval_metrics"]
+            assert "avg_ndcg" in summary["retrieval_metrics"]
+
+    @pytest.mark.unit
+    def test_subset_metrics_config(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            test_data_path = self._create_test_data(temp_path)
+            output_dir = temp_path / "output"
+            pipeline = self._create_mock_pipeline()
+
+            from eval.run_eval import run_evaluation
+
+            summary = run_evaluation(
+                pipeline=pipeline,
+                test_data_path=str(test_data_path),
+                output_dir=str(output_dir),
+                metrics_config=["hit_rate", "mrr"],
+            )
+
+            for result in summary["results"]:
+                assert "hit_rate" in result["retrieval"]
+                assert "mrr" in result["retrieval"]
+                assert "ndcg" not in result["retrieval"]
+
+            assert "avg_hit_rate" in summary["retrieval_metrics"]
+            assert "avg_mrr" in summary["retrieval_metrics"]
+            assert "avg_ndcg" not in summary["retrieval_metrics"]
+
+    @pytest.mark.unit
+    def test_empty_metrics_config(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            test_data_path = self._create_test_data(temp_path)
+            output_dir = temp_path / "output"
+            pipeline = self._create_mock_pipeline()
+
+            from eval.run_eval import run_evaluation
+
+            summary = run_evaluation(
+                pipeline=pipeline,
+                test_data_path=str(test_data_path),
+                output_dir=str(output_dir),
+                metrics_config=[],
+            )
+
+            for result in summary["results"]:
+                assert result["retrieval"] == {}
+
+            assert summary["retrieval_metrics"] == {}
+
+    @pytest.mark.unit
+    def test_single_metric_config(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            test_data_path = self._create_test_data(temp_path)
+            output_dir = temp_path / "output"
+            pipeline = self._create_mock_pipeline()
+
+            from eval.run_eval import run_evaluation
+
+            summary = run_evaluation(
+                pipeline=pipeline,
+                test_data_path=str(test_data_path),
+                output_dir=str(output_dir),
+                metrics_config=["ndcg"],
+            )
+
+            for result in summary["results"]:
+                assert "hit_rate" not in result["retrieval"]
+                assert "mrr" not in result["retrieval"]
+                assert "ndcg" in result["retrieval"]
+
+            assert "avg_hit_rate" not in summary["retrieval_metrics"]
+            assert "avg_mrr" not in summary["retrieval_metrics"]
+            assert "avg_ndcg" in summary["retrieval_metrics"]
+
+    @pytest.mark.unit
+    def test_exp_config_metrics_extraction(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+
+            config = {
+                "name": "test_experiment",
+                "description": "Test",
+                "data": {"meal": "test_meal"},
+                "test_sets": [{"strategy": "factual", "num_questions": 10}],
+                "variants": [{"name": "v1"}],
+                "evaluation": {
+                    "metrics": {
+                        "retrieval": ["hit_rate"],
+                    },
+                },
+            }
+
+            config_path = temp_path / "exp_config.yaml"
+            with open(config_path, "w", encoding="utf-8") as f:
+                yaml.dump(config, f)
+
+            from src.experiment import load_experiment_config
+
+            exp_config = load_experiment_config(str(config_path))
+
+            metrics = exp_config.evaluation.get("metrics", {}).get("retrieval")
+            assert metrics == ["hit_rate"]

@@ -17,13 +17,33 @@ project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
 
+DEFAULT_RETRIEVAL_METRICS = ["hit_rate", "mrr", "ndcg"]
+
+
 def run_evaluation(
     pipeline: RAGPipeline,
     test_data_path: str,
     output_dir: str,
     sample_size: int = None,
     meal_data_id: str = None,
+    metrics_config: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
+    """Run evaluation on test data using the provided RAG pipeline.
+
+    Args:
+        pipeline: Configured RAG pipeline instance.
+        test_data_path: Path to test data JSON file.
+        output_dir: Directory to save evaluation report.
+        sample_size: Optional number of test cases to sample.
+        meal_data_id: Optional meal data identifier.
+        metrics_config: Optional list of retrieval metric names to calculate.
+            Defaults to ["hit_rate", "mrr", "ndcg"] when None.
+
+    Returns:
+        Dictionary containing evaluation summary with results and metrics.
+    """
+    if metrics_config is None:
+        metrics_config = list(DEFAULT_RETRIEVAL_METRICS)
     test_data_path = Path(test_data_path)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -63,25 +83,33 @@ def run_evaluation(
             if not expected_sources:
                 expected_sources = test_case.get("source_files", [])
 
-            hit_rate = calculate_hit_rate(retrieved_sources, expected_sources)
-            mrr = calculate_mrr(retrieved_sources, expected_sources)
-            ndcg = calculate_ndcg(retrieved_sources, expected_sources, k=5)
+            retrieval = {}
+            if "hit_rate" in metrics_config:
+                retrieval["hit_rate"] = calculate_hit_rate(retrieved_sources, expected_sources)
+            if "mrr" in metrics_config:
+                retrieval["mrr"] = calculate_mrr(retrieved_sources, expected_sources)
+            if "ndcg" in metrics_config:
+                retrieval["ndcg"] = calculate_ndcg(retrieved_sources, expected_sources, k=5)
 
             result = {
                 "id": test_case["id"],
                 "question": test_case["question"],
                 "answer": response["answer"],
-                "retrieval": {
-                    "hit_rate": hit_rate,
-                    "mrr": mrr,
-                    "ndcg": ndcg,
-                },
+                "retrieval": retrieval,
                 "sources": retrieved_sources,
                 "time_seconds": case_time,
             }
 
+            metric_parts = []
+            if "hit_rate" in retrieval:
+                metric_parts.append(f"HR={retrieval['hit_rate']:.2f}")
+            if "mrr" in retrieval:
+                metric_parts.append(f"MRR={retrieval['mrr']:.2f}")
+            if "ndcg" in retrieval:
+                metric_parts.append(f"NDCG={retrieval['ndcg']:.2f}")
+            metric_str = ", ".join(metric_parts)
             logger.success(
-                f"Test case {test_case['id']}: HR={hit_rate:.2f}, MRR={mrr:.2f}, NDCG={ndcg:.2f} ({case_time:.2f}s)"
+                f"Test case {test_case['id']}: {metric_str} ({case_time:.2f}s)"
             )
 
         except Exception as e:
@@ -99,20 +127,15 @@ def run_evaluation(
 
     total_time = time.time() - total_start_time
 
-    retrieval_metrics = {
-        "avg_hit_rate": sum(r["retrieval"]["hit_rate"] for r in results if "retrieval" in r)
-        / len([r for r in results if "retrieval" in r])
-        if [r for r in results if "retrieval" in r]
-        else 0,
-        "avg_mrr": sum(r["retrieval"]["mrr"] for r in results if "retrieval" in r)
-        / len([r for r in results if "retrieval" in r])
-        if [r for r in results if "retrieval" in r]
-        else 0,
-        "avg_ndcg": sum(r["retrieval"]["ndcg"] for r in results if "retrieval" in r)
-        / len([r for r in results if "retrieval" in r])
-        if [r for r in results if "retrieval" in r]
-        else 0,
-    }
+    retrieval_metrics = {}
+    valid_results = [r for r in results if "retrieval" in r and r["retrieval"]]
+    if valid_results:
+        for metric_name in metrics_config:
+            values = [r["retrieval"][metric_name] for r in valid_results if metric_name in r["retrieval"]]
+            if values:
+                retrieval_metrics[f"avg_{metric_name}"] = sum(values) / len(values)
+            else:
+                retrieval_metrics[f"avg_{metric_name}"] = 0
 
     summary = {
         "timestamp": datetime.now().isoformat(),
@@ -135,6 +158,11 @@ def run_evaluation(
 
 
 def print_summary(summary: Dict[str, Any]) -> None:
+    """Print evaluation summary to stdout.
+
+    Args:
+        summary: Evaluation summary dictionary from run_evaluation.
+    """
     print("\n" + "=" * 60)
     print("EVALUATION SUMMARY")
     print("=" * 60)
@@ -145,9 +173,14 @@ def print_summary(summary: Dict[str, Any]) -> None:
     print(f"Total time: {summary['total_time_seconds']:.2f}s")
     print(f"Avg time per case: {summary['avg_time_per_case']:.2f}s")
     print("\nRetrieval Metrics:")
-    print(f"  Hit Rate: {summary['retrieval_metrics']['avg_hit_rate']:.4f}")
-    print(f"  MRR:      {summary['retrieval_metrics']['avg_mrr']:.4f}")
-    print(f"  NDCG:     {summary['retrieval_metrics']['avg_ndcg']:.4f}")
+    label_map = {
+        "avg_hit_rate": "Hit Rate",
+        "avg_mrr": "MRR",
+        "avg_ndcg": "NDCG",
+    }
+    for key, value in summary["retrieval_metrics"].items():
+        label = label_map.get(key, key)
+        print(f"  {label}: {value:.4f}")
     print("=" * 60)
 
 
@@ -380,11 +413,16 @@ if __name__ == "__main__":
             pipeline.build_index(sampling_config=sampling_config)
             logger.success("Index built successfully")
 
+    metrics_config = None
+    if args.exp_config and exp_config:
+        metrics_config = exp_config.evaluation.get("metrics", {}).get("retrieval")
+
     summary = run_evaluation(
         pipeline=pipeline,
         test_data_path=test_data_path,
         output_dir=output_dir,
         meal_data_id=meal_data_id,
+        metrics_config=metrics_config,
     )
 
     pipeline.close()
