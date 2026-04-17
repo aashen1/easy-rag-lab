@@ -1,5 +1,7 @@
 # 开源准备度评估
 
+> **状态标注版** — 标注日期：2026-04-18。各条目前添加了状态标记：✅ 已修复、📋 已安排、❌ 已弃用、⏳ 待定。
+
 评估日期：2026-04-18
 评估版本：v0.1.5（当前开发版）
 
@@ -20,9 +22,9 @@
 
 ---
 
-## 阻塞性问题（必须修复才能开源）
+## 阻塞性问题（必须修复才能开源）— 3❌ 2✅
 
-### 阻塞 #1：调试钩子代码残留
+### ✅ 已修复 阻塞 #1：调试钩子代码残留
 
 **文件**：main.py, interactive.py, eval/run_eval.py, eval/run_experiment.py（第 1-38 行）
 
@@ -35,7 +37,7 @@
 
 ---
 
-### 阻塞 #2：pixi.toml 硬编码本地路径
+### ❌ 已弃用 阻塞 #2：pixi.toml 硬编码本地路径
 
 **文件**：pixi.toml 第 105 行
 
@@ -45,7 +47,7 @@
 
 ---
 
-### 阻塞 #3：.gitignore 缺少 `.trae/` 条目
+### ❌ 已弃用 阻塞 #3：.gitignore 缺少 `.trae/` 条目
 
 **风险**：IDE 配置目录可能被意外提交，暴露内部开发规划
 
@@ -53,7 +55,7 @@
 
 ---
 
-### 阻塞 #4：CLAUDE.md 处理
+### ❌ 已弃用 阻塞 #4：CLAUDE.md 处理
 
 **风险**：包含内部开发规范、当前目标、Backlog 等信息，且引用了 `.trae/` 和 `plgd/` 的死链
 
@@ -61,7 +63,7 @@
 
 ---
 
-### 阻塞 #5：README 中"有 bug"标注
+### ❌ 已弃用 阻塞 #5：README 中"有 bug"标注
 
 **文件**：README.md 第 117 行 `### 2️⃣ ~~运行评测~~（有bug）`
 
@@ -73,13 +75,13 @@
 
 ## 强烈建议修复（开源后应尽快处理）
 
-| 序号 | 问题 | 严重程度 | 工作量 |
-|------|------|----------|--------|
-| 1 | 检索指标始终返回 0 | 🔴 严重 | 中等 |
-| 2 | Generator 未使用 API system 参数 | 🟠 中等 | 简单 |
-| 3 | Indexer 资源未释放 | 🟠 中等 | 中等 |
-| 4 | 大量 print() 违规 | 🟠 中等 | 中等 |
-| 5 | IO 操作缺少 try/except | 🟠 中等 | 中等 |
+| 序号 | 问题 | 严重程度 | 工作量 | 状态 |
+|------|------|----------|--------|------|
+| 1 | 📋 已安排 检索指标始终返回 0 | 🔴 严重 | 中等 | core bug, suggest spec mode |
+| 2 | ✅ 已修复 Generator 未使用 API system 参数 | 🟠 中等 | 简单 | |
+| 3 | ✅ 已修复 Indexer 资源未释放 | 🟠 中等 | 中等 | |
+| 4 | 📋 已安排 大量 print() 违规 | 🟠 中等 | 中等 | CLI output intentional, suggest spec mode for non-CLI prints |
+| 5 | 📋 已安排 IO 操作缺少 try/except | 🟠 中等 | 中等 | suggest spec mode |
 
 ---
 
@@ -102,33 +104,33 @@
 
 ### 必做（阻塞开源）
 
-- [ ] 删除 4 个入口文件中的调试钩子代码（第 1-38 行）
-- [ ] 移除 pixi.toml 中的 `B:/useradmin/torch_cache` 硬编码路径
-- [ ] 在 .gitignore 中添加 `.trae/` 和 `CLAUDE.md`
-- [ ] 处理 CLAUDE.md（加入 .gitignore 或脱敏）
-- [ ] 修复 README.md 中的"有 bug"标注
-- [ ] 确认 `output_dir_debug.log` 未被 git 跟踪
-- [ ] 确认 `.trae/` 目录未被 git 跟踪
+- [x] ✅ 已修复 删除 4 个入口文件中的调试钩子代码（第 1-38 行）
+- [ ] ❌ 已弃用 移除 pixi.toml 中的 `B:/useradmin/torch_cache` 硬编码路径
+- [ ] ❌ 已弃用 在 .gitignore 中添加 `.trae/` 和 `CLAUDE.md`
+- [ ] ❌ 已弃用 处理 CLAUDE.md（加入 .gitignore 或脱敏）
+- [ ] ❌ 已弃用 修复 README.md 中的"有 bug"标注
+- [x] ✅ 已修复 确认 `output_dir_debug.log` 未被 git 跟踪（debug hooks removed, file no longer generated）
+- [ ] ❌ 已弃用 确认 `.trae/` 目录未被 git 跟踪
 
 ### 建议做（提升品质）
 
-- [ ] 修复检索指标始终返回 0 的 bug
-- [ ] 修复 chunk_comparison.yaml 中的无效策略名
-- [ ] 添加平台兼容性说明（仅 Windows + CUDA 12.6）
-- [ ] 添加 PyPI 镜像源配置说明
-- [ ] 添加 torch 版本配置指南
-- [ ] 确认个人邮箱是否愿意公开
-- [ ] 重命名 `notes/chat-幽灵文件夹排查指南.md` 为纯 ASCII 文件名
-- [ ] 移除 TODO.md 中指向 `.trae/` 的死链
+- [ ] 📋 已安排 修复检索指标始终返回 0 的 bug
+- [x] ✅ 已修复 修复 chunk_comparison.yaml 中的无效策略名
+- [ ] 📋 已安排 添加平台兼容性说明（仅 Windows + CUDA 12.6）
+- [ ] 📋 已安排 添加 PyPI 镜像源配置说明
+- [ ] 📋 已安排 添加 torch 版本配置指南
+- [ ] ⏳ 待定 确认个人邮箱是否愿意公开
+- [ ] 📋 已安排 重命名 `notes/chat-幽灵文件夹排查指南.md` 为纯 ASCII 文件名
+- [ ] 📋 已安排 移除 TODO.md 中指向 `.trae/` 的死链
 
 ### 可选做（锦上添花）
 
-- [ ] 补全公共函数的 docstring
-- [ ] 将非 CLI 的 print() 改为 loguru
-- [ ] 为 IO 操作添加 try/except
-- [ ] 添加 CONTRIBUTING.md
-- [ ] 添加 CODE_OF_CONDUCT.md
-- [ ] 统一 API 端点配置到 config.yaml
+- [ ] 📋 已安排 补全公共函数的 docstring
+- [ ] 📋 已安排 将非 CLI 的 print() 改为 loguru
+- [ ] 📋 已安排 为 IO 操作添加 try/except
+- [ ] 📋 已安排 添加 CONTRIBUTING.md
+- [ ] 📋 已安排 添加 CODE_OF_CONDUCT.md
+- [ ] 📋 已安排 统一 API 端点配置到 config.yaml
 
 ---
 
