@@ -1,5 +1,7 @@
 # 已知 Bug 与功能问题审查
 
+> **状态标注版本**（标注日期：2026-04-18）— 各问题标题前已添加状态标签：✅ 已修复 / 📋 已安排 / ⏳ 待定
+
 审查日期：2026-04-18
 审查来源：CHANGELOG.md Known Issues、代码分析、测试结果
 
@@ -17,7 +19,7 @@
 
 ## 🔴 严重问题
 
-### 1. 检索指标始终返回 0
+### 1. 📋 已安排 — 检索指标始终返回 0
 
 **来源**：CHANGELOG.md Known Issues #1
 
@@ -36,7 +38,7 @@
 
 ---
 
-### 2. chunk_comparison.yaml 使用无效策略名
+### 2. ✅ 已修复 — chunk_comparison.yaml 使用无效策略名
 
 **来源**：CHANGELOG.md Known Issues #2
 
@@ -50,7 +52,7 @@
 
 ## 🟠 中等问题
 
-### 3. Generator 未使用 Anthropic API 的 system 参数
+### 3. ✅ 已修复 — Generator 未使用 Anthropic API 的 system 参数
 
 **来源**：CHANGELOG.md Known Issues #3
 
@@ -76,7 +78,7 @@ response = client.messages.create(
 
 ---
 
-### 4. Indexer 资源未自动释放
+### 4. ✅ 已修复 — Indexer 资源未自动释放
 
 **来源**：CHANGELOG.md Known Issues #4
 
@@ -96,7 +98,7 @@ response = client.messages.create(
 
 ---
 
-### 5. Meal total_chunks 偏差一位
+### 5. ✅ 已修复 — Meal total_chunks 偏差一位
 
 **来源**：CHANGELOG.md Known Issues #5
 
@@ -110,7 +112,7 @@ response = client.messages.create(
 
 ---
 
-### 6. 测试数据占位符未填充
+### 6. 📋 已安排 — 测试数据占位符未填充
 
 **来源**：CHANGELOG.md Known Issues #6
 
@@ -122,7 +124,7 @@ response = client.messages.create(
 
 ---
 
-### 7. 生成质量指标未实现
+### 7. 📋 已安排 — 生成质量指标未实现
 
 **来源**：CHANGELOG.md Known Issues #7
 
@@ -136,7 +138,7 @@ response = client.messages.create(
 
 ## 🟡 轻微问题
 
-### 8. NDCG 简化实现
+### 8. 📋 已安排 — NDCG 简化实现
 
 **来源**：CHANGELOG.md Known Issues #9
 
@@ -146,7 +148,7 @@ response = client.messages.create(
 
 ---
 
-### 9. Hit Rate 定义非标准
+### 9. 📋 已安排 — Hit Rate 定义非标准
 
 **来源**：CHANGELOG.md Known Issues #10
 
@@ -156,7 +158,7 @@ response = client.messages.create(
 
 ---
 
-### 10. 评测指标配置未动态应用
+### 10. 📋 已安排 — 评测指标配置未动态应用
 
 **来源**：CHANGELOG.md Known Issues #11
 
@@ -166,7 +168,7 @@ response = client.messages.create(
 
 ---
 
-### 11. 文档类别检测逻辑重复
+### 11. 📋 已安排 — 文档类别检测逻辑重复
 
 **来源**：CHANGELOG.md Known Issues #12
 
@@ -176,7 +178,7 @@ response = client.messages.create(
 
 ---
 
-### 12. Embedder show_progress 参数未实现
+### 12. 📋 已安排 — Embedder show_progress 参数未实现
 
 **来源**：CHANGELOG.md Known Issues #13
 
@@ -188,7 +190,7 @@ response = client.messages.create(
 
 ## 测试覆盖问题
 
-### 13. 测试覆盖不完整
+### 13. 📋 已安排 — 测试覆盖不完整
 
 **来源**：CHANGELOG.md Known Issues #8
 
