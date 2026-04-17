@@ -6,7 +6,8 @@ from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
-from src.meal import MealManager
+from src.generator import Generator
+from src.meal import MealConfig, MealManager
 from src.utils import ensure_dir, get_llm_config
 
 
@@ -63,6 +64,13 @@ class TestSetGenerator:
     __test__ = False
 
     def __init__(self, config: Dict[str, Any]):
+        """Initialize the TestSetGenerator with application configuration.
+
+        Args:
+            config: Application configuration dictionary containing a
+                'test_generation' section with max_retries, default_strategy,
+                and default_num_questions settings.
+        """
         self.config = config
         tg_config = config.get("test_generation", {})
         self.max_retries = tg_config.get("max_retries", 3)
@@ -78,6 +86,28 @@ class TestSetGenerator:
         seed: Optional[int] = None,
         token_tracker: Optional[Any] = None,
     ) -> Dict[str, Any]:
+        """Generate a test set of Q&A pairs for a given meal.
+
+        Args:
+            meal_name: Name of the meal to generate questions for.
+            strategy: Question generation strategy ('factual', 'boundary',
+                or 'multi_hop'). Defaults to the configured default_strategy.
+            num_questions: Number of questions to generate. Defaults to the
+                configured default_num_questions.
+            llm_preset: LLM preset name from the configuration to use for
+                question generation.
+            seed: Random seed for reproducible chunk selection. If None, the
+                random state is not reset.
+            token_tracker: Optional token usage tracker passed to the LLM
+                generator.
+
+        Returns:
+            Dictionary containing the test set metadata and generated questions.
+
+        Raises:
+            ValueError: If no chunks are found for the meal or no questions
+                could be generated.
+        """
         strategy = strategy or self.default_strategy
         num_questions = num_questions or self.default_num_questions
 
@@ -104,8 +134,6 @@ class TestSetGenerator:
         chunk_groups = self._select_chunks(grouped, strategy, num_questions)
         logger.info(
             f"Selected {len(chunk_groups)} chunk groups for question generation")
-
-        from src.generator import Generator
 
         llm_config = get_llm_config(self.config, llm_preset)
         generator = Generator(
@@ -165,6 +193,15 @@ class TestSetGenerator:
         return test_set
 
     def _load_meal_chunks(self, meal_config) -> List[Dict[str, Any]]:
+        """Load chunk data from JSONL files associated with a meal's PDF files.
+
+        Args:
+            meal_config: MealConfig object whose pdf_files determine the
+                source filter for chunk loading.
+
+        Returns:
+            List of chunk dictionaries loaded from matching JSONL files.
+        """
         chunks_dir = Path(self.config.get(
             "chunker", {}).get("output_dir", "data/chunks"))
         if not chunks_dir.exists():
@@ -202,6 +239,17 @@ class TestSetGenerator:
     def _group_chunks_by_source(
         self, chunks: List[Dict]
     ) -> Dict[str, List[Dict]]:
+        """Group chunks by their source file metadata.
+
+        Chunks within each group are sorted by chunk_index in ascending order.
+
+        Args:
+            chunks: List of chunk dictionaries, each containing a 'metadata'
+                field with a 'source' key.
+
+        Returns:
+            Dictionary mapping source file names to lists of chunk dictionaries.
+        """
         grouped = {}
         for chunk in chunks:
             source = chunk.get("metadata", {}).get("source", "unknown")
@@ -222,6 +270,21 @@ class TestSetGenerator:
         strategy: str,
         num_questions: int,
     ) -> List[List[Dict]]:
+        """Select chunk groups for question generation based on the strategy.
+
+        Args:
+            grouped_chunks: Dictionary mapping source file names to chunk lists.
+            strategy: Question generation strategy ('factual', 'boundary',
+                or 'multi_hop').
+            num_questions: Target number of chunk groups to select.
+
+        Returns:
+            List of chunk groups, where each group is a list of chunk
+            dictionaries.
+
+        Raises:
+            ValueError: If the strategy is not recognized.
+        """
         normalized_strategy = strategy.replace("-", "_")
         if normalized_strategy == "factual":
             return self._select_chunks_for_factual(grouped_chunks, num_questions)
@@ -235,6 +298,15 @@ class TestSetGenerator:
     def _select_chunks_for_factual(
         self, grouped_chunks: Dict[str, List[Dict]], num_questions: int
     ) -> List[List[Dict]]:
+        """Select individual chunks randomly for factual question generation.
+
+        Args:
+            grouped_chunks: Dictionary mapping source file names to chunk lists.
+            num_questions: Target number of chunks to select.
+
+        Returns:
+            List of single-element chunk lists, one per selected chunk.
+        """
         all_chunks = []
         for chunks in grouped_chunks.values():
             all_chunks.extend(chunks)
@@ -250,6 +322,15 @@ class TestSetGenerator:
     def _select_chunks_for_boundary(
         self, grouped_chunks: Dict[str, List[Dict]], num_questions: int
     ) -> List[List[Dict]]:
+        """Select adjacent chunk pairs for boundary question generation.
+
+        Args:
+            grouped_chunks: Dictionary mapping source file names to chunk lists.
+            num_questions: Target number of chunk pairs to select.
+
+        Returns:
+            List of two-element chunk lists, each containing an adjacent pair.
+        """
         pairs = []
         for source, chunks in grouped_chunks.items():
             for i in range(len(chunks) - 1):
@@ -269,6 +350,16 @@ class TestSetGenerator:
     def _select_chunks_for_multi_hop(
         self, grouped_chunks: Dict[str, List[Dict]], num_questions: int
     ) -> List[List[Dict]]:
+        """Select non-adjacent chunk pairs for multi-hop question generation.
+
+        Args:
+            grouped_chunks: Dictionary mapping source file names to chunk lists.
+            num_questions: Target number of chunk pairs to select.
+
+        Returns:
+            List of two-element chunk lists, each containing non-adjacent chunks
+            from the same source file.
+        """
         groups = []
         for source, chunks in grouped_chunks.items():
             if len(chunks) >= 3:
@@ -289,6 +380,23 @@ class TestSetGenerator:
         strategy: str,
         generator,
     ) -> Optional[Dict[str, Any]]:
+        """Generate a single Q&A pair from chunks using an LLM.
+
+        Retries up to max_retries times on failure or unparseable responses.
+
+        Args:
+            chunks: List of chunk dictionaries to base the question on.
+            strategy: Question generation strategy ('factual', 'boundary',
+                or 'multi_hop').
+            generator: Generator instance used to call the LLM.
+
+        Returns:
+            Dictionary with 'question', 'answer', and 'difficulty' keys, or
+            None if all retry attempts fail.
+
+        Raises:
+            ValueError: If the strategy is not recognized.
+        """
         normalized_strategy = strategy.replace("-", "_")
         if normalized_strategy == "factual":
             prompt = FACTUAL_PROMPT.format(
@@ -329,6 +437,18 @@ class TestSetGenerator:
         return None
 
     def _parse_llm_response(self, response: str) -> Optional[Dict[str, Any]]:
+        """Parse an LLM response string into a Q&A dictionary.
+
+        Handles responses wrapped in markdown code blocks and extracts the
+        first JSON object found in the text.
+
+        Args:
+            response: Raw LLM response string.
+
+        Returns:
+            Dictionary with 'question', 'answer', and 'difficulty' keys, or
+            None if the response cannot be parsed or is missing required fields.
+        """
         try:
             response = response.strip()
             if response.startswith("```"):
@@ -360,6 +480,16 @@ class TestSetGenerator:
     def _save_test_set(
         self, meal_name: str, test_set: Dict[str, Any], filename: str
     ) -> Path:
+        """Save a test set to a JSON file in the meal's test_sets directory.
+
+        Args:
+            meal_name: Name of the meal the test set belongs to.
+            test_set: Test set dictionary to serialize.
+            filename: Base filename without extension.
+
+        Returns:
+            Path to the saved JSON file.
+        """
         meal_manager = MealManager(self.config)
         meal_dir = meal_manager.get_meal_dir(meal_name)
         test_sets_dir = meal_dir / "test_sets"

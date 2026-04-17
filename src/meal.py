@@ -75,23 +75,52 @@ class MealConfig:
 
 
 def compute_file_sha256(file_path: Path, chunk_size: int = 8192) -> str:
+    """Compute SHA-256 hash of a file by reading it in chunks.
+
+    Args:
+        file_path: Path to the file to hash.
+        chunk_size: Number of bytes to read per iteration.
+
+    Returns:
+        Hexadecimal SHA-256 digest string.
+    """
     sha256 = hashlib.sha256()
-    with open(file_path, "rb") as f:
-        while True:
-            chunk = f.read(chunk_size)
-            if not chunk:
-                break
-            sha256.update(chunk)
-    return sha256.hexdigest()
+    try:
+        with open(file_path, "rb") as f:
+            while True:
+                chunk = f.read(chunk_size)
+                if not chunk:
+                    break
+                sha256.update(chunk)
+        return sha256.hexdigest()
+    except Exception as e:
+        logger.error(f"Failed to compute SHA256 for {file_path}: {str(e)}")
+        return ""
 
 
 def compute_data_id(pdf_files: List[MealFile]) -> str:
+    """Compute a deterministic data ID from a list of meal files.
+
+    Args:
+        pdf_files: List of MealFile objects whose SHA-256 hashes are combined.
+
+    Returns:
+        Hexadecimal SHA-256 digest string serving as the data ID.
+    """
     sorted_hashes = sorted(f.sha256 for f in pdf_files)
     combined = "|".join(sorted_hashes)
     return hashlib.sha256(combined.encode()).hexdigest()
 
 
 def compute_parser_config_hash(parser_config: Dict) -> str:
+    """Compute a short hash of the parser configuration.
+
+    Args:
+        parser_config: Parser configuration dictionary.
+
+    Returns:
+        First 8 characters of the SHA-256 hex digest.
+    """
     relevant = {"algorithm": parser_config.get("algorithm", "pymupdf4llm")}
     return hashlib.sha256(json.dumps(relevant, sort_keys=True).encode()).hexdigest()[:8]
 
@@ -108,6 +137,14 @@ def compute_chunker_config_hash(chunker_config: Dict) -> str:
 
 
 def compute_embedding_config_hash(embedding_config: Dict) -> str:
+    """Compute a short hash of the embedding configuration.
+
+    Args:
+        embedding_config: Embedding configuration dictionary containing model_name.
+
+    Returns:
+        First 8 characters of the SHA-256 hex digest.
+    """
     relevant = {"model_name": embedding_config["model_name"]}
     return hashlib.sha256(json.dumps(relevant, sort_keys=True).encode()).hexdigest()[:8]
 
@@ -124,10 +161,28 @@ def compute_index_key(data_id: str, config_hashes: Dict[str, str]) -> str:
 
 
 def generate_collection_name(index_key: str, prefix: str = "m_") -> str:
+    """Generate a Qdrant collection name from an index key.
+
+    Args:
+        index_key: Full index key string.
+        prefix: Prefix to prepend to the truncated index key.
+
+    Returns:
+        Collection name string in the format '{prefix}{first_12_chars_of_index_key}'.
+    """
     return f"{prefix}{index_key[:12]}"
 
 
 def validate_meal_name(name: str) -> bool:
+    """Validate that a meal name contains only allowed characters.
+
+    Args:
+        name: Proposed meal name string.
+
+    Returns:
+        True if the name matches the pattern of alphanumeric characters,
+        underscores, and hyphens; False otherwise.
+    """
     if not name:
         return False
     pattern = r'^[a-zA-Z0-9_-]+$'
@@ -135,6 +190,11 @@ def validate_meal_name(name: str) -> bool:
 
 
 def generate_timestamp_name() -> str:
+    """Generate a meal name based on the current timestamp.
+
+    Returns:
+        Meal name string in the format 'meal_YYYYMMDD_HHMMSS'.
+    """
     return f"meal_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
 
@@ -225,21 +285,60 @@ def build_index_from_chunks(
 
 class ArtifactCache:
     def __init__(self, artifacts_dir: Path):
+        """Initialize the ArtifactCache with a base artifacts directory.
+
+        Args:
+            artifacts_dir: Root directory for storing cached artifacts.
+        """
         self.artifacts_dir = artifacts_dir
 
     def get_artifact_group_dir(self, data_id: str) -> Path:
+        """Get the artifact group directory for a given data ID.
+
+        Args:
+            data_id: Data identifier string.
+
+        Returns:
+            Path to the artifact group directory using the first 12 chars of data_id.
+        """
         short_id = data_id[:12]
         return self.artifacts_dir / short_id
 
     def get_parsed_dir(self, data_id: str) -> Path:
+        """Get the directory for parsed artifacts of a given data ID.
+
+        Args:
+            data_id: Data identifier string.
+
+        Returns:
+            Path to the 'parsed' subdirectory within the artifact group.
+        """
         group_dir = self.get_artifact_group_dir(data_id)
         return group_dir / "parsed"
 
     def get_chunks_dir(self, data_id: str, chunker_hash: str) -> Path:
+        """Get the directory for chunked artifacts of a given data ID and chunker hash.
+
+        Args:
+            data_id: Data identifier string.
+            chunker_hash: Short hash of the chunker configuration.
+
+        Returns:
+            Path to the 'chunks_{chunker_hash}' subdirectory within the artifact group.
+        """
         group_dir = self.get_artifact_group_dir(data_id)
         return group_dir / f"chunks_{chunker_hash}"
 
     def parsed_exists(self, data_id: str, expected_files: List[str]) -> bool:
+        """Check whether parsed artifacts exist and contain all expected files.
+
+        Args:
+            data_id: Data identifier string.
+            expected_files: List of expected markdown file names.
+
+        Returns:
+            True if the parsed directory exists and contains all expected .md files.
+        """
         parsed_dir = self.get_parsed_dir(data_id)
         if not parsed_dir.exists():
             return False
@@ -247,6 +346,16 @@ class ArtifactCache:
         return set(expected_files).issubset(existing)
 
     def chunks_exist(self, data_id: str, chunker_hash: str, expected_files: List[str]) -> bool:
+        """Check whether chunked artifacts exist and contain all expected files.
+
+        Args:
+            data_id: Data identifier string.
+            chunker_hash: Short hash of the chunker configuration.
+            expected_files: List of expected JSONL file names.
+
+        Returns:
+            True if the chunks directory exists and contains all expected .jsonl files.
+        """
         chunks_dir = self.get_chunks_dir(data_id, chunker_hash)
         if not chunks_dir.exists():
             return False
@@ -254,6 +363,15 @@ class ArtifactCache:
         return set(expected_files).issubset(existing)
 
     def ensure_dirs(self, data_id: str, chunker_hash: str) -> Tuple[Path, Path]:
+        """Ensure that artifact directories exist, creating them if necessary.
+
+        Args:
+            data_id: Data identifier string.
+            chunker_hash: Short hash of the chunker configuration.
+
+        Returns:
+            Tuple of (parsed_dir, chunks_dir) paths that are guaranteed to exist.
+        """
         group_dir = self.get_artifact_group_dir(data_id)
         ensure_dir(str(group_dir))
         parsed_dir = self.get_parsed_dir(data_id)
@@ -263,23 +381,52 @@ class ArtifactCache:
         return parsed_dir, chunks_dir
 
     def save_manifest(self, data_id: str, manifest: Dict[str, Any]) -> None:
+        """Save an artifact manifest JSON file for a given data ID.
+
+        Args:
+            data_id: Data identifier string.
+            manifest: Dictionary to serialize as the manifest.
+        """
         group_dir = self.get_artifact_group_dir(data_id)
         ensure_dir(str(group_dir))
         manifest_path = group_dir / "manifest.json"
-        with open(manifest_path, "w", encoding="utf-8") as f:
-            json.dump(manifest, f, ensure_ascii=False, indent=2)
+        try:
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(manifest, f, ensure_ascii=False, indent=2)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to save manifest for data_id {data_id}: {str(e)}")
+            return False
 
     def load_manifest(self, data_id: str) -> Optional[Dict[str, Any]]:
+        """Load an artifact manifest JSON file for a given data ID.
+
+        Args:
+            data_id: Data identifier string.
+
+        Returns:
+            Parsed manifest dictionary, or None if the manifest file does not exist.
+        """
         group_dir = self.get_artifact_group_dir(data_id)
         manifest_path = group_dir / "manifest.json"
         if not manifest_path.exists():
             return None
-        with open(manifest_path, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(manifest_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to load manifest for data_id {data_id}: {str(e)}")
+            return None
 
 
 class MealManager:
     def __init__(self, config: Dict[str, Any]):
+        """Initialize the MealManager with application configuration.
+
+        Args:
+            config: Application configuration dictionary containing 'meals',
+                'parser', 'chunker', 'artifacts', and 'vector_store' sections.
+        """
         self.config = config
         meals_config = config.get("meals", {})
         self.meals_dir = Path(meals_config.get("dir", "data/meals"))
@@ -338,6 +485,21 @@ class MealManager:
         seed: Optional[int] = None,
         force_parse: bool = False,
     ) -> MealConfig:
+        """Create a new meal by sampling PDFs, parsing, chunking, and indexing.
+
+        Args:
+            name: Desired meal name. If None, a timestamp-based name is generated.
+            sampling_config: Configuration controlling how PDFs are sampled.
+            seed: Random seed for reproducible sampling. If None, a random seed is used.
+            force_parse: If True, re-parse PDFs even if cached parsed artifacts exist.
+
+        Returns:
+            MealConfig object for the newly created meal.
+
+        Raises:
+            ValueError: If the meal name is invalid, already exists, or no PDFs
+                could be processed.
+        """
 
         if name is None:
             name = generate_timestamp_name()
@@ -493,8 +655,12 @@ class MealManager:
         ensure_dir(str(meal_dir / "test_sets"))
 
         manifest_path = meal_dir / "manifest.json"
-        with open(manifest_path, "w", encoding="utf-8") as f:
-            json.dump(meal_config.to_dict(), f, ensure_ascii=False, indent=2)
+        try:
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(meal_config.to_dict(), f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to write manifest for meal '{name}': {str(e)}")
+            raise
 
         cache_status = []
         if cache_hit_parse:
@@ -510,6 +676,18 @@ class MealManager:
         return meal_config
 
     def load_meal(self, name: str) -> MealConfig:
+        """Load a meal configuration from its manifest file.
+
+        Args:
+            name: Name of the meal to load.
+
+        Returns:
+            MealConfig object loaded from the meal's manifest.
+
+        Raises:
+            FileNotFoundError: If the meal manifest file does not exist.
+            ValueError: If the manifest file cannot be parsed.
+        """
         meal_dir = self.get_meal_dir(name)
         manifest_path = meal_dir / "manifest.json"
 
@@ -525,6 +703,14 @@ class MealManager:
             raise ValueError(f"Failed to load meal '{name}': {str(e)}")
 
     def find_equivalent_meals(self, data_id: str) -> List[MealConfig]:
+        """Find all meals that share the same data ID.
+
+        Args:
+            data_id: Data identifier to search for.
+
+        Returns:
+            List of MealConfig objects with the matching data ID.
+        """
         equivalents = []
         for meal in self.list_meals():
             if meal.data_id == data_id:
@@ -532,6 +718,11 @@ class MealManager:
         return equivalents
 
     def list_meals(self) -> List[MealConfig]:
+        """List all available meals by scanning the meals directory.
+
+        Returns:
+            List of MealConfig objects for all meals with valid manifests.
+        """
         if not self.meals_dir.exists():
             return []
 
@@ -550,6 +741,15 @@ class MealManager:
         return meals
 
     def delete_meal(self, name: str) -> None:
+        """Delete a meal and its associated Qdrant collection if not shared.
+
+        Args:
+            name: Name of the meal to delete.
+
+        Raises:
+            FileNotFoundError: If the meal does not exist.
+            ValueError: If the meal manifest cannot be loaded.
+        """
         meal_config = self.load_meal(name)
         meal_dir = self.get_meal_dir(name)
 
@@ -580,6 +780,18 @@ class MealManager:
         logger.success(f"Meal '{name}' deleted successfully")
 
     def rename_meal(self, old_name: str, new_name: str) -> MealConfig:
+        """Rename a meal by moving its directory and updating the manifest.
+
+        Args:
+            old_name: Current name of the meal.
+            new_name: Desired new name for the meal.
+
+        Returns:
+            Updated MealConfig object with the new name.
+
+        Raises:
+            ValueError: If the new name is invalid or already exists.
+        """
         if not validate_meal_name(new_name):
             raise ValueError(
                 f"Invalid meal name '{new_name}'. "
@@ -597,14 +809,32 @@ class MealManager:
 
         meal_config.name = new_name
         manifest_path = new_dir / "manifest.json"
-        with open(manifest_path, "w", encoding="utf-8") as f:
-            json.dump(meal_config.to_dict(), f, ensure_ascii=False, indent=2)
+        try:
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(meal_config.to_dict(), f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to write manifest after renaming meal from '{old_name}' to '{new_name}': {str(e)}")
+            raise
 
         logger.success(
             f"Meal renamed from '{old_name}' to '{new_name}' (data_id unchanged: {meal_config.data_id[:12]})")
         return meal_config
 
     def copy_meal(self, source_name: str, target_name: str) -> MealConfig:
+        """Copy a meal's directory and create a new manifest with the target name.
+
+        The copied meal shares the same Qdrant collection as the source.
+
+        Args:
+            source_name: Name of the meal to copy from.
+            target_name: Name for the new copied meal.
+
+        Returns:
+            MealConfig object for the newly created copy.
+
+        Raises:
+            ValueError: If the target name is invalid or already exists.
+        """
         if not validate_meal_name(target_name):
             raise ValueError(
                 f"Invalid meal name '{target_name}'. "
@@ -633,8 +863,12 @@ class MealManager:
         )
 
         manifest_path = target_dir / "manifest.json"
-        with open(manifest_path, "w", encoding="utf-8") as f:
-            json.dump(new_config.to_dict(), f, ensure_ascii=False, indent=2)
+        try:
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(new_config.to_dict(), f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to write manifest for copied meal '{target_name}': {str(e)}")
+            raise
 
         logger.success(
             f"Meal copied from '{source_name}' to '{target_name}' "
@@ -643,6 +877,15 @@ class MealManager:
         return new_config
 
     def check_meal_status(self, name: str) -> Tuple[MealStatus, List[str]]:
+        """Check the integrity of a meal's source PDF files.
+
+        Args:
+            name: Name of the meal to check.
+
+        Returns:
+            Tuple of (MealStatus, list of issue descriptions). The status
+            indicates whether files are available, missing, changed, or mixed.
+        """
         meal_config = self.load_meal(name)
         issues = []
         has_missing = False
@@ -680,6 +923,26 @@ class MealManager:
         create_new: bool = False,
         new_name: Optional[str] = None,
     ) -> MealConfig:
+        """Repair a meal by replacing or removing corrupted/missing PDF files.
+
+        Rebuilds the parsing, chunking, and indexing pipeline for the repaired
+        set of PDF files.
+
+        Args:
+            name: Name of the meal to repair.
+            replacements: Mapping from old relative file paths to new relative
+                file paths within the raw directory.
+            create_new: If True, create a new meal instead of modifying in-place.
+            new_name: Name for the new meal when create_new is True. Defaults
+                to '{name}_repaired'.
+
+        Returns:
+            MealConfig object for the repaired (or newly created) meal.
+
+        Raises:
+            ValueError: If no valid PDF files remain after repair, or if the
+                target meal name already exists.
+        """
         meal_config = self.load_meal(name)
         replacements = replacements or {}
 
@@ -833,8 +1096,12 @@ class MealManager:
             meal_dir = self.get_meal_dir(target_name)
 
         manifest_path = meal_dir / "manifest.json"
-        with open(manifest_path, "w", encoding="utf-8") as f:
-            json.dump(new_config.to_dict(), f, ensure_ascii=False, indent=2)
+        try:
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(new_config.to_dict(), f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to write manifest for repaired meal '{target_name}': {str(e)}")
+            raise
 
         logger.success(
             f"Meal '{target_name}' repaired successfully "
@@ -843,10 +1110,26 @@ class MealManager:
         return new_config
 
     def meal_exists(self, name: str) -> bool:
+        """Check whether a meal with the given name exists.
+
+        Args:
+            name: Name of the meal to check.
+
+        Returns:
+            True if the meal directory and its manifest file both exist.
+        """
         meal_dir = self.get_meal_dir(name)
         return meal_dir.exists() and (meal_dir / "manifest.json").exists()
 
     def get_meal_dir(self, name: str) -> Path:
+        """Get the filesystem path for a meal's directory.
+
+        Args:
+            name: Name of the meal.
+
+        Returns:
+            Path to the meal directory under the meals root.
+        """
         return self.meals_dir / name
 
     def _is_collection_shared(self, collection_name: str, exclude_name: Optional[str] = None) -> bool:
