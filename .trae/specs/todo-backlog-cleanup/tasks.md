@@ -1,17 +1,17 @@
 # Tasks
 
-- [ ] Task 1: 修复 PytestCollectionWarning，为 TestCaseResult 添加 `__test__ = False`
-  - [ ] 修改 eval/experiment_reporter.py
-  - [ ] commit: `fix: add __test__ = False to TestCaseResult to suppress PytestCollectionWarning`
-- [ ] Task 2: 修复 src/chunker.py 尾随空格（第 68 行）
-  - [ ] 修改 src/chunker.py
-  - [ ] commit: `fix: remove trailing whitespace in chunker.py`
-- [ ] Task 3: 删除 tests/test_e2e_experiment.py 中重复的本地 `temp_project_dir` fixture
-  - [ ] 修改 tests/test_e2e_experiment.py
-  - [ ] commit: `refactor: remove duplicate temp_project_dir fixture from test_e2e_experiment.py`
-- [ ] Task 4: 修改 tests/conftest.py mock_embedder fixture 使用固定向量
-  - [ ] 修改 tests/conftest.py
-  - [ ] commit: `refactor: use fixed vectors in mock_embedder fixture for deterministic tests`
+- [x] Task 1: 修复 PytestCollectionWarning，为 TestCaseResult 添加 `__test__ = False`
+  - [x] 修改 eval/experiment_reporter.py
+  - [x] commit: `fix: add __test__ = False to TestCaseResult to suppress PytestCollectionWarning`
+- [x] Task 2: 修复 src/chunker.py 尾随空格（第 68 行）
+  - [x] 修改 src/chunker.py
+  - [x] commit: `fix: remove trailing whitespace in chunker.py`
+- [x] Task 3: 删除 tests/test_e2e_experiment.py 中重复的本地 `temp_project_dir` fixture
+  - [x] 修改 tests/test_e2e_experiment.py
+  - [x] commit: `refactor: remove duplicate temp_project_dir fixture from test_e2e_experiment.py`
+- [x] Task 4: 修改 tests/conftest.py mock_embedder fixture 使用固定向量
+  - [x] 修改 tests/conftest.py
+  - [x] commit: `refactor: use fixed vectors in mock_embedder fixture for deterministic tests`
 - [ ] Task 5: 清洗 CHANGELOG.md，移除已修复的 Known Issues
   - [ ] 修改 CHANGELOG.md
   - [ ] commit: `docs: clean up CHANGELOG.md by removing fixed Known Issues`
