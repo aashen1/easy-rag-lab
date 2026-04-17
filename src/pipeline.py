@@ -136,8 +136,28 @@ class RAGPipeline:
 
         logger.success("Vector index built successfully")
 
+    def close(self) -> None:
+        """Close the pipeline and release resources.
+
+        Closes the Qdrant client held by the indexer to prevent
+        resource leaks (file handles, WAL locks, etc.).
+        """
+        if hasattr(self, 'indexer') and self.indexer is not None:
+            self.indexer.close()
+            logger.info("RAGPipeline indexer closed")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
+
     def use_meal(self, meal_name: str):
         from src.meal import MealManager
+
+        if hasattr(self, 'indexer') and self.indexer is not None:
+            self.indexer.close()
 
         meal_manager = MealManager(self.config)
         self.meal_config = meal_manager.load_meal(meal_name)

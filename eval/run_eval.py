@@ -426,4 +426,6 @@ if __name__ == "__main__":
         meal_data_id=meal_data_id,
     )
 
+    pipeline.close()
+
     print_summary(summary)

@@ -746,6 +746,8 @@ def run_variant_evaluation(
             f"total={token_total.total_tokens:,}"
         )
 
+        pipeline.close()
+
         return variant_result
 
     except Exception as e:
