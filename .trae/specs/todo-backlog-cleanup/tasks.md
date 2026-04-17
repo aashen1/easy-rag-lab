@@ -12,29 +12,29 @@
 - [x] Task 4: 修改 tests/conftest.py mock_embedder fixture 使用固定向量
   - [x] 修改 tests/conftest.py
   - [x] commit: `refactor: use fixed vectors in mock_embedder fixture for deterministic tests`
-- [ ] Task 5: 清洗 CHANGELOG.md，移除已修复的 Known Issues
-  - [ ] 修改 CHANGELOG.md
-  - [ ] commit: `docs: clean up CHANGELOG.md by removing fixed Known Issues`
-- [ ] Task 6: 标注 test-review-suggestions.md 状态
-  - [ ] 逐项标注 11 条建议的状态
-  - [ ] commit: `docs: annotate status in test-review-suggestions.md`
-- [ ] Task 7: 标注 test-future-directions.md 状态
-  - [ ] 逐项标注 6 个方向的状态
-  - [ ] commit: `docs: annotate status in test-future-directions.md`
-- [ ] Task 8: 标注 02-code-quality-standards.md 状态
-  - [ ] 逐项标注 7 类问题的状态
-  - [ ] commit: `docs: annotate status in 02-code-quality-standards.md`
-- [ ] Task 9: 标注 04-known-bugs-functional-issues.md 状态
-  - [ ] 逐项标注 13 个问题的状态
-  - [ ] commit: `docs: annotate status in 04-known-bugs-functional-issues.md`
-- [ ] Task 10: 标注 05-open-source-readiness.md 状态
-  - [ ] 逐项标注阻塞项和建议项的状态
-  - [ ] commit: `docs: annotate status in 05-open-source-readiness.md`
-- [ ] Task 11: 全面更新 TODO.md，标记已完成项，批复延后项
-  - [ ] 修改 TODO.md
-  - [ ] commit: `docs: update TODO.md with completion status and deferral notes`
-- [ ] Task 12: 运行测试验证所有修改无回归
-  - [ ] `pixi run pytest tests/ -m "not integration" -v`
+- [x] Task 5: 清洗 CHANGELOG.md，移除已修复的 Known Issues
+  - [x] 修改 CHANGELOG.md
+  - [x] commit: `docs: clean up CHANGELOG.md by removing fixed Known Issues`
+- [x] Task 6: 标注 test-review-suggestions.md 状态
+  - [x] 逐项标注 11 条建议的状态
+  - [x] commit: `docs: annotate status in test-review-suggestions.md`
+- [x] Task 7: 标注 test-future-directions.md 状态
+  - [x] 逐项标注 6 个方向的状态
+  - [x] commit: `docs: annotate status in test-future-directions.md`
+- [x] Task 8: 标注 02-code-quality-standards.md 状态
+  - [x] 逐项标注 7 类问题的状态
+  - [x] commit: `docs: annotate status in 02-code-quality-standards.md`
+- [x] Task 9: 标注 04-known-bugs-functional-issues.md 状态
+  - [x] 逐项标注 13 个问题的状态
+  - [x] commit: `docs: annotate status in 04-known-bugs-functional-issues.md`
+- [x] Task 10: 标注 05-open-source-readiness.md 状态
+  - [x] 逐项标注阻塞项和建议项的状态
+  - [x] commit: `docs: annotate status in 05-open-source-readiness.md`
+- [x] Task 11: 全面更新 TODO.md，标记已完成项，批复延后项
+  - [x] 修改 TODO.md
+  - [x] commit: `docs: update TODO.md with completion status and deferral notes`
+- [x] Task 12: 运行测试验证所有修改无回归
+  - [x] `pixi run pytest tests/ -m "not integration" -v` — 全绿
 
 # Task Dependencies
 
