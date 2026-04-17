@@ -74,11 +74,11 @@
 - [ ] 目前的日志系统似乎并不是"应记尽记"的，比如pytest有些就不会体现在日志里（例如`pixi run pytest tests/ -m "not integration" -v`就不会被记录），分析一下怎么做符合最佳实践 📋 已安排（建议 plan 模式，需调研最佳实践）
 
 - [ ] 完成 [test-future-directions.md](.trae\documents\test-suite\test-future-directions.md) 📋 已安排（已标注状态：1项⏳待定，5项📋已安排，建议逐项 spec）
-- [ ] 全面更新文档，主要改善可读性，例如把README作为唯一且易读的文档入口，整理一些过时的文档，精简总的文档数目，重新组织目前文档的存放路径 📋 已安排（建议 spec 模式，规模大）
+- [x] 全面更新文档，主要改善可读性，例如把README作为唯一且易读的文档入口，整理一些过时的文档，精简总的文档数目，重新组织目前文档的存放路径 ✅ 2026-04-18 07:45:16
 - [ ] `exp_configs`当中一些模板yaml是不是有可能已经不符合现在版本了？等实验系统新版做好可以整个整理一下。📋 已安排（建议 spec 模式）
 - [ ] `pixi run pytest tests/ -m "integration" -v` 需要`10 passed, 385 deselected, 1 warning in 182.32s (0:03:02)`，用的时间有点久啊，是不是测试策略不对？看看是否有优化空间 📋 已安排（建议 plan 模式，需分析瓶颈）
 - [ ] 更新README和CLAUDE两份文件，同步到目前版本，并调整开发重心 📋 已安排（建议 plan 模式）
-- [ ] [04-known-bugs-functional-issues.md](.trae\code_reviews\v0.1.5\04-known-bugs-functional-issues.md) 核实并修复 📋 已安排（已标注状态：4项✅已修复，9项📋已安排，剩余项建议逐项 spec）
+- [x] [04-known-bugs-functional-issues.md](.trae\code_reviews\v0.1.5\04-known-bugs-functional-issues.md) 核实并修复 ✅ 2026-04-18 07:45:16（9项✅已修复/已改善，4项❌不修）
 
 - [ ] 核实 [05-open-source-readiness.md](.trae\code_reviews\v0.1.5\05-open-source-readiness.md) 📋 已安排（已标注状态：3项✅已修复，4项❌已弃用，其余📋已安排）
 - [ ] 实验资产包里有没有一并记录CLI里面打印的那个很漂亮的token summary，以及详细到每个问题消耗多少token的全部token消耗数据？一打眼好像都没看见 📋 已安排（需了解现有资产包结构）
