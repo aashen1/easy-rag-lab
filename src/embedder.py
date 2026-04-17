@@ -3,6 +3,7 @@ from typing import List
 import numpy as np
 import torch
 from loguru import logger
+from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
 
 
@@ -58,7 +59,7 @@ class Embedder:
             raise Exception(error_msg)
 
     def _encode_batch(
-        self, texts: List[str], batch_size: int, max_length: int = 512
+        self, texts: List[str], batch_size: int, max_length: int = 512, show_progress: bool = False
     ) -> np.ndarray:
         """Encode a list of texts into normalized CLS embeddings in batches.
 
@@ -69,6 +70,7 @@ class Embedder:
             texts: List of text strings to encode.
             batch_size: Number of texts per forward pass.
             max_length: Maximum token length for truncation. Defaults to 512.
+            show_progress: If True, display a tqdm progress bar over batches.
 
         Returns:
             A numpy array of shape ``(len(texts), embedding_dim)`` with
@@ -76,7 +78,10 @@ class Embedder:
         """
         all_embeddings = []
 
-        for i in range(0, len(texts), batch_size):
+        batch_range = range(0, len(texts), batch_size)
+        if show_progress:
+            batch_range = tqdm(batch_range, desc="Embedding", unit="batch")
+        for i in batch_range:
             batch_texts = texts[i : i + batch_size]
 
             encoded = self._tokenizer(
@@ -112,7 +117,7 @@ class Embedder:
         Args:
             texts: List of text strings to embed. All items must be strings.
             batch_size: Number of texts per encoding batch. Defaults to 32.
-            show_progress: Reserved for progress display (currently unused).
+            show_progress: If True, display a tqdm progress bar during embedding.
 
         Returns:
             A numpy array of shape ``(len(texts), embedding_dim)``. Returns an
@@ -134,7 +139,7 @@ class Embedder:
         try:
             logger.info(f"Embedding {len(texts)} texts with batch size {batch_size}")
 
-            embeddings = self._encode_batch(texts, batch_size)
+            embeddings = self._encode_batch(texts, batch_size, show_progress=show_progress)
 
             logger.success(f"Successfully embedded {len(texts)} texts")
 

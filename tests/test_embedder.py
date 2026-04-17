@@ -143,6 +143,23 @@ class TestEmbedder:
         assert "Failed to embed query" in str(exc_info.value)
 
     @pytest.mark.unit
+    def test_embed_texts_show_progress(self, embedder_setup):
+        mock_outputs = MagicMock()
+        mock_outputs.last_hidden_state = torch.randn(3, 10, 1024)
+        embedder_setup.mock_model.return_value = mock_outputs
+
+        mock_tokenizer = MagicMock()
+        mock_tokenizer.return_value = {
+            "input_ids": torch.randint(0, 1000, (3, 10)),
+            "attention_mask": torch.ones(3, 10),
+        }
+        embedder_setup.embedder._tokenizer = mock_tokenizer
+
+        texts = ["text1", "text2", "text3"]
+        embeddings = embedder_setup.embedder.embed_texts(texts, batch_size=32, show_progress=True)
+        assert embeddings.shape == (3, 1024)
+
+    @pytest.mark.unit
     def test_get_embedding_dimension(self, embedder_setup):
         dim = embedder_setup.embedder.get_embedding_dimension()
         assert dim == 1024
