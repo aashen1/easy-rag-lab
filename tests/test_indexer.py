@@ -125,3 +125,31 @@ class TestVectorIndexer:
         indexer = VectorIndexer(persist_dir=str(temp_project_dir / "data" / "vector_store"))
         indexer.close()
         mock_qdrant_client.close.assert_called_once()
+
+    @patch("src.indexer.QdrantClient")
+    def test_get_collection_info_error(self, mock_qdrant_class, mock_qdrant_client, temp_project_dir):
+        mock_qdrant_class.return_value = mock_qdrant_client
+        mock_qdrant_client.get_collection.side_effect = Exception("Collection not found")
+        indexer = VectorIndexer(persist_dir=str(temp_project_dir / "data" / "vector_store"))
+        info = indexer.get_collection_info()
+        assert info is None
+
+    @patch("src.indexer.QdrantClient")
+    def test_build_index_corrupted_jsonl(self, mock_qdrant_class, mock_qdrant_client, temp_project_dir):
+        mock_qdrant_class.return_value = mock_qdrant_client
+        chunks_dir = temp_project_dir / "data" / "chunks"
+        bad_file = chunks_dir / "corrupted.jsonl"
+        with open(bad_file, "w", encoding="utf-8") as f:
+            f.write("not valid json\n")
+        good_file = chunks_dir / "valid.jsonl"
+        with open(good_file, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"chunk_id": "c1", "text": "valid", "metadata": {}}) + "\n")
+        mock_embedder_inst = MagicMock()
+        mock_embedder_inst.get_embedding_dimension.return_value = 1024
+        mock_embedder_inst.embed_texts.return_value = np.ones((1, 1024), dtype=np.float32)
+        indexer = VectorIndexer(persist_dir=str(temp_project_dir / "data" / "vector_store"))
+        indexer.build_index(chunks_dir=str(chunks_dir), embedder=mock_embedder_inst)
+        mock_embedder_inst.embed_texts.assert_called_once()
+        texts_arg = mock_embedder_inst.embed_texts.call_args[0][0]
+        assert len(texts_arg) == 1
+        assert texts_arg[0] == "valid"
