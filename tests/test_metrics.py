@@ -1,6 +1,30 @@
 import pytest
 
-from eval.metrics import calculate_hit_rate, calculate_mrr, calculate_ndcg
+from eval.metrics import calculate_hit_rate, calculate_mrr, calculate_ndcg, normalize_source
+
+
+@pytest.mark.unit
+class TestNormalizeSource:
+
+    def test_md_path_with_directory(self):
+        assert normalize_source("annual_report/贵州茅台2023年年度报告.md") == "贵州茅台2023年年度报告"
+
+    def test_pdf_filename(self):
+        assert normalize_source("贵州茅台2023年年度报告.pdf") == "贵州茅台2023年年度报告"
+
+    def test_plain_name_no_extension(self):
+        assert normalize_source("贵州茅台2023年年度报告") == "贵州茅台2023年年度报告"
+
+    def test_nested_path(self):
+        assert normalize_source("a/b/c/report.md") == "report"
+
+    def test_dot_in_stem(self):
+        assert normalize_source("贵州茅台2023年年度报告_英文版_.pdf") == "贵州茅台2023年年度报告_英文版_"
+
+    def test_both_formats_produce_same_stem(self):
+        md_result = normalize_source("annual_report/贵州茅台2023年年度报告.md")
+        pdf_result = normalize_source("贵州茅台2023年年度报告.pdf")
+        assert md_result == pdf_result
 
 
 @pytest.mark.unit
@@ -36,6 +60,16 @@ class TestCalculateHitRate:
         expected = ["doc1", "doc2", "doc3"]
         assert calculate_hit_rate(retrieved, expected) == pytest.approx(2 / 3)
 
+    def test_cross_format_hit(self):
+        retrieved = ["annual_report/贵州茅台2023年年度报告.md"]
+        expected = ["贵州茅台2023年年度报告.pdf"]
+        assert calculate_hit_rate(retrieved, expected) == 1.0
+
+    def test_cross_format_no_hit(self):
+        retrieved = ["annual_report/其他报告.md"]
+        expected = ["贵州茅台2023年年度报告.pdf"]
+        assert calculate_hit_rate(retrieved, expected) == 0.0
+
 
 @pytest.mark.unit
 class TestCalculateMRR:
@@ -63,6 +97,11 @@ class TestCalculateMRR:
     def test_multiple_expected(self):
         retrieved = ["doc3", "doc1", "doc2"]
         expected = ["doc1", "doc2"]
+        assert calculate_mrr(retrieved, expected) == pytest.approx(1 / 2)
+
+    def test_cross_format_mrr(self):
+        retrieved = ["other.md", "annual_report/贵州茅台2023年年度报告.md"]
+        expected = ["贵州茅台2023年年度报告.pdf"]
         assert calculate_mrr(retrieved, expected) == pytest.approx(1 / 2)
 
 
@@ -109,3 +148,9 @@ class TestCalculateNDCG:
         dcg = 1.0 / 2
         ideal_dcg = 1.0 / 1
         assert score == pytest.approx(dcg / ideal_dcg)
+
+    def test_cross_format_ndcg(self):
+        retrieved = ["annual_report/贵州茅台2023年年度报告.md", "other.md"]
+        expected = ["贵州茅台2023年年度报告.pdf"]
+        score = calculate_ndcg(retrieved, expected)
+        assert score == 1.0
