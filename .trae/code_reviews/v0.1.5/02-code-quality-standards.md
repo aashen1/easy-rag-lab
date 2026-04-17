@@ -9,7 +9,7 @@
 
 ## 审查结论
 
-**整体评价：不合格。** 项目自身制定了严格的开发规范，但实际代码存在大量违规。最严重的问题是 4 个入口文件中残留的调试钩子代码。
+**整体评价：已修复。** 审查发现的所有问题均已处理（已修复或已评估后决定不修并注明理由）。
 
 ---
 
@@ -81,22 +81,22 @@ os.makedirs = _debug_makedirs
 
 ---
 
-## 2. 📋 已安排 — print() 调用违规（严重）
+## 2. ❌ 已弃用 — print() 调用违规（严重）
 
-> revert掉以后不知道还剩没剩，需要核实
+> 审计核实：调试钩子中的 print 已随钩子代码一起删除。剩余 172 处 print 全部为 CLI 面向用户的输出。`src/utils.py` 中的 loguru sink print 已改为 `sys.stdout.write`。
 
 ### 统计
 
-约 93 处 `print()` 调用分布在以下文件中：
+约 172 处 `print()` 调用分布在以下文件中（审计核实后数据）：
 
 | 文件 | 数量 | 性质 |
 |------|------|------|
-| `main.py` | ~50 处 | CLI 输出 + 调试钩子 |
-| `interactive.py` | ~12 处 | CLI 输出 + 调试钩子 |
-| `eval/run_experiment.py` | ~16 处 | CLI 输出 + 调试钩子 |
-| `eval/run_eval.py` | ~10 处 | CLI 输出 + 调试钩子 |
+| `main.py` | 65 处 | CLI 用户面向输出 |
+| `interactive.py` | 13 处 | CLI 用户面向输出 |
+| `eval/run_experiment.py` | 76 处 | CLI 用户面向输出 |
+| `eval/run_eval.py` | 13 处 | CLI 用户面向输出 |
 | `src/pipeline.py` | 4 处 | `__main__` 块中的脚本输出 |
-| `src/utils.py` | 1 处 | loguru console sink |
+| `src/utils.py` | 1 处 | loguru console sink — **已修复为 `sys.stdout.write`** |
 
 ### 分类分析
 
@@ -120,13 +120,15 @@ logger.add(sink=lambda msg: print(msg, end=""), ...)
 
 ### 修复建议
 
-1. 删除调试钩子中的 print（随调试代码一起）
+1. ~~删除调试钩子中的 print（随调试代码一起）~~ ✅ 已随钩子代码删除
 2. CLI 输出的 print 可保留，但建议在文件头部注释说明：`# CLI 面向用户的输出使用 print，与日志输出区分`
-3. `src/utils.py` 中的 print 改为 `sys.stdout.write`
+3. `src/utils.py` 中的 print 改为 `sys.stdout.write` ✅ 已修复
+
+**弃用理由：** CLI 面向用户的 172 处 print 替换为 loguru 会改变输出格式（添加时间戳、颜色、level 标记），破坏 CLI 用户体验。涉及 4 个文件、172 处修改，牵动太大，建议此条单开任务专门处理 CLI 输出规范化。
 
 ---
 
-## 3. 📋 已安排 — 公共函数缺少 docstring（中等）
+## 3. ✅ 已修复 — 公共函数缺少 docstring（中等）
 
 ### 统计
 
@@ -212,7 +214,7 @@ logger.add(sink=lambda msg: print(msg, end=""), ...)
 
 ---
 
-## 4. 📋 已安排 — 公共函数缺少类型标注（中等）
+## 4. ✅ 已修复 — 公共函数缺少类型标注（中等）
 
 | 文件 | 行号 | 函数 | 问题 |
 |------|------|------|------|
@@ -235,7 +237,7 @@ logger.add(sink=lambda msg: print(msg, end=""), ...)
 
 ---
 
-## 5. 📋 已安排 — IO 操作缺少 try/except（严重）
+## 5. ✅ 已修复 — IO 操作缺少 try/except（严重）
 
 项目规范要求"所有 IO 操作必须有 try/except，捕获异常后记录日志并优雅降级"，但以下位置未做异常处理：
 
@@ -253,31 +255,33 @@ logger.add(sink=lambda msg: print(msg, end=""), ...)
 
 注：`MealManager.load_meal`（第 521 行）的文件读取已在 try/except 中，合规。
 
+**修复方式：** 为全部 7 处 IO 操作添加了 try/except。读操作返回安全降级值（空字符串/None），可降级写操作返回 False，不可降级写操作（manifest 不一致）记录日志后 raise。
+
 ---
 
-## 6. 📋 已安排 — 代码风格问题（低）
+## 6. ✅ 已修复 — 代码风格问题（低）
 
 ### 重复导入
 
-| 文件 | 行号 | 问题 |
-|------|------|------|
-| `eval/run_eval.py` | 3, 40 | `from datetime import datetime` 重复导入 |
-| `eval/run_experiment.py` | 3, 46 | `from datetime import datetime` 重复导入 |
+| 文件 | 行号 | 问题 | 状态 |
+|------|------|------|------|
+| `eval/run_eval.py` | 3, 40 | `from datetime import datetime` 重复导入 | ✅ 已修复（审计发现已无重复） |
+| `eval/run_experiment.py` | 3, 46 | `from datetime import datetime` 重复导入 | ✅ 已修复（审计发现已无重复） |
 
 ### 函数内部导入
 
-| 文件 | 行号 | 导入内容 |
-|------|------|----------|
-| `eval/run_experiment.py` | 507 | `import yaml` |
-| `eval/run_experiment.py` | 578 | `import json` |
-| `eval/run_experiment.py` | 660 | `import json` |
-| `eval/run_experiment.py` | 734 | `import json` |
-| `eval/run_experiment.py` | 775 | `import json` |
-| `eval/run_experiment.py` | 861 | `from src.token_tracker import DetailedTokenUsage, TokenRecord` |
+| 文件 | 行号 | 导入内容 | 状态 |
+|------|------|----------|------|
+| `eval/run_experiment.py` | 129 | `import yaml` | ❌ 保留（延迟加载，避免模块加载时触发依赖） |
+| `eval/run_experiment.py` | 434 | `from src.indexer import VectorIndexer` | ❌ 保留（避免循环依赖） |
+| `eval/run_experiment.py` | 822 | `from src.token_tracker import ...` | ❌ 保留（延迟加载） |
+| `eval/run_experiment.py` | 1474-1475 | `import tempfile / import yaml` | ❌ 保留（延迟加载） |
+
+**函数级 import 保留理由：** 这些函数级 import 是合理的工程实践，用于避免循环依赖或延迟加载重型模块。强制移到模块顶部可能引入循环导入或不必要的启动依赖。
 
 ### 尾随空格
 
-`src/chunker.py` 第 68 行末尾有多余空格。
+`src/chunker.py` 第 68 行末尾有多余空格。✅ 已修复。
 
 ---
 
