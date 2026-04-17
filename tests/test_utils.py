@@ -132,6 +132,16 @@ class TestGetLlmConfig:
         assert result["api_key"] == "env-key"
         assert result["base_url"] == "https://env.url.com/anthropic"
 
+    @patch("src.utils.os.getenv")
+    def test_api_key_missing_raises_error(self, mock_getenv):
+        mock_getenv.side_effect = lambda key, default=None: {
+            "LLM_MODEL_ID": "test-model",
+            "LLM_BASE_URL": "https://api.test.com/",
+        }.get(key, default)
+        config = {"llm_presets": {"default": {"temperature": 0.5, "max_tokens": 2048}}}
+        with pytest.raises(ValueError, match="Required environment variable"):
+            get_llm_config(config)
+
 
 @pytest.mark.unit
 class TestGetEnvVar:
