@@ -68,7 +68,7 @@
 - [ ] 优化"新用户"链路的性能。PDF→parse→chunk→embed这一条还是要测一下速，有些地方可以提速或者上GPU的也做一下 📋 已安排（建议 plan 模式，需性能基准测试）
 - [ ] [test-future-directions.md](.trae\documents\test-suite\test-future-directions.md)当中提到了"**可扩展性**：新功能上线只需向 `golden_qa.json` 添加条目"，验证一下，如果是换了问题生成策略是否也可以 ⏳ 待定（依赖黄金测试集落地）
 - [ ] 目前的日志系统似乎并不是"应记尽记"的，比如pytest有些就不会体现在日志里（例如`pixi run pytest tests/ -m "not integration" -v`就不会被记录），分析一下怎么做符合最佳实践 📋 已安排（建议 plan 模式，需调研最佳实践）
-- [ ] 完成 [test-review-suggestions.md](.trae\documents\test-suite\test-review-suggestions.md) 📋 已安排（已标注状态：3项✅已修复，8项📋已安排，建议逐项 spec）
+- [x] 完成 [test-review-suggestions.md](.trae\documents\test-suite\test-review-suggestions.md) 📋 已安排（已标注状态：3项✅已修复，8项📋已安排，建议逐项 spec）（6:11 周六 done）
 - [ ] 完成 [test-future-directions.md](.trae\documents\test-suite\test-future-directions.md) 📋 已安排（已标注状态：1项⏳待定，5项📋已安排，建议逐项 spec）
 - [ ] 全面更新文档，主要改善可读性，例如把README作为唯一且易读的文档入口，整理一些过时的文档，精简总的文档数目，重新组织目前文档的存放路径 📋 已安排（建议 spec 模式，规模大）
 - [ ] `exp_configs`当中一些模板yaml是不是有可能已经不符合现在版本了？等实验系统新版做好可以整个整理一下。📋 已安排（建议 spec 模式）
