@@ -59,3 +59,8 @@
 - [ ] 全面更新文档，主要改善可读性，例如把README作为唯一且易读的文档入口，整理一些过时的文档，精简总的文档数目，重新组织目前文档的存放路径
 - [ ] `exp_configs`当中一些模板yaml是不是有可能已经不符合现在版本了？等实验系统新版做好可以整个整理一下。
 - [ ] `pixi run pytest tests/ -m "integration" -v` 需要`10 passed, 385 deselected, 1 warning in 182.32s (0:03:02)`，用的时间有点久啊，是不是测试策略不对？看看是否有优化空间
+- [ ]  [02-code-quality-standards.md](.trae\code_reviews\v0.1.5\02-code-quality-standards.md) 优化代码
+- [ ] 更新README和CLAUDE两份文件，同步到目前版本，并调整开发重心
+- [ ]  [04-known-bugs-functional-issues.md](.trae\code_reviews\v0.1.5\04-known-bugs-functional-issues.md) 核实并修复，不过这篇文档是根据CHANGELOG写的，里面很多可能已经修了，看来CHANGELOG还是不要写什么待办，下次提醒下AI
+- [ ] 把CHANGELOG清洗一下，只写做了的，不写bug和TODO
+- [ ] 核实 [05-open-source-readiness.md](.trae\code_reviews\v0.1.5\05-open-source-readiness.md) 
