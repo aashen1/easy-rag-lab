@@ -37,7 +37,49 @@ Path ends with output_dir
 
 1:39 周六
 
-有点累，排查半天好像毫无进展。
+有点累，在procmon这边排查半天好像毫无进展。
+
+1:43 周六
+
+难绷，原来这个钩子代码设置的是根目录下面的单独一个log文件，名字叫`output_dir_debug.log`我到现在才反应过来，之前procmon筛选的时候都没意识到这个文件是干啥的。
+
+1:44 周六
+
+把日志丢给TRAE，移动了一行代码，但经过测试没有解决问题，更糟糕的是现在连debug log也不产生了。
+
+1:54 周六
+
+还好，追问了一下AI，帮我找到了一个钩子没有覆盖的创建方式，修复之后，
+
+问题终于解决了。
 
 
 
+# AI总结
+
+让我重新排查。既然日志不生成了，说明可能不是通过 `os.mkdir` 创建的，而是通过 `pathlib.Path.mkdir`。让我检查 debug hook 代码：
+
+发现问题了！debug hook 只 hook 了 `os.mkdir` 和 `os.makedirs`，但 `src/utils.py` 中使用的是 `pathlib.Path.mkdir`！让我检查：
+
+**修复完成！**
+
+## 问题根源
+
+幽灵文件夹 `output_dir` 由两个测试用例创建：
+
+1. `tests/test_parser.py:51` - `test_parse_all_pdfs_input_dir_not_found`
+2. `tests/test_chunker.py:65` - `test_process_parsed_files_input_dir_not_found`
+
+两个函数都有相同的 bug：**先创建输出目录，后检查输入目录是否存在**。
+
+## 修复内容
+
+| 文件                                                         | 函数                   | 修改                           |
+| ------------------------------------------------------------ | ---------------------- | ------------------------------ |
+| [src/parser.py:41-48](file:///b:/project/ash-easy-rag/src/parser.py#L41-L48) | `parse_all_pdfs`       | 先检查输入目录，再创建输出目录 |
+| [src/chunker.py:86-93](file:///b:/project/ash-easy-rag/src/chunker.py#L86-L93) | `process_parsed_files` | 先检查输入目录，再创建输出目录 |
+
+## 结果
+
+- ✅ 所有 32 个测试通过
+- ✅ 幽灵文件夹 `output_dir` 不再被错误创建
