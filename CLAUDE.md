@@ -8,9 +8,35 @@
 
 ## 开发规范
 
-### 版本控制
-- 每个开发步骤独立提交，commit message 须清晰描述变更内容
-- **commit message 仅允许英文 ASCII 字符**，遵循 Conventional Commits 格式（如 `feat:`、`fix:`、`docs:`）
+### 版本控制 - CRITICAL
+
+**核心原则：完成任何逻辑工作单元后立即提交，绝不累积多个修改再提交**
+
+**⚠️ 只提交自己做的改动：**
+- 提交前必须运行 `git status` 和 `git diff` 确认
+- **只 stage 自己在本次工作中修改的文件**
+- **禁止使用 `git add -A` 或 `git add .`**（会包含他人的改动）
+- 使用精确命令：`git add path/to/file1.py path/to/file2.py`
+- 或使用交互式：`git add -p`
+
+- ✅ 每完成一个 todo 项 → 立即提交
+- ✅ 每实现一个函数/方法 → 立即提交  
+- ✅ 每创建并通过一个测试 → 立即提交
+- ✅ 每修复一个 bug → 立即提交
+- ✅ 每修改配置/文档 → 立即提交
+
+**适用所有工作模式**（Agent/Plan/Spec）：
+- 每个步骤/任务完成后立即提交
+- 禁止将所有实现累积到最后一次性提交
+- **宁多勿少：过度提交优于提交不足**
+
+- **commit message 仅允许英文 ASCII 字符**，遵循 Conventional Commits 格式：
+  - `feat: add user authentication`
+  - `fix: resolve null pointer in parser`
+  - `test: add unit tests for validator`
+  - 使用祈使语气（"add" 而非 "added"）
+
+**自我检查机制**：开始新工作前，检查是否有未提交的修改。如有，先提交再继续。
 
 ### 测试
 - 使用 Red/Green TDD 进行开发
