@@ -8,6 +8,32 @@
 
 ---
 
+## v0.1.7 (2026-04-18)
+
+### 版本主题
+
+评测系统增强
+
+### 关键决策
+
+- 采用文档级问题生成策略，与 chunk 参数解耦
+- 引入生成质量指标（Faithfulness, Answer Relevancy）
+- 改进检索指标实现，采用业界标准定义
+
+### 交付成果
+
+- **文档级问题生成**：基于完整 MD 文档生成真实场景问题，支持 6 种问题类型
+- **生成质量指标**：Faithfulness（忠实度）、Answer Relevancy（回答相关性）
+- **检索指标改进**：Hit Rate 采用业界标准定义，NDCG 支持多级相关性
+- **真实性检查**：过滤学术化表述，确保问题贴近用户场景
+- **向后兼容**：旧策略保留并显示 deprecation 警告
+
+### 版本验收
+
+- [交付对照](archive/specs/new-evaluation-system/outcome.md)
+
+---
+
 ## v0.1.6 (2026-04-18)
 
 ### 版本主题
@@ -99,12 +125,12 @@ MVP RAG 基础链路
 
 ### v0.2.0（计划中）
 
-- 实现生成质量指标（Faithfulness, Answer Relevancy）
 - 混合检索（BM25 + 向量）
 - Reranker 重排
+- 语义分块
 
 ### v0.3.0（计划中）
 
-- 语义分块
 - 查询改写
 - Prompt 工程优化
+- 更多生成质量指标（Context Precision 等）
