@@ -358,8 +358,12 @@ def prepare_test_sets(
         strategy = test_set_config.get("strategy", "factual")
         num_questions = test_set_config.get("num_questions", 20)
         seed = test_set_config.get("seed")
+        type_distribution = test_set_config.get("type_distribution")
 
-        filename = f"auto_{strategy}_n{num_questions}"
+        if strategy == "document":
+            filename = f"document_level_n{num_questions}"
+        else:
+            filename = f"auto_{strategy}_n{num_questions}"
         test_set_path = test_sets_dir / f"{filename}.json"
 
         if test_set_path.exists():
@@ -394,14 +398,23 @@ def prepare_test_sets(
             generator = TestSetGenerator(system_config)
             llm_preset = exp_config.evaluation.get("llm_preset", "default")
 
-            test_set_data = generator.generate_test_set(
-                meal_name=meal_name,
-                strategy=strategy,
-                num_questions=num_questions,
-                llm_preset=llm_preset,
-                seed=seed,
-                token_tracker=token_tracker,
-            )
+            if strategy == "document":
+                test_set_data = generator.generate_document_based_questions(
+                    meal_name=meal_name,
+                    num_questions=num_questions,
+                    type_distribution=type_distribution,
+                    llm_preset=llm_preset,
+                    token_tracker=token_tracker,
+                )
+            else:
+                test_set_data = generator.generate_test_set(
+                    meal_name=meal_name,
+                    strategy=strategy,
+                    num_questions=num_questions,
+                    llm_preset=llm_preset,
+                    seed=seed,
+                    token_tracker=token_tracker,
+                )
 
             test_sets.append(test_set_data)
             logger.success(f"Test set '{filename}' generated ({len(test_set_data.get('questions', []))} questions)")

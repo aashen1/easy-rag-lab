@@ -8,15 +8,15 @@ data:
     seed: 42
 
 test_sets:
-  - strategy: "factual"
-    num_questions: 30
-    seed: 200
-  - strategy: "boundary"
-    num_questions: 25
-    seed: 201
-  - strategy: "multi_hop"
-    num_questions: 15
-    seed: 202
+  - strategy: "document"
+    num_questions: 50
+    type_distribution:
+      single_fact: 0.30
+      multi_fact: 0.25
+      reasoning: 0.15
+      comparative: 0.15
+      missing: 0.10
+      irrelevant: 0.05
 
 variants:
   - name: "chunk_256_overlap_0"
