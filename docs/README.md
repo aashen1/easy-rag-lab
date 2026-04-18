@@ -18,7 +18,8 @@
 
 1. [版本演进年轮](version-history.md) — 项目版本迭代历程
 2. [待做事项总表](backlog.md) — 项目"卫生情况"总入口
-3. [配置参考](config-reference.md) — config.yaml 完整说明
+3. [抛接球年轮方法论](methodology.md) — AI 时代的版本演进管理方法论
+4. [配置参考](config-reference.md) — config.yaml 完整说明
 
 ### 使用指南
 
@@ -40,6 +41,7 @@ docs/
 ├── README.md                  # 本文档（导航索引）
 ├── version-history.md         # 版本演进年轮
 ├── backlog.md                 # 待做事项总表
+├── methodology.md             # 抛接球年轮方法论
 ├── inbox-log.md               # 收件箱处理日志
 │
 ├── getting-started.md         # 快速上手
