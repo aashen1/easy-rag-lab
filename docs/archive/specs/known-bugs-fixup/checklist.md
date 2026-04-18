@@ -1,0 +1,12 @@
+- [x] `detect_document_category` utility function exists in `src/utils.py` and handles annual_report, research_report, and unknown categories
+- [x] `src/parser.py` no longer contains inline category detection logic (uses utility function instead)
+- [x] `src/chunker.py` no longer contains inline category detection logic (uses utility function instead)
+- [x] Unit tests for `detect_document_category` pass in `tests/test_utils.py`
+- [x] `Embedder.embed_texts()` displays tqdm progress bar when `show_progress=True`
+- [x] `Embedder.embed_texts()` shows no progress bar when `show_progress=False` (default)
+- [x] `run_evaluation()` accepts and applies `metrics_config` parameter for dynamic metric selection
+- [x] Backward compatibility: calling `run_evaluation()` without `metrics_config` calculates all three default metrics
+- [x] Review document `.trae/code_reviews/v0.1.5/04-known-bugs-functional-issues.md` accurately reflects current status of all 13 issues
+- [x] Issues #6, #7, #8, #9 have ❌ 不修 status with documented reasons
+- [x] TODO.md line 77 is checked off with completion timestamp
+- [x] All changes committed with English ASCII commit messages
