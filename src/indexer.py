@@ -258,7 +258,7 @@ class VectorIndexer:
                 "status": info.status.value,
             }
         except Exception as e:
-            logger.error(f"Failed to get collection info: {str(e)}")
+            logger.warning(f"Collection not found or unavailable: {self.collection_name} ({str(e)})")
             return None
 
     def delete_collection(self) -> None:
