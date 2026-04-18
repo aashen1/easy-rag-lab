@@ -4,12 +4,18 @@ import time
 import random
 import json
 from loguru import logger
-from eval.metrics import calculate_hit_rate, calculate_mrr, calculate_ndcg
+from eval.metrics import (
+    calculate_hit_rate,
+    calculate_mrr,
+    calculate_ndcg,
+    calculate_faithfulness,
+    calculate_answer_relevancy,
+)
 from src.experiment import ExperimentConfig, load_experiment_config, merge_config
 from src.meal import MealManager, MealStatus
 from src.sampler import SamplingConfig
 from src.pipeline import RAGPipeline
-from src.utils import load_config, setup_logger
+from src.utils import load_config, setup_logger, get_llm_config
 import sys
 from pathlib import Path
 
@@ -18,6 +24,7 @@ sys.path.insert(0, str(project_root))
 
 
 DEFAULT_RETRIEVAL_METRICS = ["hit_rate", "mrr", "ndcg"]
+DEFAULT_GENERATION_METRICS = ["faithfulness", "answer_relevancy"]
 
 
 def run_evaluation(
@@ -27,6 +34,8 @@ def run_evaluation(
     sample_size: int = None,
     meal_data_id: str = None,
     metrics_config: Optional[List[str]] = None,
+    generation_metrics_config: Optional[List[str]] = None,
+    llm_config: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """Run evaluation on test data using the provided RAG pipeline.
 
@@ -38,12 +47,18 @@ def run_evaluation(
         meal_data_id: Optional meal data identifier.
         metrics_config: Optional list of retrieval metric names to calculate.
             Defaults to ["hit_rate", "mrr", "ndcg"] when None.
+        generation_metrics_config: Optional list of generation metric names to calculate.
+            Supports "faithfulness" and "answer_relevancy". Defaults to empty list.
+        llm_config: Optional LLM configuration for generation metrics.
+            Must contain api_key, base_url, and model_name keys.
 
     Returns:
         Dictionary containing evaluation summary with results and metrics.
     """
     if metrics_config is None:
         metrics_config = list(DEFAULT_RETRIEVAL_METRICS)
+    if generation_metrics_config is None:
+        generation_metrics_config = []
     test_data_path = Path(test_data_path)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -91,6 +106,42 @@ def run_evaluation(
             if "ndcg" in metrics_config:
                 retrieval["ndcg"] = calculate_ndcg(retrieved_sources, expected_sources, k=5)
 
+            generation = {}
+            if generation_metrics_config and llm_config:
+                contexts = response.get("contexts", [])
+                answer = response.get("answer", "")
+                question = test_case.get("question", "")
+
+                if "faithfulness" in generation_metrics_config:
+                    try:
+                        logger.info(f"Calculating faithfulness for test case {test_case['id']}")
+                        faithfulness_score = calculate_faithfulness(
+                            answer=answer,
+                            contexts=contexts,
+                            api_key=llm_config["api_key"],
+                            base_url=llm_config["base_url"],
+                            model_name=llm_config["model_name"],
+                        )
+                        generation["faithfulness"] = faithfulness_score
+                    except Exception as e:
+                        logger.error(f"Failed to calculate faithfulness: {str(e)}")
+                        generation["faithfulness"] = None
+
+                if "answer_relevancy" in generation_metrics_config:
+                    try:
+                        logger.info(f"Calculating answer relevancy for test case {test_case['id']}")
+                        relevancy_score = calculate_answer_relevancy(
+                            question=question,
+                            answer=answer,
+                            api_key=llm_config["api_key"],
+                            base_url=llm_config["base_url"],
+                            model_name=llm_config["model_name"],
+                        )
+                        generation["answer_relevancy"] = relevancy_score
+                    except Exception as e:
+                        logger.error(f"Failed to calculate answer relevancy: {str(e)}")
+                        generation["answer_relevancy"] = None
+
             result = {
                 "id": test_case["id"],
                 "question": test_case["question"],
@@ -100,6 +151,9 @@ def run_evaluation(
                 "time_seconds": case_time,
             }
 
+            if generation:
+                result["generation"] = generation
+
             metric_parts = []
             if "hit_rate" in retrieval:
                 metric_parts.append(f"HR={retrieval['hit_rate']:.2f}")
@@ -107,6 +161,11 @@ def run_evaluation(
                 metric_parts.append(f"MRR={retrieval['mrr']:.2f}")
             if "ndcg" in retrieval:
                 metric_parts.append(f"NDCG={retrieval['ndcg']:.2f}")
+            if generation:
+                if "faithfulness" in generation and generation["faithfulness"] is not None:
+                    metric_parts.append(f"FA={generation['faithfulness']:.2f}")
+                if "answer_relevancy" in generation and generation["answer_relevancy"] is not None:
+                    metric_parts.append(f"AR={generation['answer_relevancy']:.2f}")
             metric_str = ", ".join(metric_parts)
             logger.success(
                 f"Test case {test_case['id']}: {metric_str} ({case_time:.2f}s)"
@@ -137,6 +196,18 @@ def run_evaluation(
             else:
                 retrieval_metrics[f"avg_{metric_name}"] = 0
 
+    generation_metrics = {}
+    valid_generation_results = [r for r in results if "generation" in r and r["generation"]]
+    if valid_generation_results:
+        for metric_name in generation_metrics_config:
+            values = [
+                r["generation"][metric_name]
+                for r in valid_generation_results
+                if metric_name in r["generation"] and r["generation"][metric_name] is not None
+            ]
+            if values:
+                generation_metrics[f"avg_{metric_name}"] = sum(values) / len(values)
+
     summary = {
         "timestamp": datetime.now().isoformat(),
         "meal_data_id": meal_data_id,
@@ -146,6 +217,9 @@ def run_evaluation(
         "retrieval_metrics": retrieval_metrics,
         "results": results,
     }
+
+    if generation_metrics:
+        summary["generation_metrics"] = generation_metrics
 
     output_file = output_dir / "baseline_report.json"
     with open(output_file, "w", encoding="utf-8") as f:
@@ -181,6 +255,17 @@ def print_summary(summary: Dict[str, Any]) -> None:
     for key, value in summary["retrieval_metrics"].items():
         label = label_map.get(key, key)
         print(f"  {label}: {value:.4f}")
+
+    if summary.get("generation_metrics"):
+        print("\nGeneration Metrics:")
+        generation_label_map = {
+            "avg_faithfulness": "Faithfulness",
+            "avg_answer_relevancy": "Answer Relevancy",
+        }
+        for key, value in summary["generation_metrics"].items():
+            label = generation_label_map.get(key, key)
+            print(f"  {label}: {value:.4f}")
+
     print("=" * 60)
 
 
@@ -414,8 +499,16 @@ if __name__ == "__main__":
             logger.success("Index built successfully")
 
     metrics_config = None
+    generation_metrics_config = None
+    llm_config_for_metrics = None
+
     if args.exp_config and exp_config:
         metrics_config = exp_config.evaluation.get("metrics", {}).get("retrieval")
+        generation_metrics_config = exp_config.evaluation.get("metrics", {}).get("generation")
+
+        if generation_metrics_config:
+            preset_name = exp_config.evaluation.get("llm_preset", args.llm_preset)
+            llm_config_for_metrics = get_llm_config(config, preset_name)
 
     summary = run_evaluation(
         pipeline=pipeline,
@@ -423,6 +516,8 @@ if __name__ == "__main__":
         output_dir=output_dir,
         meal_data_id=meal_data_id,
         metrics_config=metrics_config,
+        generation_metrics_config=generation_metrics_config,
+        llm_config=llm_config_for_metrics,
     )
 
     pipeline.close()
