@@ -7,28 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- Sampling System with three modes (count/pages/ratio)
-- Meal Data Management System
-- Test Set Generator with LLM-assisted question generation
-- Experiment System with multi-variant comparison
-- Token Tracking System
-- ~220+ test cases
-
-### Changed
-
-- Sampling now applies end-to-end across all pipeline stages
-- Unified CLI entry point covering meal management, test generation, and interactive QA
-
-### Fixed
-
-- Fix invalid strategy name in chunk_comparison.yaml
-- Fix Generator to use Anthropic API `system` parameter
-- Fix RAGPipeline to properly release VectorIndexer resources
-- Fix Meal total_chunks off-by-one error
+_No unreleased changes yet._
 
 ## [0.1.6] - 2026-04-18
+
+Project hygiene overhaul — documentation system restructure and code quality improvements.
 
 ### Added
 
@@ -60,6 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.5] - 2026-04-18
 
+Test suite redesign — comprehensive testing framework with golden tests and best practices.
+
 ### Added
 
 - Comprehensive test suite with ~220+ test cases
@@ -89,6 +74,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.4] - 2026-04-17
 
+Token tracking system — comprehensive LLM token consumption monitoring across all scenarios.
+
 ### Added
 
 - Token Tracking System with DetailedTokenUsage tracking
@@ -104,6 +91,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Backward compatible with optional tracker parameter
 
 ## [0.1.3] - 2026-04-17
+
+Automated experiment system — config-driven evaluation pipeline for multi-variant comparison.
 
 ### Added
 
@@ -133,6 +122,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.2] - 2026-04-16
 
+Meal system — reproducible evaluation sets via content-addressable dataset management.
+
 ### Added
 
 - Meal Data Management System for reproducible evaluation
@@ -155,6 +146,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.1] - 2026-04-16
 
+Sampling system — configurable PDF sampling to speed up evaluation iteration.
+
 ### Added
 
 - Sampling System with multi-mode PDF sampling
@@ -170,6 +163,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Parser now uses pdf_files parameter instead of sample_size
 
 ## [0.1.0] - 2026-04-16
+
+Core RAG pipeline — foundational document processing and retrieval system.
 
 ### Added
 
