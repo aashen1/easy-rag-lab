@@ -10,6 +10,7 @@ from src.generator import Generator
 from src.hybrid_retriever import HybridRetriever
 from src.indexer import VectorIndexer
 from src.parser import parse_all_pdfs
+from src.query_rewriter import QueryRewriter
 from src.reranker import Reranker
 from src.retriever import Retriever
 from src.sampler import SamplingConfig, determine_sample
@@ -112,6 +113,21 @@ class RAGPipeline:
                 device=reranker_config.get("device", "cuda"),
             )
             self.reranker_top_n = reranker_config.get("top_n", top_k)
+
+        self.query_rewriter: Optional[QueryRewriter] = None
+        rewrite_config = retrieval_config.get("query_rewrite", {})
+        if rewrite_config.get("enabled", False):
+            llm_config = get_llm_config(self.config)
+            self.query_rewriter = QueryRewriter(
+                strategy=rewrite_config.get("strategy", "hyde"),
+                llm_model_name=llm_config["model_name"],
+                llm_api_key=llm_config["api_key"],
+                llm_base_url=llm_config["base_url"],
+                llm_temperature=llm_config.get("temperature", 0.0),
+                llm_max_tokens=llm_config.get("max_tokens", 512),
+                num_queries=rewrite_config.get("num_queries", 3),
+                token_tracker=self.token_tracker,
+            )
 
     def build_index(
         self,
@@ -318,15 +334,67 @@ class RAGPipeline:
         try:
             logger.info(f"Processing query: {question[:50]}...")
 
+            retrieval_query = question
+            if self.query_rewriter is not None:
+                logger.debug("Rewriting query...")
+                rewrite_result = self.query_rewriter.rewrite(question)
+
+                if rewrite_result["strategy"] == "hyde":
+                    retrieval_query = rewrite_result["rewritten"]
+                    logger.info(f"HyDE: using hypothetical answer for retrieval")
+                elif rewrite_result["strategy"] == "multi_query":
+                    all_results = []
+                    seen_ids = set()
+                    for sub_query in rewrite_result["rewritten"]:
+                        if self.retrieval_method == "hybrid" and self.hybrid_retriever is not None:
+                            sub_results = self.hybrid_retriever.retrieve(sub_query)
+                        elif self.retrieval_method == "bm25" and self.bm25_retriever is not None:
+                            sub_results = self.bm25_retriever.retrieve(
+                                sub_query, top_k=self.config["retrieval"]["top_k"]
+                            )
+                        else:
+                            sub_results = self.retriever.retrieve(sub_query)
+                        for r in sub_results:
+                            if r["chunk_id"] not in seen_ids:
+                                seen_ids.add(r["chunk_id"])
+                                all_results.append(r)
+
+                    all_results.sort(key=lambda x: x.get("score", 0), reverse=True)
+                    results = all_results[:self.config["retrieval"]["top_k"]]
+
+                    if self.reranker is not None and results:
+                        logger.debug("Reranking multi-query results...")
+                        results = self.reranker.rerank(
+                            question, results, top_n=self.reranker_top_n
+                        )
+
+                    contexts = [r["text"] for r in results]
+                    scores = [r.get("rerank_score", r["score"]) if "rerank_score" in r else r["score"] for r in results]
+                    sources = [r["metadata"].get("source", "Unknown") for r in results]
+
+                    logger.debug("Generating answer...")
+                    answer = self.generator.generate(question, contexts)
+
+                    response = {"question": question, "answer": answer}
+                    if return_contexts:
+                        response["contexts"] = contexts
+                        response["scores"] = scores
+                        response["sources"] = sources
+                    if self.generator.last_token_usage is not None:
+                        response["token_usage"] = self.generator.last_token_usage.to_dict()
+
+                    logger.success("Query processed successfully (multi-query)")
+                    return response
+
             logger.debug("Retrieving relevant contexts...")
             if self.retrieval_method == "hybrid" and self.hybrid_retriever is not None:
-                results = self.hybrid_retriever.retrieve(question)
+                results = self.hybrid_retriever.retrieve(retrieval_query)
             elif self.retrieval_method == "bm25" and self.bm25_retriever is not None:
                 results = self.bm25_retriever.retrieve(
-                    question, top_k=self.config["retrieval"]["top_k"]
+                    retrieval_query, top_k=self.config["retrieval"]["top_k"]
                 )
             else:
-                results = self.retriever.retrieve(question)
+                results = self.retriever.retrieve(retrieval_query)
 
             if self.reranker is not None and results:
                 logger.debug("Reranking results...")

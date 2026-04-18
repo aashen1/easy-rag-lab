@@ -1,0 +1,78 @@
+name: "query_rewrite_comparison"
+description: "查询改写对比实验 - 对比HyDE和Multi-Query两种查询改写策略对问答质量的影响"
+
+data:
+  meal: "meal_query_rewrite_comparison"
+  create_if_missing:
+    sample_ratio: 0.2
+    seed: 42
+
+test_sets:
+  - strategy: "factual"
+    num_questions: 30
+    seed: 500
+  - strategy: "boundary"
+    num_questions: 20
+    seed: 501
+  - strategy: "multi_hop"
+    num_questions: 15
+    seed: 502
+
+variants:
+  - name: "no_rewrite"
+    description: "无查询改写（基线）"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        top_k: 5
+        query_rewrite:
+          enabled: false
+
+  - name: "hyde"
+    description: "HyDE - 假设性文档嵌入"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        top_k: 5
+        query_rewrite:
+          enabled: true
+          strategy: "hyde"
+
+  - name: "multi_query_3"
+    description: "Multi-Query - 3个子查询"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        top_k: 5
+        query_rewrite:
+          enabled: true
+          strategy: "multi_query"
+          num_queries: 3
+
+  - name: "hyde_hybrid"
+    description: "HyDE + 混合检索"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 5
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+        query_rewrite:
+          enabled: true
+          strategy: "hyde"
+
+evaluation:
+  llm_preset: "default"
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+
+llm:
+  question_generation: "sonnet"
+  answering: "default"

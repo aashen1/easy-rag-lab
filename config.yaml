@@ -81,6 +81,10 @@ retrieval:
     model_name: "BAAI/bge-reranker-large"  # Cross-encoder model
     device: "cuda"          # Reranker device
     top_n: 3                # Number of results to keep after reranking
+  query_rewrite:
+    enabled: false          # Enable query rewriting
+    strategy: "hyde"        # Strategy: "hyde" or "multi_query"
+    num_queries: 3          # Number of sub-queries for multi_query strategy
 
 # ============================================================
 # 实验管理配置
