@@ -29,6 +29,8 @@
 - [评测指标详解](guides/evaluation-metrics.md)
 - [Token 追踪](guides/token-tracking.md)
 - [测试运行指南](guides/testing.md)
+- [RAG 泛超参数使用指南](guides/hyperparameter-guide.md)
+- [RAG 优化实现与测试保障](guides/rag-optimization-implementation.md)
 
 ### 故障排查
 

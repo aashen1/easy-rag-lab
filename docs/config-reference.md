@@ -2,7 +2,7 @@
 
 <!-- status: active -->
 
-> 最后更新: 2026-04-18
+> 最后更新: 2026-04-19
 
 本文档说明 `config.yaml` 中所有配置项的含义和默认值。
 
@@ -101,9 +101,25 @@ parser:
 chunker:
   input_dir: "data/parsed"   # Markdown 输入目录
   output_dir: "data/chunks"  # JSONL 输出目录
+  strategy: "fixed"          # 分块策略: "fixed" 或 "semantic"
   chunk_size: 512            # 每块最大 token 数
-  chunk_overlap: 0           # 相邻块重叠 token 数
+  chunk_overlap: 0           # 相邻块重叠 token 数（fixed 策略）
+  semantic:                  # 语义分块参数（semantic 策略）
+    similarity_threshold: 0.5    # 断点相似度阈值
+    breakpoint_percentile: null  # 百分位阈值（null = 禁用）
+    min_chunk_size: 100          # 最小 chunk token 数
 ```
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `strategy` | `"fixed"` | 分块策略。`"fixed"` 为固定 token 数分块，`"semantic"` 为基于语义相似度的断点分块 |
+| `chunk_size` | `512` | 每块最大 token 数 |
+| `chunk_overlap` | `0` | 相邻块重叠 token 数（仅 fixed 策略生效） |
+| `semantic.similarity_threshold` | `0.5` | 语义断点的余弦相似度阈值（仅 semantic 策略生效） |
+| `semantic.breakpoint_percentile` | `null` | 取相似度分布的百分位作为阈值，设置后覆盖 similarity_threshold |
+| `semantic.min_chunk_size` | `100` | 低于此 token 数的 chunk 会与相邻 chunk 合并 |
+
+> 详细参数说明请参阅 [RAG 泛超参数使用指南](guides/hyperparameter-guide.md)。
 
 ---
 
@@ -134,8 +150,46 @@ vector_store:
 
 ```yaml
 retrieval:
-  top_k: 5    # 检索返回的文档块数量
+  method: "vector"           # 检索方式: "vector", "bm25", 或 "hybrid"
+  top_k: 5                   # 检索返回的文档块数量
+  bm25:                      # BM25 参数（method 为 bm25 或 hybrid 时生效）
+    k1: 1.5                  # 词频饱和参数
+    b: 0.75                  # 长度归一化参数
+  hybrid:                    # 混合检索参数（method 为 hybrid 时生效）
+    fusion: "rrf"            # 融合策略: "rrf" 或 "weighted"
+    rrf_k: 60                # RRF 常数
+    vector_weight: 0.7       # 向量检索权重（weighted 模式）
+    bm25_weight: 0.3         # BM25 检索权重（weighted 模式）
+  reranker:                  # 重排序配置
+    enabled: false           # 是否启用 Cross-Encoder 重排序
+    model_name: "BAAI/bge-reranker-large"  # Cross-Encoder 模型
+    device: "cuda"           # 推理设备
+    top_n: 3                 # 重排后保留的文档数量
+  query_rewrite:             # 查询改写配置
+    enabled: false           # 是否启用查询改写
+    strategy: "hyde"         # 改写策略: "hyde" 或 "multi_query"
+    num_queries: 3           # Multi-Query 的子查询数量
 ```
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `method` | `"vector"` | 检索方式。`"vector"` 纯向量检索，`"bm25"` 纯稀疏检索，`"hybrid"` 混合检索 |
+| `top_k` | `5` | 检索返回的文档块数量 |
+| `bm25.k1` | `1.5` | BM25 词频饱和参数，控制词频对分数的影响程度 |
+| `bm25.b` | `0.75` | BM25 长度归一化参数，控制文档长度对分数的影响 |
+| `hybrid.fusion` | `"rrf"` | 混合检索的融合策略。`"rrf"` 基于排名融合，`"weighted"` 基于分数加权 |
+| `hybrid.rrf_k` | `60` | RRF 常数，值越大排名差异的影响越小 |
+| `hybrid.vector_weight` | `0.7` | 向量检索在加权融合中的权重 |
+| `hybrid.bm25_weight` | `0.3` | BM25 检索在加权融合中的权重 |
+| `reranker.enabled` | `false` | 是否启用 Cross-Encoder 重排序 |
+| `reranker.model_name` | `"BAAI/bge-reranker-large"` | Cross-Encoder 模型名称 |
+| `reranker.device` | `"cuda"` | 重排序模型推理设备 |
+| `reranker.top_n` | `3` | 重排后保留的文档数量 |
+| `query_rewrite.enabled` | `false` | 是否启用查询改写 |
+| `query_rewrite.strategy` | `"hyde"` | 改写策略。`"hyde"` 假设性文档嵌入，`"multi_query"` 多查询改写 |
+| `query_rewrite.num_queries` | `3` | Multi-Query 策略生成的子查询数量 |
+
+> 详细参数说明和使用建议请参阅 [RAG 泛超参数使用指南](guides/hyperparameter-guide.md)。
 
 ---
 
