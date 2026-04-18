@@ -1,0 +1,104 @@
+name: "smoke_test_v017"
+description: "Smoke test for v0.1.7+ new features: generation metrics, BM25, hybrid retrieval, reranker, query rewrite, semantic chunking, LLM report"
+
+data:
+  meal: "test1"
+  create_if_missing:
+    sample_ratio: 0.05
+    seed: 42
+
+test_sets:
+  - strategy: "factual"
+    num_questions: 1
+    seed: 100
+
+variants:
+  - name: "baseline"
+    description: "Baseline - verifies generation metrics (faithfulness + answer_relevancy)"
+    config_overrides: {}
+
+  - name: "bm25"
+    description: "BM25 sparse retrieval"
+    config_overrides:
+      retrieval:
+        method: "bm25"
+        top_k: 5
+
+  - name: "hybrid_rrf"
+    description: "Hybrid retrieval with RRF fusion"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 5
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+
+  - name: "hybrid_weighted"
+    description: "Hybrid retrieval with weighted fusion"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 5
+        hybrid:
+          fusion: "weighted"
+          vector_weight: 0.7
+          bm25_weight: 0.3
+
+  - name: "reranker"
+    description: "Vector retrieval + Cross-Encoder reranker"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        top_k: 5
+        reranker:
+          enabled: true
+          model_name: "BAAI/bge-reranker-large"
+          top_n: 3
+
+  - name: "hyde"
+    description: "HyDE query rewriting"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        top_k: 5
+        query_rewrite:
+          enabled: true
+          strategy: "hyde"
+
+  - name: "multi_query"
+    description: "Multi-Query rewriting (3 sub-queries)"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        top_k: 5
+        query_rewrite:
+          enabled: true
+          strategy: "multi_query"
+          num_queries: 3
+
+  - name: "semantic_chunk"
+    description: "Semantic chunking strategy"
+    config_overrides:
+      chunker:
+        strategy: "semantic"
+        chunk_size: 512
+        semantic:
+          similarity_threshold: 0.5
+          min_chunk_size: 100
+
+evaluation:
+  llm_preset: "default"
+  llm_report: true
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+
+llm:
+  question_generation: "default"
+  answering: "default"
