@@ -1,0 +1,81 @@
+name: "retrieval_comparison"
+description: "检索方式对比实验 - 对比稀疏检索(BM25)、稠密检索(Vector)、混合检索(Hybrid RRF/Weighted)对问答质量的影响"
+
+data:
+  meal: "meal_retrieval_comparison"
+  create_if_missing:
+    sample_ratio: 0.2
+    seed: 42
+
+test_sets:
+  - strategy: "factual"
+    num_questions: 30
+    seed: 300
+  - strategy: "boundary"
+    num_questions: 20
+    seed: 301
+  - strategy: "multi_hop"
+    num_questions: 15
+    seed: 302
+
+variants:
+  - name: "vector_only"
+    description: "纯向量语义检索（基线）"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        top_k: 5
+
+  - name: "bm25_only"
+    description: "纯BM25稀疏检索"
+    config_overrides:
+      retrieval:
+        method: "bm25"
+        top_k: 5
+
+  - name: "hybrid_rrf"
+    description: "混合检索 - RRF融合"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 5
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+
+  - name: "hybrid_weighted_70_30"
+    description: "混合检索 - 加权融合(向量0.7/BM25 0.3)"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 5
+        hybrid:
+          fusion: "weighted"
+          vector_weight: 0.7
+          bm25_weight: 0.3
+
+  - name: "hybrid_weighted_50_50"
+    description: "混合检索 - 加权融合(向量0.5/BM25 0.5)"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 5
+        hybrid:
+          fusion: "weighted"
+          vector_weight: 0.5
+          bm25_weight: 0.5
+
+evaluation:
+  llm_preset: "default"
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+
+llm:
+  question_generation: "sonnet"
+  answering: "default"
