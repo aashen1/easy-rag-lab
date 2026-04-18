@@ -12,9 +12,9 @@
 
 | 类型 | 待处理 | 进行中 | 已完成 | 已延期 |
 |------|--------|--------|--------|--------|
-| Bug | 0 | 0 | 7 | 2 |
-| Feature | 5 | 0 | 9 | 0 |
-| Refactor | 2 | 0 | 4 | 0 |
+| Bug | 0 | 0 | 9 | 2 |
+| Feature | 4 | 0 | 10 | 0 |
+| Refactor | 4 | 0 | 4 | 0 |
 | Optimization | 2 | 0 | 0 | 0 |
 | Investigation | 3 | 0 | 1 | 0 |
 
@@ -39,7 +39,6 @@
 | FEAT-003 | Reranker 重排 | [CLAUDE.md](../CLAUDE.md) | 📋 待处理 | 中 | RAG 优化 |
 | FEAT-004 | 查询改写 | [CLAUDE.md](../CLAUDE.md) | 📋 待处理 | 中 | RAG 优化 |
 | FEAT-005 | 语义分块 | [CLAUDE.md](../CLAUDE.md) | 📋 待处理 | 中 | RAG 优化 |
-| FEAT-006 | 重写问题生成策略，与 chunk 解耦，基于整个 MD | [原 TODO.md](../TODO.md) | 📋 待处理 | 大 | 建议 spec 模式 |
 
 ---
 
@@ -49,6 +48,8 @@
 |----|------|------|------|------|------|
 | RF-001 | CLI 输出规范化（172 处 print） | [v0.1.5 code-review](reviews/v0.1.5/code-review.md) | 📋 待处理 | 中 | 替换为 loguru 会改变输出格式 |
 | RF-002 | 项目结构整理（根目录 .py 文件） | [原 TODO.md](../TODO.md) | 📋 待处理 | 小 | 需评估影响范围 |
+| RF-004 | 硬编码配置值提取到 config.yaml | v0.1.7 合并验收 | 📋 待处理 | 中 | metrics.py/experiment_reporter.py/test_generator.py 中模型名、API URL、max_tokens、temperature 硬编码 |
+| RF-005 | Anthropic 客户端创建统一抽象 | v0.1.7 合并验收 | 📋 待处理 | 小 | metrics.py calculate_answer_relevancy 重复创建客户端，api_key="dummy" 模式散布多处 |
 
 ---
 
@@ -65,7 +66,7 @@
 
 | ID | 描述 | 来源 | 状态 | 备注 |
 |----|------|------|------|------|
-| INV-001 | 实验报告 sources 字段细化到标题头或 chunk | [原 TODO.md](../TODO.md) | 📋 待处理 | 与 FEAT-006 耦合 |
+| INV-001 | 实验报告 sources 字段细化到标题头或 chunk | [原 TODO.md](../TODO.md) | 📋 待处理 | FEAT-006 已完成，可独立推进 |
 | INV-002 | 验证问题生成策略可扩展性 | [原 TODO.md](../TODO.md) | ⏳ 待定 | 依赖黄金测试集落地 |
 | INV-003 | 日志系统"应记尽记"最佳实践 | [原 TODO.md](../TODO.md) | 📋 待处理 | pytest 日志不完整 |
 
@@ -84,12 +85,15 @@
 | BUG-007 | Indexer 资源未释放 | [v0.1.5 code-review](reviews/v0.1.5/code-review.md) | 2026-04-18 |
 | BUG-008 | total_chunks 偏差 | [v0.1.5 code-review](reviews/v0.1.5/code-review.md) | 2026-04-18 |
 | BUG-009 | main.py 缺失 typing 导入（Optional/Dict/Any） | 代码审查发现 | 2026-04-19 |
+| BUG-010 | test_generator.py _save_test_set IO 写入无 try/except | v0.1.7 合并验收 | 2026-04-19 |
+| BUG-011 | experiment_reporter.py generate_markdown_report 公共方法缺 docstring | v0.1.7 合并验收 | 2026-04-19 |
 
 ### Feature
 
 | ID | 描述 | 来源 | 完成日期 |
 |----|------|------|---------|
 | FEAT-001 | 实现生成质量指标（Faithfulness, Answer Relevancy） | [v0.1.5 code-review](reviews/v0.1.5/code-review.md) | 2026-04-18 |
+| FEAT-006 | 重写问题生成策略，与 chunk 解耦，基于整个 MD | [原 TODO.md](../TODO.md) | 2026-04-18 |
 | FEAT-DONE-001 | 文档系统重构 | [原 TODO.md](../TODO.md) | 2026-04-18 |
 | FEAT-DONE-002 | LLM 报告功能修复 | [原 TODO.md](../TODO.md) | 2026-04-17 |
 | FEAT-DONE-003 | Token 统计功能 | [原 TODO.md](../TODO.md) | 2026-04-17 |
