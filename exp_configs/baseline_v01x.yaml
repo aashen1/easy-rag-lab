@@ -10,10 +10,13 @@ data:
 test_sets:
   - strategy: "factual"
     num_questions: 20
+    seed: 100
   - strategy: "boundary"
     num_questions: 10
-  - strategy: "multi-hop"
+    seed: 101
+  - strategy: "multi_hop"
     num_questions: 5
+    seed: 102
 
 
 variants:
@@ -28,6 +31,9 @@ evaluation:
       - "hit_rate"
       - "mrr"
       - "ndcg"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
 
 llm:
   question_generation: "default"
