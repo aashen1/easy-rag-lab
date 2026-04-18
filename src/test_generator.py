@@ -794,6 +794,16 @@ class TestSetGenerator:
         )
         logger.info(f"Question type distribution: {type_counts}")
 
+        doc_question_plans = self._distribute_questions_across_docs(
+            type_counts, list(document_contents.keys())
+        )
+        num_docs = len(document_contents)
+
+        logger.info(
+            f"Distributing {num_questions} questions across {num_docs} "
+            f"documents (~{num_questions // num_docs} per document)"
+        )
+
         llm_config = get_llm_config(self.config, llm_preset)
         generator = Generator(
             model_name=llm_config["model_name"],
@@ -810,30 +820,33 @@ class TestSetGenerator:
         failed_count = 0
 
         for doc_name, doc_content in document_contents.items():
-            for q_type, count in type_counts.items():
-                for _ in range(count):
-                    total_attempts += 1
-                    logger.info(
-                        f"Generating question {question_id}/{num_questions} "
-                        f"(type={q_type}, doc={doc_name})..."
-                    )
+            assigned_types = doc_question_plans.get(doc_name, [])
+            if not assigned_types:
+                continue
 
-                    qa = self._generate_single_document_question(
-                        doc_content, q_type, generator
-                    )
+            for q_type in assigned_types:
+                total_attempts += 1
+                logger.info(
+                    f"Generating question {question_id}/{num_questions} "
+                    f"(type={q_type}, doc={doc_name})..."
+                )
 
-                    if qa is not None:
-                        qa["id"] = f"q{question_id:03d}"
-                        qa["source_document"] = doc_name
-                        qa["category"] = "document"
-                        questions.append(qa)
-                        question_id += 1
-                    else:
-                        failed_count += 1
-                        logger.warning(
-                            f"Failed to generate question, total failures: "
-                            f"{failed_count}/{total_attempts}"
-                        )
+                qa = self._generate_single_document_question(
+                    doc_content, q_type, generator
+                )
+
+                if qa is not None:
+                    qa["id"] = f"q{question_id:03d}"
+                    qa["source_document"] = doc_name
+                    qa["category"] = "document"
+                    questions.append(qa)
+                    question_id += 1
+                else:
+                    failed_count += 1
+                    logger.warning(
+                        f"Failed to generate question, total failures: "
+                        f"{failed_count}/{total_attempts}"
+                    )
 
         if not questions:
             raise ValueError("No questions could be generated")
@@ -941,6 +954,39 @@ class TestSetGenerator:
                 remaining -= count
 
         return type_counts
+
+    def _distribute_questions_across_docs(
+        self,
+        type_counts: Dict[str, int],
+        doc_names: List[str],
+    ) -> Dict[str, List[str]]:
+        """Distribute question types across documents using round-robin.
+
+        Creates a flat list of question types from type_counts, then assigns
+        each question to a document in round-robin order so that the total
+        number of questions equals the sum of type_counts (not multiplied
+        by the number of documents).
+
+        Args:
+            type_counts: Dictionary mapping question type names to counts.
+            doc_names: List of document names to distribute across.
+
+        Returns:
+            Dictionary mapping document names to their assigned question types.
+        """
+        question_plan = []
+        for q_type, count in type_counts.items():
+            question_plan.extend([q_type] * count)
+
+        num_docs = len(doc_names)
+        doc_question_plans: Dict[str, List[str]] = {
+            name: [] for name in doc_names
+        }
+        for i, q_type in enumerate(question_plan):
+            doc_name = doc_names[i % num_docs]
+            doc_question_plans[doc_name].append(q_type)
+
+        return doc_question_plans
 
     def _generate_single_document_question(
         self,

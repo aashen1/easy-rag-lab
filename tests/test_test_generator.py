@@ -661,3 +661,76 @@ class TestQuestionTypes:
         assert self.generator.QUESTION_TYPES["comparative"] == "对比分析"
         assert self.generator.QUESTION_TYPES["missing"] == "缺失知识点"
         assert self.generator.QUESTION_TYPES["irrelevant"] == "无关问题"
+
+
+class TestDistributeQuestionsAcrossDocs:
+    def setup_method(self):
+        self.config = {
+            "test_generation": {"max_retries": 3},
+        }
+        self.generator = TestSetGenerator(self.config)
+
+    def test_total_questions_equals_num_questions(self):
+        type_counts = {"single_fact": 15, "multi_fact": 12, "reasoning": 7,
+                       "comparative": 7, "missing": 5, "irrelevant": 4}
+        doc_names = ["doc_a", "doc_b", "doc_c"]
+        result = self.generator._distribute_questions_across_docs(
+            type_counts, doc_names
+        )
+        total = sum(len(v) for v in result.values())
+        assert total == 50
+
+    def test_no_questions_per_doc_multiplier(self):
+        type_counts = {"single_fact": 15, "multi_fact": 12}
+        doc_names = [f"doc_{i}" for i in range(35)]
+        result = self.generator._distribute_questions_across_docs(
+            type_counts, doc_names
+        )
+        total = sum(len(v) for v in result.values())
+        assert total == 27
+
+    def test_single_document_gets_all_questions(self):
+        type_counts = {"single_fact": 10, "multi_fact": 5}
+        doc_names = ["only_doc"]
+        result = self.generator._distribute_questions_across_docs(
+            type_counts, doc_names
+        )
+        assert len(result["only_doc"]) == 15
+        total = sum(len(v) for v in result.values())
+        assert total == 15
+
+    def test_round_robin_distribution(self):
+        type_counts = {"type_a": 3, "type_b": 3}
+        doc_names = ["doc_1", "doc_2"]
+        result = self.generator._distribute_questions_across_docs(
+            type_counts, doc_names
+        )
+        assert len(result["doc_1"]) == 3
+        assert len(result["doc_2"]) == 3
+
+    def test_more_docs_than_questions(self):
+        type_counts = {"single_fact": 2}
+        doc_names = ["doc_a", "doc_b", "doc_c", "doc_d"]
+        result = self.generator._distribute_questions_across_docs(
+            type_counts, doc_names
+        )
+        total = sum(len(v) for v in result.values())
+        assert total == 2
+        non_empty = [name for name, types in result.items() if types]
+        assert len(non_empty) == 2
+
+    def test_preserves_type_proportions_globally(self):
+        type_counts = {"single_fact": 15, "multi_fact": 12, "reasoning": 7,
+                       "comparative": 7, "missing": 5, "irrelevant": 4}
+        doc_names = [f"doc_{i}" for i in range(5)]
+        result = self.generator._distribute_questions_across_docs(
+            type_counts, doc_names
+        )
+        all_types = []
+        for types in result.values():
+            all_types.extend(types)
+        from collections import Counter
+        counts = Counter(all_types)
+        assert counts["single_fact"] == 15
+        assert counts["multi_fact"] == 12
+        assert counts["reasoning"] == 7
