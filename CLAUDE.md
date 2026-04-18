@@ -55,11 +55,11 @@
 
 ## 当前状态
 
-**版本**：v0.1.5（MVP RAG + Baseline 评测）
+**版本**：v0.1.6（项目卫生 + 文档系统重构）
 
 **待做事项**：参见 [docs/backlog.md](docs/backlog.md)
 
-**下版本方向**：参见 [docs/reviews/v0.1.5/next-direction.md](docs/reviews/v0.1.5/next-direction.md)
+**下版本方向**：参见 [docs/reviews/v0.1.6/next-direction.md](docs/reviews/v0.1.6/next-direction.md)
 
 ---
 
