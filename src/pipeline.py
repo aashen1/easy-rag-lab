@@ -10,6 +10,7 @@ from src.generator import Generator
 from src.hybrid_retriever import HybridRetriever
 from src.indexer import VectorIndexer
 from src.parser import parse_all_pdfs
+from src.reranker import Reranker
 from src.retriever import Retriever
 from src.sampler import SamplingConfig, determine_sample
 from src.token_tracker import DetailedTokenUsage, TokenTracker
@@ -102,6 +103,15 @@ class RAGPipeline:
                 bm25_weight=hybrid_config.get("bm25_weight", 0.3),
                 top_k=top_k,
             )
+
+        self.reranker: Optional[Reranker] = None
+        reranker_config = retrieval_config.get("reranker", {})
+        if reranker_config.get("enabled", False):
+            self.reranker = Reranker(
+                model_name=reranker_config.get("model_name", "BAAI/bge-reranker-large"),
+                device=reranker_config.get("device", "cuda"),
+            )
+            self.reranker_top_n = reranker_config.get("top_n", top_k)
 
     def build_index(
         self,
@@ -317,6 +327,12 @@ class RAGPipeline:
                 )
             else:
                 results = self.retriever.retrieve(question)
+
+            if self.reranker is not None and results:
+                logger.debug("Reranking results...")
+                results = self.reranker.rerank(
+                    question, results, top_n=self.reranker_top_n
+                )
 
             contexts = [result["text"] for result in results]
             scores = [result["score"] for result in results]

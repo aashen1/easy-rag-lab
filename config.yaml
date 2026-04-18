@@ -76,6 +76,11 @@ retrieval:
     rrf_k: 60               # RRF constant (higher = dampen rank impact)
     vector_weight: 0.7      # Weight for vector scores in weighted fusion
     bm25_weight: 0.3        # Weight for BM25 scores in weighted fusion
+  reranker:
+    enabled: false          # Enable cross-encoder reranking
+    model_name: "BAAI/bge-reranker-large"  # Cross-encoder model
+    device: "cuda"          # Reranker device
+    top_n: 3                # Number of results to keep after reranking
 
 # ============================================================
 # 实验管理配置

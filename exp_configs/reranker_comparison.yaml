@@ -1,0 +1,80 @@
+name: "reranker_comparison"
+description: "重排序对比实验 - 探究Cross-Encoder重排对检索和生成质量的影响"
+
+data:
+  meal: "meal_reranker_comparison"
+  create_if_missing:
+    sample_ratio: 0.2
+    seed: 42
+
+test_sets:
+  - strategy: "factual"
+    num_questions: 30
+    seed: 400
+  - strategy: "boundary"
+    num_questions: 20
+    seed: 401
+  - strategy: "multi_hop"
+    num_questions: 15
+    seed: 402
+
+variants:
+  - name: "no_rerank"
+    description: "无重排序（基线）"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        top_k: 5
+        reranker:
+          enabled: false
+
+  - name: "rerank_top3"
+    description: "Cross-Encoder重排，保留top-3"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        top_k: 5
+        reranker:
+          enabled: true
+          model_name: "BAAI/bge-reranker-large"
+          top_n: 3
+
+  - name: "rerank_top5"
+    description: "Cross-Encoder重排，保留top-5"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        top_k: 10
+        reranker:
+          enabled: true
+          model_name: "BAAI/bge-reranker-large"
+          top_n: 5
+
+  - name: "hybrid_rerank"
+    description: "混合检索 + Cross-Encoder重排"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 10
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+        reranker:
+          enabled: true
+          model_name: "BAAI/bge-reranker-large"
+          top_n: 5
+
+evaluation:
+  llm_preset: "default"
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+
+llm:
+  question_generation: "sonnet"
+  answering: "default"
