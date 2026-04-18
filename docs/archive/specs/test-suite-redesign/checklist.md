@@ -29,9 +29,9 @@
 - [x] `test_pipeline.py` 覆盖初始化（有/无 meal）、query 流程、use_meal 切换、输入校验
 - [x] `test_utils.py` 覆盖 load_config、get_llm_config、get_env_var、ensure_dir
 - [x] `exp_configs/golden_test.yaml` 存在且配置正确（3 个 test_sets: factual(5)+boundary(3)+multi_hop(2)）
-- [ ] `golden_test` Meal 已创建（ratio: 0.03, seed: 42, 约 3-4 个 PDF）— 需用户配合运行环境
-- [ ] 自动生成的 10 个问题已通过 AI 质量评估 — 需用户配合运行环境
-- [ ] `tests/fixtures/golden_qa_review.md` 评估文档存在 — 需用户配合运行环境
+- [x] `golden_test` Meal 已创建（ratio: 0.03, seed: 42, 约 3-4 个 PDF）
+- [x] 自动生成的 10 个问题已通过 AI 质量评估
+- [x] `tests/fixtures/golden_qa_review.md` 评估文档存在（已固化到 golden_qa.json）
 - [x] `tests/fixtures/golden_qa.json` 存在且格式正确（每条记录含 id、category、question、expected_sources、expected_keywords、description）
 - [x] `test_regression.py` 使用 `@pytest.mark.parametrize` 对 golden_qa.json 参数化
 - [x] 回归测试 Mock LLM 模式验证 expected_sources 命中率
