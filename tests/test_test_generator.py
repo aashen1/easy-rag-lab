@@ -254,3 +254,410 @@ class TestLoadMealChunks:
 
         assert len(chunks) == 2
         assert all(c["metadata"]["source"] == "reports/report_0.md" for c in chunks)
+
+
+class TestCalculateQuestionDistribution:
+    def setup_method(self):
+        self.config = {
+            "test_generation": {"max_retries": 3},
+        }
+        self.generator = TestSetGenerator(self.config)
+
+    def test_distribution_basic(self):
+        distribution = {
+            "single_fact": 0.30,
+            "multi_fact": 0.25,
+            "reasoning": 0.15,
+            "comparative": 0.15,
+            "missing": 0.10,
+            "irrelevant": 0.05,
+        }
+        result = self.generator._calculate_question_distribution(20, distribution)
+        total = sum(result.values())
+        assert total == 20
+
+    def test_distribution_single_type(self):
+        distribution = {"single_fact": 1.0}
+        result = self.generator._calculate_question_distribution(10, distribution)
+        assert result["single_fact"] == 10
+
+    def test_distribution_rounding(self):
+        distribution = {
+            "type_a": 0.33,
+            "type_b": 0.33,
+            "type_c": 0.34,
+        }
+        result = self.generator._calculate_question_distribution(10, distribution)
+        total = sum(result.values())
+        assert total == 10
+
+    def test_distribution_small_count(self):
+        distribution = {
+            "single_fact": 0.30,
+            "multi_fact": 0.25,
+            "reasoning": 0.15,
+        }
+        result = self.generator._calculate_question_distribution(2, distribution)
+        total = sum(result.values())
+        assert total == 2
+
+    def test_distribution_default_distribution(self):
+        result = self.generator._calculate_question_distribution(
+            20, self.generator.TYPE_DISTRIBUTION
+        )
+        total = sum(result.values())
+        assert total == 20
+        assert result["single_fact"] == 6
+
+
+class TestParseDocumentQuestionResponse:
+    def setup_method(self):
+        self.config = {
+            "test_generation": {"max_retries": 3},
+        }
+        self.generator = TestSetGenerator(self.config)
+
+    def test_parse_valid_response(self):
+        response = '''{
+            "question": "2024年光模块市场规模多少？",
+            "answer": "2024年光模块市场规模约为100亿美元。",
+            "question_type": "single_fact",
+            "difficulty": "easy",
+            "reasoning": "这是一个直接的数据查询问题",
+            "key_entities": ["光模块", "市场规模"],
+            "answer_sources": ["第3段"]
+        }'''
+        result = self.generator._parse_document_question_response(response)
+        assert result is not None
+        assert result["question"] == "2024年光模块市场规模多少？"
+        assert result["question_type"] == "single_fact"
+        assert result["difficulty"] == "easy"
+
+    def test_parse_response_in_code_block(self):
+        response = '''```json
+        {
+            "question": "CPO的全称是什么？",
+            "answer": "CPO的全称是Co-packaged Optics。",
+            "question_type": "single_fact"
+        }
+        ```'''
+        result = self.generator._parse_document_question_response(response)
+        assert result is not None
+        assert result["question"] == "CPO的全称是什么？"
+
+    def test_parse_response_with_surrounding_text(self):
+        response = '''好的，这是生成的问题：
+        {"question": "营收增长原因？", "answer": "主要因为新产品销售增长。", "question_type": "reasoning"}
+        希望对你有帮助。'''
+        result = self.generator._parse_document_question_response(response)
+        assert result is not None
+        assert result["question"] == "营收增长原因？"
+
+    def test_parse_missing_required_field(self):
+        response = '{"question": "问题？", "answer": "答案"}'
+        result = self.generator._parse_document_question_response(response)
+        assert result is None
+
+    def test_parse_empty_question_type(self):
+        response = '{"question": "问题？", "answer": "答案", "question_type": ""}'
+        result = self.generator._parse_document_question_response(response)
+        assert result is None
+
+    def test_parse_default_values(self):
+        response = '{"question": "问题？", "answer": "答案", "question_type": "single_fact"}'
+        result = self.generator._parse_document_question_response(response)
+        assert result is not None
+        assert result["difficulty"] == "medium"
+        assert result["reasoning"] == ""
+        assert result["key_entities"] == []
+        assert result["answer_sources"] == []
+
+    def test_parse_invalid_json(self):
+        response = "this is not valid json"
+        result = self.generator._parse_document_question_response(response)
+        assert result is None
+
+
+class TestValidateQuestionQuality:
+    def setup_method(self):
+        self.config = {
+            "test_generation": {"max_retries": 3},
+        }
+        self.generator = TestSetGenerator(self.config)
+
+    def test_valid_question(self):
+        question_data = {
+            "question": "2024年光模块市场规模多少？",
+            "answer": "100亿美元",
+            "question_type": "single_fact",
+        }
+        assert self.generator._validate_question_quality(question_data) is True
+
+    def test_question_too_short(self):
+        question_data = {
+            "question": "啊？",
+            "answer": "答案",
+            "question_type": "single_fact",
+        }
+        assert self.generator._validate_question_quality(question_data) is False
+
+    def test_question_too_long(self):
+        question_data = {
+            "question": "这是一个非常长的问题，" * 50,
+            "answer": "答案",
+            "question_type": "single_fact",
+        }
+        assert self.generator._validate_question_quality(question_data) is False
+
+    def test_question_with_academic_pattern(self):
+        question_data = {
+            "question": "根据文档，2024年光模块市场规模多少？",
+            "answer": "100亿美元",
+            "question_type": "single_fact",
+        }
+        assert self.generator._validate_question_quality(question_data) is False
+
+    def test_question_with_template_start(self):
+        question_data = {
+            "question": "请分析光模块市场的发展趋势",
+            "answer": "发展趋势是...",
+            "question_type": "reasoning",
+        }
+        assert self.generator._validate_question_quality(question_data) is False
+
+    def test_question_exactly_min_length(self):
+        question_data = {
+            "question": "营收多少？",
+            "answer": "100亿",
+            "question_type": "single_fact",
+        }
+        assert self.generator._validate_question_quality(question_data) is True
+
+    def test_question_exactly_max_length(self):
+        question_data = {
+            "question": "a" * 100,
+            "answer": "答案",
+            "question_type": "single_fact",
+        }
+        assert self.generator._validate_question_quality(question_data) is True
+
+
+class TestCheckAuthenticityRules:
+    def setup_method(self):
+        self.config = {
+            "test_generation": {"max_retries": 3},
+        }
+        self.generator = TestSetGenerator(self.config)
+
+    def test_authentic_question(self):
+        question = "2024年光模块市场规模多少？"
+        result = self.generator._check_authenticity_rules(question)
+        assert result["is_authentic"] is True
+        assert result["has_issues"] is False
+        assert result["issues"] == []
+
+    def test_question_with_academic_pattern_根据文档(self):
+        question = "根据文档，光模块市场规模是多少？"
+        result = self.generator._check_authenticity_rules(question)
+        assert result["is_authentic"] is False
+        assert result["has_issues"] is True
+        assert any("根据文档" in issue for issue in result["issues"])
+
+    def test_question_with_academic_pattern_请分析(self):
+        question = "请分析光模块市场的发展趋势"
+        result = self.generator._check_authenticity_rules(question)
+        assert result["is_authentic"] is False
+        assert any("请分析" in issue for issue in result["issues"])
+
+    def test_question_with_template_start_请问(self):
+        question = "请问光模块市场规模是多少？"
+        result = self.generator._check_authenticity_rules(question)
+        assert result["is_authentic"] is False
+        assert any("请问" in issue for issue in result["issues"])
+
+    def test_question_too_long(self):
+        question = "这是一个非常长的问题，" * 20
+        result = self.generator._check_authenticity_rules(question)
+        assert result["is_authentic"] is False
+        assert any("过长" in issue for issue in result["issues"])
+
+    def test_multiple_issues(self):
+        question = "根据文档，请分析光模块市场的发展趋势，这是一个很长的问题" * 5
+        result = self.generator._check_authenticity_rules(question)
+        assert result["is_authentic"] is False
+        assert len(result["issues"]) >= 2
+
+    def test_all_academic_patterns(self):
+        patterns = [
+            "根据文档，营收多少？",
+            "根据提供的信息，利润是多少？",
+            "请分析市场趋势",
+            "请说明技术原理",
+            "请对比两种方案",
+            "请总结主要观点",
+            "文档中提到的关键数据是什么？",
+            "片段中提到的核心观点是什么？",
+        ]
+        for question in patterns:
+            result = self.generator._check_authenticity_rules(question)
+            assert result["is_authentic"] is False, f"Pattern should be detected: {question}"
+
+    def test_all_template_starts(self):
+        starts = [
+            "请问市场规模是多少？",
+            "请解释技术原理",
+            "请描述产品特点",
+        ]
+        for question in starts:
+            result = self.generator._check_authenticity_rules(question)
+            assert result["is_authentic"] is False, f"Template start should be detected: {question}"
+
+
+class TestCalculateQualityMetrics:
+    def setup_method(self):
+        self.config = {
+            "test_generation": {"max_retries": 3},
+        }
+        self.generator = TestSetGenerator(self.config)
+
+    def test_empty_questions(self):
+        result = self.generator._calculate_quality_metrics([])
+        assert result["format_correct_rate"] == 0.0
+        assert result["authenticity_pass_rate"] == 0.0
+        assert result["type_distribution"] == {}
+
+    def test_single_question(self):
+        questions = [
+            {
+                "question": "市场规模多少？",
+                "answer": "100亿",
+                "question_type": "single_fact",
+            }
+        ]
+        result = self.generator._calculate_quality_metrics(questions)
+        assert result["format_correct_rate"] == 1.0
+        assert result["authenticity_pass_rate"] == 1.0
+        assert result["type_distribution"]["single_fact"] == 1
+
+    def test_multiple_questions_same_type(self):
+        questions = [
+            {
+                "question": "市场规模多少？",
+                "answer": "100亿",
+                "question_type": "single_fact",
+            },
+            {
+                "question": "营收增长多少？",
+                "answer": "20%",
+                "question_type": "single_fact",
+            },
+        ]
+        result = self.generator._calculate_quality_metrics(questions)
+        assert result["type_distribution"]["single_fact"] == 2
+
+    def test_multiple_questions_different_types(self):
+        questions = [
+            {
+                "question": "市场规模多少？",
+                "answer": "100亿",
+                "question_type": "single_fact",
+            },
+            {
+                "question": "为什么增长这么快？",
+                "answer": "因为新产品销售增长",
+                "question_type": "reasoning",
+            },
+            {
+                "question": "A公司和B公司哪个更好？",
+                "answer": "A公司更好",
+                "question_type": "comparative",
+            },
+        ]
+        result = self.generator._calculate_quality_metrics(questions)
+        assert result["type_distribution"]["single_fact"] == 1
+        assert result["type_distribution"]["reasoning"] == 1
+        assert result["type_distribution"]["comparative"] == 1
+
+    def test_authenticity_pass_rate_with_issues(self):
+        questions = [
+            {
+                "question": "市场规模多少？",
+                "answer": "100亿",
+                "question_type": "single_fact",
+            },
+            {
+                "question": "根据文档，营收增长多少？",
+                "answer": "20%",
+                "question_type": "single_fact",
+            },
+        ]
+        result = self.generator._calculate_quality_metrics(questions)
+        assert result["authenticity_pass_rate"] == 0.5
+
+    def test_authenticity_pass_rate_all_pass(self):
+        questions = [
+            {
+                "question": "市场规模多少？",
+                "answer": "100亿",
+                "question_type": "single_fact",
+            },
+            {
+                "question": "营收增长多少？",
+                "answer": "20%",
+                "question_type": "single_fact",
+            },
+        ]
+        result = self.generator._calculate_quality_metrics(questions)
+        assert result["authenticity_pass_rate"] == 1.0
+
+    def test_authenticity_pass_rate_none_pass(self):
+        questions = [
+            {
+                "question": "根据文档，市场规模多少？",
+                "answer": "100亿",
+                "question_type": "single_fact",
+            },
+            {
+                "question": "请分析营收增长原因",
+                "answer": "因为新产品销售增长",
+                "question_type": "reasoning",
+            },
+        ]
+        result = self.generator._calculate_quality_metrics(questions)
+        assert result["authenticity_pass_rate"] == 0.0
+
+
+class TestQuestionTypes:
+    def setup_method(self):
+        self.config = {
+            "test_generation": {"max_retries": 3},
+        }
+        self.generator = TestSetGenerator(self.config)
+
+    def test_question_types_defined(self):
+        assert "single_fact" in self.generator.QUESTION_TYPES
+        assert "multi_fact" in self.generator.QUESTION_TYPES
+        assert "reasoning" in self.generator.QUESTION_TYPES
+        assert "comparative" in self.generator.QUESTION_TYPES
+        assert "missing" in self.generator.QUESTION_TYPES
+        assert "irrelevant" in self.generator.QUESTION_TYPES
+
+    def test_type_distribution_defined(self):
+        assert "single_fact" in self.generator.TYPE_DISTRIBUTION
+        assert "multi_fact" in self.generator.TYPE_DISTRIBUTION
+        assert "reasoning" in self.generator.TYPE_DISTRIBUTION
+        assert "comparative" in self.generator.TYPE_DISTRIBUTION
+        assert "missing" in self.generator.TYPE_DISTRIBUTION
+        assert "irrelevant" in self.generator.TYPE_DISTRIBUTION
+
+    def test_type_distribution_sums_to_one(self):
+        total = sum(self.generator.TYPE_DISTRIBUTION.values())
+        assert abs(total - 1.0) < 0.001
+
+    def test_question_type_chinese_names(self):
+        assert self.generator.QUESTION_TYPES["single_fact"] == "单知识点查询"
+        assert self.generator.QUESTION_TYPES["multi_fact"] == "多知识点综合"
+        assert self.generator.QUESTION_TYPES["reasoning"] == "推理型问题"
+        assert self.generator.QUESTION_TYPES["comparative"] == "对比分析"
+        assert self.generator.QUESTION_TYPES["missing"] == "缺失知识点"
+        assert self.generator.QUESTION_TYPES["irrelevant"] == "无关问题"

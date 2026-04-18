@@ -13,7 +13,7 @@
 | 类型 | 待处理 | 进行中 | 已完成 | 已延期 |
 |------|--------|--------|--------|--------|
 | Bug | 0 | 0 | 5 | 3 |
-| Feature | 6 | 0 | 8 | 0 |
+| Feature | 5 | 0 | 9 | 0 |
 | Refactor | 3 | 0 | 3 | 0 |
 | Optimization | 2 | 0 | 0 | 0 |
 | Investigation | 4 | 0 | 0 | 0 |
@@ -36,7 +36,6 @@
 
 | ID | 描述 | 来源 | 状态 | 规模 | 备注 |
 |----|------|------|------|------|------|
-| FEAT-001 | 实现生成质量指标（Faithfulness, Answer Relevancy） | [v0.1.5 code-review](reviews/v0.1.5/code-review.md) | 📋 待处理 | 大 | 建议 spec 模式 |
 | FEAT-002 | 混合检索（BM25 + 向量） | [CLAUDE.md](../CLAUDE.md) | 📋 待处理 | 中 | RAG 优化 |
 | FEAT-003 | Reranker 重排 | [CLAUDE.md](../CLAUDE.md) | 📋 待处理 | 中 | RAG 优化 |
 | FEAT-004 | 查询改写 | [CLAUDE.md](../CLAUDE.md) | 📋 待处理 | 中 | RAG 优化 |
@@ -91,6 +90,7 @@
 
 | ID | 描述 | 来源 | 完成日期 |
 |----|------|------|---------|
+| FEAT-001 | 实现生成质量指标（Faithfulness, Answer Relevancy） | [v0.1.5 code-review](reviews/v0.1.5/code-review.md) | 2026-04-18 |
 | FEAT-DONE-001 | 文档系统重构 | [原 TODO.md](../TODO.md) | 2026-04-18 |
 | FEAT-DONE-002 | LLM 报告功能修复 | [原 TODO.md](../TODO.md) | 2026-04-17 |
 | FEAT-DONE-003 | Token 统计功能 | [原 TODO.md](../TODO.md) | 2026-04-17 |

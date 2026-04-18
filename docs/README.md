@@ -25,6 +25,7 @@
 
 - [Meal 数据管理系统](guides/meal-system.md)
 - [实验评测系统](guides/experiment-system.md)
+- [评测指标详解](guides/evaluation-metrics.md)
 - [Token 追踪](guides/token-tracking.md)
 - [测试运行指南](guides/testing.md)
 
@@ -52,6 +53,7 @@ docs/
 ├── guides/                    # 使用指南
 │   ├── meal-system.md
 │   ├── experiment-system.md
+│   ├── evaluation-metrics.md
 │   ├── token-tracking.md
 │   └── testing.md
 │

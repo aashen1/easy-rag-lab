@@ -1,9 +1,11 @@
 import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
+
+from src.test_generator import TestSetGenerator
 
 
 @pytest.fixture
@@ -514,3 +516,468 @@ class TestReproduceExperiment:
         assert result.valid is True
         assert result.missing_files == []
         assert result.pdf_issues == {}
+
+
+class TestEndToEndEvaluationFlow:
+    @pytest.mark.unit
+    def test_full_evaluation_flow_with_generation_metrics(
+        self,
+        temp_project_dir,
+        test_system_config,
+    ):
+        from eval.run_eval import run_evaluation
+
+        test_data = [
+            {
+                "id": "q001",
+                "question": "What is the revenue?",
+                "source_files": ["report_a.pdf"],
+            },
+            {
+                "id": "q002",
+                "question": "What is the profit?",
+                "source_files": ["report_b.pdf"],
+            },
+        ]
+        test_data_path = temp_project_dir / "test_data.json"
+        with open(test_data_path, "w", encoding="utf-8") as f:
+            json.dump(test_data, f)
+
+        output_dir = temp_project_dir / "output"
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.query.side_effect = [
+            {
+                "answer": "Revenue is 100M.",
+                "sources": ["report_a.pdf"],
+                "contexts": ["Revenue for 2023 was 100 million."],
+            },
+            {
+                "answer": "Profit is 50M.",
+                "sources": ["report_b.pdf"],
+                "contexts": ["Net profit for 2023 was 50 million."],
+            },
+        ]
+
+        with patch("eval.run_eval.calculate_faithfulness") as mock_faithfulness, \
+             patch("eval.run_eval.calculate_answer_relevancy") as mock_relevancy:
+            mock_faithfulness.return_value = 0.85
+            mock_relevancy.return_value = 0.92
+
+            summary = run_evaluation(
+                pipeline=mock_pipeline,
+                test_data_path=str(test_data_path),
+                output_dir=str(output_dir),
+                metrics_config=["hit_rate", "mrr", "ndcg"],
+                generation_metrics_config=["faithfulness", "answer_relevancy"],
+                llm_config={
+                    "api_key": "test_key",
+                    "base_url": "https://test.url",
+                    "model_name": "test_model",
+                },
+            )
+
+            assert summary["total_test_cases"] == 2
+            assert "retrieval_metrics" in summary
+            assert "generation_metrics" in summary
+
+            for result in summary["results"]:
+                assert "retrieval" in result
+                assert "generation" in result
+                assert "hit_rate" in result["retrieval"]
+                assert "mrr" in result["retrieval"]
+                assert "ndcg" in result["retrieval"]
+                assert "faithfulness" in result["generation"]
+                assert "answer_relevancy" in result["generation"]
+
+            report_path = output_dir / "baseline_report.json"
+            assert report_path.exists()
+
+    @pytest.mark.unit
+    def test_evaluation_flow_with_document_level_questions(
+        self,
+        temp_project_dir,
+        test_system_config,
+    ):
+        test_data = {
+            "name": "document_level_n10",
+            "strategy": "document",
+            "questions": [
+                {
+                    "id": "q001",
+                    "question": "2024年光模块市场规模多少？",
+                    "answer": "约100亿美元",
+                    "question_type": "single_fact",
+                    "source_files": ["report_a.pdf"],
+                },
+                {
+                    "id": "q002",
+                    "question": "为什么CPO能降低功耗？",
+                    "answer": "因为减少了信号传输距离",
+                    "question_type": "reasoning",
+                    "source_files": ["report_b.pdf"],
+                },
+            ],
+        }
+        test_data_path = temp_project_dir / "test_data.json"
+        with open(test_data_path, "w", encoding="utf-8") as f:
+            json.dump(test_data, f)
+
+        output_dir = temp_project_dir / "output"
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.query.side_effect = [
+            {
+                "answer": "2024年光模块市场规模约为100亿美元。",
+                "sources": ["report_a.pdf"],
+                "contexts": ["根据市场研究报告，2024年全球光模块市场规模约为100亿美元。"],
+            },
+            {
+                "answer": "CPO能降低功耗主要是因为减少了信号传输距离。",
+                "sources": ["report_b.pdf"],
+                "contexts": ["CPO技术通过将光引擎与芯片封装在一起，大幅减少了信号传输距离，从而降低功耗。"],
+            },
+        ]
+
+        with patch("eval.run_eval.calculate_faithfulness") as mock_faithfulness, \
+             patch("eval.run_eval.calculate_answer_relevancy") as mock_relevancy:
+            mock_faithfulness.return_value = 0.90
+            mock_relevancy.return_value = 0.95
+
+            from eval.run_eval import run_evaluation
+
+            summary = run_evaluation(
+                pipeline=mock_pipeline,
+                test_data_path=str(test_data_path),
+                output_dir=str(output_dir),
+                metrics_config=["hit_rate", "ndcg"],
+                generation_metrics_config=["faithfulness", "answer_relevancy"],
+                llm_config={
+                    "api_key": "test_key",
+                    "base_url": "https://test.url",
+                    "model_name": "test_model",
+                },
+            )
+
+            assert summary["total_test_cases"] == 2
+            assert len(summary["results"]) == 2
+
+            for result in summary["results"]:
+                assert "hit_rate" in result["retrieval"]
+                assert "ndcg" in result["retrieval"]
+                assert "faithfulness" in result["generation"]
+
+
+class TestBackwardCompatibility:
+    @pytest.mark.unit
+    def test_evaluation_without_generation_metrics(
+        self,
+        temp_project_dir,
+        test_system_config,
+    ):
+        from eval.run_eval import run_evaluation
+
+        test_data = [
+            {
+                "id": "q001",
+                "question": "What is the revenue?",
+                "source_files": ["report_a.pdf"],
+            },
+        ]
+        test_data_path = temp_project_dir / "test_data.json"
+        with open(test_data_path, "w", encoding="utf-8") as f:
+            json.dump(test_data, f)
+
+        output_dir = temp_project_dir / "output"
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.query.return_value = {
+            "answer": "Revenue is 100M.",
+            "sources": ["report_a.pdf"],
+        }
+
+        summary = run_evaluation(
+            pipeline=mock_pipeline,
+            test_data_path=str(test_data_path),
+            output_dir=str(output_dir),
+            metrics_config=["hit_rate", "mrr", "ndcg"],
+            generation_metrics_config=None,
+            llm_config=None,
+        )
+
+        assert "retrieval_metrics" in summary
+        assert "generation_metrics" not in summary
+        assert "generation" not in summary["results"][0]
+
+    @pytest.mark.unit
+    def test_test_data_format_list(
+        self,
+        temp_project_dir,
+        test_system_config,
+    ):
+        from eval.run_eval import run_evaluation
+
+        test_data = [
+            {
+                "id": "q001",
+                "question": "Question 1?",
+                "source_files": ["doc_a.pdf"],
+            },
+        ]
+        test_data_path = temp_project_dir / "test_data.json"
+        with open(test_data_path, "w", encoding="utf-8") as f:
+            json.dump(test_data, f)
+
+        output_dir = temp_project_dir / "output"
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.query.return_value = {
+            "answer": "Answer 1",
+            "sources": ["doc_a.pdf"],
+        }
+
+        summary = run_evaluation(
+            pipeline=mock_pipeline,
+            test_data_path=str(test_data_path),
+            output_dir=str(output_dir),
+        )
+
+        assert summary["total_test_cases"] == 1
+
+    @pytest.mark.unit
+    def test_test_data_format_dict_with_questions(
+        self,
+        temp_project_dir,
+        test_system_config,
+    ):
+        from eval.run_eval import run_evaluation
+
+        test_data = {
+            "name": "test_set",
+            "questions": [
+                {
+                    "id": "q001",
+                    "question": "Question 1?",
+                    "source_files": ["doc_a.pdf"],
+                },
+            ],
+        }
+        test_data_path = temp_project_dir / "test_data.json"
+        with open(test_data_path, "w", encoding="utf-8") as f:
+            json.dump(test_data, f)
+
+        output_dir = temp_project_dir / "output"
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.query.return_value = {
+            "answer": "Answer 1",
+            "sources": ["doc_a.pdf"],
+        }
+
+        summary = run_evaluation(
+            pipeline=mock_pipeline,
+            test_data_path=str(test_data_path),
+            output_dir=str(output_dir),
+        )
+
+        assert summary["total_test_cases"] == 1
+
+    @pytest.mark.unit
+    def test_expected_sources_fallback(
+        self,
+        temp_project_dir,
+        test_system_config,
+    ):
+        from eval.run_eval import run_evaluation
+
+        test_data = [
+            {
+                "id": "q001",
+                "question": "Question 1?",
+                "source_files": ["doc_a.pdf"],
+            },
+        ]
+        test_data_path = temp_project_dir / "test_data.json"
+        with open(test_data_path, "w", encoding="utf-8") as f:
+            json.dump(test_data, f)
+
+        output_dir = temp_project_dir / "output"
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.query.return_value = {
+            "answer": "Answer 1",
+            "sources": ["doc_a.pdf"],
+        }
+
+        summary = run_evaluation(
+            pipeline=mock_pipeline,
+            test_data_path=str(test_data_path),
+            output_dir=str(output_dir),
+            metrics_config=["hit_rate"],
+        )
+
+        assert summary["results"][0]["retrieval"]["hit_rate"] == 1.0
+
+    @pytest.mark.unit
+    def test_experiment_config_without_generation_metrics(
+        self,
+        temp_project_dir,
+        test_system_config,
+    ):
+        config = {
+            "name": "test_experiment",
+            "description": "Test",
+            "data": {"meal": "test_meal"},
+            "test_sets": [{"strategy": "factual", "num_questions": 10}],
+            "variants": [{"name": "v1"}],
+            "evaluation": {
+                "llm_preset": "default",
+                "metrics": {
+                    "retrieval": ["hit_rate", "mrr", "ndcg"],
+                },
+            },
+        }
+
+        from src.experiment import ExperimentConfig
+
+        exp_config = ExperimentConfig.from_dict(config)
+        errors = exp_config.validate()
+
+        assert not any("metrics" in e.lower() for e in errors)
+
+        retrieval_metrics = exp_config.evaluation.get("metrics", {}).get("retrieval")
+        generation_metrics = exp_config.evaluation.get("metrics", {}).get("generation")
+
+        assert retrieval_metrics == ["hit_rate", "mrr", "ndcg"]
+        assert generation_metrics is None
+
+    @pytest.mark.unit
+    def test_experiment_result_backward_compatibility(self):
+        from eval.experiment_reporter import ExperimentResult
+
+        legacy_data = {
+            "timestamp": "2026-04-16T10:00:00",
+            "total_test_cases": 2,
+            "total_time_seconds": 6.0,
+            "avg_time_per_case": 3.0,
+            "retrieval_metrics": {
+                "avg_hit_rate": 0.8,
+                "avg_mrr": 0.65,
+                "avg_ndcg": 0.7,
+            },
+            "results": [
+                {
+                    "id": "q001",
+                    "question": "What is the revenue?",
+                    "answer": "Revenue is 100M.",
+                    "retrieval": {"hit_rate": 0.9, "mrr": 0.8, "ndcg": 0.85},
+                    "sources": ["report1.pdf"],
+                    "time_seconds": 3.0,
+                },
+            ],
+        }
+
+        result = ExperimentResult.from_dict(legacy_data)
+
+        assert result.timestamp == "2026-04-16T10:00:00"
+        assert result.total_test_cases == 2
+        assert result.generation_metrics is None
+        assert result.results[0].generation is None
+
+    @pytest.mark.unit
+    def test_variant_result_backward_compatibility(self):
+        from eval.experiment_reporter import VariantResult
+
+        legacy_data = {
+            "variant_name": "baseline",
+            "variant_description": "Baseline configuration",
+            "retrieval_metrics": {"avg_hit_rate": 0.75, "avg_mrr": 0.55, "avg_ndcg": 0.65},
+            "total_questions": 15,
+            "total_time_seconds": 25.0,
+        }
+
+        result = VariantResult.from_dict(legacy_data)
+
+        assert result.variant_name == "baseline"
+        assert result.retrieval_metrics["avg_hit_rate"] == 0.75
+        assert result.generation_metrics is None
+
+
+class TestDocumentLevelQuestionGenerationIntegration:
+    @pytest.mark.unit
+    def test_question_generation_with_quality_validation(self):
+        config = {
+            "test_generation": {"max_retries": 3},
+        }
+        generator = TestSetGenerator(config)
+
+        valid_question = {
+            "question": "2024年光模块市场规模多少？",
+            "answer": "约100亿美元",
+            "question_type": "single_fact",
+        }
+        assert generator._validate_question_quality(valid_question) is True
+
+        invalid_question = {
+            "question": "根据文档，市场规模是多少？",
+            "answer": "约100亿美元",
+            "question_type": "single_fact",
+        }
+        assert generator._validate_question_quality(invalid_question) is False
+
+    @pytest.mark.unit
+    def test_question_type_distribution_integration(self):
+        config = {
+            "test_generation": {"max_retries": 3},
+        }
+        generator = TestSetGenerator(config)
+
+        distribution = {
+            "single_fact": 0.30,
+            "multi_fact": 0.25,
+            "reasoning": 0.15,
+            "comparative": 0.15,
+            "missing": 0.10,
+            "irrelevant": 0.05,
+        }
+
+        result = generator._calculate_question_distribution(100, distribution)
+
+        total = sum(result.values())
+        assert total == 100
+
+        assert result["single_fact"] == 30
+        assert result["multi_fact"] == 25
+        assert result["reasoning"] == 15
+
+    @pytest.mark.unit
+    def test_quality_metrics_calculation_integration(self):
+        config = {
+            "test_generation": {"max_retries": 3},
+        }
+        generator = TestSetGenerator(config)
+
+        questions = [
+            {
+                "question": "市场规模多少？",
+                "answer": "100亿",
+                "question_type": "single_fact",
+            },
+            {
+                "question": "根据文档，营收增长多少？",
+                "answer": "20%",
+                "question_type": "single_fact",
+            },
+            {
+                "question": "为什么增长这么快？",
+                "answer": "因为新产品销售增长",
+                "question_type": "reasoning",
+            },
+        ]
+
+        result = generator._calculate_quality_metrics(questions)
+
+        assert result["format_correct_rate"] == 1.0
+        assert result["authenticity_pass_rate"] == 2 / 3
+        assert result["type_distribution"]["single_fact"] == 2
+        assert result["type_distribution"]["reasoning"] == 1

@@ -71,26 +71,26 @@
 
 ## Phase 5: 测试与文档
 
-- [ ] Task 12: 完善测试覆盖
-  - [ ] SubTask 12.1: 为文档级问题生成添加单元测试
-  - [ ] SubTask 12.2: 为检索指标改进添加单元测试
-  - [ ] SubTask 12.3: 为生成质量指标添加单元测试
-  - [ ] SubTask 12.4: 添加端到端集成测试
-  - [ ] SubTask 12.5: 运行回归测试，确保向后兼容
+- [x] Task 12: 完善测试覆盖
+  - [x] SubTask 12.1: 为文档级问题生成添加单元测试
+  - [x] SubTask 12.2: 为检索指标改进添加单元测试
+  - [x] SubTask 12.3: 为生成质量指标添加单元测试
+  - [x] SubTask 12.4: 添加端到端集成测试
+  - [x] SubTask 12.5: 运行回归测试，确保向后兼容
 
-- [ ] Task 13: 更新文档
-  - [ ] SubTask 13.1: 更新 docs/guides/experiment-system.md
-  - [ ] SubTask 13.2: 创建 docs/guides/evaluation-metrics.md
-  - [ ] SubTask 13.3: 更新 docs/config-reference.md
-  - [ ] SubTask 13.4: 更新 CLAUDE.md 中的相关说明
+- [x] Task 13: 更新文档
+  - [x] SubTask 13.1: 更新 docs/guides/experiment-system.md
+  - [x] SubTask 13.2: 创建 docs/guides/evaluation-metrics.md
+  - [x] SubTask 13.3: 更新 docs/config-reference.md
+  - [x] SubTask 13.4: 更新 CLAUDE.md 中的相关说明
 
 ## Phase 6: 验证与优化
 
-- [ ] Task 14: 运行验证实验
-  - [ ] SubTask 14.1: 使用新系统运行基线实验
-  - [ ] SubTask 14.2: 对比新旧系统的评测结果
-  - [ ] SubTask 14.3: 验证 chunk-size 对比实验的可行性
-  - [ ] SubTask 14.4: 验证问题生成的真实性和多样性
+- [x] Task 14: 运行验证实验
+  - [x] SubTask 14.1: 使用新系统运行基线实验
+  - [x] SubTask 14.2: 对比新旧系统的评测结果
+  - [x] SubTask 14.3: 验证 chunk-size 对比实验的可行性
+  - [x] SubTask 14.4: 验证问题生成的真实性和多样性
 
 # Task Dependencies
 

@@ -13,6 +13,8 @@
 自动化评测系统支持：
 - **多 Variant 对比实验**：在一个实验中对比多种配置
 - **自动数据准备**：自动创建 Meal 和测试集
+- **文档级问题生成**：基于完整文档生成真实场景问题
+- **多维度评测指标**：检索指标 + 生成质量指标
 - **实验复现**：完整保存配置和数据，支持复现
 - **报告生成**：自动生成结构化的实验报告
 
@@ -67,7 +69,10 @@ data:
     seed: 42
 
 test_sets:
-  - strategy: "factual"          # 问题策略
+  - strategy: "document"         # 文档级问题生成（推荐）
+    num_questions: 20
+    seed: 100
+  - strategy: "factual"          # 传统策略（已弃用）
     num_questions: 20
     seed: 100
 
@@ -82,10 +87,13 @@ variants:
 evaluation:
   llm_preset: "default"
   metrics:
-    retrieval:
+    retrieval:                   # 检索指标
       - "hit_rate"
       - "mrr"
       - "ndcg"
+    generation:                  # 生成质量指标
+      - "faithfulness"
+      - "answer_relevancy"
 ```
 
 ### 配置字段说明
@@ -96,12 +104,61 @@ evaluation:
 | `description` | 实验描述 |
 | `data.meal` | Meal 名称 |
 | `data.create_if_missing` | 自动创建 Meal 的配置 |
-| `test_sets[].strategy` | 问题策略（factual, boundary, multi_hop） |
+| `test_sets[].strategy` | 问题策略（推荐 `document`，传统策略已弃用） |
 | `test_sets[].num_questions` | 问题数量 |
 | `variants[].name` | Variant 名称 |
 | `variants[].config_overrides` | 配置覆盖 |
 | `evaluation.llm_preset` | LLM preset |
 | `evaluation.metrics.retrieval` | 检索指标列表 |
+| `evaluation.metrics.generation` | 生成质量指标列表 |
+
+---
+
+## 问题生成策略
+
+### 文档级问题生成（推荐）
+
+文档级问题生成（`strategy: "document"`）基于完整的 Markdown 文档生成问题，具有以下优势：
+
+- **真实场景**：模拟用户阅读完整报告后的真实提问
+- **多类型覆盖**：支持 6 种问题类型，覆盖不同场景
+- **质量可控**：内置真实性检查，过滤学术化表述
+
+**问题类型分布（默认）**：
+
+| 类型 | 比例 | 说明 |
+|------|------|------|
+| 单知识点查询 | 30% | 查询具体数据、事实 |
+| 多知识点综合 | 25% | 整合多个信息点 |
+| 推理型问题 | 15% | 基于信息推理判断 |
+| 对比分析 | 15% | 对比多个对象 |
+| 缺失知识点 | 10% | 测试拒答能力 |
+| 无关问题 | 5% | 测试边界识别 |
+
+**配置示例**：
+
+```yaml
+test_sets:
+  - strategy: "document"
+    num_questions: 20
+    type_distribution:          # 可选：自定义类型分布
+      single_fact: 0.40
+      multi_fact: 0.30
+      reasoning: 0.15
+      comparative: 0.10
+      missing: 0.05
+      irrelevant: 0.00
+```
+
+### 传统策略（已弃用）
+
+以下策略已弃用，将在未来版本移除：
+
+- `factual`：基于单个 chunk 生成事实性问题
+- `boundary`：基于相邻 chunk 边界生成问题
+- `multi_hop`：基于非相邻 chunk 生成多跳问题
+
+建议迁移到 `document` 策略。
 
 ---
 
@@ -133,6 +190,32 @@ data/exp_reports/exp_20250416_120000/
 | **MRR** | 平均倒数排名，衡量第一个正确文档的排名 | 0.0 - 1.0 |
 | **NDCG** | 归一化折损累积增益，综合考虑排序位置 | 0.0 - 1.0 |
 
+### 生成质量指标
+
+| 指标 | 说明 | 取值范围 |
+|------|------|---------|
+| **Faithfulness** | 回答的事实陈述是否可从上下文推导 | 0.0 - 1.0 |
+| **Answer Relevancy** | 回答与问题的相关程度 | 0.0 - 1.0 |
+
+> 详细指标说明请参阅 [评测指标详解](evaluation-metrics.md)。
+
+### 指标配置
+
+```yaml
+evaluation:
+  llm_preset: "default"
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+    generation:                  # 生成质量指标需要 LLM 调用
+      - "faithfulness"
+      - "answer_relevancy"
+```
+
+**注意**：生成质量指标需要额外的 LLM 调用，会增加评测时间和成本。
+
 ---
 
 ## 常见问题
@@ -153,5 +236,6 @@ A: 使用 `--llm-report` 参数，系统会使用 LLM 生成深度分析报告�
 
 ## 相关文档
 
+- [评测指标详解](evaluation-metrics.md)
 - [Meal 系统指南](meal-system.md)
 - [配置参考](../config-reference.md)

@@ -146,11 +146,31 @@ evaluation:
   test_data_path: "eval/test_data.json"  # 测试数据路径
   results_dir: "eval/results"            # 结果输出目录
   metrics:
-    retrieval:
+    retrieval:                           # 检索指标
       - "hit_rate"
       - "mrr"
       - "ndcg"
+    generation:                          # 生成质量指标
+      - "faithfulness"
+      - "answer_relevancy"
 ```
+
+### 检索指标
+
+| 指标 | 说明 |
+|------|------|
+| `hit_rate` | 命中率，检索结果中是否包含相关文档 |
+| `mrr` | 平均倒数排名，第一个相关文档的排名 |
+| `ndcg` | 归一化折损累积增益，综合排序质量 |
+
+### 生成质量指标
+
+| 指标 | 说明 | 注意事项 |
+|------|------|---------|
+| `faithfulness` | 忠实度，回答是否可从上下文推导 | 需要额外 LLM 调用 |
+| `answer_relevancy` | 回答相关性，回答与问题的相关程度 | 需要额外 LLM 调用 |
+
+> 详细指标说明请参阅 [评测指标详解](guides/evaluation-metrics.md)。
 
 ---
 
@@ -188,7 +208,47 @@ test_generation:
   default_strategy: "factual"   # 默认问题策略
   default_num_questions: 20     # 默认问题数量
   max_retries: 3                # 最大重试次数
+  
+  # 文档级问题生成配置
+  document_level:
+    enabled: true               # 是否启用文档级问题生成
+    default_num_questions: 20   # 默认问题数量
+    type_distribution:          # 问题类型分布
+      single_fact: 0.30         # 单知识点查询
+      multi_fact: 0.25          # 多知识点综合
+      reasoning: 0.15           # 推理型问题
+      comparative: 0.15         # 对比分析
+      missing: 0.10             # 缺失知识点
+      irrelevant: 0.05          # 无关问题
+    quality_control:            # 质量控制
+      enable_authenticity_check: true   # 启用真实性检查
+      enable_llm_evaluation: false      # 启用 LLM 质量评估
+      min_authenticity_score: 12        # 最低真实性分数
+    max_retries: 3              # 最大重试次数
 ```
+
+### 文档级问题生成配置说明
+
+| 字段 | 说明 | 默认值 |
+|------|------|--------|
+| `enabled` | 是否启用文档级问题生成 | `true` |
+| `default_num_questions` | 默认生成问题数量 | `20` |
+| `type_distribution` | 问题类型分布比例 | 见上表 |
+| `quality_control.enable_authenticity_check` | 启用真实性检查 | `true` |
+| `quality_control.enable_llm_evaluation` | 启用 LLM 质量评估 | `false` |
+| `quality_control.min_authenticity_score` | 最低真实性分数阈值 | `12` |
+| `max_retries` | 生成失败时的最大重试次数 | `3` |
+
+### 问题类型说明
+
+| 类型 | 说明 | 典型问题示例 |
+|------|------|-------------|
+| `single_fact` | 单知识点查询 | "2024年光模块市场规模多少？" |
+| `multi_fact` | 多知识点综合 | "光模块行业未来几年的增长点主要在哪里？" |
+| `reasoning` | 推理型问题 | "为什么CPO能降低功耗？" |
+| `comparative` | 对比分析 | "中际旭创和新易盛哪个更值得投资？" |
+| `missing` | 缺失知识点 | "光模块行业的ESG评级情况怎么样？" |
+| `irrelevant` | 无关问题 | "新能源汽车的电池技术发展怎么样？" |
 
 ---
 
