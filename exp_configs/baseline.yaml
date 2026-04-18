@@ -8,12 +8,8 @@ data:
     seed: 42
 
 test_sets:
-  - strategy: "factual"
-    num_questions: 20
-    seed: 100
-  - strategy: "boundary"
-    num_questions: 15
-    seed: 101
+  - strategy: "document"
+    num_questions: 35
 
 variants:
   - name: "chunk_512_overlap_0"

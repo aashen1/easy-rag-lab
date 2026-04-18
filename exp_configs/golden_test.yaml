@@ -8,15 +8,8 @@ data:
     seed: 42
 
 test_sets:
-  - strategy: "factual"
-    num_questions: 5
-    seed: 100
-  - strategy: "boundary"
-    num_questions: 3
-    seed: 101
-  - strategy: "multi_hop"
-    num_questions: 2
-    seed: 102
+  - strategy: "document"
+    num_questions: 10
 
 variants:
   - name: "baseline"
@@ -30,3 +23,6 @@ evaluation:
       - "hit_rate"
       - "mrr"
       - "ndcg"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
