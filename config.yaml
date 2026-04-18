@@ -99,6 +99,21 @@ test_generation:
   default_strategy: "factual"
   default_num_questions: 20
   max_retries: 3
+  document_level:
+    enabled: true
+    default_num_questions: 20
+    type_distribution:
+      single_fact: 0.30
+      multi_fact: 0.25
+      reasoning: 0.15
+      comparative: 0.15
+      missing: 0.10
+      irrelevant: 0.05
+    quality_control:
+      enable_authenticity_check: true
+      enable_llm_evaluation: false
+      min_authenticity_score: 12
+    max_retries: 3
 
 # Token 成本配置：各模型的定价和折算系数
 token_cost:

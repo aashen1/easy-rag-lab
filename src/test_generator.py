@@ -1,5 +1,6 @@
 import json
 import random
+import warnings
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -59,9 +60,170 @@ MULTI_HOP_PROMPT = """你是一个金融研报问答系统的测试工程师。�
 请严格以以下JSON格式输出（不要输出其他内容）：
 {{"question": "你的问题", "answer": "期望的答案", "difficulty": "hard"}}"""
 
+DOCUMENT_LEVEL_PROMPT = """你是一位金融行业从业者，正在阅读一份行业研究报告。请基于这份报告，生成一个你会真实提出的问题。
+
+## 你的背景
+- 你可能是投资分析师、基金经理、行业研究员或企业战略规划人员
+- 你关心的是能帮助你做决策的信息
+- 你的提问风格是直接、口语化、不啰嗦
+
+## 报告内容
+---
+{document_content}
+---
+
+## 问题类型要求
+请生成一个【{question_type}】类型的问题。
+
+类型说明：
+- 单知识点查询：查询某个具体数据、事实或概念
+- 多知识点综合：需要整合多个信息点才能回答
+- 推理型问题：需要基于信息进行推理或判断
+- 对比分析：对比两个或多个对象
+- 缺失知识点：询问文档中没有或不完整的信息
+- 无关问题：与文档主题无关的问题
+
+## 生成要求
+
+1. 问题风格：
+   - 直接、口语化，像在问同事问题
+   - 不要用"根据文档"、"请分析"等学术化表述
+   - 避免过于正式或结构化的问题
+
+2. 问题质量：
+   - 问题应该有明确的意图
+   - 问题应该有合理的答案（即使是"文档未提及"）
+   - 问题应该体现真实业务场景
+
+3. 答案要求：
+   - 答案应基于文档内容
+   - 如果文档无法回答，明确说明原因
+   - 答案应简洁、准确
+
+## 输出格式
+
+请严格按以下JSON格式输出（不要输出其他内容）：
+
+{{
+    "question": "你的问题",
+    "answer": "期望的答案",
+    "question_type": "{question_type}",
+    "difficulty": "easy/medium/hard/special",
+    "reasoning": "简要说明为什么这个问题属于该类型",
+    "key_entities": ["问题涉及的关键实体，如公司名、技术名等"],
+    "answer_sources": ["答案依据的文档段落，如'第3段'或'表格数据'"]
+}}"""
+
+SINGLE_FACT_SUPPLEMENT = """
+## 单知识点查询的特别说明
+
+好的示例：
+- "2024年光模块市场规模多少？"
+- "CPO的全称是什么？"
+- "中际旭创的主要产品是什么？"
+
+不好的示例（太学术化）：
+- "请根据文档说明2024年光模块市场规模"
+- "文档中提到的CPO技术的全称是什么？"
+"""
+
+MULTI_FACT_SUPPLEMENT = """
+## 多知识点综合的特别说明
+
+好的示例：
+- "科瑞技术和猎奇智能在光模块设备上有什么区别？"
+- "光模块行业未来几年的增长点主要在哪里？"
+
+不好的示例：
+- "请对比分析科瑞技术和猎奇智能的业务差异"
+- "请总结光模块行业的发展趋势"
+"""
+
+REASONING_SUPPLEMENT = """
+## 推理型问题的特别说明
+
+好的示例：
+- "为什么CPO能降低功耗？"
+- "如果800G需求翻倍，对设备商有什么影响？"
+
+答案要求：
+- 必须展示推理过程
+- 推理依据必须来自文档
+- 可以有合理的推断，但要说明依据
+"""
+
+COMPARATIVE_SUPPLEMENT = """
+## 对比分析的特别说明
+
+好的示例：
+- "中际旭创和新易盛哪个更值得投资？"
+- "CPO和LPO两种技术路线各有什么优缺点？"
+
+答案要求：
+- 客观呈现对比结果
+- 如果文档信息不足以对比，如实说明
+- 可以给出倾向性结论，但要说明依据
+"""
+
+MISSING_KNOWLEDGE_SUPPLEMENT = """
+## 缺失知识点的特别说明
+
+这类问题测试系统处理"不知道"的能力。
+
+好的示例：
+- "光模块行业的ESG评级情况怎么样？"（文档未涉及ESG）
+- "2025年的市场预测数据有吗？"（文档只有到2024年）
+
+答案要求：
+- 明确说明"文档未提及该信息"或"文档信息不完整"
+- 如果有部分相关信息，可以提供并说明局限性
+- 不要编造信息
+"""
+
+IRRELEVANT_SUPPLEMENT = """
+## 无关问题的特别说明
+
+这类问题测试系统的拒答能力。
+
+好的示例：
+- "新能源汽车的电池技术发展怎么样？"（文档是关于光模块的）
+- "最近美联储加息对股市有什么影响？"（文档未涉及宏观政策）
+
+答案要求：
+- 明确说明"该问题与文档内容无关"
+- 可以简要说明文档的主题范围
+"""
+
+QUESTION_TYPE_SUPPLEMENTS = {
+    "single_fact": SINGLE_FACT_SUPPLEMENT,
+    "multi_fact": MULTI_FACT_SUPPLEMENT,
+    "reasoning": REASONING_SUPPLEMENT,
+    "comparative": COMPARATIVE_SUPPLEMENT,
+    "missing": MISSING_KNOWLEDGE_SUPPLEMENT,
+    "irrelevant": IRRELEVANT_SUPPLEMENT,
+}
+
 
 class TestSetGenerator:
     __test__ = False
+
+    QUESTION_TYPES = {
+        "single_fact": "单知识点查询",
+        "multi_fact": "多知识点综合",
+        "reasoning": "推理型问题",
+        "comparative": "对比分析",
+        "missing": "缺失知识点",
+        "irrelevant": "无关问题",
+    }
+
+    TYPE_DISTRIBUTION = {
+        "single_fact": 0.30,
+        "multi_fact": 0.25,
+        "reasoning": 0.15,
+        "comparative": 0.15,
+        "missing": 0.10,
+        "irrelevant": 0.05,
+    }
 
     def __init__(self, config: Dict[str, Any]):
         """Initialize the TestSetGenerator with application configuration.
@@ -90,8 +252,10 @@ class TestSetGenerator:
 
         Args:
             meal_name: Name of the meal to generate questions for.
-            strategy: Question generation strategy ('factual', 'boundary',
-                or 'multi_hop'). Defaults to the configured default_strategy.
+            strategy: Question generation strategy. 'factual', 'boundary',
+                and 'multi_hop' are deprecated and will emit a DeprecationWarning.
+                Please use 'document' strategy instead. Defaults to the
+                configured default_strategy.
             num_questions: Number of questions to generate. Defaults to the
                 configured default_num_questions.
             llm_preset: LLM preset name from the configuration to use for
@@ -110,6 +274,16 @@ class TestSetGenerator:
         """
         strategy = strategy or self.default_strategy
         num_questions = num_questions or self.default_num_questions
+
+        deprecated_strategies = {"factual", "boundary", "multi_hop"}
+        normalized_strategy = strategy.replace("-", "_")
+        if normalized_strategy in deprecated_strategies:
+            deprecation_msg = (
+                f"Strategy '{strategy}' is deprecated and will be removed in a future version. "
+                f"Please use 'document' strategy instead."
+            )
+            warnings.warn(deprecation_msg, DeprecationWarning, stacklevel=2)
+            logger.warning(deprecation_msg)
 
         meal_manager = MealManager(self.config)
         meal_config = meal_manager.load_meal(meal_name)
@@ -274,8 +448,9 @@ class TestSetGenerator:
 
         Args:
             grouped_chunks: Dictionary mapping source file names to chunk lists.
-            strategy: Question generation strategy ('factual', 'boundary',
-                or 'multi_hop').
+            strategy: Question generation strategy. 'factual', 'boundary',
+                and 'multi_hop' are deprecated. Please use 'document' strategy
+                instead.
             num_questions: Target number of chunk groups to select.
 
         Returns:
@@ -386,8 +561,9 @@ class TestSetGenerator:
 
         Args:
             chunks: List of chunk dictionaries to base the question on.
-            strategy: Question generation strategy ('factual', 'boundary',
-                or 'multi_hop').
+            strategy: Question generation strategy. 'factual', 'boundary',
+                and 'multi_hop' are deprecated. Please use 'document' strategy
+                instead.
             generator: Generator instance used to call the LLM.
 
         Returns:
@@ -501,3 +677,405 @@ class TestSetGenerator:
 
         logger.info(f"Test set saved to {output_path}")
         return output_path
+
+    def generate_document_based_questions(
+        self,
+        meal_name: str,
+        num_questions: int = None,
+        type_distribution: Optional[Dict[str, float]] = None,
+        llm_preset: str = "default",
+        token_tracker: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """Generate questions based on full MD documents.
+
+        This method generates questions from complete documents rather than
+        chunks, supporting 6 different question types with realistic style.
+
+        Args:
+            meal_name: Name of the meal to generate questions for.
+            num_questions: Total number of questions to generate. Defaults to
+                the configured default_num_questions.
+            type_distribution: Custom distribution of question types. Keys are
+                type names ('single_fact', 'multi_fact', etc.) and values are
+                proportions (0.0-1.0). Defaults to TYPE_DISTRIBUTION.
+            llm_preset: LLM preset name from the configuration to use for
+                question generation.
+            token_tracker: Optional token usage tracker passed to the LLM
+                generator.
+
+        Returns:
+            Dictionary containing the test set metadata and generated questions
+            with quality metrics.
+
+        Raises:
+            ValueError: If no documents are found for the meal or no questions
+                could be generated.
+        """
+        num_questions = num_questions or self.default_num_questions
+        type_distribution = type_distribution or self.TYPE_DISTRIBUTION
+
+        meal_manager = MealManager(self.config)
+        meal_config = meal_manager.load_meal(meal_name)
+
+        logger.info(
+            f"Generating document-based questions for meal '{meal_name}' "
+            f"(num_questions={num_questions})"
+        )
+
+        document_contents = self._load_full_documents(meal_config)
+        if not document_contents:
+            raise ValueError(f"No documents found for meal '{meal_name}'")
+
+        logger.info(f"Loaded {len(document_contents)} documents")
+
+        type_counts = self._calculate_question_distribution(
+            num_questions, type_distribution
+        )
+        logger.info(f"Question type distribution: {type_counts}")
+
+        llm_config = get_llm_config(self.config, llm_preset)
+        generator = Generator(
+            model_name=llm_config["model_name"],
+            api_key=llm_config["api_key"],
+            base_url=llm_config["base_url"],
+            temperature=0.7,
+            max_tokens=1024,
+            token_tracker=token_tracker,
+        )
+
+        questions = []
+        question_id = 1
+        total_attempts = 0
+        failed_count = 0
+
+        for doc_name, doc_content in document_contents.items():
+            for q_type, count in type_counts.items():
+                for _ in range(count):
+                    total_attempts += 1
+                    logger.info(
+                        f"Generating question {question_id}/{num_questions} "
+                        f"(type={q_type}, doc={doc_name})..."
+                    )
+
+                    qa = self._generate_single_document_question(
+                        doc_content, q_type, generator
+                    )
+
+                    if qa is not None:
+                        qa["id"] = f"q{question_id:03d}"
+                        qa["source_document"] = doc_name
+                        qa["category"] = "document"
+                        questions.append(qa)
+                        question_id += 1
+                    else:
+                        failed_count += 1
+                        logger.warning(
+                            f"Failed to generate question, total failures: "
+                            f"{failed_count}/{total_attempts}"
+                        )
+
+        if not questions:
+            raise ValueError("No questions could be generated")
+
+        quality_metrics = self._calculate_quality_metrics(questions)
+
+        test_set = {
+            "name": f"document_level_n{num_questions}",
+            "meal_data_id": meal_config.data_id,
+            "meal_name": meal_name,
+            "strategy": "document",
+            "created_at": datetime.now().isoformat(),
+            "generation_config": {
+                "num_questions": num_questions,
+                "type_distribution": type_distribution,
+                "llm_preset": llm_preset,
+            },
+            "quality_metrics": quality_metrics,
+            "questions": questions,
+        }
+
+        filename = f"document_level_n{num_questions}"
+        self._save_test_set(meal_name, test_set, filename)
+
+        logger.success(
+            f"Generated {len(questions)}/{num_questions} questions "
+            f"for meal '{meal_name}' (strategy: document)"
+        )
+        return test_set
+
+    def _load_full_documents(
+        self, meal_config: MealConfig
+    ) -> Dict[str, str]:
+        """Load full MD documents associated with a meal's PDF files.
+
+        Args:
+            meal_config: MealConfig object whose pdf_files determine the
+                documents to load.
+
+        Returns:
+            Dictionary mapping document names to their full text content.
+        """
+        parsed_dir = Path(self.config.get(
+            "parser", {}).get("output_dir", "data/parsed"))
+        if not parsed_dir.exists():
+            logger.warning(f"Parsed directory not found: {parsed_dir}")
+            return {}
+
+        documents = {}
+        for mf in meal_config.pdf_files:
+            md_path = Path(mf.path).with_suffix(".md")
+
+            if not md_path.exists():
+                md_path = parsed_dir / md_path.name
+
+            if not md_path.exists():
+                md_path = parsed_dir / md_path.name.replace("\\", "/")
+
+            if md_path.exists():
+                try:
+                    with open(md_path, "r", encoding="utf-8") as f:
+                        content = f.read()
+
+                    doc_name = md_path.stem
+                    documents[doc_name] = content
+                    logger.debug(f"Loaded document: {doc_name} ({len(content)} chars)")
+                except Exception as e:
+                    logger.error(f"Failed to load {md_path}: {str(e)}")
+            else:
+                logger.warning(f"Document not found: {md_path}")
+
+        return documents
+
+    def _calculate_question_distribution(
+        self,
+        num_questions: int,
+        type_distribution: Dict[str, float],
+    ) -> Dict[str, int]:
+        """Calculate the number of questions for each type.
+
+        Args:
+            num_questions: Total number of questions to generate.
+            type_distribution: Dictionary mapping type names to proportions.
+
+        Returns:
+            Dictionary mapping type names to question counts.
+        """
+        type_counts = {}
+        remaining = num_questions
+
+        sorted_types = sorted(
+            type_distribution.items(),
+            key=lambda x: x[1],
+            reverse=True
+        )
+
+        for i, (q_type, proportion) in enumerate(sorted_types):
+            if i == len(sorted_types) - 1:
+                type_counts[q_type] = remaining
+            else:
+                count = int(num_questions * proportion)
+                type_counts[q_type] = count
+                remaining -= count
+
+        return type_counts
+
+    def _generate_single_document_question(
+        self,
+        document_content: str,
+        question_type: str,
+        generator,
+    ) -> Optional[Dict[str, Any]]:
+        """Generate a single question from a document using an LLM.
+
+        Args:
+            document_content: Full text content of the document.
+            question_type: Type of question to generate (e.g., 'single_fact',
+                'multi_fact', etc.).
+            generator: Generator instance used to call the LLM.
+
+        Returns:
+            Dictionary with question data, or None if generation fails.
+        """
+        q_type_cn = self.QUESTION_TYPES.get(question_type, question_type)
+
+        supplement = QUESTION_TYPE_SUPPLEMENTS.get(question_type, "")
+
+        prompt = DOCUMENT_LEVEL_PROMPT.format(
+            document_content=document_content[:8000],
+            question_type=q_type_cn
+        )
+
+        if supplement:
+            prompt += supplement
+
+        for attempt in range(self.max_retries):
+            try:
+                response = generator.generate(
+                    query=prompt,
+                    contexts=[],
+                    system_prompt="你是一位金融行业从业者。请严格按照要求的JSON格式输出，不要输出任何其他内容。",
+                    category="test_generation",
+                )
+
+                qa = self._parse_document_question_response(response)
+                if qa is not None and self._validate_question_quality(qa):
+                    return qa
+
+                logger.debug(
+                    f"Attempt {attempt + 1}: failed to parse or validate "
+                    f"question response"
+                )
+            except Exception as e:
+                logger.warning(f"Attempt {attempt + 1} failed: {str(e)}")
+
+        return None
+
+    def _parse_document_question_response(
+        self, response: str
+    ) -> Optional[Dict[str, Any]]:
+        """Parse an LLM response for document-based question generation.
+
+        Args:
+            response: Raw LLM response string.
+
+        Returns:
+            Dictionary with question data, or None if parsing fails.
+        """
+        try:
+            response = response.strip()
+            if response.startswith("```"):
+                lines = response.split("\n")
+                lines = [l for l in lines if not l.startswith("```")]
+                response = "\n".join(lines)
+
+            start = response.find("{")
+            end = response.rfind("}") + 1
+            if start == -1 or end == 0:
+                return None
+
+            json_str = response[start:end]
+            qa = json.loads(json_str)
+
+            required_fields = ["question", "answer", "question_type"]
+            for field in required_fields:
+                if field not in qa or not qa[field]:
+                    logger.debug(f"Missing or empty required field: {field}")
+                    return None
+
+            qa.setdefault("difficulty", "medium")
+            qa.setdefault("reasoning", "")
+            qa.setdefault("key_entities", [])
+            qa.setdefault("answer_sources", [])
+
+            return qa
+
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.debug(f"Failed to parse LLM response as JSON: {str(e)}")
+            return None
+
+    def _validate_question_quality(self, question_data: Dict) -> bool:
+        """Validate the quality of a generated question.
+
+        Args:
+            question_data: Dictionary containing question data.
+
+        Returns:
+            True if the question passes quality checks, False otherwise.
+        """
+        question = question_data.get("question", "")
+
+        authenticity = self._check_authenticity_rules(question)
+        if authenticity["has_issues"]:
+            logger.debug(
+                f"Question failed authenticity check: "
+                f"{authenticity['issues']}"
+            )
+            return False
+
+        if len(question) < 5:
+            logger.debug("Question too short")
+            return False
+
+        if len(question) > 200:
+            logger.debug("Question too long")
+            return False
+
+        return True
+
+    def _check_authenticity_rules(self, question: str) -> Dict[str, Any]:
+        """Check if a question follows authenticity rules.
+
+        Args:
+            question: The question text to check.
+
+        Returns:
+            Dictionary with 'has_issues', 'issues', and 'is_authentic' keys.
+        """
+        issues = []
+
+        academic_patterns = [
+            "根据文档",
+            "根据提供的信息",
+            "请分析",
+            "请说明",
+            "请对比",
+            "请总结",
+            "文档中提到",
+            "片段中提到",
+        ]
+        for pattern in academic_patterns:
+            if pattern in question:
+                issues.append(f"包含学术化表述：'{pattern}'")
+
+        template_starts = [
+            "请问",
+            "请解释",
+            "请描述",
+        ]
+        for start in template_starts:
+            if question.startswith(start):
+                issues.append(f"模板化开头：'{start}'")
+
+        if len(question) > 100:
+            issues.append("问题过长，可能不够直接")
+
+        return {
+            "has_issues": len(issues) > 0,
+            "issues": issues,
+            "is_authentic": len(issues) == 0
+        }
+
+    def _calculate_quality_metrics(
+        self, questions: List[Dict]
+    ) -> Dict[str, Any]:
+        """Calculate quality metrics for generated questions.
+
+        Args:
+            questions: List of generated question dictionaries.
+
+        Returns:
+            Dictionary containing quality metrics.
+        """
+        if not questions:
+            return {
+                "format_correct_rate": 0.0,
+                "authenticity_pass_rate": 0.0,
+                "type_distribution": {},
+            }
+
+        type_counts = {}
+        for q in questions:
+            q_type = q.get("question_type", "unknown")
+            type_counts[q_type] = type_counts.get(q_type, 0) + 1
+
+        total = len(questions)
+        authenticity_passed = sum(
+            1 for q in questions
+            if self._check_authenticity_rules(q.get("question", ""))["is_authentic"]
+        )
+
+        return {
+            "format_correct_rate": 1.0,
+            "authenticity_pass_rate": authenticity_passed / total,
+            "type_distribution": type_counts,
+        }
