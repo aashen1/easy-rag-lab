@@ -734,3 +734,114 @@ class TestDistributeQuestionsAcrossDocs:
         assert counts["single_fact"] == 15
         assert counts["multi_fact"] == 12
         assert counts["reasoning"] == 7
+
+
+class TestLoadFullDocuments:
+    def setup_method(self):
+        self.config = {
+            "parser": {"output_dir": "data/parsed"},
+            "test_generation": {"max_retries": 3},
+        }
+        self.generator = TestSetGenerator(self.config)
+
+    def test_returns_dict_with_content_and_source_path(self, tmp_path):
+        parsed_dir = tmp_path / "parsed"
+        sub_dir = parsed_dir / "research_reports"
+        sub_dir.mkdir(parents=True)
+        md_file = sub_dir / "2026年光伏行业分析.md"
+        md_file.write_text("光伏行业分析内容", encoding="utf-8")
+
+        meal_config = MagicMock()
+        meal_config.data_id = None
+        meal_config.pdf_files = [
+            MagicMock(path="research_reports/2026年光伏行业分析.pdf")
+        ]
+
+        with patch.object(
+            self.generator, "_resolve_parsed_dir", return_value=parsed_dir
+        ):
+            result = self.generator._load_full_documents(meal_config)
+
+        assert "2026年光伏行业分析" in result
+        doc_data = result["2026年光伏行业分析"]
+        assert "content" in doc_data
+        assert "source_path" in doc_data
+        assert doc_data["content"] == "光伏行业分析内容"
+        assert doc_data["source_path"] == "research_reports/2026年光伏行业分析.md"
+
+    def test_empty_when_no_parsed_dir(self):
+        meal_config = MagicMock()
+        meal_config.data_id = None
+        meal_config.pdf_files = []
+
+        with patch.object(
+            self.generator, "_resolve_parsed_dir", return_value=None
+        ):
+            result = self.generator._load_full_documents(meal_config)
+
+        assert result == {}
+
+
+class TestDocumentBasedQuestionsSourceFiles:
+    def setup_method(self):
+        self.config = {
+            "parser": {"output_dir": "data/parsed"},
+            "test_generation": {"max_retries": 3, "default_num_questions": 20},
+        }
+        self.generator = TestSetGenerator(self.config)
+
+    def test_source_files_set_in_generated_questions(self, tmp_path):
+        parsed_dir = tmp_path / "parsed"
+        sub_dir = parsed_dir / "research_reports"
+        sub_dir.mkdir(parents=True)
+        md_file = sub_dir / "光模块行业分析.md"
+        md_file.write_text("光模块行业内容" * 100, encoding="utf-8")
+
+        meal_config = MagicMock()
+        meal_config.data_id = "test_data_id"
+        meal_config.pdf_files = [
+            MagicMock(path="research_reports/光模块行业分析.pdf")
+        ]
+
+        mock_meal_manager = MagicMock()
+        mock_meal_manager.load_meal.return_value = meal_config
+        mock_meal_manager.get_meal_dir.return_value = tmp_path / "meals" / "test_meal"
+
+        mock_generator = MagicMock()
+        mock_generator.generate.return_value = json.dumps({
+            "question": "光模块市场规模多少？",
+            "answer": "约100亿美元",
+            "question_type": "single_fact",
+            "difficulty": "easy",
+            "reasoning": "测试",
+            "key_entities": ["光模块"],
+            "answer_sources": ["第1段"],
+        })
+
+        with patch.object(
+            self.generator, "_resolve_parsed_dir", return_value=parsed_dir
+        ), patch(
+            "src.test_generator.MealManager", return_value=mock_meal_manager
+        ), patch(
+            "src.test_generator.Generator", return_value=mock_generator
+        ), patch(
+            "src.test_generator.get_llm_config",
+            return_value={
+                "model_name": "test",
+                "api_key": "test",
+                "base_url": "http://test",
+            },
+        ):
+            result = self.generator.generate_document_based_questions(
+                meal_name="test_meal",
+                num_questions=1,
+                type_distribution={"single_fact": 1.0},
+            )
+
+        questions = result["questions"]
+        assert len(questions) >= 1
+        for q in questions:
+            assert "source_files" in q
+            assert isinstance(q["source_files"], list)
+            assert len(q["source_files"]) > 0
+            assert q["source_files"][0] == "research_reports/光模块行业分析.md"

@@ -819,10 +819,13 @@ class TestSetGenerator:
         total_attempts = 0
         failed_count = 0
 
-        for doc_name, doc_content in document_contents.items():
+        for doc_name, doc_data in document_contents.items():
             assigned_types = doc_question_plans.get(doc_name, [])
             if not assigned_types:
                 continue
+
+            doc_content = doc_data["content"]
+            source_path = doc_data["source_path"]
 
             for q_type in assigned_types:
                 total_attempts += 1
@@ -838,6 +841,7 @@ class TestSetGenerator:
                 if qa is not None:
                     qa["id"] = f"q{question_id:03d}"
                     qa["source_document"] = doc_name
+                    qa["source_files"] = [source_path]
                     qa["category"] = "document"
                     questions.append(qa)
                     question_id += 1
@@ -879,7 +883,7 @@ class TestSetGenerator:
 
     def _load_full_documents(
         self, meal_config: MealConfig
-    ) -> Dict[str, str]:
+    ) -> Dict[str, Dict[str, str]]:
         """Load full MD documents associated with a meal's PDF files.
 
         Resolves the parsed directory via the ArtifactCache first, falling
@@ -890,7 +894,9 @@ class TestSetGenerator:
                 documents to load.
 
         Returns:
-            Dictionary mapping document names to their full text content.
+            Dictionary mapping document names to dicts with 'content' and
+            'source_path' keys. 'source_path' is the relative path from
+            the parsed directory (e.g. 'research_reports/doc.md').
         """
         parsed_dir = self._resolve_parsed_dir(meal_config)
         if not parsed_dir or not parsed_dir.exists():
@@ -915,7 +921,10 @@ class TestSetGenerator:
                     content = f.read()
 
                 doc_name = md_file.stem
-                documents[doc_name] = content
+                documents[doc_name] = {
+                    "content": content,
+                    "source_path": rel_path,
+                }
                 logger.debug(f"Loaded document: {doc_name} ({len(content)} chars)")
             except Exception as e:
                 logger.error(f"Failed to load {md_file}: {str(e)}")
