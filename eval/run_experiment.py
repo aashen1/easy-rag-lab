@@ -476,6 +476,8 @@ def prepare_index_for_variant(
     if not index_exists:
         logger.info(f"Building index for variant '{variant_name}'...")
 
+        indexer.close()
+
         artifacts_config = merged_config.get("artifacts") or {}
         artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
         cache = ArtifactCache(artifacts_dir)
@@ -726,6 +728,11 @@ def run_variant_evaluation(
 
     except Exception as e:
         logger.error(f"Failed to evaluate variant '{variant_name}': {str(e)}")
+        if 'pipeline' in locals():
+            try:
+                pipeline.close()
+            except Exception:
+                pass
         raise
 
 
