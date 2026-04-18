@@ -889,6 +889,27 @@ def run_experiment(
         token_cost_config = system_config.get("token_cost", {})
         cost_info = experiment_tracker.estimate_cost(token_cost_config)
 
+        try:
+            token_summary_data = experiment_tracker.to_dict()
+            token_summary_data["estimated_cost"] = cost_info
+            token_summary_path = exp_dir / "token_summary.json"
+            with open(token_summary_path, "w", encoding="utf-8") as f:
+                json.dump(token_summary_data, f, ensure_ascii=False, indent=2)
+            logger.info(f"Token summary saved to {token_summary_path}")
+
+            token_table = experiment_tracker.get_detailed_table()
+            if cost_info["total_cost"] > 0:
+                token_table += f"\n\nEstimated Cost (model: {cost_info['model']}):\n"
+                token_table += f"  Input:  ${cost_info['input_cost']:.4f}\n"
+                token_table += f"  Output: ${cost_info['output_cost']:.4f}\n"
+                token_table += f"  Total:  ${cost_info['total_cost']:.4f}\n"
+            token_table_path = exp_dir / "token_summary.txt"
+            with open(token_table_path, "w", encoding="utf-8") as f:
+                f.write(token_table)
+            logger.info(f"Token summary table saved to {token_table_path}")
+        except Exception as e:
+            logger.warning(f"Failed to save token summary: {str(e)}")
+
         print("\n" + experiment_tracker.get_detailed_table())
 
         if cost_info["total_cost"] > 0:
