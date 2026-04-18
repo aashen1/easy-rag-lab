@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 from loguru import logger
 
 from src.generator import Generator
-from src.meal import MealConfig, MealManager
+from src.meal import ArtifactCache, MealConfig, MealManager
 from src.utils import ensure_dir, get_llm_config
 
 
@@ -366,8 +366,70 @@ class TestSetGenerator:
         )
         return test_set
 
+    def _resolve_parsed_dir(self, meal_config: MealConfig) -> Optional[Path]:
+        """Resolve the parsed artifacts directory for a meal.
+
+        Tries the ArtifactCache first (based on meal data_id), then falls
+        back to the config-based ``parser.output_dir`` path.
+
+        Args:
+            meal_config: MealConfig object with data_id and config_hashes.
+
+        Returns:
+            Path to the parsed directory, or None if not found.
+        """
+        if meal_config.data_id:
+            artifacts_config = self.config.get("artifacts", {})
+            artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
+            cache = ArtifactCache(artifacts_dir)
+            parsed_dir = cache.get_parsed_dir(meal_config.data_id)
+            if parsed_dir.exists():
+                logger.debug(f"Resolved parsed dir via ArtifactCache: {parsed_dir}")
+                return parsed_dir
+
+        fallback = Path(self.config.get("parser", {}).get("output_dir", "data/parsed"))
+        if fallback.exists():
+            logger.debug(f"Resolved parsed dir via config fallback: {fallback}")
+            return fallback
+
+        return None
+
+    def _resolve_chunks_dir(self, meal_config: MealConfig) -> Optional[Path]:
+        """Resolve the chunks artifacts directory for a meal.
+
+        Tries the ArtifactCache first (based on meal data_id and chunker
+        hash), then falls back to the config-based ``chunker.output_dir``
+        path.
+
+        Args:
+            meal_config: MealConfig object with data_id and config_hashes.
+
+        Returns:
+            Path to the chunks directory, or None if not found.
+        """
+        if meal_config.data_id and meal_config.config_hashes:
+            chunker_hash = meal_config.config_hashes.get("chunker", "")
+            if chunker_hash:
+                artifacts_config = self.config.get("artifacts", {})
+                artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
+                cache = ArtifactCache(artifacts_dir)
+                chunks_dir = cache.get_chunks_dir(meal_config.data_id, chunker_hash)
+                if chunks_dir.exists():
+                    logger.debug(f"Resolved chunks dir via ArtifactCache: {chunks_dir}")
+                    return chunks_dir
+
+        fallback = Path(self.config.get("chunker", {}).get("output_dir", "data/chunks"))
+        if fallback.exists():
+            logger.debug(f"Resolved chunks dir via config fallback: {fallback}")
+            return fallback
+
+        return None
+
     def _load_meal_chunks(self, meal_config) -> List[Dict[str, Any]]:
         """Load chunk data from JSONL files associated with a meal's PDF files.
+
+        Resolves the chunks directory via the ArtifactCache first, falling
+        back to the config-based ``chunker.output_dir`` path.
 
         Args:
             meal_config: MealConfig object whose pdf_files determine the
@@ -376,9 +438,8 @@ class TestSetGenerator:
         Returns:
             List of chunk dictionaries loaded from matching JSONL files.
         """
-        chunks_dir = Path(self.config.get(
-            "chunker", {}).get("output_dir", "data/chunks"))
-        if not chunks_dir.exists():
+        chunks_dir = self._resolve_chunks_dir(meal_config)
+        if not chunks_dir or not chunks_dir.exists():
             return []
 
         source_filter = set()
@@ -808,6 +869,9 @@ class TestSetGenerator:
     ) -> Dict[str, str]:
         """Load full MD documents associated with a meal's PDF files.
 
+        Resolves the parsed directory via the ArtifactCache first, falling
+        back to the config-based ``parser.output_dir`` path.
+
         Args:
             meal_config: MealConfig object whose pdf_files determine the
                 documents to load.
@@ -815,34 +879,33 @@ class TestSetGenerator:
         Returns:
             Dictionary mapping document names to their full text content.
         """
-        parsed_dir = Path(self.config.get(
-            "parser", {}).get("output_dir", "data/parsed"))
-        if not parsed_dir.exists():
+        parsed_dir = self._resolve_parsed_dir(meal_config)
+        if not parsed_dir or not parsed_dir.exists():
             logger.warning(f"Parsed directory not found: {parsed_dir}")
             return {}
 
-        documents = {}
+        source_filter = set()
         for mf in meal_config.pdf_files:
-            md_path = Path(mf.path).with_suffix(".md")
+            md_rel = str(Path(mf.path).with_suffix(".md")).replace("\\", "/")
+            source_filter.add(md_rel)
 
-            if not md_path.exists():
-                md_path = parsed_dir / md_path.name
+        documents = {}
+        md_files = list(parsed_dir.rglob("*.md"))
 
-            if not md_path.exists():
-                md_path = parsed_dir / md_path.name.replace("\\", "/")
+        for md_file in md_files:
+            try:
+                rel_path = str(md_file.relative_to(parsed_dir)).replace("\\", "/")
+                if source_filter and rel_path not in source_filter:
+                    continue
 
-            if md_path.exists():
-                try:
-                    with open(md_path, "r", encoding="utf-8") as f:
-                        content = f.read()
+                with open(md_file, "r", encoding="utf-8") as f:
+                    content = f.read()
 
-                    doc_name = md_path.stem
-                    documents[doc_name] = content
-                    logger.debug(f"Loaded document: {doc_name} ({len(content)} chars)")
-                except Exception as e:
-                    logger.error(f"Failed to load {md_path}: {str(e)}")
-            else:
-                logger.warning(f"Document not found: {md_path}")
+                doc_name = md_file.stem
+                documents[doc_name] = content
+                logger.debug(f"Loaded document: {doc_name} ({len(content)} chars)")
+            except Exception as e:
+                logger.error(f"Failed to load {md_file}: {str(e)}")
 
         return documents
 
