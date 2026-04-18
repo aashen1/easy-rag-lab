@@ -10,6 +10,8 @@ from src.experiment import (
     ExperimentConfig,
     ExperimentManager,
     ExperimentResult,
+    VALID_GENERATION_METRICS,
+    VALID_RETRIEVAL_METRICS,
     deep_merge,
     get_test_set_config,
     get_variant_config,
@@ -139,6 +141,94 @@ class TestExperimentConfig:
         config2 = ExperimentConfig.from_dict(data2)
         errors2 = config2.validate()
         assert "Test set 0 missing 'num_questions' field" in errors2
+
+    @pytest.mark.unit
+    def test_valid_metrics_with_retrieval_only(self):
+        data = self._make_config_dict()
+        data["evaluation"]["metrics"] = {
+            "retrieval": ["hit_rate", "mrr", "ndcg"]
+        }
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        assert not any("metrics" in e.lower() for e in errors)
+
+    @pytest.mark.unit
+    def test_valid_metrics_with_retrieval_and_generation(self):
+        data = self._make_config_dict()
+        data["evaluation"]["metrics"] = {
+            "retrieval": ["hit_rate", "mrr"],
+            "generation": ["faithfulness", "answer_relevancy"]
+        }
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        assert not any("metrics" in e.lower() for e in errors)
+
+    @pytest.mark.unit
+    def test_invalid_retrieval_metrics(self):
+        data = self._make_config_dict()
+        data["evaluation"]["metrics"] = {
+            "retrieval": ["hit_rate", "invalid_metric", "another_invalid"]
+        }
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        assert any("Invalid retrieval metrics" in e for e in errors)
+        assert any("invalid_metric" in e for e in errors)
+
+    @pytest.mark.unit
+    def test_invalid_generation_metrics(self):
+        data = self._make_config_dict()
+        data["evaluation"]["metrics"] = {
+            "retrieval": ["hit_rate"],
+            "generation": ["faithfulness", "invalid_gen_metric"]
+        }
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        assert any("Invalid generation metrics" in e for e in errors)
+        assert any("invalid_gen_metric" in e for e in errors)
+
+    @pytest.mark.unit
+    def test_metrics_not_dict(self):
+        data = self._make_config_dict()
+        data["evaluation"]["metrics"] = ["hit_rate", "mrr"]
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        assert any("must be a dictionary" in e for e in errors)
+
+    @pytest.mark.unit
+    def test_retrieval_not_list(self):
+        data = self._make_config_dict()
+        data["evaluation"]["metrics"] = {
+            "retrieval": "hit_rate"
+        }
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        assert any("Retrieval metrics must be a list" in e for e in errors)
+
+    @pytest.mark.unit
+    def test_generation_not_list(self):
+        data = self._make_config_dict()
+        data["evaluation"]["metrics"] = {
+            "retrieval": ["hit_rate"],
+            "generation": "faithfulness"
+        }
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        assert any("Generation metrics must be a list" in e for e in errors)
+
+    @pytest.mark.unit
+    def test_missing_retrieval_field(self):
+        data = self._make_config_dict()
+        data["evaluation"]["metrics"] = {
+            "generation": ["faithfulness"]
+        }
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        assert any("must include 'retrieval' field" in e for e in errors)
+
+    @pytest.mark.unit
+    def test_valid_metrics_constants(self):
+        assert VALID_RETRIEVAL_METRICS == {"hit_rate", "mrr", "ndcg"}
+        assert VALID_GENERATION_METRICS == {"faithfulness", "answer_relevancy"}
 
 
 class TestDeepMerge:

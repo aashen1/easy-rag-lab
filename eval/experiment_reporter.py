@@ -13,6 +13,7 @@ class TestCaseResult:
     question: str
     answer: Optional[str]
     retrieval: Optional[Dict[str, float]] = None
+    generation: Optional[Dict[str, float]] = None
     sources: Optional[List[str]] = None
     error: Optional[str] = None
     time_seconds: float = 0.0
@@ -24,6 +25,7 @@ class VariantResult:
     variant_name: str
     variant_description: Optional[str] = None
     retrieval_metrics: Optional[Dict[str, float]] = None
+    generation_metrics: Optional[Dict[str, float]] = None
     config_snapshot: Optional[Dict[str, Any]] = None
     total_questions: int = 0
     total_time_seconds: float = 0.0
@@ -35,6 +37,7 @@ class VariantResult:
             variant_name=data.get("variant_name", "unnamed"),
             variant_description=data.get("variant_description"),
             retrieval_metrics=data.get("retrieval_metrics"),
+            generation_metrics=data.get("generation_metrics"),
             config_snapshot=data.get("config_snapshot"),
             total_questions=data.get("total_questions", 0),
             total_time_seconds=data.get("total_time_seconds", 0.0),
@@ -50,6 +53,7 @@ class ExperimentResult:
     avg_time_per_case: float
     retrieval_metrics: Dict[str, float]
     results: List[TestCaseResult]
+    generation_metrics: Optional[Dict[str, float]] = None
     meal_data_id: Optional[str] = None
     meal_name: Optional[str] = None
     config_snapshot: Optional[Dict[str, Any]] = None
@@ -67,6 +71,7 @@ class ExperimentResult:
                 question=r.get("question", ""),
                 answer=r.get("answer"),
                 retrieval=r.get("retrieval"),
+                generation=r.get("generation"),
                 sources=r.get("sources"),
                 error=r.get("error"),
                 time_seconds=r.get("time_seconds", 0.0),
@@ -86,6 +91,7 @@ class ExperimentResult:
             avg_time_per_case=data.get("avg_time_per_case", 0.0),
             retrieval_metrics=data.get("retrieval_metrics", {}),
             results=results,
+            generation_metrics=data.get("generation_metrics"),
             meal_data_id=data.get("meal_data_id"),
             meal_name=data.get("meal_name"),
             config_snapshot=data.get("config_snapshot"),
@@ -127,12 +133,18 @@ LLM_REPORT_PROMPT_TEMPLATE = """你是一位专业的RAG系统分析师。请根
 - 评估所选技术和模型
 - 讨论潜在的优势和局限
 
-### 4. 评测结果分析
+### 4. 检索性能分析
 - 解读检索指标（Hit Rate、MRR、NDCG）
 - 分析不同问题类型的表现差异
 - 识别潜在的瓶颈或问题
 
-### 5. 结论与建议
+### 5. 生成质量分析
+- 解读生成质量指标（Faithfulness、Answer Relevancy）
+- 分析回答是否基于检索内容（Faithfulness）
+- 分析回答是否切题（Answer Relevancy）
+- 识别潜在的幻觉或不相关问题
+
+### 6. 结论与建议
 - 总结关键发现
 - 提出可行的改进建议
 - 建议下一步优化方向
@@ -301,12 +313,25 @@ class ExperimentReporter:
         self, variant_results: List[Dict[str, Any]]
     ) -> str:
         lines = ["## 2. Variant Comparison Table", ""]
-        lines.append(
-            "| Variant | Description | Hit Rate | MRR | NDCG | Questions | Time (s) |"
+
+        has_generation = any(
+            vr.get("generation_metrics") for vr in variant_results
         )
-        lines.append(
-            "|---------|-------------|----------|-----|------|-----------|----------|"
-        )
+
+        if has_generation:
+            lines.append(
+                "| Variant | Description | Hit Rate | MRR | NDCG | Faithfulness | Relevancy | Questions | Time (s) |"
+            )
+            lines.append(
+                "|---------|-------------|----------|-----|------|--------------|-----------|-----------|----------|"
+            )
+        else:
+            lines.append(
+                "| Variant | Description | Hit Rate | MRR | NDCG | Questions | Time (s) |"
+            )
+            lines.append(
+                "|---------|-------------|----------|-----|------|-----------|----------|"
+            )
 
         best_variant = self._find_best_variant(variant_results)
 
@@ -325,14 +350,32 @@ class ExperimentReporter:
                 time_s = vr.get("total_time_seconds", 0)
 
                 marker = " ⭐" if vr == best_variant else ""
-                lines.append(
-                    f"| {name}{marker} | {desc} | {hr:.4f} | {mrr:.4f} | {ndcg:.4f} | {q_count} | {time_s:.2f} |"
-                )
+
+                if has_generation and vr.get("generation_metrics"):
+                    gen_metrics = vr["generation_metrics"]
+                    faithfulness = gen_metrics.get("avg_faithfulness")
+                    relevancy = gen_metrics.get("avg_answer_relevancy")
+                    fa_str = f"{faithfulness:.2f}" if faithfulness is not None else "N/A"
+                    ar_str = f"{relevancy:.2f}" if relevancy is not None else "N/A"
+                    lines.append(
+                        f"| {name}{marker} | {desc} | {hr:.4f} | {mrr:.4f} | {ndcg:.4f} | {fa_str} | {ar_str} | {q_count} | {time_s:.2f} |"
+                    )
+                elif has_generation:
+                    lines.append(
+                        f"| {name}{marker} | {desc} | {hr:.4f} | {mrr:.4f} | {ndcg:.4f} | N/A | N/A | {q_count} | {time_s:.2f} |"
+                    )
+                else:
+                    lines.append(
+                        f"| {name}{marker} | {desc} | {hr:.4f} | {mrr:.4f} | {ndcg:.4f} | {q_count} | {time_s:.2f} |"
+                    )
             else:
                 error = vr.get("error", "Unknown error")
                 if len(error) > 30:
                     error = error[:27] + "..."
-                lines.append(f"| {name} | {desc} | ERROR | ERROR | ERROR | - | - |")
+                if has_generation:
+                    lines.append(f"| {name} | {desc} | ERROR | ERROR | ERROR | ERROR | ERROR | - | - |")
+                else:
+                    lines.append(f"| {name} | {desc} | ERROR | ERROR | ERROR | - | - |")
 
         lines.append("")
         lines.append("_⭐ = Best performing variant_")
@@ -370,10 +413,23 @@ class ExperimentReporter:
         lines.append(f"**Variant**: {name}")
         lines.append(f"**Description**: {desc}")
         lines.append("")
-        lines.append("**Performance Metrics**:")
+        lines.append("**Retrieval Metrics**:")
         lines.append(f"- Hit Rate: {metrics.get('avg_hit_rate', 0):.4f}")
         lines.append(f"- MRR: {metrics.get('avg_mrr', 0):.4f}")
         lines.append(f"- NDCG: {metrics.get('avg_ndcg', 0):.4f}")
+        lines.append("")
+
+        if best.get("generation_metrics"):
+            gen_metrics = best["generation_metrics"]
+            lines.append("**Generation Quality Metrics**:")
+            faithfulness = gen_metrics.get("avg_faithfulness")
+            relevancy = gen_metrics.get("avg_answer_relevancy")
+            if faithfulness is not None:
+                lines.append(f"- Faithfulness: {faithfulness:.4f}")
+            if relevancy is not None:
+                lines.append(f"- Answer Relevancy: {relevancy:.4f}")
+            lines.append("")
+
         lines.append(f"- Total Questions: {best.get('total_questions', 0)}")
         lines.append(f"- Total Time: {best.get('total_time_seconds', 0):.2f}s")
         lines.append("")
@@ -414,6 +470,17 @@ class ExperimentReporter:
                 lines.append(f"- MRR: {metrics.get('avg_mrr', 0):.4f}")
                 lines.append(f"- NDCG: {metrics.get('avg_ndcg', 0):.4f}")
                 lines.append("")
+
+                if vr.get("generation_metrics"):
+                    gen_metrics = vr["generation_metrics"]
+                    lines.append("**Generation Quality Metrics**:")
+                    faithfulness = gen_metrics.get("avg_faithfulness")
+                    relevancy = gen_metrics.get("avg_answer_relevancy")
+                    if faithfulness is not None:
+                        lines.append(f"- Faithfulness: {faithfulness:.4f}")
+                    if relevancy is not None:
+                        lines.append(f"- Answer Relevancy: {relevancy:.4f}")
+                    lines.append("")
 
                 config_snapshot = vr.get("config_snapshot", {})
                 if config_snapshot and "merged" in config_snapshot:
@@ -478,7 +545,7 @@ class ExperimentReporter:
         best_mrr = best_metrics.get("avg_mrr", 0)
         best_ndcg = best_metrics.get("avg_ndcg", 0)
 
-        lines.append("### Performance Analysis")
+        lines.append("### Retrieval Performance Analysis")
         lines.append("")
 
         if best_hr >= 0.8:
@@ -503,45 +570,110 @@ class ExperimentReporter:
         lines.append(f"- **NDCG ({best_ndcg:.4f})**: Overall ranking quality metric.")
         lines.append("")
 
+        if best.get("generation_metrics"):
+            gen_metrics = best["generation_metrics"]
+            best_faithfulness = gen_metrics.get("avg_faithfulness", 0)
+            best_relevancy = gen_metrics.get("avg_answer_relevancy", 0)
+
+            lines.append("### Generation Quality Analysis")
+            lines.append("")
+
+            if best_faithfulness >= 0.8:
+                fa_assessment = "Excellent - Answers are well-grounded in contexts."
+            elif best_faithfulness >= 0.6:
+                fa_assessment = "Good - Most answers are supported by contexts."
+            elif best_faithfulness >= 0.4:
+                fa_assessment = "Moderate - Some hallucinations detected."
+            else:
+                fa_assessment = "Low - Significant hallucinations, needs improvement."
+
+            if best_relevancy >= 0.8:
+                ar_assessment = "Excellent - Answers directly address questions."
+            elif best_relevancy >= 0.6:
+                ar_assessment = "Good - Answers are mostly relevant."
+            elif best_relevancy >= 0.4:
+                ar_assessment = "Moderate - Some answers may be off-topic."
+            else:
+                ar_assessment = "Low - Answers often irrelevant, needs improvement."
+
+            lines.append(f"- **Faithfulness ({best_faithfulness:.4f})**: {fa_assessment}")
+            lines.append(f"- **Answer Relevancy ({best_relevancy:.4f})**: {ar_assessment}")
+            lines.append("")
+
         lines.append("### Optimization Suggestions")
         lines.append("")
 
         recommendations = []
+        rec_num = 1
 
         if best_hr < 0.6:
             recommendations.append(
-                "1. Consider increasing `top_k` to retrieve more candidate documents."
+                f"{rec_num}. Consider increasing `top_k` to retrieve more candidate documents."
             )
+            rec_num += 1
             recommendations.append(
-                "2. Evaluate embedding model quality for domain-specific content."
+                f"{rec_num}. Evaluate embedding model quality for domain-specific content."
             )
+            rec_num += 1
             recommendations.append(
-                "3. Consider hybrid retrieval (BM25 + vector search)."
+                f"{rec_num}. Consider hybrid retrieval (BM25 + vector search)."
             )
+            rec_num += 1
 
         if best_mrr < 0.5:
             recommendations.append(
-                "4. Add a reranker to improve document ranking."
+                f"{rec_num}. Add a reranker to improve document ranking."
             )
+            rec_num += 1
             recommendations.append(
-                "5. Review chunking strategy for better context preservation."
+                f"{rec_num}. Review chunking strategy for better context preservation."
             )
+            rec_num += 1
 
         if best_ndcg < 0.5:
             recommendations.append(
-                "6. Consider semantic chunking for better context boundaries."
+                f"{rec_num}. Consider semantic chunking for better context boundaries."
             )
+            rec_num += 1
+
+        if best.get("generation_metrics"):
+            gen_metrics = best["generation_metrics"]
+            best_faithfulness = gen_metrics.get("avg_faithfulness", 0)
+            best_relevancy = gen_metrics.get("avg_answer_relevancy", 0)
+
+            if best_faithfulness < 0.6:
+                recommendations.append(
+                    f"{rec_num}. Review prompt engineering to reduce hallucinations."
+                )
+                rec_num += 1
+                recommendations.append(
+                    f"{rec_num}. Ensure retrieved contexts are relevant and complete."
+                )
+                rec_num += 1
+
+            if best_relevancy < 0.6:
+                recommendations.append(
+                    f"{rec_num}. Improve question understanding in generation prompts."
+                )
+                rec_num += 1
+                recommendations.append(
+                    f"{rec_num}. Consider answer validation or filtering."
+                )
+                rec_num += 1
 
         if not recommendations:
             recommendations.append(
-                "1. Current best variant shows satisfactory performance."
+                f"{rec_num}. Current best variant shows satisfactory performance."
             )
+            rec_num += 1
             recommendations.append(
-                "2. Consider fine-tuning embedding model for domain-specific improvements."
+                f"{rec_num}. Consider fine-tuning embedding model for domain-specific improvements."
             )
+            rec_num += 1
             recommendations.append(
-                "3. Explore advanced retrieval strategies for edge cases."
+                f"{rec_num}. Explore advanced retrieval strategies for edge cases."
             )
+            rec_num += 1
 
         lines.extend(recommendations)
         lines.append("")
@@ -679,17 +811,60 @@ class ExperimentReporter:
 
         return "\n".join(lines)
 
+    def _get_metric_description(self, metric: str) -> str:
+        """Get description for a retrieval metric.
+
+        Args:
+            metric: Metric name (e.g., 'avg_hit_rate', 'avg_mrr').
+
+        Returns:
+            Human-readable description of the metric.
+        """
+        descriptions = {
+            "avg_hit_rate": "Percentage of queries where relevant docs were retrieved",
+            "avg_mrr": "Average position of first relevant document",
+            "avg_ndcg": "Normalized ranking quality across all positions",
+        }
+        return descriptions.get(metric, "Retrieval quality metric")
+
+    def _get_generation_metric_description(self, metric: str) -> str:
+        """Get description for a generation quality metric.
+
+        Args:
+            metric: Metric name (e.g., 'avg_faithfulness', 'avg_answer_relevancy').
+
+        Returns:
+            Human-readable description of the metric.
+        """
+        descriptions = {
+            "avg_faithfulness": "How well the answer is grounded in retrieved contexts",
+            "avg_answer_relevancy": "How relevant the answer is to the question",
+        }
+        return descriptions.get(metric, "Generation quality metric")
+
     def _generate_results_section(self, result: ExperimentResult) -> str:
         lines = ["## 5. Evaluation Results", ""]
 
         lines.append("### Overall Retrieval Metrics")
         lines.append("")
-        lines.append("| Metric | Value |")
-        lines.append("|--------|-------|")
+        lines.append("| Metric | Value | Description |")
+        lines.append("|--------|-------|-------------|")
         for metric, value in result.retrieval_metrics.items():
             metric_name = metric.replace("avg_", "").replace("_", " ").upper()
-            lines.append(f"| {metric_name} | {value:.4f} |")
+            description = self._get_metric_description(metric)
+            lines.append(f"| {metric_name} | {value:.4f} | {description} |")
         lines.append("")
+
+        if result.generation_metrics:
+            lines.append("### Generation Quality Metrics")
+            lines.append("")
+            lines.append("| Metric | Value | Description |")
+            lines.append("|--------|-------|-------------|")
+            for metric, value in result.generation_metrics.items():
+                metric_name = metric.replace("avg_", "").replace("_", " ").title()
+                description = self._get_generation_metric_description(metric)
+                lines.append(f"| {metric_name} | {value:.4f} | {description} |")
+            lines.append("")
 
         categories = {}
         for r in result.results:
@@ -728,8 +903,14 @@ class ExperimentReporter:
     def _generate_comparison_table(self, result: ExperimentResult) -> str:
         lines = ["## 6. Detailed Results Comparison", ""]
 
-        lines.append("| ID | Question | Hit Rate | MRR | NDCG | Time (s) |")
-        lines.append("|----|----------|----------|-----|------|----------|")
+        has_generation = any(r.generation for r in result.results)
+
+        if has_generation:
+            lines.append("| ID | Question | Hit Rate | MRR | NDCG | Faithfulness | Relevancy | Time (s) |")
+            lines.append("|----|----------|----------|-----|------|--------------|-----------|----------|")
+        else:
+            lines.append("| ID | Question | Hit Rate | MRR | NDCG | Time (s) |")
+            lines.append("|----|----------|----------|-----|------|----------|")
 
         for r in result.results[:50]:
             q_short = r.question[:30] + "..." if len(r.question) > 30 else r.question
@@ -737,9 +918,20 @@ class ExperimentReporter:
                 hr = r.retrieval.get("hit_rate", 0)
                 mrr = r.retrieval.get("mrr", 0)
                 ndcg = r.retrieval.get("ndcg", 0)
-                lines.append(f"| {r.id} | {q_short} | {hr:.4f} | {mrr:.4f} | {ndcg:.4f} | {r.time_seconds:.2f} |")
+
+                if has_generation and r.generation:
+                    faithfulness = r.generation.get("faithfulness")
+                    relevancy = r.generation.get("answer_relevancy")
+                    fa_str = f"{faithfulness:.2f}" if faithfulness is not None else "N/A"
+                    ar_str = f"{relevancy:.2f}" if relevancy is not None else "N/A"
+                    lines.append(f"| {r.id} | {q_short} | {hr:.4f} | {mrr:.4f} | {ndcg:.4f} | {fa_str} | {ar_str} | {r.time_seconds:.2f} |")
+                else:
+                    lines.append(f"| {r.id} | {q_short} | {hr:.4f} | {mrr:.4f} | {ndcg:.4f} | {r.time_seconds:.2f} |")
             else:
-                lines.append(f"| {r.id} | {q_short} | N/A | N/A | N/A | {r.time_seconds:.2f} |")
+                if has_generation:
+                    lines.append(f"| {r.id} | {q_short} | N/A | N/A | N/A | N/A | N/A | {r.time_seconds:.2f} |")
+                else:
+                    lines.append(f"| {r.id} | {q_short} | N/A | N/A | N/A | {r.time_seconds:.2f} |")
 
         if len(result.results) > 50:
             lines.append(f"| ... | ... and {len(result.results) - 50} more results | ... | ... | ... | ... |")
@@ -754,7 +946,7 @@ class ExperimentReporter:
         avg_mrr = result.retrieval_metrics.get("avg_mrr", 0)
         avg_ndcg = result.retrieval_metrics.get("avg_ndcg", 0)
 
-        lines.append("### Performance Summary")
+        lines.append("### Retrieval Performance Summary")
         lines.append("")
 
         if avg_hr >= 0.8:
@@ -778,23 +970,77 @@ class ExperimentReporter:
         lines.append(f"- **NDCG ({avg_ndcg:.4f})**: Ranking quality assessment.")
         lines.append("")
 
+        if result.generation_metrics:
+            avg_faithfulness = result.generation_metrics.get("avg_faithfulness", 0)
+            avg_relevancy = result.generation_metrics.get("avg_answer_relevancy", 0)
+
+            lines.append("### Generation Quality Summary")
+            lines.append("")
+
+            if avg_faithfulness >= 0.8:
+                fa_assessment = "Excellent - Answers are well-grounded in retrieved contexts."
+            elif avg_faithfulness >= 0.6:
+                fa_assessment = "Good - Most answer content is supported by contexts."
+            elif avg_faithfulness >= 0.4:
+                fa_assessment = "Moderate - Some hallucinations detected, review needed."
+            else:
+                fa_assessment = "Needs Improvement - Significant hallucinations, answers not grounded."
+
+            if avg_relevancy >= 0.8:
+                ar_assessment = "Excellent - Answers directly address the questions."
+            elif avg_relevancy >= 0.6:
+                ar_assessment = "Good - Answers are mostly relevant to questions."
+            elif avg_relevancy >= 0.4:
+                ar_assessment = "Moderate - Some answers may be off-topic or incomplete."
+            else:
+                ar_assessment = "Needs Improvement - Answers often irrelevant to questions."
+
+            lines.append(f"- **Faithfulness ({avg_faithfulness:.4f})**: {fa_assessment}")
+            lines.append(f"- **Answer Relevancy ({avg_relevancy:.4f})**: {ar_assessment}")
+            lines.append("")
+
         lines.append("### Recommendations")
         lines.append("")
 
         recommendations = []
+        rec_num = 1
+
         if avg_hr < 0.6:
-            recommendations.append("1. Consider increasing `top_k` to retrieve more candidates.")
-            recommendations.append("2. Evaluate embedding model quality for domain-specific content.")
+            recommendations.append(f"{rec_num}. Consider increasing `top_k` to retrieve more candidates.")
+            rec_num += 1
+            recommendations.append(f"{rec_num}. Evaluate embedding model quality for domain-specific content.")
+            rec_num += 1
         if avg_mrr < 0.5:
-            recommendations.append("3. Consider adding a reranker to improve ranking.")
-            recommendations.append("4. Review chunking strategy for better context preservation.")
+            recommendations.append(f"{rec_num}. Consider adding a reranker to improve ranking.")
+            rec_num += 1
+            recommendations.append(f"{rec_num}. Review chunking strategy for better context preservation.")
+            rec_num += 1
         if avg_ndcg < 0.5:
-            recommendations.append("5. Consider hybrid retrieval (BM25 + vector search).")
+            recommendations.append(f"{rec_num}. Consider hybrid retrieval (BM25 + vector search).")
+            rec_num += 1
+
+        if result.generation_metrics:
+            avg_faithfulness = result.generation_metrics.get("avg_faithfulness", 0)
+            avg_relevancy = result.generation_metrics.get("avg_answer_relevancy", 0)
+
+            if avg_faithfulness < 0.6:
+                recommendations.append(f"{rec_num}. Review prompt engineering to reduce hallucinations.")
+                rec_num += 1
+                recommendations.append(f"{rec_num}. Ensure retrieved contexts are relevant and complete.")
+                rec_num += 1
+            if avg_relevancy < 0.6:
+                recommendations.append(f"{rec_num}. Improve question understanding in the generation prompt.")
+                rec_num += 1
+                recommendations.append(f"{rec_num}. Consider answer validation or filtering.")
+                rec_num += 1
 
         if not recommendations:
-            recommendations.append("1. Current performance is satisfactory for baseline.")
-            recommendations.append("2. Consider fine-tuning embedding model for domain-specific improvements.")
-            recommendations.append("3. Explore advanced retrieval strategies for edge cases.")
+            recommendations.append(f"{rec_num}. Current performance is satisfactory for baseline.")
+            rec_num += 1
+            recommendations.append(f"{rec_num}. Consider fine-tuning embedding model for domain-specific improvements.")
+            rec_num += 1
+            recommendations.append(f"{rec_num}. Explore advanced retrieval strategies for edge cases.")
+            rec_num += 1
 
         lines.extend(recommendations)
         lines.append("")
@@ -901,6 +1147,20 @@ class ExperimentReporter:
             variant_results, meal_info, config_snapshot
         )
 
+        has_generation = any(
+            vr.get("generation_metrics") for vr in variant_results
+        )
+
+        generation_section = ""
+        if has_generation:
+            generation_section = """
+### 5. 生成质量分析
+- 分析各变体的生成质量指标（Faithfulness、Answer Relevancy）
+- 对比不同变体之间的生成质量差异
+- 识别潜在的幻觉或不相关问题
+- 讨论检索质量与生成质量的关系
+"""
+
         prompt = f"""你是一位专业的RAG系统分析师。请根据以下实验数据撰写一份全面的实验报告。
 
 ## 实验数据
@@ -916,7 +1176,7 @@ class ExperimentReporter:
 - 说明正在对比的各变体
 - 总结整体发现
 
-### 2. 性能分析
+### 2. 检索性能分析
 - 分析各变体的检索指标（Hit Rate、MRR、NDCG）
 - 对比不同变体之间的性能差异
 - 识别各配置的优势和不足
@@ -930,8 +1190,8 @@ class ExperimentReporter:
 - 评估不同配置选择的影响
 - 讨论分块大小、重叠率等参数如何影响性能
 - 提供最优配置选择的见解
-
-### 5. 结论与建议
+{generation_section}
+### 结论与建议
 - 总结关键发现
 - 提出可行的改进建议
 - 建议下一步优化方向

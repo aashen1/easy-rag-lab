@@ -68,6 +68,9 @@ evaluation:
       - "hit_rate"
       - "mrr"
       - "ndcg"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
 
 llm:
   question_generation: "sonnet"

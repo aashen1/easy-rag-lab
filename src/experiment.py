@@ -7,6 +7,10 @@ import yaml
 from loguru import logger
 
 
+VALID_RETRIEVAL_METRICS = {"hit_rate", "mrr", "ndcg"}
+VALID_GENERATION_METRICS = {"faithfulness", "answer_relevancy"}
+
+
 @dataclass
 class ExperimentConfig:
     """
@@ -117,6 +121,42 @@ class ExperimentConfig:
 
         if "metrics" not in self.evaluation:
             errors.append("Evaluation configuration must include 'metrics' field")
+        else:
+            metrics = self.evaluation["metrics"]
+            if not isinstance(metrics, dict):
+                errors.append("Evaluation 'metrics' must be a dictionary")
+            else:
+                if "retrieval" not in metrics:
+                    errors.append("Evaluation metrics must include 'retrieval' field")
+                else:
+                    retrieval_metrics = metrics["retrieval"]
+                    if not isinstance(retrieval_metrics, list):
+                        errors.append("Retrieval metrics must be a list")
+                    else:
+                        invalid_retrieval = [
+                            m for m in retrieval_metrics
+                            if m not in VALID_RETRIEVAL_METRICS
+                        ]
+                        if invalid_retrieval:
+                            errors.append(
+                                f"Invalid retrieval metrics: {invalid_retrieval}. "
+                                f"Valid options: {sorted(VALID_RETRIEVAL_METRICS)}"
+                            )
+
+                if "generation" in metrics:
+                    generation_metrics = metrics["generation"]
+                    if not isinstance(generation_metrics, list):
+                        errors.append("Generation metrics must be a list")
+                    else:
+                        invalid_generation = [
+                            m for m in generation_metrics
+                            if m not in VALID_GENERATION_METRICS
+                        ]
+                        if invalid_generation:
+                            errors.append(
+                                f"Invalid generation metrics: {invalid_generation}. "
+                                f"Valid options: {sorted(VALID_GENERATION_METRICS)}"
+                            )
 
         return errors
 

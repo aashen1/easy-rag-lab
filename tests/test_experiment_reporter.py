@@ -342,7 +342,8 @@ class TestLLMPromptTemplate:
         assert "实验概述" in LLM_REPORT_PROMPT_TEMPLATE
         assert "数据来源分析" in LLM_REPORT_PROMPT_TEMPLATE
         assert "技术选型分析" in LLM_REPORT_PROMPT_TEMPLATE
-        assert "评测结果分析" in LLM_REPORT_PROMPT_TEMPLATE
+        assert "检索性能分析" in LLM_REPORT_PROMPT_TEMPLATE
+        assert "生成质量分析" in LLM_REPORT_PROMPT_TEMPLATE
         assert "结论与建议" in LLM_REPORT_PROMPT_TEMPLATE
 
     @pytest.mark.unit
@@ -621,3 +622,229 @@ class TestMultiVariantComparison:
 
         assert "Excellent retrieval performance" in report
         assert "satisfactory performance" in report
+
+
+class TestGenerationMetrics:
+    @pytest.fixture
+    def sample_result_with_generation(self):
+        data = {
+            "timestamp": "2026-04-16T10:00:00",
+            "total_test_cases": 3,
+            "total_time_seconds": 10.0,
+            "avg_time_per_case": 3.33,
+            "retrieval_metrics": {
+                "avg_hit_rate": 0.8,
+                "avg_mrr": 0.65,
+                "avg_ndcg": 0.7,
+            },
+            "generation_metrics": {
+                "avg_faithfulness": 0.85,
+                "avg_answer_relevancy": 0.75,
+            },
+            "results": [
+                {
+                    "id": "q001",
+                    "question": "What is the revenue?",
+                    "answer": "Revenue is 100M.",
+                    "retrieval": {"hit_rate": 0.9, "mrr": 0.8, "ndcg": 0.85},
+                    "generation": {"faithfulness": 0.9, "answer_relevancy": 0.8},
+                    "sources": ["report1.pdf"],
+                    "time_seconds": 3.0,
+                    "category": "fact_extraction",
+                },
+                {
+                    "id": "q002",
+                    "question": "What is the profit?",
+                    "answer": "Profit is 20M.",
+                    "retrieval": {"hit_rate": 0.7, "mrr": 0.5, "ndcg": 0.6},
+                    "generation": {"faithfulness": 0.8, "answer_relevancy": 0.7},
+                    "sources": ["report2.pdf"],
+                    "time_seconds": 3.5,
+                    "category": "fact_extraction",
+                },
+                {
+                    "id": "q003",
+                    "question": "Summarize the report.",
+                    "answer": "Summary...",
+                    "retrieval": {"hit_rate": 0.8, "mrr": 0.7, "ndcg": 0.75},
+                    "generation": {"faithfulness": 0.85, "answer_relevancy": 0.75},
+                    "sources": ["report1.pdf"],
+                    "time_seconds": 3.5,
+                    "category": "summary",
+                },
+            ],
+            "meal_data_id": "abc123def456789",
+            "meal_name": "test_meal",
+        }
+        return ExperimentResult.from_dict(data)
+
+    @pytest.mark.unit
+    def test_result_with_generation_metrics(self, sample_result_with_generation):
+        result = sample_result_with_generation
+        assert result.generation_metrics is not None
+        assert result.generation_metrics["avg_faithfulness"] == 0.85
+        assert result.generation_metrics["avg_answer_relevancy"] == 0.75
+
+    @pytest.mark.unit
+    def test_test_case_result_with_generation(self, sample_result_with_generation):
+        result = sample_result_with_generation
+        assert result.results[0].generation is not None
+        assert result.results[0].generation["faithfulness"] == 0.9
+        assert result.results[0].generation["answer_relevancy"] == 0.8
+
+    @pytest.mark.unit
+    def test_report_contains_generation_metrics_section(self, sample_result_with_generation, tmp_path):
+        reporter = ExperimentReporter()
+        report = reporter.generate_markdown_report(
+            exp_dir=tmp_path,
+            result=sample_result_with_generation,
+            use_llm=False,
+        )
+
+        assert "Generation Quality Metrics" in report
+        assert "Faithfulness" in report
+        assert "Answer Relevancy" in report
+        assert "0.85" in report
+        assert "0.75" in report
+
+    @pytest.mark.unit
+    def test_report_comparison_table_with_generation(self, sample_result_with_generation, tmp_path):
+        reporter = ExperimentReporter()
+        report = reporter.generate_markdown_report(
+            exp_dir=tmp_path,
+            result=sample_result_with_generation,
+            use_llm=False,
+        )
+
+        assert "Faithfulness" in report
+        assert "Relevancy" in report
+
+    @pytest.mark.unit
+    def test_report_conclusion_with_generation_analysis(self, sample_result_with_generation, tmp_path):
+        reporter = ExperimentReporter()
+        report = reporter.generate_markdown_report(
+            exp_dir=tmp_path,
+            result=sample_result_with_generation,
+            use_llm=False,
+        )
+
+        assert "Generation Quality Summary" in report
+        assert "well-grounded" in report or "grounded" in report.lower()
+
+    @pytest.mark.unit
+    def test_variant_result_with_generation_metrics(self):
+        data = {
+            "variant_name": "test_variant",
+            "variant_description": "Test variant with generation metrics",
+            "retrieval_metrics": {"avg_hit_rate": 0.8, "avg_mrr": 0.6, "avg_ndcg": 0.7},
+            "generation_metrics": {"avg_faithfulness": 0.85, "avg_answer_relevancy": 0.75},
+            "total_questions": 10,
+            "total_time_seconds": 30.0,
+        }
+        result = VariantResult.from_dict(data)
+        assert result.generation_metrics is not None
+        assert result.generation_metrics["avg_faithfulness"] == 0.85
+        assert result.generation_metrics["avg_answer_relevancy"] == 0.75
+
+    @pytest.mark.unit
+    def test_variant_report_with_generation_metrics(self, tmp_path):
+        variant_results = [
+            {
+                "variant_name": "baseline",
+                "variant_description": "Baseline variant",
+                "retrieval_metrics": {"avg_hit_rate": 0.75, "avg_mrr": 0.60, "avg_ndcg": 0.65},
+                "generation_metrics": {"avg_faithfulness": 0.80, "avg_answer_relevancy": 0.70},
+                "total_questions": 20,
+                "total_time_seconds": 30.0,
+            },
+            {
+                "variant_name": "optimized",
+                "variant_description": "Optimized variant",
+                "retrieval_metrics": {"avg_hit_rate": 0.85, "avg_mrr": 0.70, "avg_ndcg": 0.75},
+                "generation_metrics": {"avg_faithfulness": 0.90, "avg_answer_relevancy": 0.80},
+                "total_questions": 20,
+                "total_time_seconds": 35.0,
+            },
+        ]
+
+        reporter = ExperimentReporter()
+        report = reporter.generate_variant_comparison_report(
+            exp_dir=tmp_path,
+            variant_results=variant_results,
+            output_filename="test_report.md",
+        )
+
+        assert "Faithfulness" in report
+        assert "Relevancy" in report
+        assert "0.80" in report
+        assert "0.90" in report
+        assert "Generation Quality Analysis" in report
+
+    @pytest.mark.unit
+    def test_variant_report_generation_quality_recommendations(self, tmp_path):
+        variant_results = [
+            {
+                "variant_name": "low_gen_quality",
+                "variant_description": "Low generation quality variant",
+                "retrieval_metrics": {"avg_hit_rate": 0.8, "avg_mrr": 0.6, "avg_ndcg": 0.7},
+                "generation_metrics": {"avg_faithfulness": 0.4, "avg_answer_relevancy": 0.3},
+                "total_questions": 10,
+                "total_time_seconds": 15.0,
+            },
+        ]
+
+        reporter = ExperimentReporter()
+        report = reporter.generate_variant_comparison_report(
+            exp_dir=tmp_path,
+            variant_results=variant_results,
+            output_filename="test_report.md",
+        )
+
+        assert "hallucinations" in report.lower() or "prompt engineering" in report.lower()
+
+    @pytest.mark.unit
+    def test_backward_compatibility_without_generation_metrics(self, tmp_path):
+        data = {
+            "timestamp": "2026-04-16T10:00:00",
+            "total_test_cases": 2,
+            "total_time_seconds": 6.0,
+            "avg_time_per_case": 3.0,
+            "retrieval_metrics": {
+                "avg_hit_rate": 0.8,
+                "avg_mrr": 0.65,
+                "avg_ndcg": 0.7,
+            },
+            "results": [
+                {
+                    "id": "q001",
+                    "question": "What is the revenue?",
+                    "answer": "Revenue is 100M.",
+                    "retrieval": {"hit_rate": 0.9, "mrr": 0.8, "ndcg": 0.85},
+                    "sources": ["report1.pdf"],
+                    "time_seconds": 3.0,
+                },
+                {
+                    "id": "q002",
+                    "question": "What is the profit?",
+                    "answer": "Profit is 20M.",
+                    "retrieval": {"hit_rate": 0.7, "mrr": 0.5, "ndcg": 0.6},
+                    "sources": ["report2.pdf"],
+                    "time_seconds": 3.0,
+                },
+            ],
+        }
+        result = ExperimentResult.from_dict(data)
+
+        assert result.generation_metrics is None
+        assert result.results[0].generation is None
+
+        reporter = ExperimentReporter()
+        report = reporter.generate_markdown_report(
+            exp_dir=tmp_path,
+            result=result,
+            use_llm=False,
+        )
+
+        assert "Experiment Overview" in report
+        assert "Evaluation Results" in report
+        assert "Generation Quality Metrics" not in report
