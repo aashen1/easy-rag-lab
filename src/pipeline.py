@@ -3,9 +3,11 @@ from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
+from src.bm25_retriever import BM25Retriever
 from src.chunker import process_parsed_files
 from src.embedder import Embedder
 from src.generator import Generator
+from src.hybrid_retriever import HybridRetriever
 from src.indexer import VectorIndexer
 from src.parser import parse_all_pdfs
 from src.retriever import Retriever
@@ -47,12 +49,7 @@ class RAGPipeline:
             distance=vector_store_config["distance"],
         )
 
-        retrieval_config = self.config["retrieval"]
-        self.retriever = Retriever(
-            indexer=self.indexer,
-            embedder=self.embedder,
-            top_k=retrieval_config["top_k"],
-        )
+        self._setup_retrievers()
 
         llm_config = get_llm_config(self.config, llm_preset)
         self.generator = Generator(
@@ -65,6 +62,46 @@ class RAGPipeline:
         )
 
         logger.success("RAG Pipeline initialized successfully")
+
+    def _setup_retrievers(self) -> None:
+        """Set up retrievers based on the current retrieval config.
+
+        Creates vector, BM25, and hybrid retrievers as needed based on
+        ``self.config["retrieval"]["method"]``. Called during initialization
+        and when the config is hot-swapped during experiments.
+        """
+        retrieval_config = self.config["retrieval"]
+        retrieval_method = retrieval_config.get("method", "vector")
+        top_k = retrieval_config["top_k"]
+
+        self.retriever = Retriever(
+            indexer=self.indexer,
+            embedder=self.embedder,
+            top_k=top_k,
+        )
+
+        self.bm25_retriever: Optional[BM25Retriever] = None
+        self.hybrid_retriever: Optional[HybridRetriever] = None
+        self.retrieval_method = retrieval_method
+
+        if retrieval_method in ("bm25", "hybrid"):
+            bm25_config = retrieval_config.get("bm25", {})
+            self.bm25_retriever = BM25Retriever(
+                k1=bm25_config.get("k1", 1.5),
+                b=bm25_config.get("b", 0.75),
+            )
+
+        if retrieval_method == "hybrid":
+            hybrid_config = retrieval_config.get("hybrid", {})
+            self.hybrid_retriever = HybridRetriever(
+                vector_retriever=self.retriever,
+                bm25_retriever=self.bm25_retriever,
+                fusion_method=hybrid_config.get("fusion", "rrf"),
+                rrf_k=hybrid_config.get("rrf_k", 60),
+                vector_weight=hybrid_config.get("vector_weight", 0.7),
+                bm25_weight=hybrid_config.get("bm25_weight", 0.3),
+                top_k=top_k,
+            )
 
     def build_index(
         self,
@@ -157,7 +194,14 @@ class RAGPipeline:
             source_filter=source_filter_jsonl,
         )
 
-        logger.success("Vector index built successfully")
+        if self.retrieval_method in ("bm25", "hybrid") and self.bm25_retriever is not None:
+            logger.info("Step 4: Building BM25 index...")
+            self.bm25_retriever.build_index_from_chunks(
+                chunks_dir=chunker_config["output_dir"],
+                source_filter=source_filter_jsonl,
+            )
+
+        logger.success("Index built successfully")
 
     def close(self) -> None:
         """Close the pipeline and release resources.
@@ -207,11 +251,32 @@ class RAGPipeline:
             collection_name=self.meal_config.collection_name,
             distance=vector_store_config["distance"],
         )
-        self.retriever = Retriever(
-            indexer=self.indexer,
-            embedder=self.embedder,
-            top_k=self.config["retrieval"]["top_k"],
-        )
+
+        self._setup_retrievers()
+
+        if self.retrieval_method in ("bm25", "hybrid") and self.bm25_retriever is not None:
+            from src.meal import ArtifactCache
+            artifacts_config = self.config.get("artifacts", {})
+            artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
+            cache = ArtifactCache(artifacts_dir)
+            chunker_hash = self.meal_config.config_hashes.get("chunker", "")
+            chunks_dir = cache.get_chunks_dir(self.meal_config.data_id, chunker_hash)
+            if chunks_dir.exists():
+                self.bm25_retriever.build_index_from_chunks(str(chunks_dir))
+            else:
+                logger.warning(f"Chunks dir not found for BM25: {chunks_dir}")
+
+            if self.retrieval_method == "hybrid" and self.hybrid_retriever is not None:
+                self.hybrid_retriever = HybridRetriever(
+                    vector_retriever=self.retriever,
+                    bm25_retriever=self.bm25_retriever,
+                    fusion_method=self.config["retrieval"].get("hybrid", {}).get("fusion", "rrf"),
+                    rrf_k=self.config["retrieval"].get("hybrid", {}).get("rrf_k", 60),
+                    vector_weight=self.config["retrieval"].get("hybrid", {}).get("vector_weight", 0.7),
+                    bm25_weight=self.config["retrieval"].get("hybrid", {}).get("bm25_weight", 0.3),
+                    top_k=self.config["retrieval"]["top_k"],
+                )
+
         logger.info(
             f"Switched to meal '{meal_name}' (data_id: {self.meal_config.data_id[:12]}, collection: {self.meal_config.collection_name})")
         return self.meal_config
@@ -244,7 +309,14 @@ class RAGPipeline:
             logger.info(f"Processing query: {question[:50]}...")
 
             logger.debug("Retrieving relevant contexts...")
-            results = self.retriever.retrieve(question)
+            if self.retrieval_method == "hybrid" and self.hybrid_retriever is not None:
+                results = self.hybrid_retriever.retrieve(question)
+            elif self.retrieval_method == "bm25" and self.bm25_retriever is not None:
+                results = self.bm25_retriever.retrieve(
+                    question, top_k=self.config["retrieval"]["top_k"]
+                )
+            else:
+                results = self.retriever.retrieve(question)
 
             contexts = [result["text"] for result in results]
             scores = [result["score"] for result in results]

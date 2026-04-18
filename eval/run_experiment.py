@@ -19,6 +19,7 @@ from src.experiment import (
     load_experiment_config,
     merge_config,
 )
+from src.hybrid_retriever import HybridRetriever
 from src.meal import MealManager, MealStatus, compute_file_sha256
 from src.meal import (
     ArtifactCache,
@@ -665,7 +666,32 @@ def run_variant_evaluation(
 
         indexer = prepare_index_for_variant(merged_config, meal_config, variant_name)
         pipeline.indexer = indexer
-        pipeline.retriever.indexer = indexer
+
+        pipeline._setup_retrievers()
+
+        retrieval_method = merged_config.get("retrieval", {}).get("method", "vector")
+        if retrieval_method in ("bm25", "hybrid") and pipeline.bm25_retriever is not None:
+            from src.meal import ArtifactCache
+            artifacts_config = merged_config.get("artifacts", {})
+            artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
+            cache = ArtifactCache(artifacts_dir)
+            chunker_hash = meal_config.config_hashes.get("chunker", "")
+            chunks_dir = cache.get_chunks_dir(meal_config.data_id, chunker_hash)
+            if chunks_dir.exists():
+                pipeline.bm25_retriever.build_index_from_chunks(str(chunks_dir))
+            else:
+                logger.warning(f"Chunks dir not found for BM25: {chunks_dir}")
+
+            if retrieval_method == "hybrid" and pipeline.hybrid_retriever is not None:
+                pipeline.hybrid_retriever = HybridRetriever(
+                    vector_retriever=pipeline.retriever,
+                    bm25_retriever=pipeline.bm25_retriever,
+                    fusion_method=merged_config.get("retrieval", {}).get("hybrid", {}).get("fusion", "rrf"),
+                    rrf_k=merged_config.get("retrieval", {}).get("hybrid", {}).get("rrf_k", 60),
+                    vector_weight=merged_config.get("retrieval", {}).get("hybrid", {}).get("vector_weight", 0.7),
+                    bm25_weight=merged_config.get("retrieval", {}).get("hybrid", {}).get("bm25_weight", 0.3),
+                    top_k=merged_config.get("retrieval", {}).get("top_k", 5),
+                )
 
         total_start_time = time.time()
         all_results = []

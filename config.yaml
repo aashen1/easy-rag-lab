@@ -66,7 +66,16 @@ vector_store:
 
 # 检索配置
 retrieval:
+  method: "vector"          # Retrieval method: "vector", "bm25", or "hybrid"
   top_k: 5
+  bm25:
+    k1: 1.5                 # BM25 term frequency saturation parameter
+    b: 0.75                 # BM25 length normalization parameter
+  hybrid:
+    fusion: "rrf"           # Fusion strategy: "rrf" or "weighted"
+    rrf_k: 60               # RRF constant (higher = dampen rank impact)
+    vector_weight: 0.7      # Weight for vector scores in weighted fusion
+    bm25_weight: 0.3        # Weight for BM25 scores in weighted fusion
 
 # ============================================================
 # 实验管理配置
