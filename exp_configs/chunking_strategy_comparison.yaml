@@ -1,0 +1,74 @@
+name: "chunking_strategy_comparison"
+description: "分块策略对比实验 - 对比固定分块与语义分块对问答质量的影响"
+
+data:
+  meal: "meal_chunking_strategy_comparison"
+  create_if_missing:
+    sample_ratio: 0.2
+    seed: 42
+
+test_sets:
+  - strategy: "factual"
+    num_questions: 30
+    seed: 600
+  - strategy: "boundary"
+    num_questions: 20
+    seed: 601
+  - strategy: "multi_hop"
+    num_questions: 15
+    seed: 602
+
+variants:
+  - name: "fixed_512_overlap_0"
+    description: "固定分块 - chunk_size=512, overlap=0（基线）"
+    config_overrides:
+      chunker:
+        strategy: "fixed"
+        chunk_size: 512
+        chunk_overlap: 0
+
+  - name: "semantic_threshold_50"
+    description: "语义分块 - 相似度阈值0.5"
+    config_overrides:
+      chunker:
+        strategy: "semantic"
+        chunk_size: 512
+        semantic:
+          similarity_threshold: 0.5
+          min_chunk_size: 100
+
+  - name: "semantic_threshold_30"
+    description: "语义分块 - 相似度阈值0.3（更少断点）"
+    config_overrides:
+      chunker:
+        strategy: "semantic"
+        chunk_size: 512
+        semantic:
+          similarity_threshold: 0.3
+          min_chunk_size: 100
+
+  - name: "semantic_percentile_25"
+    description: "语义分块 - 25百分位断点"
+    config_overrides:
+      chunker:
+        strategy: "semantic"
+        chunk_size: 512
+        semantic:
+          similarity_threshold: 0.5
+          breakpoint_percentile: 25
+          min_chunk_size: 100
+
+evaluation:
+  llm_preset: "default"
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+
+llm:
+  question_generation: "sonnet"
+  answering: "default"

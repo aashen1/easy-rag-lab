@@ -23,7 +23,7 @@ def _split_into_sentences(text: str) -> List[str]:
     """
     import re
 
-    parts = re.split(r'(?<=[。！？；.!?;])\s*', text)
+    parts = re.split(r'(?<=[。！？；.!?;])', text)
 
     sentences = []
     buffer = ""

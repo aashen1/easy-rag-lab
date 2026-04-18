@@ -44,12 +44,17 @@ parser:
   input_dir: "data/raw"
   output_dir: "data/parsed"
 
-# 文本分块配置
+# 分块配置
 chunker:
   input_dir: "data/parsed"
   output_dir: "data/chunks"
-  chunk_size: 512
-  chunk_overlap: 0
+  strategy: "fixed"          # Chunking strategy: "fixed" or "semantic"
+  chunk_size: 512            # Max tokens per chunk
+  chunk_overlap: 0           # Overlap tokens between chunks (fixed strategy)
+  semantic:
+    similarity_threshold: 0.5    # Cosine similarity threshold for breakpoints
+    breakpoint_percentile: null  # Use percentile-based threshold (null = disabled)
+    min_chunk_size: 100          # Minimum tokens per chunk
 
 # 向量化配置
 embedding:

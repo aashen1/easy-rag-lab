@@ -13,6 +13,7 @@ from src.parser import parse_all_pdfs
 from src.query_rewriter import QueryRewriter
 from src.reranker import Reranker
 from src.retriever import Retriever
+from src.semantic_chunker import process_parsed_files_semantic
 from src.sampler import SamplingConfig, determine_sample
 from src.token_tracker import DetailedTokenUsage, TokenTracker
 from src.utils import get_llm_config, load_config, setup_logger
@@ -191,13 +192,28 @@ class RAGPipeline:
                 f"Source filter for chunker: {len(source_filter_md)} files")
 
         logger.info("Step 2: Chunking documents...")
-        chunk_results = process_parsed_files(
-            input_dir=chunker_config["input_dir"],
-            output_dir=chunker_config["output_dir"],
-            chunk_size=chunker_config["chunk_size"],
-            overlap=chunker_config["chunk_overlap"],
-            source_filter=source_filter_md,
-        )
+        chunker_strategy = chunker_config.get("strategy", "fixed")
+
+        if chunker_strategy == "semantic":
+            semantic_config = chunker_config.get("semantic", {})
+            chunk_results = process_parsed_files_semantic(
+                input_dir=chunker_config["input_dir"],
+                output_dir=chunker_config["output_dir"],
+                embedder=self.embedder,
+                chunk_size=chunker_config["chunk_size"],
+                similarity_threshold=semantic_config.get("similarity_threshold", 0.5),
+                breakpoint_percentile=semantic_config.get("breakpoint_percentile"),
+                min_chunk_size=semantic_config.get("min_chunk_size", 100),
+                source_filter=source_filter_md,
+            )
+        else:
+            chunk_results = process_parsed_files(
+                input_dir=chunker_config["input_dir"],
+                output_dir=chunker_config["output_dir"],
+                chunk_size=chunker_config["chunk_size"],
+                overlap=chunker_config["chunk_overlap"],
+                source_filter=source_filter_md,
+            )
 
         source_filter_jsonl = None
         if sampling_config is not None:
