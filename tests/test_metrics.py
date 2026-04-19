@@ -5,11 +5,20 @@ from unittest.mock import MagicMock, patch
 
 from eval.metrics import (
     calculate_answer_relevancy,
+    calculate_chunk_hit_rate,
+    calculate_chunk_mrr,
+    calculate_chunk_ndcg,
+    calculate_dedup_hit_rate,
+    calculate_dedup_mrr,
+    calculate_dedup_ndcg,
+    calculate_false_positive_rate,
     calculate_faithfulness,
     calculate_hit_rate,
     calculate_mrr,
     calculate_ndcg,
+    deduplicate_by_document,
     normalize_source,
+    normalize_source_with_equivalence,
     _create_llm_client,
     _extract_statements,
     _parse_relevancy_response,
@@ -1373,6 +1382,469 @@ class TestCalculateContextRecall:
         )
 
         assert score == pytest.approx(2/3)
+
+
+@pytest.mark.unit
+class TestChunkHitRate:
+
+    def test_exact_match(self):
+        retrieved = ["doc1_000", "doc1_001"]
+        expected = ["doc1_000"]
+        assert calculate_chunk_hit_rate(retrieved, expected) == 1.0
+
+    def test_adjacent_match(self):
+        retrieved = ["doc1_001"]
+        expected = ["doc1_000"]
+        assert calculate_chunk_hit_rate(retrieved, expected, adjacent_tolerance=1) == 1.0
+
+    def test_no_match(self):
+        retrieved = ["doc1_005"]
+        expected = ["doc1_000"]
+        assert calculate_chunk_hit_rate(retrieved, expected, adjacent_tolerance=1) == 0.0
+
+    def test_different_document(self):
+        retrieved = ["doc2_000"]
+        expected = ["doc1_000"]
+        assert calculate_chunk_hit_rate(retrieved, expected) == 0.0
+
+    def test_empty_expected(self):
+        retrieved = ["doc1_000"]
+        expected = []
+        assert calculate_chunk_hit_rate(retrieved, expected) == 0.0
+
+    def test_empty_retrieved(self):
+        retrieved = []
+        expected = ["doc1_000"]
+        assert calculate_chunk_hit_rate(retrieved, expected) == 0.0
+
+    def test_multiple_expected_one_adjacent_match(self):
+        retrieved = ["doc1_001"]
+        expected = ["doc1_000", "doc1_005"]
+        assert calculate_chunk_hit_rate(retrieved, expected, adjacent_tolerance=1) == 1.0
+
+    def test_k_parameter(self):
+        retrieved = ["doc1_010", "doc1_000"]
+        expected = ["doc1_000"]
+        assert calculate_chunk_hit_rate(retrieved, expected, k=1) == 0.0
+
+    def test_zero_tolerance(self):
+        retrieved = ["doc1_001"]
+        expected = ["doc1_000"]
+        assert calculate_chunk_hit_rate(retrieved, expected, adjacent_tolerance=0) == 0.0
+
+
+@pytest.mark.unit
+class TestChunkMRR:
+
+    def test_exact_match_at_position_1(self):
+        retrieved = ["doc1_000", "doc2_000"]
+        expected = ["doc1_000"]
+        assert calculate_chunk_mrr(retrieved, expected) == 1.0
+
+    def test_adjacent_match_at_position_2(self):
+        retrieved = ["doc2_000", "doc1_001"]
+        expected = ["doc1_000"]
+        assert calculate_chunk_mrr(retrieved, expected) == pytest.approx(0.5)
+
+    def test_no_match(self):
+        retrieved = ["doc2_000", "doc2_001"]
+        expected = ["doc1_000"]
+        assert calculate_chunk_mrr(retrieved, expected) == 0.0
+
+    def test_empty_expected(self):
+        retrieved = ["doc1_000"]
+        expected = []
+        assert calculate_chunk_mrr(retrieved, expected) == 0.0
+
+
+@pytest.mark.unit
+class TestChunkNDCG:
+
+    def test_exact_match_relevance_2(self):
+        retrieved = ["doc1_000", "doc2_000"]
+        expected = ["doc1_000"]
+        dcg = (2**2 - 1) / math.log2(2)
+        ideal_dcg = (2**2 - 1) / math.log2(2)
+        assert calculate_chunk_ndcg(retrieved, expected) == pytest.approx(dcg / ideal_dcg)
+
+    def test_adjacent_match_relevance_1(self):
+        retrieved = ["doc1_001"]
+        expected = ["doc1_000"]
+        dcg = (2**1 - 1) / math.log2(2)
+        ideal_dcg = (2**2 - 1) / math.log2(2)
+        assert calculate_chunk_ndcg(retrieved, expected) == pytest.approx(dcg / ideal_dcg)
+
+    def test_no_match(self):
+        retrieved = ["doc2_000", "doc2_001"]
+        expected = ["doc1_000"]
+        assert calculate_chunk_ndcg(retrieved, expected) == 0.0
+
+    def test_mixed_exact_and_adjacent(self):
+        retrieved = ["doc1_000", "doc1_001", "doc2_000"]
+        expected = ["doc1_000"]
+        dcg = (2**2 - 1) / math.log2(2) + (2**1 - 1) / math.log2(3)
+        ideal_dcg = (2**2 - 1) / math.log2(2)
+        assert calculate_chunk_ndcg(retrieved, expected) == pytest.approx(min(1.0, dcg / ideal_dcg))
+
+
+@pytest.mark.unit
+class TestFalsePositiveRate:
+
+    def test_all_slots_filled(self):
+        retrieved = ["doc1.md", "doc2.md", "doc3.md", "doc4.md", "doc5.md"]
+        assert calculate_false_positive_rate(retrieved, k=5) == 1.0
+
+    def test_partial_slots_filled(self):
+        retrieved = ["doc1.md", "doc2.md", "doc3.md"]
+        assert calculate_false_positive_rate(retrieved, k=5) == pytest.approx(0.6)
+
+    def test_no_results(self):
+        retrieved = []
+        assert calculate_false_positive_rate(retrieved, k=5) == 0.0
+
+    def test_more_results_than_k(self):
+        retrieved = ["doc1.md", "doc2.md", "doc3.md", "doc4.md", "doc5.md", "doc6.md", "doc7.md"]
+        assert calculate_false_positive_rate(retrieved, k=5) == 1.0
+
+
+@pytest.mark.unit
+class TestDeduplicateByDocument:
+
+    def test_all_same_document(self):
+        sources = ["doc1.md", "doc1.md", "doc1.md"]
+        assert deduplicate_by_document(sources) == [0]
+
+    def test_mixed_documents(self):
+        sources = ["doc1.md", "doc2.md", "doc1.md"]
+        assert deduplicate_by_document(sources) == [0, 1]
+
+    def test_single_result(self):
+        sources = ["doc1.md"]
+        assert deduplicate_by_document(sources) == [0]
+
+    def test_empty(self):
+        sources = []
+        assert deduplicate_by_document(sources) == []
+
+
+@pytest.mark.unit
+class TestDedupMetrics:
+
+    def test_dedup_hit_rate_same_doc_repeated(self):
+        sources = ["doc1.md", "doc1.md", "doc1.md", "doc1.md", "doc1.md"]
+        expected = ["doc1.md"]
+        assert calculate_dedup_hit_rate(sources, expected, k=5) == 1.0
+
+    def test_dedup_hit_rate_different_docs_match(self):
+        sources = ["doc1.md", "doc2.md", "doc3.md"]
+        expected = ["doc1.md"]
+        assert calculate_dedup_hit_rate(sources, expected, k=5) == 1.0
+
+    def test_dedup_hit_rate_no_match(self):
+        sources = ["doc1.md", "doc2.md", "doc3.md"]
+        expected = ["doc4.md"]
+        assert calculate_dedup_hit_rate(sources, expected, k=5) == 0.0
+
+    def test_dedup_mrr_same_doc_repeated(self):
+        sources = ["doc1.md", "doc1.md", "doc1.md", "doc1.md", "doc1.md"]
+        expected = ["doc1.md"]
+        assert calculate_dedup_mrr(sources, expected) == 1.0
+
+    def test_dedup_mrr_different_docs_match(self):
+        sources = ["doc2.md", "doc1.md", "doc3.md"]
+        expected = ["doc1.md"]
+        assert calculate_dedup_mrr(sources, expected) == pytest.approx(0.5)
+
+    def test_dedup_mrr_no_match(self):
+        sources = ["doc1.md", "doc2.md", "doc3.md"]
+        expected = ["doc4.md"]
+        assert calculate_dedup_mrr(sources, expected) == 0.0
+
+    def test_dedup_ndcg_same_doc_repeated(self):
+        sources = ["doc1.md", "doc1.md", "doc1.md", "doc1.md", "doc1.md"]
+        expected = ["doc1.md"]
+        assert calculate_dedup_ndcg(sources, expected, k=5) == 1.0
+
+    def test_dedup_ndcg_different_docs_match(self):
+        sources = ["doc1.md", "doc2.md", "doc3.md"]
+        expected = ["doc1.md"]
+        assert calculate_dedup_ndcg(sources, expected, k=5) == 1.0
+
+    def test_dedup_ndcg_no_match(self):
+        sources = ["doc1.md", "doc2.md", "doc3.md"]
+        expected = ["doc4.md"]
+        assert calculate_dedup_ndcg(sources, expected, k=5) == 0.0
+
+
+@pytest.mark.unit
+class TestNormalizeSourceWithEquivalence:
+
+    def test_no_equivalence_groups_returns_stem(self):
+        result = normalize_source_with_equivalence(
+            "annual_report/贵州茅台2023年年度报告.md"
+        )
+        assert result == "贵州茅台2023年年度报告"
+
+    def test_none_equivalence_groups_returns_stem(self):
+        result = normalize_source_with_equivalence(
+            "annual_report/贵州茅台2023年年度报告.md",
+            equivalence_groups=None,
+        )
+        assert result == "贵州茅台2023年年度报告"
+
+    def test_empty_equivalence_groups_returns_stem(self):
+        result = normalize_source_with_equivalence(
+            "annual_report/贵州茅台2023年年度报告.md",
+            equivalence_groups={},
+        )
+        assert result == "贵州茅台2023年年度报告"
+
+    def test_member_maps_to_group_key(self):
+        groups = {
+            "中国建筑2023年年度报告": [
+                "中国建筑2023年年度报告.pdf",
+                "中国建筑2023年年度报告摘要.pdf",
+            ]
+        }
+        result = normalize_source_with_equivalence(
+            "中国建筑2023年年度报告摘要.pdf",
+            equivalence_groups=groups,
+        )
+        assert result == "中国建筑2023年年度报告"
+
+    def test_primary_member_maps_to_group_key(self):
+        groups = {
+            "中国建筑2023年年度报告": [
+                "中国建筑2023年年度报告.pdf",
+                "中国建筑2023年年度报告摘要.pdf",
+            ]
+        }
+        result = normalize_source_with_equivalence(
+            "中国建筑2023年年度报告.pdf",
+            equivalence_groups=groups,
+        )
+        assert result == "中国建筑2023年年度报告"
+
+    def test_non_member_returns_original_stem(self):
+        groups = {
+            "中国建筑2023年年度报告": [
+                "中国建筑2023年年度报告.pdf",
+                "中国建筑2023年年度报告摘要.pdf",
+            ]
+        }
+        result = normalize_source_with_equivalence(
+            "其他公司2023年年度报告.pdf",
+            equivalence_groups=groups,
+        )
+        assert result == "其他公司2023年年度报告"
+
+    def test_path_with_directory_maps_to_group_key(self):
+        groups = {
+            "中国建筑2023年年度报告": [
+                "中国建筑2023年年度报告.pdf",
+                "中国建筑2023年年度报告摘要.pdf",
+            ]
+        }
+        result = normalize_source_with_equivalence(
+            "annual_report/中国建筑2023年年度报告摘要.md",
+            equivalence_groups=groups,
+        )
+        assert result == "中国建筑2023年年度报告"
+
+    def test_multiple_groups(self):
+        groups = {
+            "中国建筑2023年年度报告": [
+                "中国建筑2023年年度报告.pdf",
+                "中国建筑2023年年度报告摘要.pdf",
+            ],
+            "贵州茅台2023年年度报告": [
+                "贵州茅台2023年年度报告.pdf",
+                "贵州茅台2023年年度报告_英文版_.pdf",
+            ],
+        }
+        result_a = normalize_source_with_equivalence(
+            "中国建筑2023年年度报告摘要.pdf",
+            equivalence_groups=groups,
+        )
+        result_b = normalize_source_with_equivalence(
+            "贵州茅台2023年年度报告_英文版_.pdf",
+            equivalence_groups=groups,
+        )
+        assert result_a == "中国建筑2023年年度报告"
+        assert result_b == "贵州茅台2023年年度报告"
+
+    def test_single_member_group(self):
+        groups = {
+            "独立报告": [
+                "独立报告.pdf",
+            ]
+        }
+        result = normalize_source_with_equivalence(
+            "独立报告.pdf",
+            equivalence_groups=groups,
+        )
+        assert result == "独立报告"
+
+
+@pytest.mark.unit
+class TestEquivalenceGroupDocumentMatching:
+
+    def test_annual_report_vs_summary_hit_rate(self):
+        groups = {
+            "中国建筑2023年年度报告": [
+                "中国建筑2023年年度报告.pdf",
+                "中国建筑2023年年度报告摘要.pdf",
+            ]
+        }
+        retrieved = [
+            normalize_source_with_equivalence(s, groups)
+            for s in ["annual_report/中国建筑2023年年度报告摘要.md"]
+        ]
+        expected = [
+            normalize_source_with_equivalence(s, groups)
+            for s in ["中国建筑2023年年度报告.pdf"]
+        ]
+        assert calculate_hit_rate(retrieved, expected) == 1.0
+
+    def test_annual_report_vs_summary_mrr(self):
+        groups = {
+            "中国建筑2023年年度报告": [
+                "中国建筑2023年年度报告.pdf",
+                "中国建筑2023年年度报告摘要.pdf",
+            ]
+        }
+        retrieved = [
+            normalize_source_with_equivalence(s, groups)
+            for s in ["other.md", "annual_report/中国建筑2023年年度报告摘要.md"]
+        ]
+        expected = [
+            normalize_source_with_equivalence(s, groups)
+            for s in ["中国建筑2023年年度报告.pdf"]
+        ]
+        assert calculate_mrr(retrieved, expected) == pytest.approx(0.5)
+
+    def test_annual_report_vs_summary_ndcg(self):
+        groups = {
+            "中国建筑2023年年度报告": [
+                "中国建筑2023年年度报告.pdf",
+                "中国建筑2023年年度报告摘要.pdf",
+            ]
+        }
+        retrieved = [
+            normalize_source_with_equivalence(s, groups)
+            for s in ["annual_report/中国建筑2023年年度报告摘要.md"]
+        ]
+        expected = [
+            normalize_source_with_equivalence(s, groups)
+            for s in ["中国建筑2023年年度报告.pdf"]
+        ]
+        assert calculate_ndcg(retrieved, expected) == 1.0
+
+    def test_chinese_vs_english_version(self):
+        groups = {
+            "贵州茅台2023年年度报告": [
+                "贵州茅台2023年年度报告.pdf",
+                "贵州茅台2023年年度报告_英文版_.pdf",
+            ]
+        }
+        retrieved = [
+            normalize_source_with_equivalence(s, groups)
+            for s in ["贵州茅台2023年年度报告_英文版_.md"]
+        ]
+        expected = [
+            normalize_source_with_equivalence(s, groups)
+            for s in ["贵州茅台2023年年度报告.pdf"]
+        ]
+        assert calculate_hit_rate(retrieved, expected) == 1.0
+        assert calculate_mrr(retrieved, expected) == 1.0
+        assert calculate_ndcg(retrieved, expected) == 1.0
+
+    def test_no_equivalence_groups_still_works(self):
+        retrieved = ["annual_report/中国建筑2023年年度报告摘要.md"]
+        expected = ["中国建筑2023年年度报告.pdf"]
+        assert calculate_hit_rate(retrieved, expected) == 0.0
+
+    def test_non_equivalent_documents_not_matched(self):
+        groups = {
+            "中国建筑2023年年度报告": [
+                "中国建筑2023年年度报告.pdf",
+                "中国建筑2023年年度报告摘要.pdf",
+            ]
+        }
+        retrieved = [
+            normalize_source_with_equivalence(s, groups)
+            for s in ["其他公司2023年年度报告.md"]
+        ]
+        expected = [
+            normalize_source_with_equivalence(s, groups)
+            for s in ["中国建筑2023年年度报告.pdf"]
+        ]
+        assert calculate_hit_rate(retrieved, expected) == 0.0
+
+
+@pytest.mark.unit
+class TestEquivalenceGroupExactMatchPriority:
+
+    def test_exact_match_still_works_with_equivalence_groups(self):
+        groups = {
+            "中国建筑2023年年度报告": [
+                "中国建筑2023年年度报告.pdf",
+                "中国建筑2023年年度报告摘要.pdf",
+            ]
+        }
+        retrieved = [
+            normalize_source_with_equivalence(s, groups)
+            for s in ["中国建筑2023年年度报告.pdf"]
+        ]
+        expected = [
+            normalize_source_with_equivalence(s, groups)
+            for s in ["中国建筑2023年年度报告.pdf"]
+        ]
+        assert calculate_hit_rate(retrieved, expected) == 1.0
+        assert calculate_mrr(retrieved, expected) == 1.0
+        assert calculate_ndcg(retrieved, expected) == 1.0
+
+    def test_exact_match_and_equivalence_both_present(self):
+        groups = {
+            "中国建筑2023年年度报告": [
+                "中国建筑2023年年度报告.pdf",
+                "中国建筑2023年年度报告摘要.pdf",
+            ]
+        }
+        retrieved = [
+            normalize_source_with_equivalence(s, groups)
+            for s in [
+                "中国建筑2023年年度报告.pdf",
+                "中国建筑2023年年度报告摘要.md",
+            ]
+        ]
+        expected = [
+            normalize_source_with_equivalence(s, groups)
+            for s in ["中国建筑2023年年度报告.pdf"]
+        ]
+        assert calculate_hit_rate(retrieved, expected) == 1.0
+        assert calculate_mrr(retrieved, expected) == 1.0
+
+    def test_different_groups_not_conflated(self):
+        groups = {
+            "中国建筑2023年年度报告": [
+                "中国建筑2023年年度报告.pdf",
+                "中国建筑2023年年度报告摘要.pdf",
+            ],
+            "贵州茅台2023年年度报告": [
+                "贵州茅台2023年年度报告.pdf",
+                "贵州茅台2023年年度报告摘要.pdf",
+            ],
+        }
+        retrieved = [
+            normalize_source_with_equivalence(s, groups)
+            for s in ["中国建筑2023年年度报告摘要.md"]
+        ]
+        expected = [
+            normalize_source_with_equivalence(s, groups)
+            for s in ["贵州茅台2023年年度报告.pdf"]
+        ]
+        assert calculate_hit_rate(retrieved, expected) == 0.0
 
 
 
