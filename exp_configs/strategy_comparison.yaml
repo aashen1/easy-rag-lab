@@ -1,0 +1,47 @@
+name: "strategy_comparison"
+description: "新旧问题生成策略对比实验 - 比较deprecated策略(factual/boundary/multi_hop)与新策略(document)在token消耗上的差异"
+
+data:
+  meal: "meal_strategy_comparison"
+  create_if_missing:
+    sample_ratio: 0.15
+    seed: 42
+
+test_sets:
+  - strategy: "factual"
+    num_questions: 5
+    seed: 700
+  - strategy: "boundary"
+    num_questions: 5
+    seed: 701
+  - strategy: "multi_hop"
+    num_questions: 5
+    seed: 702
+  - strategy: "document"
+    num_questions: 15
+    type_distribution:
+      single_fact: 0.33
+      multi_fact: 0.27
+      reasoning: 0.20
+      comparative: 0.13
+      missing: 0.07
+
+variants:
+  - name: "baseline"
+    description: "Baseline configuration - runs on both old and new strategy test sets"
+    config_overrides: {}
+
+evaluation:
+  llm_preset: "default"
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+
+llm:
+  question_generation: "default"
+  answering: "default"

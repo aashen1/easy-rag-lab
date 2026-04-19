@@ -8,15 +8,8 @@ data:
     seed: 42
 
 test_sets:
-  - strategy: "factual"
-    num_questions: 30
-    seed: 600
-  - strategy: "boundary"
-    num_questions: 20
-    seed: 601
-  - strategy: "multi_hop"
-    num_questions: 15
-    seed: 602
+  - strategy: "document"
+    num_questions: 65
 
 variants:
   - name: "fixed_512_overlap_0"

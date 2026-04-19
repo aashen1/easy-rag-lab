@@ -8,9 +8,8 @@ data:
     seed: 42
 
 test_sets:
-  - strategy: "factual"
+  - strategy: "document"
     num_questions: 1
-    seed: 100
 
 variants:
   - name: "baseline"

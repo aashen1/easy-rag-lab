@@ -8,15 +8,8 @@ data:
     seed: 42
 
 test_sets:
-  - strategy: "factual"
-    num_questions: 30
-    seed: 300
-  - strategy: "boundary"
-    num_questions: 20
-    seed: 301
-  - strategy: "multi_hop"
-    num_questions: 15
-    seed: 302
+  - strategy: "document"
+    num_questions: 65
 
 variants:
   - name: "vector_only"
