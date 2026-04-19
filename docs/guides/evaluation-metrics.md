@@ -212,6 +212,114 @@ Faithfulness = 可推导陈述数 / 总陈述数
 
 ---
 
+## LLM 检索指标
+
+### Context Precision（上下文精确率）
+
+**定义**：衡量检索系统是否将相关上下文排在无关上下文之前。
+
+**来源**：DeepEval
+
+**计算方法**：
+
+```
+Context Precision = (1/N) × Σ(Precision@k × r_k)
+```
+
+其中：
+- N = 相关上下文数量
+- Precision@k = 前 k 个位置中相关上下文的比例
+- r_k = 第 k 个上下文是否相关（1 或 0）
+
+**取值范围**：0.0 - 1.0
+
+**与 Hit Rate / NDCG 的区别**：
+
+| 指标 | 评测对象 | 是否需要 LLM | 关注点 |
+|------|---------|-------------|--------|
+| Hit Rate | 文档是否命中 | 否 | 是否检索到 |
+| NDCG | 文档排序质量 | 否 | 排序位置 |
+| Context Precision | 上下文相关性与排序 | 是 | 内容是否相关 + 排序质量 |
+
+**解读**：
+- **0.8+**：检索结果高度相关且排序合理
+- **0.5-0.8**：部分检索结果不相关或排序不佳
+- **< 0.5**：检索结果相关性差或排序混乱
+
+**改进建议**：
+- 优化 Reranker 重排模型
+- 提高 embedding 模型质量
+- 优化 chunk 策略，提高 chunk 与查询的相关性
+
+---
+
+### Context Recall（上下文召回率）
+
+**定义**：Ground Truth 中的信息是否都能从检索上下文中推断出来。
+
+**来源**：RAGAS
+
+**计算方法**：
+
+1. 将 Ground Truth 分割成句子
+2. 对每个句子，判断是否可从检索上下文中推断
+3. 计算可推断句子的比例
+
+```
+Context Recall = 可推断句子数 / Ground Truth 总句子数
+```
+
+**取值范围**：0.0 - 1.0
+
+**示例**：
+
+**Ground Truth**：贵州茅台2023年实现营业收入1505.60亿元，同比增长18.04%。
+
+**检索上下文**：贵州茅台2023年年度报告显示，公司实现营业收入1505.60亿元。
+
+**分析**：
+- 句子1："贵州茅台2023年实现营业收入1505.60亿元" → 可推断 ✓
+- 句子2："同比增长18.04%" → 不可推断 ✗
+
+**Context Recall = 0.5**
+
+**解读**：
+- **0.9+**：检索上下文几乎覆盖所有需要的信息
+- **0.7-0.9**：大部分信息可推断，有少量遗漏
+- **0.5-0.7**：信息覆盖不足，需要增加检索量
+- **< 0.5**：检索上下文严重不足
+
+**改进建议**：
+- 增加 `top_k` 值
+- 优化 chunk 大小，确保关键信息完整
+- 考虑混合检索（BM25 + 向量）
+
+---
+
+## 问题有效性检查
+
+### 为什么需要
+
+当测试集中某些问题的 `expected_sources` 指向不在检索库中的文档时，这些问题注定无法命中，会人为拉低检索指标。
+
+### 使用方法
+
+```python
+from eval.metrics import validate_question, filter_valid_questions
+
+# 验证单个问题
+validity = validate_question(
+    question={"source_files": ["doc1.pdf"]},
+    corpus_sources={"doc1", "doc2", "doc3"}
+)
+print(validity.is_valid)  # True
+
+# 批量过滤无效问题
+valid_questions = filter_valid_questions(all_questions, corpus_sources)
+```
+
+---
+
 ## 指标对比
 
 | 指标 | 评测阶段 | 是否需要 LLM | 计算成本 |
@@ -219,6 +327,8 @@ Faithfulness = 可推导陈述数 / 总陈述数
 | Hit Rate | 检索 | 否 | 低 |
 | MRR | 检索 | 否 | 低 |
 | NDCG | 检索 | 否 | 低 |
+| Context Precision | LLM 检索 | 是 | 中 |
+| Context Recall | LLM 检索 | 是 | 中 |
 | Faithfulness | 生成 | 是 | 高 |
 | Answer Relevancy | 生成 | 是 | 高 |
 
@@ -239,12 +349,33 @@ evaluation:
       - "ndcg"
 ```
 
-### 完整评测
+### 标准评测
 
-同时使用检索和生成指标，全面评估系统质量：
+同时使用检索和生成指标：
 
 ```yaml
 evaluation:
+  llm_preset: "default"
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+```
+
+### 深度评测（对齐业界标准）
+
+包含 LLM 检索指标，全面评估系统质量：
+
+```yaml
+evaluation:
+  llm_preset: "default"
+  llm_retrieval_metrics:
+    - "context_precision"
+    - "context_recall"
   metrics:
     retrieval:
       - "hit_rate"
@@ -261,7 +392,9 @@ evaluation:
 2. **MRR**：反映排序质量，重要
 3. **Faithfulness**：反映回答可信度，关键
 4. **NDCG**：综合排序指标，进阶
-5. **Answer Relevancy**：反映用户体验，进阶
+5. **Context Precision**：检索内容相关性 + 排序质量，深度评测
+6. **Context Recall**：信息覆盖完整性，深度评测
+7. **Answer Relevancy**：反映用户体验，进阶
 
 ---
 
@@ -269,3 +402,4 @@ evaluation:
 
 - [实验系统指南](experiment-system.md)
 - [配置参考](../config-reference.md)
+- [评测指标 Bug 修复报告](../troubleshooting/eval-metrics-bugfix.md)
