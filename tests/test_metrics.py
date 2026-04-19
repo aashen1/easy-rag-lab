@@ -1073,3 +1073,303 @@ class TestCalculateFaithfulness:
         )
 
         assert score == 0.5
+
+
+@pytest.mark.unit
+class TestSplitIntoSentences:
+    """Tests for _split_into_sentences function."""
+
+    def test_chinese_sentences(self):
+        from eval.metrics import _split_into_sentences
+        text = "这是第一句。这是第二句！这是第三句？"
+        sentences = _split_into_sentences(text)
+        assert len(sentences) == 3
+        assert sentences[0] == "这是第一句"
+        assert sentences[1] == "这是第二句"
+        assert sentences[2] == "这是第三句"
+
+    def test_english_sentences(self):
+        from eval.metrics import _split_into_sentences
+        text = "First sentence. Second sentence! Third sentence?"
+        sentences = _split_into_sentences(text)
+        assert len(sentences) == 3
+
+    def test_mixed_sentences(self):
+        from eval.metrics import _split_into_sentences
+        text = "中文句子。English sentence. 混合内容！"
+        sentences = _split_into_sentences(text)
+        assert len(sentences) == 3
+
+    def test_empty_text(self):
+        from eval.metrics import _split_into_sentences
+        sentences = _split_into_sentences("")
+        assert sentences == []
+
+    def test_no_punctuation(self):
+        from eval.metrics import _split_into_sentences
+        text = "没有标点的文本"
+        sentences = _split_into_sentences(text)
+        assert len(sentences) == 1
+        assert sentences[0] == "没有标点的文本"
+
+
+@pytest.mark.unit
+class TestJudgeContextRelevance:
+    """Tests for _judge_context_relevance function."""
+
+    @patch("eval.metrics._create_llm_client")
+    def test_relevant_context_returns_true(self, mock_create_client):
+        mock_client = MagicMock()
+        mock_create_client.return_value = mock_client
+
+        mock_message = MagicMock()
+        mock_message.content = [MagicMock()]
+        mock_message.content[0].text = '{"verdict": "是", "reason": "上下文包含答案"}'
+        mock_client.messages.create.return_value = mock_message
+
+        from eval.metrics import _judge_context_relevance
+        result = _judge_context_relevance(
+            question="营收是多少？",
+            expected_output="营收是100万元",
+            context="公司2023年营收为100万元",
+            api_key="test-key",
+            base_url="https://api.test.com",
+            model_name="test-model"
+        )
+
+        assert result is True
+
+    @patch("eval.metrics._create_llm_client")
+    def test_irrelevant_context_returns_false(self, mock_create_client):
+        mock_client = MagicMock()
+        mock_create_client.return_value = mock_client
+
+        mock_message = MagicMock()
+        mock_message.content = [MagicMock()]
+        mock_message.content[0].text = '{"verdict": "否", "reason": "上下文无关"}'
+        mock_client.messages.create.return_value = mock_message
+
+        from eval.metrics import _judge_context_relevance
+        result = _judge_context_relevance(
+            question="营收是多少？",
+            expected_output="营收是100万元",
+            context="今天天气很好",
+            api_key="test-key",
+            base_url="https://api.test.com",
+            model_name="test-model"
+        )
+
+        assert result is False
+
+    @patch("eval.metrics._create_llm_client")
+    def test_llm_error_returns_false(self, mock_create_client):
+        mock_client = MagicMock()
+        mock_create_client.return_value = mock_client
+        mock_client.messages.create.side_effect = Exception("API Error")
+
+        from eval.metrics import _judge_context_relevance
+        result = _judge_context_relevance(
+            question="问题",
+            expected_output="答案",
+            context="上下文",
+            api_key="test-key",
+            base_url="https://api.test.com",
+            model_name="test-model"
+        )
+
+        assert result is False
+
+
+@pytest.mark.unit
+class TestCalculateContextPrecision:
+    """Tests for calculate_context_precision function."""
+
+    def test_empty_context_returns_zero(self):
+        from eval.metrics import calculate_context_precision
+        score = calculate_context_precision(
+            question="问题",
+            expected_output="答案",
+            retrieval_context=[],
+            api_key="test-key"
+        )
+        assert score == 0.0
+
+    @patch("eval.metrics._judge_context_relevance")
+    def test_all_relevant_contexts(self, mock_judge):
+        mock_judge.return_value = True
+
+        from eval.metrics import calculate_context_precision
+        score = calculate_context_precision(
+            question="问题",
+            expected_output="答案",
+            retrieval_context=["上下文1", "上下文2", "上下文3"],
+            api_key="test-key"
+        )
+
+        assert score == 1.0
+        assert mock_judge.call_count == 3
+
+    @patch("eval.metrics._judge_context_relevance")
+    def test_no_relevant_contexts(self, mock_judge):
+        mock_judge.return_value = False
+
+        from eval.metrics import calculate_context_precision
+        score = calculate_context_precision(
+            question="问题",
+            expected_output="答案",
+            retrieval_context=["上下文1", "上下文2", "上下文3"],
+            api_key="test-key"
+        )
+
+        assert score == 0.0
+
+    @patch("eval.metrics._judge_context_relevance")
+    def test_partial_relevant_contexts(self, mock_judge):
+        mock_judge.side_effect = [True, False, True]
+
+        from eval.metrics import calculate_context_precision
+        score = calculate_context_precision(
+            question="问题",
+            expected_output="答案",
+            retrieval_context=["上下文1", "上下文2", "上下文3"],
+            api_key="test-key"
+        )
+
+        assert 0.0 < score < 1.0
+
+    @patch("eval.metrics._judge_context_relevance")
+    def test_weighted_precision_calculation(self, mock_judge):
+        mock_judge.side_effect = [True, False, True]
+
+        from eval.metrics import calculate_context_precision
+        score = calculate_context_precision(
+            question="问题",
+            expected_output="答案",
+            retrieval_context=["上下文1", "上下文2", "上下文3"],
+            api_key="test-key"
+        )
+
+        wcp_sum = (1/1) + (2/3)
+        expected = wcp_sum / 2
+        assert score == pytest.approx(expected)
+
+
+@pytest.mark.unit
+class TestCanInferFromContext:
+    """Tests for _can_infer_from_context function."""
+
+    @patch("eval.metrics._create_llm_client")
+    def test_inferable_sentence_returns_true(self, mock_create_client):
+        mock_client = MagicMock()
+        mock_create_client.return_value = mock_client
+
+        mock_message = MagicMock()
+        mock_message.content = [MagicMock()]
+        mock_message.content[0].text = '{"verdict": "是"}'
+        mock_client.messages.create.return_value = mock_message
+
+        from eval.metrics import _can_infer_from_context
+        result = _can_infer_from_context(
+            sentence="营收是100万元",
+            context="公司2023年营收为100万元",
+            api_key="test-key",
+            base_url="https://api.test.com",
+            model_name="test-model"
+        )
+
+        assert result is True
+
+    @patch("eval.metrics._create_llm_client")
+    def test_non_inferable_sentence_returns_false(self, mock_create_client):
+        mock_client = MagicMock()
+        mock_create_client.return_value = mock_client
+
+        mock_message = MagicMock()
+        mock_message.content = [MagicMock()]
+        mock_message.content[0].text = '{"verdict": "否"}'
+        mock_client.messages.create.return_value = mock_message
+
+        from eval.metrics import _can_infer_from_context
+        result = _can_infer_from_context(
+            sentence="利润是50万元",
+            context="营收是100万元",
+            api_key="test-key",
+            base_url="https://api.test.com",
+            model_name="test-model"
+        )
+
+        assert result is False
+
+
+@pytest.mark.unit
+class TestCalculateContextRecall:
+    """Tests for calculate_context_recall function."""
+
+    def test_empty_ground_truth_returns_zero(self):
+        from eval.metrics import calculate_context_recall
+        score = calculate_context_recall(
+            question="问题",
+            ground_truth="",
+            retrieval_context=["上下文"],
+            api_key="test-key"
+        )
+        assert score == 0.0
+
+    def test_empty_context_returns_zero(self):
+        from eval.metrics import calculate_context_recall
+        score = calculate_context_recall(
+            question="问题",
+            ground_truth="答案",
+            retrieval_context=[],
+            api_key="test-key"
+        )
+        assert score == 0.0
+
+    @patch("eval.metrics._can_infer_from_context")
+    @patch("eval.metrics._split_into_sentences")
+    def test_all_sentences_inferable(self, mock_split, mock_infer):
+        mock_split.return_value = ["句子1", "句子2", "句子3"]
+        mock_infer.return_value = True
+
+        from eval.metrics import calculate_context_recall
+        score = calculate_context_recall(
+            question="问题",
+            ground_truth="句子1。句子2。句子3。",
+            retrieval_context=["上下文"],
+            api_key="test-key"
+        )
+
+        assert score == 1.0
+        assert mock_infer.call_count == 3
+
+    @patch("eval.metrics._can_infer_from_context")
+    @patch("eval.metrics._split_into_sentences")
+    def test_no_sentences_inferable(self, mock_split, mock_infer):
+        mock_split.return_value = ["句子1", "句子2"]
+        mock_infer.return_value = False
+
+        from eval.metrics import calculate_context_recall
+        score = calculate_context_recall(
+            question="问题",
+            ground_truth="句子1。句子2。",
+            retrieval_context=["上下文"],
+            api_key="test-key"
+        )
+
+        assert score == 0.0
+
+    @patch("eval.metrics._can_infer_from_context")
+    @patch("eval.metrics._split_into_sentences")
+    def test_partial_sentences_inferable(self, mock_split, mock_infer):
+        mock_split.return_value = ["句子1", "句子2", "句子3"]
+        mock_infer.side_effect = [True, False, True]
+
+        from eval.metrics import calculate_context_recall
+        score = calculate_context_recall(
+            question="问题",
+            ground_truth="句子1。句子2。句子3。",
+            retrieval_context=["上下文"],
+            api_key="test-key"
+        )
+
+        assert score == pytest.approx(2/3)
