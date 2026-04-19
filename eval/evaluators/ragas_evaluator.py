@@ -22,8 +22,8 @@ class RagasEvaluator(BaseEvaluator):
     Evaluator that uses the RAGAS framework for evaluation.
 
     This evaluator integrates RAGAS metrics with the project's
-    evaluation system, using LangChain Anthropic interface for
-    LongCat API compatibility.
+    evaluation system, using ragas llm_factory with Anthropic
+    client for LongCat API compatibility.
 
     Args:
         config: Configuration dictionary containing:
@@ -57,49 +57,46 @@ class RagasEvaluator(BaseEvaluator):
 
     def _create_llm(self, llm_config: Dict[str, str]) -> Any:
         """
-        Create RAGAS-compatible LLM using LangChain Anthropic.
+        Create RAGAS-compatible LLM using llm_factory with Anthropic client.
 
-        According to LongCat API compatibility analysis:
-        - LangChain Anthropic interface is fully compatible
-        - Structured output works reliably
-        - Requires special authentication headers
+        Uses the native Anthropic client for LongCat API compatibility,
+        wrapped by ragas llm_factory to produce an InstructorLLM instance.
 
         Args:
             llm_config: Dictionary containing api_key, base_url, model_name.
 
         Returns:
-            RAGAS-compatible LLM instance.
+            RAGAS-compatible InstructorLLM instance.
         """
         try:
-            from langchain_anthropic import ChatAnthropic
-            from ragas.llms.base import LangchainLLMWrapper
+            from anthropic import Anthropic
+            from ragas.llms import llm_factory
 
             base_url = llm_config["base_url"].rstrip("/")
             if not base_url.endswith("/anthropic"):
                 base_url = f"{base_url}/anthropic"
 
-            lc_llm = ChatAnthropic(
-                model=llm_config["model_name"],
-                temperature=0.0,
+            client = Anthropic(
+                api_key=llm_config["api_key"],
                 base_url=base_url,
-                api_key="dummy",
                 default_headers={
-                    "Authorization": f"Bearer {llm_config['api_key']}",
                     "Content-Type": "application/json",
                 },
             )
-            return LangchainLLMWrapper(langchain_llm=lc_llm)
+            return llm_factory(
+                llm_config["model_name"], provider="anthropic", client=client
+            )
 
         except ImportError as e:
             error_msg = f"Failed to import RAGAS dependencies: {str(e)}"
             logger.error(error_msg)
             raise ImportError(
-                f"{error_msg}. Please install with: pixi add langchain-anthropic ragas"
+                f"{error_msg}. Please install with: pixi add anthropic ragas"
             )
 
     def _create_embeddings(self, config: Dict[str, Any]) -> Any:
         """
-        Create RAGAS-compatible embeddings using local BGE model.
+        Create RAGAS-compatible embeddings using ragas native HuggingFaceEmbeddings.
 
         Args:
             config: Configuration dictionary containing embedding settings.
@@ -108,8 +105,7 @@ class RagasEvaluator(BaseEvaluator):
             RAGAS-compatible embeddings instance.
         """
         try:
-            from langchain_community.embeddings import HuggingFaceEmbeddings
-            from ragas.embeddings.base import LangchainEmbeddingsWrapper
+            from ragas.embeddings import HuggingFaceEmbeddings
 
             embedding_config = config.get("embedding", {})
             model_name = embedding_config.get(
@@ -117,17 +113,13 @@ class RagasEvaluator(BaseEvaluator):
             )
             device = embedding_config.get("device", "cuda")
 
-            embeddings = HuggingFaceEmbeddings(
-                model_name=model_name,
-                model_kwargs={"device": device},
-            )
-            return LangchainEmbeddingsWrapper(embeddings=embeddings)
+            return HuggingFaceEmbeddings(model=model_name, device=device)
 
         except ImportError as e:
             error_msg = f"Failed to import embeddings dependencies: {str(e)}"
             logger.error(error_msg)
             raise ImportError(
-                f"{error_msg}. Please install with: pixi add langchain-community"
+                f"{error_msg}. Please install with: pixi add sentence-transformers ragas"
             )
 
     def _build_ragas_dataset(
