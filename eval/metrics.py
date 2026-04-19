@@ -24,6 +24,42 @@ def normalize_source(source: str) -> str:
     return Path(source).stem
 
 
+def normalize_source_with_equivalence(
+    source: str,
+    equivalence_groups: Optional[Dict[str, List[str]]] = None,
+) -> str:
+    """Normalize source path with equivalence group matching.
+
+    First normalizes the source to its stem using normalize_source,
+    then checks if the stem belongs to any equivalence group. If it
+    does, returns the group key (the primary member's stem) so that
+    equivalent documents map to the same identifier.
+
+    This allows documents like "中国建筑2023年年度报告" and
+    "中国建筑2023年年度报告摘要" to be treated as the same document
+    for retrieval evaluation purposes.
+
+    Args:
+        source: Source path string.
+        equivalence_groups: Optional dict mapping group keys to lists of
+            file paths. The group key is the primary member's stem, and
+            the value contains all equivalent file paths. If None or
+            empty, behaves like normalize_source.
+
+    Returns:
+        Group key if the source belongs to an equivalence group,
+        otherwise the normalized stem.
+    """
+    stem = normalize_source(source)
+    if not equivalence_groups:
+        return stem
+    for group_key, members in equivalence_groups.items():
+        for member in members:
+            if normalize_source(member) == stem:
+                return group_key
+    return stem
+
+
 def calculate_hit_rate(
     retrieved_sources: List[str],
     expected_sources: List[str],
