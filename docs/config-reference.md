@@ -199,6 +199,7 @@ retrieval:
 evaluation:
   test_data_path: "eval/test_data.json"  # 测试数据路径
   results_dir: "eval/results"            # 结果输出目录
+  backends: ["builtin"]                  # 评测后端列表
   metrics:
     retrieval:                           # 检索指标
       - "hit_rate"
@@ -207,6 +208,14 @@ evaluation:
     generation:                          # 生成质量指标
       - "faithfulness"
       - "answer_relevancy"
+  ragas:                                 # RAGAS 专用配置
+    enabled: false
+    llm_backend: "anthropic"
+    embeddings_backend: "local"
+    run_config:
+      max_workers: 5
+      timeout: 60
+      max_retries: 3
 ```
 
 ### 检索指标
@@ -224,7 +233,45 @@ evaluation:
 | `faithfulness` | 忠实度，回答是否可从上下文推导 | 需要额外 LLM 调用 |
 | `answer_relevancy` | 回答相关性，回答与问题的相关程度 | 需要额外 LLM 调用 |
 
-> 详细指标说明请参阅 [评测指标详解](guides/evaluation-metrics.md)。
+### 评测后端
+
+| 后端 | 说明 |
+|------|------|
+| `builtin` | 自研评测系统，支持检索指标和生成指标 |
+| `ragas` | RAGAS 评测框架，支持更丰富的生成质量指标 |
+
+`backends` 为列表格式，支持同时启用多个后端：
+
+```yaml
+evaluation:
+  backends: ["builtin"]              # 仅自研
+  backends: ["ragas"]                # 仅 RAGAS
+  backends: ["builtin", "ragas"]     # 同时使用
+```
+
+### RAGAS 配置
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `ragas.enabled` | `false` | 是否启用 RAGAS 评测 |
+| `ragas.llm_backend` | `"anthropic"` | LLM 接口类型。`"anthropic"` 使用 LangChain Anthropic 接口连接 LongCat API |
+| `ragas.embeddings_backend` | `"local"` | Embeddings 接口。`"local"` 使用本地 BGE 模型，`"openai"` 使用 OpenAI 兼容接口 |
+| `ragas.run_config.max_workers` | `5` | RAGAS 批量评测的并行度 |
+| `ragas.run_config.timeout` | `60` | 单次评测超时时间（秒） |
+| `ragas.run_config.max_retries` | `3` | 评测失败时的重试次数 |
+
+### RAGAS 生成指标
+
+| 指标 | 说明 | 注意事项 |
+|------|------|---------|
+| `faithfulness` | 忠实度（RAGAS 实现） | 需要额外 LLM 调用 |
+| `answer_relevancy` | 回答相关性（RAGAS 实现） | 需要额外 LLM 调用 |
+| `context_precision` | 上下文精确度，相关文档排名质量 | 需要 reference |
+| `context_recall` | 上下文召回率，检索覆盖度 | 需要 reference |
+| `factual_correctness` | 事实正确性 | 需要 reference |
+| `semantic_similarity` | 语义相似度 | 需要 reference |
+
+> 详细指标说明请参阅 [评测指标详解](guides/evaluation-metrics.md)，RAGAS 使用方法请参阅 [RAGAS 评测系统指南](guides/ragas-evaluation.md)。
 
 ---
 

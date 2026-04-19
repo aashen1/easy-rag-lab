@@ -10,12 +10,15 @@
 
 ## 概述
 
-评测系统提供两类指标：
+评测系统提供两类指标，并支持两种评测后端：
 
-| 类别 | 指标 | 评测对象 |
-|------|------|---------|
-| **检索指标** | Hit Rate, MRR, NDCG | 检索结果质量 |
-| **生成质量指标** | Faithfulness, Answer Relevancy | 回答内容质量 |
+| 类别 | 指标 | 评测对象 | 可用后端 |
+|------|------|---------|---------|
+| **检索指标** | Hit Rate, MRR, NDCG | 检索结果质量 | builtin |
+| **生成质量指标** | Faithfulness, Answer Relevancy | 回答内容质量 | builtin, ragas |
+| **RAGAS 生成指标** | Context Precision, Context Recall, Factual Correctness, Semantic Similarity | 回答与检索质量 | ragas |
+
+> 关于 RAGAS 后端的详细使用方法，请参阅 [RAGAS 评测系统指南](ragas-evaluation.md)。
 
 ---
 
@@ -212,15 +215,116 @@ Faithfulness = 可推导陈述数 / 总陈述数
 
 ---
 
+## RAGAS 生成指标
+
+以下指标由 RAGAS 评测后端提供，需要在配置中启用 `ragas` 后端。
+
+### Context Precision（上下文精确度）
+
+**定义**：检索结果中，相关文档是否排在靠前的位置。
+
+**计算方法**：
+
+1. 对每个检索结果，判断其是否与问题相关
+2. 计算精确度：相关文档在排名中的位置越靠前，分数越高
+
+**取值范围**：0.0 - 1.0
+
+**所需输入**：question, contexts, **reference**（参考答案）
+
+**解读**：
+- **0.8+**：相关文档排名靠前，检索排序质量优秀
+- **0.5-0.8**：部分相关文档排名靠后，可优化
+- **< 0.5**：相关文档排名靠后，需要改进检索或添加重排序
+
+**改进建议**：
+- 启用 Reranker 重排序
+- 优化 Embedding 模型
+- 调整 `top_k` 参数
+
+---
+
+### Context Recall（上下文召回率）
+
+**定义**：检索结果是否覆盖了回答所需的所有信息。
+
+**计算方法**：
+
+1. 将参考答案拆分为多个陈述
+2. 对每个陈述，判断是否可从检索上下文中推导
+3. 计算可推导陈述的比例
+
+**取值范围**：0.0 - 1.0
+
+**所需输入**：question, contexts, **reference**（参考答案）
+
+**解读**：
+- **0.8+**：检索结果信息覆盖充分
+- **0.5-0.8**：部分关键信息未被检索到
+- **< 0.5**：大量关键信息缺失
+
+**改进建议**：
+- 增加 `top_k` 值
+- 调整 `chunk_size` 和 `chunk_overlap`
+- 考虑混合检索（BM25 + 向量）
+
+---
+
+### Factual Correctness（事实正确性）
+
+**定义**：回答与参考答案的事实一致性，基于 claim-level 对比。
+
+**计算方法**：
+
+1. 从回答和参考答案中分别提取事实声明（claims）
+2. 计算回答 claims 相对于参考答案 claims 的覆盖度
+
+**取值范围**：0.0 - 1.0
+
+**所需输入**：response, **reference**（参考答案）
+
+**解读**：
+- **0.8+**：回答事实与参考高度一致
+- **0.5-0.8**：部分事实存在偏差
+- **< 0.5**：事实偏差较大
+
+> 此指标高度依赖参考答案的质量。
+
+---
+
+### Semantic Similarity（语义相似度）
+
+**定义**：回答与参考答案的语义相似度，基于 Embedding 向量的余弦相似度。
+
+**计算方法**：
+
+1. 将回答和参考答案分别编码为向量
+2. 计算余弦相似度
+
+**取值范围**：0.0 - 1.0
+
+**所需输入**：response, **reference**（参考答案）
+
+**解读**：
+- **0.9+**：语义高度相似
+- **0.7-0.9**：语义基本相似
+- **< 0.7**：语义差异较大
+
+---
+
 ## 指标对比
 
-| 指标 | 评测阶段 | 是否需要 LLM | 计算成本 |
-|------|---------|-------------|---------|
-| Hit Rate | 检索 | 否 | 低 |
-| MRR | 检索 | 否 | 低 |
-| NDCG | 检索 | 否 | 低 |
-| Faithfulness | 生成 | 是 | 高 |
-| Answer Relevancy | 生成 | 是 | 高 |
+| 指标 | 评测阶段 | 是否需要 LLM | 需要 reference | 计算成本 | 可用后端 |
+|------|---------|-------------|---------------|---------|---------|
+| Hit Rate | 检索 | 否 | 否 | 低 | builtin |
+| MRR | 检索 | 否 | 否 | 低 | builtin |
+| NDCG | 检索 | 否 | 否 | 低 | builtin |
+| Faithfulness | 生成 | 是 | 否 | 高 | builtin, ragas |
+| Answer Relevancy | 生成 | 是 | 否 | 高 | builtin, ragas |
+| Context Precision | 生成 | 是 | 是 | 高 | ragas |
+| Context Recall | 生成 | 是 | 是 | 高 | ragas |
+| Factual Correctness | 生成 | 是 | 是 | 高 | ragas |
+| Semantic Similarity | 生成 | 否（需 Embedding） | 是 | 中 | ragas |
 
 ---
 
@@ -232,6 +336,7 @@ Faithfulness = 可推导陈述数 / 总陈述数
 
 ```yaml
 evaluation:
+  backends: ["builtin"]
   metrics:
     retrieval:
       - "hit_rate"
@@ -245,6 +350,7 @@ evaluation:
 
 ```yaml
 evaluation:
+  backends: ["builtin"]
   metrics:
     retrieval:
       - "hit_rate"
@@ -255,6 +361,25 @@ evaluation:
       - "answer_relevancy"
 ```
 
+### RAGAS 评测
+
+使用 RAGAS 后端获取更丰富的生成质量指标：
+
+```yaml
+evaluation:
+  backends: ["builtin", "ragas"]
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+      - "context_precision"
+      - "context_recall"
+```
+
 ### 指标优先级
 
 1. **Hit Rate**：最基础，必须关注
@@ -262,10 +387,13 @@ evaluation:
 3. **Faithfulness**：反映回答可信度，关键
 4. **NDCG**：综合排序指标，进阶
 5. **Answer Relevancy**：反映用户体验，进阶
+6. **Context Precision**：检索排序质量（RAGAS），进阶
+7. **Context Recall**：检索覆盖度（RAGAS），进阶
 
 ---
 
 ## 相关文档
 
+- [RAGAS 评测系统指南](ragas-evaluation.md)
 - [实验系统指南](experiment-system.md)
 - [配置参考](../config-reference.md)

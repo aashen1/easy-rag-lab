@@ -15,6 +15,7 @@
 - **自动数据准备**：自动创建 Meal 和测试集
 - **文档级问题生成**：基于完整文档生成真实场景问题
 - **多维度评测指标**：检索指标 + 生成质量指标
+- **多评测后端**：自研评测（builtin）+ RAGAS 评测框架
 - **实验复现**：完整保存配置和数据，支持复现
 - **报告生成**：自动生成结构化的实验报告
 
@@ -86,6 +87,7 @@ variants:
 
 evaluation:
   llm_preset: "default"
+  backends: ["builtin"]          # 评测后端：["builtin"], ["ragas"], 或 ["builtin", "ragas"]
   metrics:
     retrieval:                   # 检索指标
       - "hit_rate"
@@ -109,6 +111,7 @@ evaluation:
 | `variants[].name` | Variant 名称 |
 | `variants[].config_overrides` | 配置覆盖 |
 | `evaluation.llm_preset` | LLM preset |
+| `evaluation.backends` | 评测后端列表，支持 `builtin`、`ragas` 或两者兼有 |
 | `evaluation.metrics.retrieval` | 检索指标列表 |
 | `evaluation.metrics.generation` | 生成质量指标列表 |
 
@@ -204,6 +207,7 @@ data/exp_reports/exp_20250416_120000/
 ```yaml
 evaluation:
   llm_preset: "default"
+  backends: ["builtin"]          # 评测后端选择
   metrics:
     retrieval:
       - "hit_rate"
@@ -215,6 +219,28 @@ evaluation:
 ```
 
 **注意**：生成质量指标需要额外的 LLM 调用，会增加评测时间和成本。
+
+### 使用 RAGAS 后端
+
+在实验配置中启用 RAGAS 评测后端：
+
+```yaml
+evaluation:
+  llm_preset: "default"
+  backends: ["builtin", "ragas"]  # 同时使用自研和 RAGAS
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+    generation:
+      - "faithfulness"            # 两个后端都会计算
+      - "answer_relevancy"        # 两个后端都会计算
+      - "context_precision"       # RAGAS 特有指标
+      - "context_recall"          # RAGAS 特有指标
+```
+
+> RAGAS 特有指标（context_precision, context_recall, factual_correctness, semantic_similarity）需要在 `backends` 中包含 `"ragas"` 才能生效。详见 [RAGAS 评测系统指南](ragas-evaluation.md)。
 
 ---
 
@@ -237,5 +263,6 @@ A: 使用 `--llm-report` 参数，系统会使用 LLM 生成深度分析报告�
 ## 相关文档
 
 - [评测指标详解](evaluation-metrics.md)
+- [RAGAS 评测系统指南](ragas-evaluation.md)
 - [Meal 系统指南](meal-system.md)
 - [配置参考](../config-reference.md)
