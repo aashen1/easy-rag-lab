@@ -14,6 +14,7 @@ class TestCaseResult:
     answer: Optional[str]
     retrieval: Optional[Dict[str, float]] = None
     generation: Optional[Dict[str, float]] = None
+    llm_retrieval: Optional[Dict[str, float]] = None
     sources: Optional[List[str]] = None
     error: Optional[str] = None
     time_seconds: float = 0.0
@@ -26,6 +27,7 @@ class VariantResult:
     variant_description: Optional[str] = None
     retrieval_metrics: Optional[Dict[str, float]] = None
     generation_metrics: Optional[Dict[str, float]] = None
+    llm_retrieval_metrics: Optional[Dict[str, float]] = None
     config_snapshot: Optional[Dict[str, Any]] = None
     total_questions: int = 0
     total_time_seconds: float = 0.0
@@ -38,6 +40,7 @@ class VariantResult:
             variant_description=data.get("variant_description"),
             retrieval_metrics=data.get("retrieval_metrics"),
             generation_metrics=data.get("generation_metrics"),
+            llm_retrieval_metrics=data.get("llm_retrieval_metrics"),
             config_snapshot=data.get("config_snapshot"),
             total_questions=data.get("total_questions", 0),
             total_time_seconds=data.get("total_time_seconds", 0.0),
@@ -54,6 +57,7 @@ class ExperimentResult:
     retrieval_metrics: Dict[str, float]
     results: List[TestCaseResult]
     generation_metrics: Optional[Dict[str, float]] = None
+    llm_retrieval_metrics: Optional[Dict[str, float]] = None
     meal_data_id: Optional[str] = None
     meal_name: Optional[str] = None
     config_snapshot: Optional[Dict[str, Any]] = None
@@ -72,6 +76,7 @@ class ExperimentResult:
                 answer=r.get("answer"),
                 retrieval=r.get("retrieval"),
                 generation=r.get("generation"),
+                llm_retrieval=r.get("llm_retrieval"),
                 sources=r.get("sources"),
                 error=r.get("error"),
                 time_seconds=r.get("time_seconds", 0.0),
@@ -92,6 +97,7 @@ class ExperimentResult:
             retrieval_metrics=data.get("retrieval_metrics", {}),
             results=results,
             generation_metrics=data.get("generation_metrics"),
+            llm_retrieval_metrics=data.get("llm_retrieval_metrics"),
             meal_data_id=data.get("meal_data_id"),
             meal_name=data.get("meal_name"),
             config_snapshot=data.get("config_snapshot"),
@@ -135,6 +141,9 @@ LLM_REPORT_PROMPT_TEMPLATE = """你是一位专业的RAG系统分析师。请根
 
 ### 4. 检索性能分析
 - 解读检索指标（Hit Rate、MRR、NDCG）
+- 解读 LLM 检索指标（Context Precision、Context Recall）
+  - Context Precision: 检索到的上下文是否与问题相关，以及排序质量
+  - Context Recall: Ground Truth 中的信息是否能从检索上下文中推断
 - 分析不同问题类型的表现差异
 - 识别潜在的瓶颈或问题
 
@@ -317,13 +326,30 @@ class ExperimentReporter:
         has_generation = any(
             vr.get("generation_metrics") for vr in variant_results
         )
+        has_llm_retrieval = any(
+            vr.get("llm_retrieval_metrics") for vr in variant_results
+        )
 
-        if has_generation:
+        if has_generation and has_llm_retrieval:
+            lines.append(
+                "| Variant | Description | Hit Rate | MRR | NDCG | CP | CR | Faithfulness | Relevancy | Questions | Time (s) |"
+            )
+            lines.append(
+                "|---------|-------------|----------|-----|------|----|----|--------------|-----------|-----------|----------|"
+            )
+        elif has_generation:
             lines.append(
                 "| Variant | Description | Hit Rate | MRR | NDCG | Faithfulness | Relevancy | Questions | Time (s) |"
             )
             lines.append(
                 "|---------|-------------|----------|-----|------|--------------|-----------|-----------|----------|"
+            )
+        elif has_llm_retrieval:
+            lines.append(
+                "| Variant | Description | Hit Rate | MRR | NDCG | CP | CR | Questions | Time (s) |"
+            )
+            lines.append(
+                "|---------|-------------|----------|-----|------|----|----|-----------|----------|"
             )
         else:
             lines.append(
@@ -351,8 +377,23 @@ class ExperimentReporter:
 
                 marker = " ⭐" if vr == best_variant else ""
 
-                if has_generation and vr.get("generation_metrics"):
-                    gen_metrics = vr["generation_metrics"]
+                llm_metrics = vr.get("llm_retrieval_metrics", {})
+                cp = llm_metrics.get("avg_context_precision")
+                cr = llm_metrics.get("avg_context_recall")
+                cp_str = f"{cp:.2f}" if cp is not None else "N/A"
+                cr_str = f"{cr:.2f}" if cr is not None else "N/A"
+
+                if has_generation and has_llm_retrieval:
+                    gen_metrics = vr.get("generation_metrics", {})
+                    faithfulness = gen_metrics.get("avg_faithfulness")
+                    relevancy = gen_metrics.get("avg_answer_relevancy")
+                    fa_str = f"{faithfulness:.2f}" if faithfulness is not None else "N/A"
+                    ar_str = f"{relevancy:.2f}" if relevancy is not None else "N/A"
+                    lines.append(
+                        f"| {name}{marker} | {desc} | {hr:.4f} | {mrr:.4f} | {ndcg:.4f} | {cp_str} | {cr_str} | {fa_str} | {ar_str} | {q_count} | {time_s:.2f} |"
+                    )
+                elif has_generation:
+                    gen_metrics = vr.get("generation_metrics", {})
                     faithfulness = gen_metrics.get("avg_faithfulness")
                     relevancy = gen_metrics.get("avg_answer_relevancy")
                     fa_str = f"{faithfulness:.2f}" if faithfulness is not None else "N/A"
@@ -360,9 +401,9 @@ class ExperimentReporter:
                     lines.append(
                         f"| {name}{marker} | {desc} | {hr:.4f} | {mrr:.4f} | {ndcg:.4f} | {fa_str} | {ar_str} | {q_count} | {time_s:.2f} |"
                     )
-                elif has_generation:
+                elif has_llm_retrieval:
                     lines.append(
-                        f"| {name}{marker} | {desc} | {hr:.4f} | {mrr:.4f} | {ndcg:.4f} | N/A | N/A | {q_count} | {time_s:.2f} |"
+                        f"| {name}{marker} | {desc} | {hr:.4f} | {mrr:.4f} | {ndcg:.4f} | {cp_str} | {cr_str} | {q_count} | {time_s:.2f} |"
                     )
                 else:
                     lines.append(
@@ -372,7 +413,11 @@ class ExperimentReporter:
                 error = vr.get("error", "Unknown error")
                 if len(error) > 30:
                     error = error[:27] + "..."
-                if has_generation:
+                if has_generation and has_llm_retrieval:
+                    lines.append(f"| {name} | {desc} | ERROR | ERROR | ERROR | ERROR | ERROR | ERROR | ERROR | - | - |")
+                elif has_generation:
+                    lines.append(f"| {name} | {desc} | ERROR | ERROR | ERROR | ERROR | ERROR | - | - |")
+                elif has_llm_retrieval:
                     lines.append(f"| {name} | {desc} | ERROR | ERROR | ERROR | ERROR | ERROR | - | - |")
                 else:
                     lines.append(f"| {name} | {desc} | ERROR | ERROR | ERROR | - | - |")
@@ -418,6 +463,17 @@ class ExperimentReporter:
         lines.append(f"- MRR: {metrics.get('avg_mrr', 0):.4f}")
         lines.append(f"- NDCG: {metrics.get('avg_ndcg', 0):.4f}")
         lines.append("")
+
+        if best.get("llm_retrieval_metrics"):
+            llm_metrics = best["llm_retrieval_metrics"]
+            lines.append("**LLM Retrieval Metrics**:")
+            cp = llm_metrics.get("avg_context_precision")
+            cr = llm_metrics.get("avg_context_recall")
+            if cp is not None:
+                lines.append(f"- Context Precision: {cp:.4f}")
+            if cr is not None:
+                lines.append(f"- Context Recall: {cr:.4f}")
+            lines.append("")
 
         if best.get("generation_metrics"):
             gen_metrics = best["generation_metrics"]
