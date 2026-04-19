@@ -40,6 +40,14 @@ from eval.metrics import (
     calculate_ndcg,
     calculate_context_precision,
     calculate_context_recall,
+    calculate_chunk_hit_rate,
+    calculate_chunk_mrr,
+    calculate_chunk_ndcg,
+    calculate_false_positive_rate,
+    calculate_dedup_hit_rate,
+    calculate_dedup_mrr,
+    calculate_dedup_ndcg,
+    normalize_source,
 )
 from eval.experiment_reporter import ExperimentReporter
 
@@ -588,10 +596,33 @@ def evaluate_test_set(
                 hit_rate = calculate_hit_rate(retrieved_sources, expected_sources)
                 mrr = calculate_mrr(retrieved_sources, expected_sources)
                 ndcg = calculate_ndcg(retrieved_sources, expected_sources, k=5)
+                dedup_hit_rate = calculate_dedup_hit_rate(retrieved_sources, expected_sources)
+                dedup_mrr = calculate_dedup_mrr(retrieved_sources, expected_sources)
+                dedup_ndcg = calculate_dedup_ndcg(retrieved_sources, expected_sources)
             else:
                 hit_rate = None
                 mrr = None
                 ndcg = None
+                dedup_hit_rate = None
+                dedup_mrr = None
+                dedup_ndcg = None
+
+            retrieved_chunk_ids = response.get("chunk_ids", [])
+            expected_chunks = question_data.get("source_chunks", [])
+
+            if expect_retrieval and expected_chunks and retrieved_chunk_ids:
+                chunk_hit_rate = calculate_chunk_hit_rate(retrieved_chunk_ids, expected_chunks)
+                chunk_mrr = calculate_chunk_mrr(retrieved_chunk_ids, expected_chunks)
+                chunk_ndcg = calculate_chunk_ndcg(retrieved_chunk_ids, expected_chunks, k=5)
+            else:
+                chunk_hit_rate = None
+                chunk_mrr = None
+                chunk_ndcg = None
+
+            if not expect_retrieval and not expected_sources:
+                false_positive_rate = calculate_false_positive_rate(retrieved_sources, k=5)
+            else:
+                false_positive_rate = None
 
             result = {
                 "id": question_id,
@@ -602,8 +633,21 @@ def evaluate_test_set(
                     "mrr": mrr,
                     "ndcg": ndcg,
                 } if hit_rate is not None else None,
+                "chunk_retrieval": {
+                    "hit_rate": chunk_hit_rate,
+                    "mrr": chunk_mrr,
+                    "ndcg": chunk_ndcg,
+                } if chunk_hit_rate is not None else None,
+                "dedup_retrieval": {
+                    "hit_rate": dedup_hit_rate,
+                    "mrr": dedup_mrr,
+                    "ndcg": dedup_ndcg,
+                } if dedup_hit_rate is not None else None,
+                "false_positive_rate": false_positive_rate,
                 "sources": retrieved_sources,
+                "chunk_ids": retrieved_chunk_ids,
                 "expected_sources": expected_sources,
+                "expected_chunks": expected_chunks,
                 "time_seconds": case_time,
                 "test_set": test_set_name,
                 "category": question_data.get("category"),
@@ -714,6 +758,46 @@ def compute_aggregate_metrics(results: List[Dict[str, Any]]) -> Dict[str, float]
         "retrieval_applicable_questions": len(retrieval_results),
         "total_questions": len(results),
     }
+
+    chunk_results = [r for r in results if r.get("chunk_retrieval") is not None]
+    if chunk_results:
+        avg_chunk_hit_rate = sum(r["chunk_retrieval"]["hit_rate"] for r in chunk_results) / len(chunk_results)
+        avg_chunk_mrr = sum(r["chunk_retrieval"]["mrr"] for r in chunk_results) / len(chunk_results)
+        avg_chunk_ndcg = sum(r["chunk_retrieval"]["ndcg"] for r in chunk_results) / len(chunk_results)
+    else:
+        avg_chunk_hit_rate = None
+        avg_chunk_mrr = None
+        avg_chunk_ndcg = None
+
+    dedup_results = [r for r in results if r.get("dedup_retrieval") is not None]
+    if dedup_results:
+        avg_dedup_hit_rate = sum(r["dedup_retrieval"]["hit_rate"] for r in dedup_results) / len(dedup_results)
+        avg_dedup_mrr = sum(r["dedup_retrieval"]["mrr"] for r in dedup_results) / len(dedup_results)
+        avg_dedup_ndcg = sum(r["dedup_retrieval"]["ndcg"] for r in dedup_results) / len(dedup_results)
+    else:
+        avg_dedup_hit_rate = None
+        avg_dedup_mrr = None
+        avg_dedup_ndcg = None
+
+    fpr_results = [r for r in results if r.get("false_positive_rate") is not None]
+    avg_false_positive_rate = (
+        sum(r["false_positive_rate"] for r in fpr_results) / len(fpr_results)
+        if fpr_results else None
+    )
+
+    metrics["chunk_level_metrics"] = {
+        "avg_hit_rate": avg_chunk_hit_rate,
+        "avg_mrr": avg_chunk_mrr,
+        "avg_ndcg": avg_chunk_ndcg,
+        "retrieval_applicable_questions": len(chunk_results),
+    }
+    metrics["dedup_metrics"] = {
+        "avg_hit_rate": avg_dedup_hit_rate,
+        "avg_mrr": avg_dedup_mrr,
+        "avg_ndcg": avg_dedup_ndcg,
+    }
+    metrics["avg_false_positive_rate"] = avg_false_positive_rate
+    metrics["irrelevant_questions_count"] = len(fpr_results)
 
     llm_retrieval_results = [r for r in results if "llm_retrieval" in r and r["llm_retrieval"]]
     if llm_retrieval_results:
