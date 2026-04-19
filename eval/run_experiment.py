@@ -81,6 +81,28 @@ class AssetVerificationResult:
         }
 
 
+def sanitize_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Create a sanitized copy of configuration with sensitive fields masked.
+
+    Removes api_key values from llm_presets to prevent credential leakage
+    in experiment snapshots.
+
+    Args:
+        config: Configuration dictionary to sanitize.
+
+    Returns:
+        Deep-copied configuration with api_key values replaced by '***'.
+    """
+    import copy
+    result = copy.deepcopy(config)
+    llm_presets = result.get("llm_presets", {})
+    for preset_name, preset_config in llm_presets.items():
+        if isinstance(preset_config, dict) and "api_key" in preset_config:
+            preset_config["api_key"] = "***"
+    return result
+
+
 def verify_experiment_assets(
     exp_dir: Path,
     system_config: Dict[str, Any],
@@ -754,11 +776,7 @@ def run_variant_evaluation(
         "test_sets": exp_config.test_sets,
         "evaluation": exp_config.evaluation,
         "variant": variant,
-        "merged": {
-            "chunker": merged_config.get("chunker", {}),
-            "embedding": merged_config.get("embedding", {}),
-            "retrieval": merged_config.get("retrieval", {}),
-        },
+        "merged": sanitize_config(merged_config),
     }
 
     llm_preset = exp_config.evaluation.get("llm_preset", "default")
@@ -939,6 +957,7 @@ def run_experiment(
             "test_sets": exp_config.test_sets,
             "evaluation": exp_config.evaluation,
             "llm": exp_config.llm,
+            "system_config": sanitize_config(system_config),
         }
 
         exp_manager.save_snapshots(
