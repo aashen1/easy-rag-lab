@@ -8,6 +8,9 @@ This evaluator provides access to RAGAS metrics including:
 - Context Recall
 - Factual Correctness
 - Semantic Similarity
+
+Uses LangchainLLMWrapper with ChatAnthropic for LongCat API compatibility,
+which preserves the Authorization: Bearer header required by the proxy.
 """
 
 from typing import Any, Dict, List, Optional
@@ -22,8 +25,8 @@ class RagasEvaluator(BaseEvaluator):
     Evaluator that uses the RAGAS framework for evaluation.
 
     This evaluator integrates RAGAS metrics with the project's
-    evaluation system, using ragas llm_factory with Anthropic
-    client for LongCat API compatibility.
+    evaluation system, using LangchainLLMWrapper with ChatAnthropic
+    for LongCat API compatibility.
 
     Args:
         config: Configuration dictionary containing:
@@ -57,55 +60,70 @@ class RagasEvaluator(BaseEvaluator):
 
     def _create_llm(self, llm_config: Dict[str, str]) -> Any:
         """
-        Create RAGAS-compatible LLM using llm_factory with Anthropic client.
+        Create RAGAS-compatible LLM using LangchainLLMWrapper.
 
-        Uses the native Anthropic client for LongCat API compatibility,
-        wrapped by ragas llm_factory to produce an InstructorLLM instance.
+        Uses ChatAnthropic with api_key='dummy' and the real key passed
+        via the Authorization: Bearer header, matching the pattern used
+        by the project's Generator class. This is required because the
+        LongCat API proxy expects the key in the Authorization header
+        rather than the x-api-key header that the Anthropic SDK uses.
+
+        The LangchainLLMWrapper preserves these custom headers through
+        to the actual HTTP calls, unlike llm_factory + instructor which
+        strips them during client patching.
 
         Args:
             llm_config: Dictionary containing api_key, base_url, model_name.
 
         Returns:
-            RAGAS-compatible InstructorLLM instance.
+            RAGAS-compatible LangchainLLMWrapper instance.
         """
         try:
-            from anthropic import Anthropic
-            from ragas.llms import llm_factory
+            from langchain_anthropic import ChatAnthropic
+            from ragas.llms import LangchainLLMWrapper
 
             base_url = llm_config["base_url"].rstrip("/")
             if not base_url.endswith("/anthropic"):
                 base_url = f"{base_url}/anthropic"
 
-            client = Anthropic(
-                api_key=llm_config["api_key"],
+            chat_model = ChatAnthropic(
+                model=llm_config["model_name"],
+                api_key="dummy",
                 base_url=base_url,
                 default_headers={
+                    "Authorization": f"Bearer {llm_config['api_key']}",
                     "Content-Type": "application/json",
                 },
+                max_tokens=llm_config.get("max_tokens", 4096),
+                temperature=llm_config.get("temperature", 0.0),
             )
-            return llm_factory(
-                llm_config["model_name"], provider="anthropic", client=client
-            )
+
+            return LangchainLLMWrapper(chat_model)
 
         except ImportError as e:
             error_msg = f"Failed to import RAGAS dependencies: {str(e)}"
             logger.error(error_msg)
             raise ImportError(
-                f"{error_msg}. Please install with: pixi add anthropic ragas"
+                f"{error_msg}. Please install with: pixi add langchain-anthropic ragas"
             )
 
     def _create_embeddings(self, config: Dict[str, Any]) -> Any:
         """
-        Create RAGAS-compatible embeddings using ragas native HuggingFaceEmbeddings.
+        Create RAGAS-compatible embeddings using LangChain HuggingFaceEmbeddings.
+
+        Uses langchain_community HuggingFaceEmbeddings which provides the
+        embed_query() method required by RAGAS AnswerRelevancy metric.
+        The ragas.embeddings.HuggingFaceEmbeddings only provides embed_text()
+        which is incompatible.
 
         Args:
             config: Configuration dictionary containing embedding settings.
 
         Returns:
-            RAGAS-compatible embeddings instance.
+            LangChain HuggingFaceEmbeddings instance compatible with RAGAS.
         """
         try:
-            from ragas.embeddings import HuggingFaceEmbeddings
+            from langchain_community.embeddings import HuggingFaceEmbeddings
 
             embedding_config = config.get("embedding", {})
             model_name = embedding_config.get(
@@ -113,13 +131,16 @@ class RagasEvaluator(BaseEvaluator):
             )
             device = embedding_config.get("device", "cuda")
 
-            return HuggingFaceEmbeddings(model=model_name, device=device)
+            return HuggingFaceEmbeddings(
+                model_name=model_name,
+                model_kwargs={"device": device},
+            )
 
         except ImportError as e:
             error_msg = f"Failed to import embeddings dependencies: {str(e)}"
             logger.error(error_msg)
             raise ImportError(
-                f"{error_msg}. Please install with: pixi add sentence-transformers ragas"
+                f"{error_msg}. Please install with: pixi add langchain-community sentence-transformers ragas"
             )
 
     def _build_ragas_dataset(
@@ -326,7 +347,10 @@ class RagasEvaluator(BaseEvaluator):
                 if isinstance(score_dict, dict):
                     for metric_name, score in score_dict.items():
                         if score is not None:
-                            generation_results[metric_name] = float(score)
+                            try:
+                                generation_results[metric_name] = float(score)
+                            except (TypeError, ValueError):
+                                logger.warning(f"Could not convert score for {metric_name}: {score}")
 
         except Exception as e:
             error = str(e)
@@ -401,7 +425,10 @@ class RagasEvaluator(BaseEvaluator):
                     if isinstance(score_dict, dict):
                         for metric_name in generation_metrics:
                             if metric_name in score_dict and score_dict[metric_name] is not None:
-                                generation_results[metric_name] = float(score_dict[metric_name])
+                                try:
+                                    generation_results[metric_name] = float(score_dict[metric_name])
+                                except (TypeError, ValueError):
+                                    logger.warning(f"Could not convert score for {metric_name}: {score_dict[metric_name]}")
 
                     results.append(
                         EvaluationResult(
@@ -419,7 +446,10 @@ class RagasEvaluator(BaseEvaluator):
                     generation_results = {}
                     for metric_name in generation_metrics:
                         if metric_name in row and row[metric_name] is not None:
-                            generation_results[metric_name] = float(row[metric_name])
+                            try:
+                                generation_results[metric_name] = float(row[metric_name])
+                            except (TypeError, ValueError):
+                                logger.warning(f"Could not convert score for {metric_name}: {row[metric_name]}")
 
                     results.append(
                         EvaluationResult(
