@@ -312,18 +312,28 @@ test_generation:
 token_cost:
   models:
     LongCat-Flash-Lite:
-      input_price: 0.000001     # 每千 token 输入价格
-      output_price: 0.000002    # 每千 token 输出价格
+      input_price_per_1k: 0.001     # 每千 token 输入价格
+      output_price_per_1k: 0.002    # 每千 token 输出价格
+      conversion_factor: 1.0        # 价格折算系数
     claude-3-opus-20240229:
-      input_price: 0.015
-      output_price: 0.075
+      input_price_per_1k: 0.015
+      output_price_per_1k: 0.075
+      conversion_factor: 15.0
     claude-3-5-sonnet-20241022:
-      input_price: 0.003
-      output_price: 0.015
+      input_price_per_1k: 0.003
+      output_price_per_1k: 0.015
+      conversion_factor: 3.0
     claude-3-haiku-20240307:
-      input_price: 0.00025
-      output_price: 0.00125
+      input_price_per_1k: 0.00025
+      output_price_per_1k: 0.00125
+      conversion_factor: 0.25
 ```
+
+| 参数 | 说明 |
+|------|------|
+| `input_price_per_1k` | 每千 token 输入价格（美元） |
+| `output_price_per_1k` | 每千 token 输出价格（美元） |
+| `conversion_factor` | 价格折算系数，用于计算等效成本 |
 
 ---
 
@@ -332,9 +342,19 @@ token_cost:
 ```yaml
 logging:
   level: "INFO"                 # 日志级别
-  format: "{time} | {level} | {message}"  # 日志格式
-  file: "logs/app.log"          # 日志文件路径
+  format: "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+  log_dir: "logs"               # 日志文件目录
+  rotation: "10 MB"             # 日志轮转大小
+  retention: "7 days"           # 日志保留时间
 ```
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `level` | `"INFO"` | 日志级别（DEBUG, INFO, WARNING, ERROR） |
+| `format` | 见上 | 日志格式（loguru 格式） |
+| `log_dir` | `"logs"` | 日志文件存储目录 |
+| `rotation` | `"10 MB"` | 日志文件轮转大小，超过后创建新文件 |
+| `retention` | `"7 days"` | 日志文件保留时间，过期自动删除 |
 
 ---
 

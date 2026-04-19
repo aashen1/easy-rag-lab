@@ -30,7 +30,8 @@
 
 ### 版本验收
 
-- [交付对照](archive/specs/new-evaluation-system/outcome.md)
+- [交付对照](reviews/v0.1.7/outcome.md)
+- [Spec 验收报告](archive/specs/new-evaluation-system/outcome.md)
 
 ---
 
