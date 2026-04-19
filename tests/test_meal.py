@@ -174,6 +174,78 @@ class TestConfigHashes:
         h2 = compute_chunker_config_hash(config)
         assert h1 == h2
 
+    def test_chunker_config_hash_different_strategies(self):
+        config_fixed = {
+            "strategy": "fixed",
+            "chunk_size": 512,
+            "chunk_overlap": 0,
+            "encoding": "cl100k_base",
+        }
+        config_semantic = {
+            "strategy": "semantic",
+            "chunk_size": 512,
+            "chunk_overlap": 0,
+            "encoding": "cl100k_base",
+            "semantic": {"similarity_threshold": 0.5, "min_chunk_size": 100},
+        }
+        h_fixed = compute_chunker_config_hash(config_fixed)
+        h_semantic = compute_chunker_config_hash(config_semantic)
+        assert h_fixed != h_semantic, "Different strategies should produce different hashes"
+
+    def test_chunker_config_hash_semantic_different_thresholds(self):
+        config_a = {
+            "strategy": "semantic",
+            "chunk_size": 512,
+            "chunk_overlap": 0,
+            "encoding": "cl100k_base",
+            "semantic": {"similarity_threshold": 0.5, "min_chunk_size": 100},
+        }
+        config_b = {
+            "strategy": "semantic",
+            "chunk_size": 512,
+            "chunk_overlap": 0,
+            "encoding": "cl100k_base",
+            "semantic": {"similarity_threshold": 0.3, "min_chunk_size": 100},
+        }
+        h_a = compute_chunker_config_hash(config_a)
+        h_b = compute_chunker_config_hash(config_b)
+        assert h_a != h_b, "Different semantic thresholds should produce different hashes"
+
+    def test_chunker_config_hash_semantic_different_percentiles(self):
+        config_a = {
+            "strategy": "semantic",
+            "chunk_size": 512,
+            "chunk_overlap": 0,
+            "encoding": "cl100k_base",
+            "semantic": {"breakpoint_percentile": 25, "min_chunk_size": 100},
+        }
+        config_b = {
+            "strategy": "semantic",
+            "chunk_size": 512,
+            "chunk_overlap": 0,
+            "encoding": "cl100k_base",
+            "semantic": {"breakpoint_percentile": 50, "min_chunk_size": 100},
+        }
+        h_a = compute_chunker_config_hash(config_a)
+        h_b = compute_chunker_config_hash(config_b)
+        assert h_a != h_b, "Different breakpoint percentiles should produce different hashes"
+
+    def test_chunker_config_hash_default_strategy_is_fixed(self):
+        config_no_strategy = {
+            "chunk_size": 512,
+            "chunk_overlap": 0,
+            "encoding": "cl100k_base",
+        }
+        config_fixed = {
+            "strategy": "fixed",
+            "chunk_size": 512,
+            "chunk_overlap": 0,
+            "encoding": "cl100k_base",
+        }
+        h_no_strategy = compute_chunker_config_hash(config_no_strategy)
+        h_fixed = compute_chunker_config_hash(config_fixed)
+        assert h_no_strategy == h_fixed, "Default strategy should be 'fixed'"
+
     def test_embedding_config_hash(self):
         config = {"model_name": "BAAI/bge-large-zh-v1.5"}
         h = compute_embedding_config_hash(config)

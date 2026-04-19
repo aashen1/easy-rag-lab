@@ -126,13 +126,38 @@ def compute_parser_config_hash(parser_config: Dict) -> str:
 
 
 def compute_chunker_config_hash(chunker_config: Dict) -> str:
+    """Compute a short hash of the chunker configuration.
+
+    The hash includes all parameters that affect chunking results:
+    - strategy: chunking strategy (fixed, semantic, etc.)
+    - chunk_size: target chunk size
+    - overlap: chunk overlap
+    - encoding: tokenizer encoding
+    - semantic config: similarity_threshold, breakpoint_percentile, min_chunk_size
+
+    Args:
+        chunker_config: Chunker configuration dictionary.
+
+    Returns:
+        First 8 characters of the SHA-256 hex digest.
+    """
     overlap = chunker_config.get(
         "chunk_overlap", chunker_config.get("overlap", 0))
     relevant = {
+        "strategy": chunker_config.get("strategy", "fixed"),
         "chunk_size": chunker_config["chunk_size"],
         "overlap": overlap,
         "encoding": chunker_config.get("encoding", "cl100k_base"),
     }
+
+    if chunker_config.get("strategy") == "semantic":
+        semantic_config = chunker_config.get("semantic", {})
+        relevant["semantic"] = {
+            "similarity_threshold": semantic_config.get("similarity_threshold", 0.5),
+            "breakpoint_percentile": semantic_config.get("breakpoint_percentile"),
+            "min_chunk_size": semantic_config.get("min_chunk_size", 100),
+        }
+
     return hashlib.sha256(json.dumps(relevant, sort_keys=True).encode()).hexdigest()[:8]
 
 
