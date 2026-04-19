@@ -227,7 +227,12 @@ class TestExperimentConfig:
 
     @pytest.mark.unit
     def test_valid_metrics_constants(self):
-        assert VALID_RETRIEVAL_METRICS == {"hit_rate", "mrr", "ndcg"}
+        assert VALID_RETRIEVAL_METRICS == {
+            "hit_rate", "mrr", "ndcg",
+            "chunk_hit_rate", "chunk_mrr", "chunk_ndcg",
+            "dedup_hit_rate", "dedup_mrr", "dedup_ndcg",
+            "false_positive_rate",
+        }
         assert VALID_GENERATION_METRICS == {"faithfulness", "answer_relevancy"}
 
 
