@@ -203,6 +203,359 @@ def calculate_ndcg(
     return min(1.0, max(0.0, ndcg))
 
 
+def _parse_chunk_id(chunk_id: str) -> tuple:
+    """Parse chunk_id into (doc_stem, chunk_index).
+
+    Chunk IDs are expected to follow the format "{doc_stem}_{index:03d}",
+    where the suffix after the last underscore is a zero-padded integer
+    representing the chunk index within the document.
+
+    Args:
+        chunk_id: Chunk identifier string to parse.
+
+    Returns:
+        Tuple of (doc_stem, chunk_index) where doc_stem is the document
+        stem string and chunk_index is the integer chunk index.
+        Returns (chunk_id, -1) if the suffix cannot be parsed as an integer.
+    """
+    last_underscore = chunk_id.rfind("_")
+    if last_underscore == -1:
+        return (chunk_id, -1)
+    doc_stem = chunk_id[:last_underscore]
+    suffix = chunk_id[last_underscore + 1:]
+    try:
+        chunk_index = int(suffix)
+        return (doc_stem, chunk_index)
+    except ValueError:
+        return (chunk_id, -1)
+
+
+def calculate_chunk_hit_rate(
+    retrieved_chunk_ids: List[str],
+    expected_chunk_ids: List[str],
+    adjacent_tolerance: int = 1,
+    k: int = 5,
+) -> float:
+    """Calculate chunk-level hit rate with adjacent tolerance.
+
+    This metric evaluates whether any of the top-k retrieved chunks match
+    the expected chunks, supporting both exact matches and adjacent matches
+    within a configurable tolerance window.
+
+    A match occurs when:
+    - The retrieved chunk_id is exactly in expected_chunk_ids (exact match), OR
+    - The retrieved chunk belongs to the same document as an expected chunk
+      AND the absolute difference between their chunk indices is within
+      adjacent_tolerance (adjacent match).
+
+    Args:
+        retrieved_chunk_ids: List of retrieved chunk identifiers, ordered
+            by relevance (most relevant first).
+        expected_chunk_ids: List of expected (ground truth) chunk identifiers.
+        adjacent_tolerance: Maximum allowed index difference for adjacent
+            matching. Defaults to 1.
+        k: Number of top results to consider. Defaults to 5.
+
+    Returns:
+        Hit rate as 1.0 if any match is found in top-k, 0.0 otherwise.
+        Returns 0.0 if expected_chunk_ids is empty.
+    """
+    if not expected_chunk_ids:
+        return 0.0
+
+    expected_parsed = [_parse_chunk_id(cid) for cid in expected_chunk_ids]
+    expected_exact_set = set(expected_chunk_ids)
+
+    for chunk_id in retrieved_chunk_ids[:k]:
+        if chunk_id in expected_exact_set:
+            return 1.0
+        ret_stem, ret_index = _parse_chunk_id(chunk_id)
+        if ret_index == -1:
+            continue
+        for exp_stem, exp_index in expected_parsed:
+            if exp_index == -1:
+                continue
+            if ret_stem == exp_stem and abs(ret_index - exp_index) <= adjacent_tolerance:
+                return 1.0
+
+    return 0.0
+
+
+def calculate_chunk_mrr(
+    retrieved_chunk_ids: List[str],
+    expected_chunk_ids: List[str],
+    adjacent_tolerance: int = 1,
+) -> float:
+    """Calculate chunk-level Mean Reciprocal Rank with adjacent tolerance.
+
+    Uses the same matching logic as calculate_chunk_hit_rate but returns
+    the reciprocal of the rank at which the first match is found, rather
+    than a binary hit/miss.
+
+    Args:
+        retrieved_chunk_ids: List of retrieved chunk identifiers, ordered
+            by relevance (most relevant first).
+        expected_chunk_ids: List of expected (ground truth) chunk identifiers.
+        adjacent_tolerance: Maximum allowed index difference for adjacent
+            matching. Defaults to 1.
+
+    Returns:
+        Reciprocal rank as a float between 0.0 and 1.0:
+        - 1.0 if the first match is at position 1
+        - 1/n if the first match is at position n
+        - 0.0 if no match is found or expected_chunk_ids is empty
+    """
+    if not expected_chunk_ids:
+        return 0.0
+
+    expected_parsed = [_parse_chunk_id(cid) for cid in expected_chunk_ids]
+    expected_exact_set = set(expected_chunk_ids)
+
+    for i, chunk_id in enumerate(retrieved_chunk_ids):
+        if chunk_id in expected_exact_set:
+            return 1.0 / (i + 1)
+        ret_stem, ret_index = _parse_chunk_id(chunk_id)
+        if ret_index == -1:
+            continue
+        for exp_stem, exp_index in expected_parsed:
+            if exp_index == -1:
+                continue
+            if ret_stem == exp_stem and abs(ret_index - exp_index) <= adjacent_tolerance:
+                return 1.0 / (i + 1)
+
+    return 0.0
+
+
+def calculate_chunk_ndcg(
+    retrieved_chunk_ids: List[str],
+    expected_chunk_ids: List[str],
+    k: int = 5,
+    adjacent_tolerance: int = 1,
+) -> float:
+    """Calculate chunk-level NDCG with adjacent tolerance.
+
+    Assigns multi-level relevance scores based on match type:
+    - Exact match: relevance = 2
+    - Adjacent match (within tolerance): relevance = 1
+    - No match: relevance = 0
+
+    Uses the standard DCG formula:
+        DCG@k = sum((2^rel_i - 1) / log2(i + 2))
+
+    Deduplicates by chunk_id before computing to avoid inflated scores.
+
+    Args:
+        retrieved_chunk_ids: List of retrieved chunk identifiers, ordered
+            by relevance (most relevant first).
+        expected_chunk_ids: List of expected (ground truth) chunk identifiers.
+        k: Number of top results to consider. Defaults to 5.
+        adjacent_tolerance: Maximum allowed index difference for adjacent
+            matching. Defaults to 1.
+
+    Returns:
+        NDCG as a float between 0.0 and 1.0.
+        Returns 0.0 if expected_chunk_ids is empty.
+    """
+    if not expected_chunk_ids:
+        return 0.0
+
+    expected_exact_set = set(expected_chunk_ids)
+    expected_parsed = [_parse_chunk_id(cid) for cid in expected_chunk_ids]
+
+    seen: set = set()
+    unique_retrieved: List[str] = []
+    for chunk_id in retrieved_chunk_ids[:k]:
+        if chunk_id not in seen:
+            seen.add(chunk_id)
+            unique_retrieved.append(chunk_id)
+
+    def _get_relevance(chunk_id: str) -> int:
+        if chunk_id in expected_exact_set:
+            return 2
+        ret_stem, ret_index = _parse_chunk_id(chunk_id)
+        if ret_index == -1:
+            return 0
+        for exp_stem, exp_index in expected_parsed:
+            if exp_index == -1:
+                continue
+            if ret_stem == exp_stem and abs(ret_index - exp_index) <= adjacent_tolerance:
+                return 1
+        return 0
+
+    dcg = 0.0
+    for i, chunk_id in enumerate(unique_retrieved):
+        rel = _get_relevance(chunk_id)
+        if rel > 0:
+            dcg += (2**rel - 1) / math.log2(i + 2)
+
+    ideal_rels = [2] * len(expected_chunk_ids)
+    ideal_rels.sort(reverse=True)
+    ideal_rels = ideal_rels[:k]
+
+    ideal_dcg = 0.0
+    for i, rel in enumerate(ideal_rels):
+        ideal_dcg += (2**rel - 1) / math.log2(i + 2)
+
+    if ideal_dcg == 0:
+        return 0.0
+
+    ndcg = dcg / ideal_dcg
+    return min(1.0, max(0.0, ndcg))
+
+
+def calculate_false_positive_rate(
+    retrieved_sources: List[str],
+    k: int = 5,
+) -> float:
+    """Calculate False Positive Rate for irrelevant questions.
+
+    For questions that have no relevant documents (irrelevant questions),
+    all retrieved documents are false positives. The FPR measures the
+    proportion of top-k slots occupied by irrelevant retrievals.
+
+    Args:
+        retrieved_sources: List of retrieved source paths for an
+            irrelevant question.
+        k: Number of top results to consider. Defaults to 5.
+
+    Returns:
+        False positive rate as a float between 0.0 and 1.0:
+        - 1.0 if all k slots are filled with irrelevant results
+        - 0.0 if no results are retrieved
+        - Proportional value for partial retrieval
+    """
+    top_k = retrieved_sources[:k]
+    return len(top_k) / k
+
+
+def deduplicate_by_document(
+    retrieved_sources: List[str],
+    retrieved_chunk_ids: Optional[List[str]] = None,
+) -> List[int]:
+    """Return indices to keep after deduplicating by document.
+
+    Identifies the first occurrence of each unique document in the
+    retrieved results and returns their indices. Subsequent occurrences
+    of the same document are excluded.
+
+    When retrieved_chunk_ids is provided, the function first attempts
+    to extract the document stem from the chunk_id (format:
+    "{doc_stem}_{index:03d}") for more precise deduplication. If
+    chunk_id parsing fails, it falls back to normalizing the source path.
+
+    Args:
+        retrieved_sources: List of retrieved source paths.
+        retrieved_chunk_ids: Optional list of chunk identifiers
+            corresponding to retrieved_sources. If provided, used for
+            document identification. If None, deduplication is based
+            on source path only.
+
+    Returns:
+        List of integer indices to keep (first occurrence of each
+        unique document), in ascending order.
+    """
+    seen: set = set()
+    keep_indices: List[int] = []
+
+    for i, source in enumerate(retrieved_sources):
+        if retrieved_chunk_ids is not None and i < len(retrieved_chunk_ids):
+            doc_stem, _ = _parse_chunk_id(retrieved_chunk_ids[i])
+            if doc_stem != retrieved_chunk_ids[i]:
+                key = doc_stem
+            else:
+                key = normalize_source(source)
+        else:
+            key = normalize_source(source)
+
+        if key not in seen:
+            seen.add(key)
+            keep_indices.append(i)
+
+    return keep_indices
+
+
+def calculate_dedup_hit_rate(
+    retrieved_sources: List[str],
+    expected_sources: List[str],
+    k: int = 5,
+    retrieved_chunk_ids: Optional[List[str]] = None,
+) -> float:
+    """Calculate hit rate after deduplicating by document.
+
+    First deduplicates the retrieved sources so that each document
+    appears only once, then calculates hit rate on the deduplicated
+    list using the standard calculate_hit_rate function.
+
+    Args:
+        retrieved_sources: List of retrieved source paths.
+        expected_sources: List of expected source paths.
+        k: Number of top results to consider. Defaults to 5.
+        retrieved_chunk_ids: Optional list of chunk identifiers for
+            more precise deduplication.
+
+    Returns:
+        Hit rate as a float between 0.0 and 1.0.
+    """
+    keep_indices = deduplicate_by_document(retrieved_sources, retrieved_chunk_ids)
+    deduped_sources = [retrieved_sources[i] for i in keep_indices]
+    return calculate_hit_rate(deduped_sources, expected_sources, k=k)
+
+
+def calculate_dedup_mrr(
+    retrieved_sources: List[str],
+    expected_sources: List[str],
+    retrieved_chunk_ids: Optional[List[str]] = None,
+) -> float:
+    """Calculate MRR after deduplicating by document.
+
+    First deduplicates the retrieved sources so that each document
+    appears only once, then calculates MRR on the deduplicated list
+    using the standard calculate_mrr function.
+
+    Args:
+        retrieved_sources: List of retrieved source paths.
+        expected_sources: List of expected source paths.
+        retrieved_chunk_ids: Optional list of chunk identifiers for
+            more precise deduplication.
+
+    Returns:
+        Reciprocal rank as a float between 0.0 and 1.0.
+    """
+    keep_indices = deduplicate_by_document(retrieved_sources, retrieved_chunk_ids)
+    deduped_sources = [retrieved_sources[i] for i in keep_indices]
+    return calculate_mrr(deduped_sources, expected_sources)
+
+
+def calculate_dedup_ndcg(
+    retrieved_sources: List[str],
+    expected_sources: List[str],
+    k: int = 5,
+    relevance_scores: Optional[Dict[str, int]] = None,
+    retrieved_chunk_ids: Optional[List[str]] = None,
+) -> float:
+    """Calculate NDCG after deduplicating by document.
+
+    First deduplicates the retrieved sources so that each document
+    appears only once, then calculates NDCG on the deduplicated list
+    using the standard calculate_ndcg function.
+
+    Args:
+        retrieved_sources: List of retrieved source paths.
+        expected_sources: List of expected source paths.
+        k: Number of top results to consider. Defaults to 5.
+        relevance_scores: Optional dict mapping source names to
+            relevance scores.
+        retrieved_chunk_ids: Optional list of chunk identifiers for
+            more precise deduplication.
+
+    Returns:
+        NDCG as a float between 0.0 and 1.0.
+    """
+    keep_indices = deduplicate_by_document(retrieved_sources, retrieved_chunk_ids)
+    deduped_sources = [retrieved_sources[i] for i in keep_indices]
+    return calculate_ndcg(deduped_sources, expected_sources, k=k, relevance_scores=relevance_scores)
+
+
 FAITHFULNESS_STATEMENT_PROMPT = """请分析以下回答，提取其中的所有事实陈述（statements）。
 
 回答：
