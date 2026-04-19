@@ -1,15 +1,15 @@
-name: "chunk_comparison"
-description: "分块参数对比实验 - 探究不同 chunk_size 和 overlap 对检索质量的影响"
+name: "chunk_smoke_test"
+description: "分块参数冒烟测试 - 2x3因子设计(chunk_size x overlap)，用于快速验证流程，验证后可放大num_questions和sample_ratio"
 
 data:
-  meal: "meal_chunk_comparison"
+  meal: "meal_chunk_smoke_test"
   create_if_missing:
-    sample_ratio: 0.2
+    sample_ratio: 0.1
     seed: 42
 
 test_sets:
   - strategy: "document"
-    num_questions: 50
+    num_questions: 5
     type_distribution:
       single_fact: 0.30
       multi_fact: 0.25
@@ -20,42 +20,42 @@ test_sets:
 
 variants:
   - name: "chunk_256_overlap_0"
-    description: "chunk_size=256, overlap=0 (小块无重叠)"
+    description: "small chunk, no overlap"
     config_overrides:
       chunker:
         chunk_size: 256
         chunk_overlap: 0
 
-  - name: "chunk_512_overlap_0"
-    description: "chunk_size=512, overlap=0 (中块无重叠)"
+  - name: "chunk_256_overlap_32"
+    description: "small chunk, small overlap (~12.5%)"
     config_overrides:
       chunker:
-        chunk_size: 512
-        chunk_overlap: 0
+        chunk_size: 256
+        chunk_overlap: 32
 
-  - name: "chunk_512_overlap_50"
-    description: "chunk_size=512, overlap=50 (中块小重叠)"
+  - name: "chunk_256_overlap_64"
+    description: "small chunk, large overlap (~25%)"
     config_overrides:
       chunker:
-        chunk_size: 512
-        chunk_overlap: 50
-
-  - name: "chunk_512_overlap_128"
-    description: "chunk_size=512, overlap=128 (中块大重叠)"
-    config_overrides:
-      chunker:
-        chunk_size: 512
-        chunk_overlap: 128
+        chunk_size: 256
+        chunk_overlap: 64
 
   - name: "chunk_1024_overlap_0"
-    description: "chunk_size=1024, overlap=0 (大块无重叠)"
+    description: "large chunk, no overlap"
     config_overrides:
       chunker:
         chunk_size: 1024
         chunk_overlap: 0
 
+  - name: "chunk_1024_overlap_128"
+    description: "large chunk, small overlap (~12.5%)"
+    config_overrides:
+      chunker:
+        chunk_size: 1024
+        chunk_overlap: 128
+
   - name: "chunk_1024_overlap_256"
-    description: "chunk_size=1024, overlap=256 (大块有重叠)"
+    description: "large chunk, large overlap (~25%)"
     config_overrides:
       chunker:
         chunk_size: 1024

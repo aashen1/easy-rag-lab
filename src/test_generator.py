@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 from loguru import logger
 
 from src.generator import Generator
-from src.meal import MealConfig, MealManager
+from src.meal import ArtifactCache, MealConfig, MealManager
 from src.utils import ensure_dir, get_llm_config
 
 
@@ -366,8 +366,70 @@ class TestSetGenerator:
         )
         return test_set
 
+    def _resolve_parsed_dir(self, meal_config: MealConfig) -> Optional[Path]:
+        """Resolve the parsed artifacts directory for a meal.
+
+        Tries the ArtifactCache first (based on meal data_id), then falls
+        back to the config-based ``parser.output_dir`` path.
+
+        Args:
+            meal_config: MealConfig object with data_id and config_hashes.
+
+        Returns:
+            Path to the parsed directory, or None if not found.
+        """
+        if meal_config.data_id:
+            artifacts_config = self.config.get("artifacts", {})
+            artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
+            cache = ArtifactCache(artifacts_dir)
+            parsed_dir = cache.get_parsed_dir(meal_config.data_id)
+            if parsed_dir.exists():
+                logger.debug(f"Resolved parsed dir via ArtifactCache: {parsed_dir}")
+                return parsed_dir
+
+        fallback = Path(self.config.get("parser", {}).get("output_dir", "data/parsed"))
+        if fallback.exists():
+            logger.debug(f"Resolved parsed dir via config fallback: {fallback}")
+            return fallback
+
+        return None
+
+    def _resolve_chunks_dir(self, meal_config: MealConfig) -> Optional[Path]:
+        """Resolve the chunks artifacts directory for a meal.
+
+        Tries the ArtifactCache first (based on meal data_id and chunker
+        hash), then falls back to the config-based ``chunker.output_dir``
+        path.
+
+        Args:
+            meal_config: MealConfig object with data_id and config_hashes.
+
+        Returns:
+            Path to the chunks directory, or None if not found.
+        """
+        if meal_config.data_id and meal_config.config_hashes:
+            chunker_hash = meal_config.config_hashes.get("chunker", "")
+            if chunker_hash:
+                artifacts_config = self.config.get("artifacts", {})
+                artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
+                cache = ArtifactCache(artifacts_dir)
+                chunks_dir = cache.get_chunks_dir(meal_config.data_id, chunker_hash)
+                if chunks_dir.exists():
+                    logger.debug(f"Resolved chunks dir via ArtifactCache: {chunks_dir}")
+                    return chunks_dir
+
+        fallback = Path(self.config.get("chunker", {}).get("output_dir", "data/chunks"))
+        if fallback.exists():
+            logger.debug(f"Resolved chunks dir via config fallback: {fallback}")
+            return fallback
+
+        return None
+
     def _load_meal_chunks(self, meal_config) -> List[Dict[str, Any]]:
         """Load chunk data from JSONL files associated with a meal's PDF files.
+
+        Resolves the chunks directory via the ArtifactCache first, falling
+        back to the config-based ``chunker.output_dir`` path.
 
         Args:
             meal_config: MealConfig object whose pdf_files determine the
@@ -376,9 +438,8 @@ class TestSetGenerator:
         Returns:
             List of chunk dictionaries loaded from matching JSONL files.
         """
-        chunks_dir = Path(self.config.get(
-            "chunker", {}).get("output_dir", "data/chunks"))
-        if not chunks_dir.exists():
+        chunks_dir = self._resolve_chunks_dir(meal_config)
+        if not chunks_dir or not chunks_dir.exists():
             return []
 
         source_filter = set()
@@ -733,6 +794,16 @@ class TestSetGenerator:
         )
         logger.info(f"Question type distribution: {type_counts}")
 
+        doc_question_plans = self._distribute_questions_across_docs(
+            type_counts, list(document_contents.keys())
+        )
+        num_docs = len(document_contents)
+
+        logger.info(
+            f"Distributing {num_questions} questions across {num_docs} "
+            f"documents (~{num_questions // num_docs} per document)"
+        )
+
         llm_config = get_llm_config(self.config, llm_preset)
         generator = Generator(
             model_name=llm_config["model_name"],
@@ -748,31 +819,38 @@ class TestSetGenerator:
         total_attempts = 0
         failed_count = 0
 
-        for doc_name, doc_content in document_contents.items():
-            for q_type, count in type_counts.items():
-                for _ in range(count):
-                    total_attempts += 1
-                    logger.info(
-                        f"Generating question {question_id}/{num_questions} "
-                        f"(type={q_type}, doc={doc_name})..."
-                    )
+        for doc_name, doc_data in document_contents.items():
+            assigned_types = doc_question_plans.get(doc_name, [])
+            if not assigned_types:
+                continue
 
-                    qa = self._generate_single_document_question(
-                        doc_content, q_type, generator
-                    )
+            doc_content = doc_data["content"]
+            source_path = doc_data["source_path"]
 
-                    if qa is not None:
-                        qa["id"] = f"q{question_id:03d}"
-                        qa["source_document"] = doc_name
-                        qa["category"] = "document"
-                        questions.append(qa)
-                        question_id += 1
-                    else:
-                        failed_count += 1
-                        logger.warning(
-                            f"Failed to generate question, total failures: "
-                            f"{failed_count}/{total_attempts}"
-                        )
+            for q_type in assigned_types:
+                total_attempts += 1
+                logger.info(
+                    f"Generating question {question_id}/{num_questions} "
+                    f"(type={q_type}, doc={doc_name})..."
+                )
+
+                qa = self._generate_single_document_question(
+                    doc_content, q_type, generator
+                )
+
+                if qa is not None:
+                    qa["id"] = f"q{question_id:03d}"
+                    qa["source_document"] = doc_name
+                    qa["source_files"] = [source_path]
+                    qa["category"] = "document"
+                    questions.append(qa)
+                    question_id += 1
+                else:
+                    failed_count += 1
+                    logger.warning(
+                        f"Failed to generate question, total failures: "
+                        f"{failed_count}/{total_attempts}"
+                    )
 
         if not questions:
             raise ValueError("No questions could be generated")
@@ -805,44 +883,51 @@ class TestSetGenerator:
 
     def _load_full_documents(
         self, meal_config: MealConfig
-    ) -> Dict[str, str]:
+    ) -> Dict[str, Dict[str, str]]:
         """Load full MD documents associated with a meal's PDF files.
+
+        Resolves the parsed directory via the ArtifactCache first, falling
+        back to the config-based ``parser.output_dir`` path.
 
         Args:
             meal_config: MealConfig object whose pdf_files determine the
                 documents to load.
 
         Returns:
-            Dictionary mapping document names to their full text content.
+            Dictionary mapping document names to dicts with 'content' and
+            'source_path' keys. 'source_path' is the relative path from
+            the parsed directory (e.g. 'research_reports/doc.md').
         """
-        parsed_dir = Path(self.config.get(
-            "parser", {}).get("output_dir", "data/parsed"))
-        if not parsed_dir.exists():
+        parsed_dir = self._resolve_parsed_dir(meal_config)
+        if not parsed_dir or not parsed_dir.exists():
             logger.warning(f"Parsed directory not found: {parsed_dir}")
             return {}
 
-        documents = {}
+        source_filter = set()
         for mf in meal_config.pdf_files:
-            md_path = Path(mf.path).with_suffix(".md")
+            md_rel = str(Path(mf.path).with_suffix(".md")).replace("\\", "/")
+            source_filter.add(md_rel)
 
-            if not md_path.exists():
-                md_path = parsed_dir / md_path.name
+        documents = {}
+        md_files = list(parsed_dir.rglob("*.md"))
 
-            if not md_path.exists():
-                md_path = parsed_dir / md_path.name.replace("\\", "/")
+        for md_file in md_files:
+            try:
+                rel_path = str(md_file.relative_to(parsed_dir)).replace("\\", "/")
+                if source_filter and rel_path not in source_filter:
+                    continue
 
-            if md_path.exists():
-                try:
-                    with open(md_path, "r", encoding="utf-8") as f:
-                        content = f.read()
+                with open(md_file, "r", encoding="utf-8") as f:
+                    content = f.read()
 
-                    doc_name = md_path.stem
-                    documents[doc_name] = content
-                    logger.debug(f"Loaded document: {doc_name} ({len(content)} chars)")
-                except Exception as e:
-                    logger.error(f"Failed to load {md_path}: {str(e)}")
-            else:
-                logger.warning(f"Document not found: {md_path}")
+                doc_name = md_file.stem
+                documents[doc_name] = {
+                    "content": content,
+                    "source_path": rel_path,
+                }
+                logger.debug(f"Loaded document: {doc_name} ({len(content)} chars)")
+            except Exception as e:
+                logger.error(f"Failed to load {md_file}: {str(e)}")
 
         return documents
 
@@ -878,6 +963,39 @@ class TestSetGenerator:
                 remaining -= count
 
         return type_counts
+
+    def _distribute_questions_across_docs(
+        self,
+        type_counts: Dict[str, int],
+        doc_names: List[str],
+    ) -> Dict[str, List[str]]:
+        """Distribute question types across documents using round-robin.
+
+        Creates a flat list of question types from type_counts, then assigns
+        each question to a document in round-robin order so that the total
+        number of questions equals the sum of type_counts (not multiplied
+        by the number of documents).
+
+        Args:
+            type_counts: Dictionary mapping question type names to counts.
+            doc_names: List of document names to distribute across.
+
+        Returns:
+            Dictionary mapping document names to their assigned question types.
+        """
+        question_plan = []
+        for q_type, count in type_counts.items():
+            question_plan.extend([q_type] * count)
+
+        num_docs = len(doc_names)
+        doc_question_plans: Dict[str, List[str]] = {
+            name: [] for name in doc_names
+        }
+        for i, q_type in enumerate(question_plan):
+            doc_name = doc_names[i % num_docs]
+            doc_question_plans[doc_name].append(q_type)
+
+        return doc_question_plans
 
     def _generate_single_document_question(
         self,
