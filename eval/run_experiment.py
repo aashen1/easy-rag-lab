@@ -544,6 +544,9 @@ def evaluate_test_set(
         question_text = question_data.get("question", "")
         expected_sources = question_data.get("source_files", [])
         ground_truth = question_data.get("answer", "")
+        expect_retrieval = question_data.get("expect_retrieval", True)
+        expect_no_answer = question_data.get("expect_no_answer", False)
+        question_type = question_data.get("question_type", "")
 
         if not question_text:
             logger.warning(f"Question {question_id} has no text, skipping")
@@ -559,9 +562,14 @@ def evaluate_test_set(
             retrieved_sources = response.get("sources", [])
             contexts = response.get("contexts", [])
 
-            hit_rate = calculate_hit_rate(retrieved_sources, expected_sources)
-            mrr = calculate_mrr(retrieved_sources, expected_sources)
-            ndcg = calculate_ndcg(retrieved_sources, expected_sources, k=5)
+            if expect_retrieval and expected_sources:
+                hit_rate = calculate_hit_rate(retrieved_sources, expected_sources)
+                mrr = calculate_mrr(retrieved_sources, expected_sources)
+                ndcg = calculate_ndcg(retrieved_sources, expected_sources, k=5)
+            else:
+                hit_rate = None
+                mrr = None
+                ndcg = None
 
             result = {
                 "id": question_id,
@@ -571,13 +579,16 @@ def evaluate_test_set(
                     "hit_rate": hit_rate,
                     "mrr": mrr,
                     "ndcg": ndcg,
-                },
+                } if hit_rate is not None else None,
                 "sources": retrieved_sources,
                 "expected_sources": expected_sources,
                 "time_seconds": case_time,
                 "test_set": test_set_name,
                 "category": question_data.get("category"),
                 "difficulty": question_data.get("difficulty"),
+                "question_type": question_type,
+                "expect_retrieval": expect_retrieval,
+                "expect_no_answer": expect_no_answer,
                 "token_usage": response.get("token_usage"),
             }
 
@@ -616,7 +627,10 @@ def evaluate_test_set(
             if llm_retrieval:
                 result["llm_retrieval"] = llm_retrieval
 
-            metric_parts = [f"HR={hit_rate:.4f}", f"MRR={mrr:.4f}", f"NDCG={ndcg:.4f}"]
+            if hit_rate is not None:
+                metric_parts = [f"HR={hit_rate:.4f}", f"MRR={mrr:.4f}", f"NDCG={ndcg:.4f}"]
+            else:
+                metric_parts = ["HR=N/A", "MRR=N/A", "NDCG=N/A"]
             if llm_retrieval:
                 if "context_precision" in llm_retrieval and llm_retrieval["context_precision"] is not None:
                     metric_parts.append(f"CP={llm_retrieval['context_precision']:.4f}")
@@ -636,6 +650,9 @@ def evaluate_test_set(
                 "time_seconds": case_time,
                 "test_set": test_set_name,
                 "category": question_data.get("category"),
+                "question_type": question_type,
+                "expect_retrieval": expect_retrieval,
+                "expect_no_answer": expect_no_answer,
             }
 
         results.append(result)
@@ -647,18 +664,22 @@ def compute_aggregate_metrics(results: List[Dict[str, Any]]) -> Dict[str, float]
     """
     Compute aggregate retrieval metrics from evaluation results.
 
+    Questions with expect_retrieval=False (irrelevant type) are excluded
+    from retrieval metric averages since they have no expected sources.
+
     Args:
         results: List of evaluation result dictionaries.
 
     Returns:
         Dictionary containing average hit_rate, mrr, ndcg, and optionally
-        context_precision and context_recall.
+        context_precision and context_recall. Also includes
+        retrieval_applicable_questions count.
     """
-    valid_results = [r for r in results if "retrieval" in r]
-    if valid_results:
-        avg_hit_rate = sum(r["retrieval"]["hit_rate"] for r in valid_results) / len(valid_results)
-        avg_mrr = sum(r["retrieval"]["mrr"] for r in valid_results) / len(valid_results)
-        avg_ndcg = sum(r["retrieval"]["ndcg"] for r in valid_results) / len(valid_results)
+    retrieval_results = [r for r in results if r.get("retrieval") is not None]
+    if retrieval_results:
+        avg_hit_rate = sum(r["retrieval"]["hit_rate"] for r in retrieval_results) / len(retrieval_results)
+        avg_mrr = sum(r["retrieval"]["mrr"] for r in retrieval_results) / len(retrieval_results)
+        avg_ndcg = sum(r["retrieval"]["ndcg"] for r in retrieval_results) / len(retrieval_results)
     else:
         avg_hit_rate = 0.0
         avg_mrr = 0.0
@@ -668,6 +689,8 @@ def compute_aggregate_metrics(results: List[Dict[str, Any]]) -> Dict[str, float]
         "avg_hit_rate": avg_hit_rate,
         "avg_mrr": avg_mrr,
         "avg_ndcg": avg_ndcg,
+        "retrieval_applicable_questions": len(retrieval_results),
+        "total_questions": len(results),
     }
 
     llm_retrieval_results = [r for r in results if "llm_retrieval" in r and r["llm_retrieval"]]

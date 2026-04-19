@@ -841,8 +841,17 @@ class TestSetGenerator:
                 if qa is not None:
                     qa["id"] = f"q{question_id:03d}"
                     qa["source_document"] = doc_name
-                    qa["source_files"] = [source_path]
                     qa["category"] = "document"
+
+                    if q_type == "irrelevant":
+                        qa["source_files"] = []
+                        qa["expect_retrieval"] = False
+                    elif q_type == "missing":
+                        qa["source_files"] = [source_path]
+                        qa["expect_no_answer"] = True
+                    else:
+                        qa["source_files"] = [source_path]
+
                     questions.append(qa)
                     question_id += 1
                 else:

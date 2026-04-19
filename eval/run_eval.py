@@ -106,13 +106,16 @@ def run_evaluation(
             if not expected_sources:
                 expected_sources = test_case.get("source_files", [])
 
+            expect_retrieval = test_case.get("expect_retrieval", True)
+
             retrieval = {}
-            if "hit_rate" in metrics_config:
-                retrieval["hit_rate"] = calculate_hit_rate(retrieved_sources, expected_sources)
-            if "mrr" in metrics_config:
-                retrieval["mrr"] = calculate_mrr(retrieved_sources, expected_sources)
-            if "ndcg" in metrics_config:
-                retrieval["ndcg"] = calculate_ndcg(retrieved_sources, expected_sources, k=5)
+            if expect_retrieval and expected_sources:
+                if "hit_rate" in metrics_config:
+                    retrieval["hit_rate"] = calculate_hit_rate(retrieved_sources, expected_sources)
+                if "mrr" in metrics_config:
+                    retrieval["mrr"] = calculate_mrr(retrieved_sources, expected_sources)
+                if "ndcg" in metrics_config:
+                    retrieval["ndcg"] = calculate_ndcg(retrieved_sources, expected_sources, k=5)
 
             generation = {}
             if generation_metrics_config and llm_config:
