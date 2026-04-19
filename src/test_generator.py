@@ -1,5 +1,6 @@
 import json
 import random
+import re
 import warnings
 from datetime import datetime
 from pathlib import Path
@@ -845,13 +846,19 @@ class TestSetGenerator:
 
                     if q_type == "irrelevant":
                         qa["source_files"] = []
+                        qa["source_chunks"] = []
                         qa["expect_retrieval"] = False
                     elif q_type == "missing":
                         qa["source_files"] = [source_path]
+                        qa["source_chunks"] = []
                         qa["expect_no_answer"] = True
                         qa["expect_retrieval"] = False
                     else:
                         qa["source_files"] = [source_path]
+                        answer_text = qa.get("answer", "")
+                        qa["source_chunks"] = self._locate_answer_chunks(
+                            answer_text, source_path
+                        )
 
                     questions.append(qa)
                     question_id += 1
@@ -1207,3 +1214,227 @@ class TestSetGenerator:
             "authenticity_pass_rate": authenticity_passed / total,
             "type_distribution": type_counts,
         }
+
+    def _locate_answer_chunks(
+        self,
+        answer: str,
+        source_path: str,
+        chunks_dir: str = "data/chunks",
+        adjacent_tolerance: int = 1,
+    ) -> List[str]:
+        """Locate chunk IDs that contain information relevant to the answer.
+
+        Scans JSONL files in chunks_dir to find chunks belonging to the
+        source document, then matches chunks against the answer text using
+        keyword and substring overlap heuristics.
+
+        Args:
+            answer: The answer text to locate in chunks.
+            source_path: Relative path of the source document (e.g.
+                'research_reports/doc.md'), using forward slashes.
+            chunks_dir: Directory containing JSONL chunk files. Defaults to
+                the configured chunker output directory.
+            adjacent_tolerance: Number of adjacent chunks (by chunk_index)
+                to include around each matched chunk. Defaults to 1.
+
+        Returns:
+            List of chunk_id strings for matched and adjacent chunks.
+            Returns an empty list if no chunks match or the directory is
+            not found.
+        """
+        if not answer or not source_path:
+            return []
+
+        resolved_chunks_dir = self.config.get("chunker", {}).get(
+            "output_dir", chunks_dir
+        )
+        chunks_path = Path(resolved_chunks_dir)
+        if not chunks_path.exists():
+            logger.warning(f"Chunks directory not found: {chunks_path}")
+            return []
+
+        normalized_source = source_path.replace("\\", "/")
+
+        doc_chunks: List[Dict[str, Any]] = []
+        jsonl_files = list(chunks_path.rglob("*.jsonl"))
+
+        for jsonl_file in jsonl_files:
+            try:
+                with open(jsonl_file, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        chunk = json.loads(line)
+                        chunk_source = (
+                            chunk.get("metadata", {})
+                            .get("source", "")
+                            .replace("\\", "/")
+                        )
+                        if chunk_source == normalized_source:
+                            doc_chunks.append(chunk)
+            except Exception as e:
+                logger.warning(f"Failed to read {jsonl_file}: {str(e)}")
+                continue
+
+        if not doc_chunks:
+            logger.debug(
+                f"No chunks found for source_path: {source_path}"
+            )
+            return []
+
+        doc_chunks.sort(
+            key=lambda c: c.get("metadata", {}).get("chunk_index", 0)
+        )
+
+        key_sentences = self._extract_key_sentences(answer)
+        key_terms = self._extract_key_terms(answer)
+
+        matched_indices: set = set()
+        for i, chunk in enumerate(doc_chunks):
+            chunk_text = chunk.get("text", "")
+            if self._chunk_matches_answer(
+                chunk_text, key_sentences, key_terms
+            ):
+                matched_indices.add(i)
+
+        if not matched_indices:
+            logger.debug(
+                f"No chunks matched for answer in source: {source_path}"
+            )
+            return []
+
+        expanded_indices: set = set()
+        for idx in matched_indices:
+            for offset in range(-adjacent_tolerance, adjacent_tolerance + 1):
+                adj = idx + offset
+                if 0 <= adj < len(doc_chunks):
+                    expanded_indices.add(adj)
+
+        expanded_indices.discard(-1)
+
+        result = [doc_chunks[i].get("chunk_id", "") for i in sorted(expanded_indices)]
+        result = [cid for cid in result if cid]
+
+        return result
+
+    def _extract_key_sentences(self, answer: str) -> List[str]:
+        """Extract key sentences from an answer text.
+
+        Splits the answer by sentence delimiters and filters for sentences
+        that contain specific data such as numbers, proper nouns, or
+        domain-specific terms.
+
+        Args:
+            answer: The answer text to extract sentences from.
+
+        Returns:
+            List of key sentences that likely contain answer-specific
+            information.
+        """
+        sentences = re.split(r'[。！？\n]', answer)
+        sentences = [s.strip() for s in sentences if len(s.strip()) > 4]
+
+        key_sentences = []
+        for sent in sentences:
+            has_number = bool(re.search(r'\d', sent))
+            has_percentage = '%' in sent
+            has_domain_terms = any(
+                kw in sent
+                for kw in ['增长', '下降', '上升', '减少', '增加',
+                           '收入', '利润', '营收', '市值', '占比',
+                           '规模', '产量', '销量', '价格', '成本']
+            )
+            if has_number or has_percentage or has_domain_terms:
+                key_sentences.append(sent)
+
+        if not key_sentences:
+            key_sentences = [s for s in sentences if len(s) >= 6][:5]
+
+        return key_sentences
+
+    def _extract_key_terms(self, answer: str) -> List[str]:
+        """Extract key terms from an answer text for chunk matching.
+
+        Identifies meaningful terms including numbers with units, proper
+        nouns, and domain-specific keywords.
+
+        Args:
+            answer: The answer text to extract terms from.
+
+        Returns:
+            List of key term strings.
+        """
+        terms: List[str] = []
+
+        number_patterns = re.findall(
+            r'\d+\.?\d*[万亿千百%％]?', answer
+        )
+        terms.extend(number_patterns)
+
+        proper_nouns = re.findall(r'[\u4e00-\u9fff]{2,8}(?:股份|集团|公司|行业|市场|技术|产品|业务|报告|年度)', answer)
+        terms.extend(proper_nouns)
+
+        domain_keywords = [
+            '增长', '下降', '上升', '减少', '增加', '收入', '利润',
+            '营收', '市值', '占比', '规模', '产量', '销量', '价格',
+            '成本', '投资', '融资', '估值', '盈利', '亏损', '负债',
+            '资产', '现金流', '毛利率', '净利率', 'ROE', 'ROA',
+        ]
+        for kw in domain_keywords:
+            if kw in answer:
+                terms.append(kw)
+
+        return list(set(terms))
+
+    def _chunk_matches_answer(
+        self,
+        chunk_text: str,
+        key_sentences: List[str],
+        key_terms: List[str],
+        term_threshold: int = 2,
+        overlap_threshold: float = 0.5,
+    ) -> bool:
+        """Check if a chunk text contains information relevant to the answer.
+
+        A chunk is considered relevant if either:
+        - It contains at least ``term_threshold`` key terms from the answer, OR
+        - A key sentence from the answer has > ``overlap_threshold`` character
+          overlap with the chunk text.
+
+        Args:
+            chunk_text: The text content of the chunk.
+            key_sentences: Key sentences extracted from the answer.
+            key_terms: Key terms extracted from the answer.
+            term_threshold: Minimum number of key terms that must appear in
+                the chunk for a match. Defaults to 2.
+            overlap_threshold: Minimum character overlap ratio for a key
+                sentence to be considered matching. Defaults to 0.5.
+
+        Returns:
+            True if the chunk is considered relevant to the answer.
+        """
+        if not key_terms and not key_sentences:
+            return False
+
+        matched_terms = sum(1 for term in key_terms if term in chunk_text)
+        if matched_terms >= term_threshold:
+            return True
+
+        for sentence in key_sentences:
+            if len(sentence) == 0:
+                continue
+            overlap_chars = 0
+            window_size = min(len(sentence), len(chunk_text))
+            for start in range(0, len(chunk_text) - window_size + 1):
+                substring = chunk_text[start:start + len(sentence)]
+                common = sum(
+                    1 for a, b in zip(sentence, substring) if a == b
+                )
+                ratio = common / len(sentence)
+                if ratio > overlap_chars:
+                    overlap_chars = ratio
+            if overlap_chars > overlap_threshold:
+                return True
+
+        return False
