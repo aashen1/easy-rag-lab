@@ -572,14 +572,7 @@ def calculate_answer_relevancy(
         raise ValueError("Answer must be a non-empty string")
 
     try:
-        client = Anthropic(
-            api_key="dummy",
-            base_url=base_url,
-            default_headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-        )
+        client = _create_llm_client(api_key=api_key, base_url=base_url)
 
         prompt = ANSWER_RELEVANCY_PROMPT.format(
             question=question,
