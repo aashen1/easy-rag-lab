@@ -1,0 +1,35 @@
+name: "ragas_builtin_evaluation"
+description: "双后端评测 - 同时使用builtin检索指标和RAGAS生成指标"
+
+data:
+  meal: "meal_ragas_builtin"
+  create_if_missing:
+    sample_ratio: 0.1
+    seed: 42
+
+test_sets:
+  - strategy: "document"
+    num_questions: 20
+
+variants:
+  - name: "builtin_ragas"
+    description: "基线配置 - builtin检索 + RAGAS生成"
+    config_overrides: {}
+
+evaluation:
+  backends: ["builtin", "ragas"]
+  llm_preset: "default"
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+      - "context_precision"
+      - "context_recall"
+
+llm:
+  question_generation: "default"
+  answering: "default"

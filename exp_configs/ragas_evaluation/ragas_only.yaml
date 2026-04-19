@@ -1,0 +1,31 @@
+name: "ragas_only_evaluation"
+description: "RAGAS评测 - 仅使用RAGAS框架进行生成质量评测（不含检索指标）"
+
+data:
+  meal: "meal_ragas"
+  create_if_missing:
+    sample_ratio: 0.1
+    seed: 42
+
+test_sets:
+  - strategy: "document"
+    num_questions: 20
+
+variants:
+  - name: "baseline_ragas"
+    description: "基线配置 - RAGAS生成指标评测"
+    config_overrides: {}
+
+evaluation:
+  backends: ["ragas"]
+  llm_preset: "default"
+  metrics:
+    retrieval: []
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+      - "context_precision"
+
+llm:
+  question_generation: "default"
+  answering: "default"
