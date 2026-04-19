@@ -185,7 +185,7 @@ class RagasEvaluator(BaseEvaluator):
             List of RAGAS metric instances.
         """
         try:
-            from ragas.metrics import (
+            from ragas.metrics.collections import (
                 Faithfulness,
                 AnswerRelevancy,
                 ContextPrecision,
@@ -326,10 +326,12 @@ class RagasEvaluator(BaseEvaluator):
                 raise_exceptions=True,
             )
 
-            if hasattr(result, "scores"):
-                for metric_name, score in result.scores.items():
-                    if score is not None:
-                        generation_results[metric_name] = float(score)
+            if hasattr(result, "scores") and result.scores:
+                score_dict = result.scores[0] if isinstance(result.scores, list) else result.scores
+                if isinstance(score_dict, dict):
+                    for metric_name, score in score_dict.items():
+                        if score is not None:
+                            generation_results[metric_name] = float(score)
 
         except Exception as e:
             error = str(e)
@@ -398,7 +400,25 @@ class RagasEvaluator(BaseEvaluator):
                 raise_exceptions=False,
             )
 
-            if hasattr(eval_result, "to_pandas"):
+            if hasattr(eval_result, "scores") and eval_result.scores:
+                for i, score_dict in enumerate(eval_result.scores):
+                    generation_results = {}
+                    if isinstance(score_dict, dict):
+                        for metric_name in generation_metrics:
+                            if metric_name in score_dict and score_dict[metric_name] is not None:
+                                generation_results[metric_name] = float(score_dict[metric_name])
+
+                    results.append(
+                        EvaluationResult(
+                            question_id=samples[i].get("question_id", f"sample_{i}"),
+                            question=samples[i].get("question", ""),
+                            answer=samples[i].get("answer", ""),
+                            contexts=samples[i].get("contexts", []),
+                            retrieval_metrics={},
+                            generation_metrics=generation_results,
+                        )
+                    )
+            elif hasattr(eval_result, "to_pandas"):
                 df = eval_result.to_pandas()
                 for i, row in df.iterrows():
                     generation_results = {}
