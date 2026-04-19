@@ -18,6 +18,7 @@ VALID_RAGAS_METRICS = {
     "factual_correctness",
     "semantic_similarity",
 }
+RAGAS_EXCLUSIVE_METRICS = VALID_RAGAS_METRICS - VALID_GENERATION_METRICS
 
 
 @dataclass
@@ -181,13 +182,13 @@ class ExperimentConfig:
                                 f"Valid options: {sorted(all_valid_generation)}"
                             )
 
-                        ragas_metrics_in_use = [
+                        ragas_exclusive_in_use = [
                             m for m in generation_metrics
-                            if m in VALID_RAGAS_METRICS
+                            if m in RAGAS_EXCLUSIVE_METRICS
                         ]
-                        if ragas_metrics_in_use and "ragas" not in backends:
+                        if ragas_exclusive_in_use and "ragas" not in backends:
                             errors.append(
-                                f"RAGAS metrics {ragas_metrics_in_use} require "
+                                f"RAGAS-exclusive metrics {ragas_exclusive_in_use} require "
                                 f"'ragas' in evaluation.backends"
                             )
 
