@@ -42,10 +42,8 @@ RAGAS（Retrieval Augmented Generation Assessment）是一个主流的开源 RAG
 RAGAS 评测需要额外的 Python 包。使用 pixi 安装：
 
 ```bash
-pixi add langchain-anthropic langchain-community
+pixi add --pypi ragas langchain-anthropic langchain-community
 ```
-
-> `ragas` 已在 `pixi.toml` 中声明，无需额外安装。
 
 ### 2. 启用 RAGAS 后端
 
