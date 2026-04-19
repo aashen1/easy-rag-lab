@@ -9,6 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes yet._
 
+## [0.1.7] - 2026-04-19
+
+Evaluation system enhancement — document-level question generation and generation quality metrics.
+
+### Added
+
+- Document-level question generation strategy with 6 question types (single_fact, multi_fact, reasoning, comparative, missing, irrelevant)
+- Generation quality metrics (Faithfulness, Answer Relevancy) for answer evaluation
+- Question authenticity checking to filter academic-style questions
+- Multi-level relevance scoring support for NDCG metric
+- Industry-standard Hit Rate@k definition with configurable k parameter
+- Smoke test configuration for v0.1.7+ features validation
+
+### Changed
+
+- Improved retrieval metrics with standard implementations (NDCG, Hit Rate, MRR)
+- Decoupled question generation from chunk parameters to enable chunk-size comparison experiments
+- Migrated all experiment configurations to document strategy
+- Added generation metrics to golden_test configuration
+
+### Fixed
+
+- Qdrant storage lock conflict in variant evaluation by properly closing indexer
+- Zero retrieval metrics in document-based evaluation by setting source_files field
+- Question generation exceeding num_questions by distributing questions across documents
+- Resolved parsed and chunks directories via ArtifactCache in test_generator
+
+### Deprecated
+
+- Old chunk-based question strategies (factual, boundary, multi_hop) with deprecation warnings
+
 ## [0.1.6] - 2026-04-18
 
 Project hygiene overhaul — documentation system restructure and code quality improvements.
