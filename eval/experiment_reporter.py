@@ -418,34 +418,21 @@ class ExperimentReporter:
             vr.get("llm_retrieval_metrics") for vr in variant_results
         )
 
-        if has_generation and has_llm_retrieval:
-            lines.append(
-                "| Variant | Description | Hit Rate | MRR | NDCG | CP | CR | Faithfulness | Relevancy | Questions | Time (s) |"
-            )
-            lines.append(
-                "|---------|-------------|----------|-----|------|----|----|--------------|-----------|-----------|----------|"
-            )
-        elif has_generation:
-            lines.append(
-                "| Variant | Description | Hit Rate | MRR | NDCG | Faithfulness | Relevancy | Questions | Time (s) |"
-            )
-            lines.append(
-                "|---------|-------------|----------|-----|------|--------------|-----------|-----------|----------|"
-            )
-        elif has_llm_retrieval:
-            lines.append(
-                "| Variant | Description | Hit Rate | MRR | NDCG | CP | CR | Questions | Time (s) |"
-            )
-            lines.append(
-                "|---------|-------------|----------|-----|------|----|----|-----------|----------|"
-            )
-        else:
-            lines.append(
-                "| Variant | Description | Hit Rate | MRR | NDCG | Questions | Time (s) |"
-            )
-            lines.append(
-                "|---------|-------------|----------|-----|------|-----------|----------|"
-            )
+        headers = [
+            "Variant", "Description",
+            "Hit Rate (doc)", "Hit Rate (chunk)", "Hit Rate (dedup)",
+            "MRR (doc)", "MRR (chunk)",
+            "NDCG (doc)", "NDCG (chunk)",
+            "FPR",
+        ]
+        if has_llm_retrieval:
+            headers.extend(["CP", "CR"])
+        if has_generation:
+            headers.extend(["Faithfulness", "Relevancy"])
+        headers.extend(["Questions", "Time (s)"])
+
+        lines.append("| " + " | ".join(headers) + " |")
+        lines.append("|" + "|".join(["---------"] * len(headers)) + "|")
 
         best_variant = self._find_best_variant(variant_results)
 
@@ -458,57 +445,61 @@ class ExperimentReporter:
             if "retrieval_metrics" in vr:
                 metrics = vr["retrieval_metrics"]
                 hr = metrics.get("avg_hit_rate", 0)
+                chunk_hr = metrics.get("avg_chunk_hit_rate")
+                dedup_hr = metrics.get("avg_dedup_hit_rate")
                 mrr = metrics.get("avg_mrr", 0)
+                chunk_mrr = metrics.get("avg_chunk_mrr")
                 ndcg = metrics.get("avg_ndcg", 0)
+                chunk_ndcg = metrics.get("avg_chunk_ndcg")
+                fpr = metrics.get("avg_false_positive_rate")
                 q_count = vr.get("total_questions", 0)
                 time_s = vr.get("total_time_seconds", 0)
 
                 marker = " ⭐" if vr == best_variant else ""
 
-                llm_metrics = vr.get("llm_retrieval_metrics", {})
-                cp = llm_metrics.get("avg_context_precision")
-                cr = llm_metrics.get("avg_context_recall")
-                cp_str = f"{cp:.2f}" if cp is not None else "N/A"
-                cr_str = f"{cr:.2f}" if cr is not None else "N/A"
+                chunk_hr_str = f"{chunk_hr:.4f}" if chunk_hr is not None else "N/A"
+                dedup_hr_str = f"{dedup_hr:.4f}" if dedup_hr is not None else "N/A"
+                chunk_mrr_str = f"{chunk_mrr:.4f}" if chunk_mrr is not None else "N/A"
+                chunk_ndcg_str = f"{chunk_ndcg:.4f}" if chunk_ndcg is not None else "N/A"
+                fpr_str = f"{fpr:.4f}" if fpr is not None else "N/A"
 
-                if has_generation and has_llm_retrieval:
+                row = [
+                    f"{name}{marker}", desc,
+                    f"{hr:.4f}", chunk_hr_str, dedup_hr_str,
+                    f"{mrr:.4f}", chunk_mrr_str,
+                    f"{ndcg:.4f}", chunk_ndcg_str,
+                    fpr_str,
+                ]
+
+                if has_llm_retrieval:
+                    llm_metrics = vr.get("llm_retrieval_metrics", {})
+                    cp = llm_metrics.get("avg_context_precision")
+                    cr = llm_metrics.get("avg_context_recall")
+                    cp_str = f"{cp:.2f}" if cp is not None else "N/A"
+                    cr_str = f"{cr:.2f}" if cr is not None else "N/A"
+                    row.extend([cp_str, cr_str])
+
+                if has_generation:
                     gen_metrics = vr.get("generation_metrics", {})
                     faithfulness = gen_metrics.get("avg_faithfulness")
                     relevancy = gen_metrics.get("avg_answer_relevancy")
                     fa_str = f"{faithfulness:.2f}" if faithfulness is not None else "N/A"
                     ar_str = f"{relevancy:.2f}" if relevancy is not None else "N/A"
-                    lines.append(
-                        f"| {name}{marker} | {desc} | {hr:.4f} | {mrr:.4f} | {ndcg:.4f} | {cp_str} | {cr_str} | {fa_str} | {ar_str} | {q_count} | {time_s:.2f} |"
-                    )
-                elif has_generation:
-                    gen_metrics = vr.get("generation_metrics", {})
-                    faithfulness = gen_metrics.get("avg_faithfulness")
-                    relevancy = gen_metrics.get("avg_answer_relevancy")
-                    fa_str = f"{faithfulness:.2f}" if faithfulness is not None else "N/A"
-                    ar_str = f"{relevancy:.2f}" if relevancy is not None else "N/A"
-                    lines.append(
-                        f"| {name}{marker} | {desc} | {hr:.4f} | {mrr:.4f} | {ndcg:.4f} | {fa_str} | {ar_str} | {q_count} | {time_s:.2f} |"
-                    )
-                elif has_llm_retrieval:
-                    lines.append(
-                        f"| {name}{marker} | {desc} | {hr:.4f} | {mrr:.4f} | {ndcg:.4f} | {cp_str} | {cr_str} | {q_count} | {time_s:.2f} |"
-                    )
-                else:
-                    lines.append(
-                        f"| {name}{marker} | {desc} | {hr:.4f} | {mrr:.4f} | {ndcg:.4f} | {q_count} | {time_s:.2f} |"
-                    )
+                    row.extend([fa_str, ar_str])
+
+                row.extend([str(q_count), f"{time_s:.2f}"])
+                lines.append("| " + " | ".join(row) + " |")
             else:
                 error = vr.get("error", "Unknown error")
                 if len(error) > 30:
                     error = error[:27] + "..."
-                if has_generation and has_llm_retrieval:
-                    lines.append(f"| {name} | {desc} | ERROR | ERROR | ERROR | ERROR | ERROR | ERROR | ERROR | - | - |")
-                elif has_generation:
-                    lines.append(f"| {name} | {desc} | ERROR | ERROR | ERROR | ERROR | ERROR | - | - |")
-                elif has_llm_retrieval:
-                    lines.append(f"| {name} | {desc} | ERROR | ERROR | ERROR | ERROR | ERROR | - | - |")
-                else:
-                    lines.append(f"| {name} | {desc} | ERROR | ERROR | ERROR | - | - |")
+                n_error_cols = 10
+                if has_llm_retrieval:
+                    n_error_cols += 2
+                if has_generation:
+                    n_error_cols += 2
+                error_parts = " | ".join(["ERROR"] * n_error_cols)
+                lines.append(f"| {name} | {desc} | {error_parts} | - | - |")
 
         lines.append("")
         lines.append("_⭐ = Best performing variant_")
@@ -546,10 +537,34 @@ class ExperimentReporter:
         lines.append(f"**Variant**: {name}")
         lines.append(f"**Description**: {desc}")
         lines.append("")
-        lines.append("**Retrieval Metrics**:")
-        lines.append(f"- Hit Rate: {metrics.get('avg_hit_rate', 0):.4f}")
-        lines.append(f"- MRR: {metrics.get('avg_mrr', 0):.4f}")
-        lines.append(f"- NDCG: {metrics.get('avg_ndcg', 0):.4f}")
+        lines.append("**Retrieval Metrics (document-level)**:")
+        lines.append(f"- Hit Rate (doc): {metrics.get('avg_hit_rate', 0):.4f}")
+        lines.append(f"- MRR (doc): {metrics.get('avg_mrr', 0):.4f}")
+        lines.append(f"- NDCG (doc): {metrics.get('avg_ndcg', 0):.4f}")
+
+        chunk_hr = metrics.get("avg_chunk_hit_rate")
+        chunk_mrr = metrics.get("avg_chunk_mrr")
+        chunk_ndcg = metrics.get("avg_chunk_ndcg")
+        dedup_hr = metrics.get("avg_dedup_hit_rate")
+        dedup_mrr = metrics.get("avg_dedup_mrr")
+        fpr = metrics.get("avg_false_positive_rate")
+
+        if any(v is not None for v in [chunk_hr, chunk_mrr, chunk_ndcg, dedup_hr, dedup_mrr, fpr]):
+            lines.append("")
+            lines.append("**Retrieval Metrics (chunk-level)**:")
+            if chunk_hr is not None:
+                lines.append(f"- Hit Rate (chunk): {chunk_hr:.4f}")
+            if chunk_mrr is not None:
+                lines.append(f"- MRR (chunk): {chunk_mrr:.4f}")
+            if chunk_ndcg is not None:
+                lines.append(f"- NDCG (chunk): {chunk_ndcg:.4f}")
+            if dedup_hr is not None:
+                lines.append(f"- Hit Rate (dedup): {dedup_hr:.4f}")
+            if dedup_mrr is not None:
+                lines.append(f"- MRR (dedup): {dedup_mrr:.4f}")
+            if fpr is not None:
+                lines.append(f"- False Positive Rate: {fpr:.4f}")
+
         lines.append("")
 
         if best.get("llm_retrieval_metrics"):
@@ -707,6 +722,50 @@ class ExperimentReporter:
         lines.append(f"- **MRR ({best_mrr:.4f})**: {mrr_assessment}")
         lines.append(f"- **NDCG ({best_ndcg:.4f})**: Overall ranking quality metric.")
         lines.append("")
+
+        has_chunk_metrics = any(
+            vr.get("retrieval_metrics", {}).get("avg_chunk_hit_rate") is not None
+            for vr in variant_results
+        )
+
+        if has_chunk_metrics:
+            lines.append("### Document vs Chunk-Level Analysis")
+            lines.append("")
+
+            best_chunk_hr = best_metrics.get("avg_chunk_hit_rate")
+            best_dedup_hr = best_metrics.get("avg_dedup_hit_rate")
+            best_fpr = best_metrics.get("avg_false_positive_rate")
+
+            if best_chunk_hr is not None:
+                doc_chunk_gap = best_hr - best_chunk_hr
+                if doc_chunk_gap > 0.1:
+                    gap_assessment = "Significant gap - chunk-level retrieval is substantially harder, suggesting fine-grained matching needs improvement."
+                elif doc_chunk_gap > 0.05:
+                    gap_assessment = "Moderate gap - chunk-level performance is lower but acceptable."
+                else:
+                    gap_assessment = "Small gap - chunk-level retrieval performs nearly as well as document-level."
+                lines.append(f"- **Doc vs Chunk Hit Rate Gap ({doc_chunk_gap:.4f})**: {gap_assessment}")
+
+            if best_dedup_hr is not None and best_chunk_hr is not None:
+                dedup_improvement = best_dedup_hr - best_chunk_hr
+                if dedup_improvement > 0.05:
+                    dedup_assessment = "Deduplication significantly improves hit rate, indicating many redundant chunks in results."
+                elif dedup_improvement > 0:
+                    dedup_assessment = "Deduplication provides marginal improvement in hit rate."
+                else:
+                    dedup_assessment = "Deduplication shows no improvement, suggesting minimal redundancy in retrieved chunks."
+                lines.append(f"- **Dedup vs Chunk Hit Rate ({dedup_improvement:+.4f})**: {dedup_assessment}")
+
+            if best_fpr is not None:
+                if best_fpr > 0.3:
+                    fpr_assessment = "High false positive rate - many retrieved chunks are irrelevant, consider improving retrieval precision."
+                elif best_fpr > 0.1:
+                    fpr_assessment = "Moderate false positive rate - some irrelevant chunks are retrieved."
+                else:
+                    fpr_assessment = "Low false positive rate - retrieved chunks are mostly relevant."
+                lines.append(f"- **False Positive Rate ({best_fpr:.4f})**: {fpr_assessment}")
+
+            lines.append("")
 
         if best.get("generation_metrics"):
             gen_metrics = best["generation_metrics"]

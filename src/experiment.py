@@ -7,7 +7,7 @@ import yaml
 from loguru import logger
 
 
-VALID_RETRIEVAL_METRICS = {"hit_rate", "mrr", "ndcg"}
+VALID_RETRIEVAL_METRICS = {"hit_rate", "mrr", "ndcg", "chunk_hit_rate", "chunk_mrr", "chunk_ndcg", "dedup_hit_rate", "dedup_mrr", "dedup_ndcg", "false_positive_rate"}
 VALID_GENERATION_METRICS = {"faithfulness", "answer_relevancy"}
 
 
@@ -85,6 +85,10 @@ class ExperimentConfig:
             llm=data.get("llm", {}),
         )
 
+    @property
+    def retrieval_granularity(self) -> str:
+        return self.evaluation.get("retrieval_granularity", "both")
+
     def validate(self) -> List[str]:
         """
         Validate the experiment configuration.
@@ -157,6 +161,15 @@ class ExperimentConfig:
                                 f"Invalid generation metrics: {invalid_generation}. "
                                 f"Valid options: {sorted(VALID_GENERATION_METRICS)}"
                             )
+
+        if "retrieval_granularity" in self.evaluation:
+            valid_granularities = {"chunk", "document", "both"}
+            granularity = self.evaluation["retrieval_granularity"]
+            if granularity not in valid_granularities:
+                errors.append(
+                    f"Invalid retrieval_granularity: '{granularity}'. "
+                    f"Valid options: {sorted(valid_granularities)}"
+                )
 
         return errors
 
