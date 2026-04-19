@@ -88,11 +88,14 @@ qdrant-client = ">=1.17.1, <2" # Qdrant vector DB client
 # ==============================
 pytest = ">=9.0.3, <10" # Testing framework
 ragas = ">=0.4.3, <0.5" # RAG evaluation
+langchain-anthropic = ">=1.4.0, <2"
+langchain-community = ">=0.4.1, <0.5"
 
 # ==============================
 # Web & Hugging Face
 # ==============================
 huggingface-hub = ">=1.10.2, <2"
+
 
 
 
