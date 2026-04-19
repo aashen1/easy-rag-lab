@@ -72,7 +72,7 @@ class RagasEvaluator(BaseEvaluator):
         """
         try:
             from langchain_anthropic import ChatAnthropic
-            from ragas.llms import LangchainLLMWrapper
+            from ragas.llms.base import LangchainLLMWrapper
 
             base_url = llm_config["base_url"].rstrip("/")
             if not base_url.endswith("/anthropic"):
@@ -88,7 +88,7 @@ class RagasEvaluator(BaseEvaluator):
                     "Content-Type": "application/json",
                 },
             )
-            return LangchainLLMWrapper(llm=lc_llm)
+            return LangchainLLMWrapper(langchain_llm=lc_llm)
 
         except ImportError as e:
             error_msg = f"Failed to import RAGAS dependencies: {str(e)}"
@@ -109,7 +109,7 @@ class RagasEvaluator(BaseEvaluator):
         """
         try:
             from langchain_community.embeddings import HuggingFaceEmbeddings
-            from ragas.embeddings import LangchainEmbeddingsWrapper
+            from ragas.embeddings.base import LangchainEmbeddingsWrapper
 
             embedding_config = config.get("embedding", {})
             model_name = embedding_config.get(
@@ -185,13 +185,13 @@ class RagasEvaluator(BaseEvaluator):
             List of RAGAS metric instances.
         """
         try:
-            from ragas.metrics.collections import (
-                Faithfulness,
-                AnswerRelevancy,
-                ContextPrecision,
-                ContextRecall,
-                FactualCorrectness,
-                SemanticSimilarity,
+            from ragas.metrics import (
+                _Faithfulness as Faithfulness,
+                _AnswerRelevancy as AnswerRelevancy,
+                _ContextPrecision as ContextPrecision,
+                _ContextRecall as ContextRecall,
+                _FactualCorrectness as FactualCorrectness,
+                _SemanticSimilarity as SemanticSimilarity,
             )
 
             metric_map = {
@@ -206,10 +206,13 @@ class RagasEvaluator(BaseEvaluator):
             metrics = []
             for name in metric_names:
                 if name in metric_map:
-                    metric = metric_map[name]()
-                    metric.llm = llm
-                    if embeddings and hasattr(metric, "embeddings"):
-                        metric.embeddings = embeddings
+                    metric_cls = metric_map[name]
+                    if name == "semantic_similarity":
+                        metric = metric_cls(embeddings=embeddings) if embeddings else metric_cls()
+                    elif name == "answer_relevancy":
+                        metric = metric_cls(llm=llm, embeddings=embeddings) if llm else metric_cls()
+                    else:
+                        metric = metric_cls(llm=llm) if llm else metric_cls()
                     metrics.append(metric)
                     logger.debug(f"Created RAGAS metric: {name}")
                 else:
