@@ -129,6 +129,10 @@ def calculate_ndcg(
     binary relevance. Uses the standard DCG formula:
         DCG@k = Σ((2^rel_i - 1) / log2(i + 2))
 
+    This implementation includes deduplication to handle cases where the same
+    document appears multiple times in the retrieved results, ensuring NDCG
+    always falls within [0, 1].
+
     Args:
         retrieved_sources: List of retrieved source paths.
         expected_sources: List of expected source paths.
@@ -150,6 +154,10 @@ def calculate_ndcg(
             >>> calculate_ndcg(["doc1", "doc2"], ["doc1", "doc2"],
             ...                relevance_scores=rel_scores)
             1.0
+
+        With duplicates (should not exceed 1.0):
+            >>> calculate_ndcg(["doc1", "doc1", "doc1"], ["doc1"])
+            1.0
     """
     if not expected_sources:
         return 0.0
@@ -162,8 +170,15 @@ def calculate_ndcg(
 
     retrieved_normalized = [normalize_source(s) for s in retrieved_sources[:k]]
 
+    seen: set = set()
+    unique_retrieved: List[str] = []
+    for source in retrieved_normalized:
+        if source not in seen:
+            seen.add(source)
+            unique_retrieved.append(source)
+
     dcg = 0.0
-    for i, source in enumerate(retrieved_normalized):
+    for i, source in enumerate(unique_retrieved):
         if source in expected_set and source in relevance_scores:
             rel = relevance_scores[source]
             dcg += (2**rel - 1) / math.log2(i + 2)
@@ -183,7 +198,9 @@ def calculate_ndcg(
     if ideal_dcg == 0:
         return 0.0
 
-    return dcg / ideal_dcg
+    ndcg = dcg / ideal_dcg
+
+    return min(1.0, max(0.0, ndcg))
 
 
 FAITHFULNESS_STATEMENT_PROMPT = """请分析以下回答，提取其中的所有事实陈述（statements）。
