@@ -6,12 +6,103 @@
 
 ## 目录
 
-1. [快速开始指南](#快速开始指南)
-2. [常见实验场景示例](#常见实验场景示例)
-3. [实验报告解读指南](#实验报告解读指南)
-4. [LLM 报告模式使用说明](#llm-报告模式使用说明)
-5. [配置文件格式](#配置文件格式)
-6. [最佳实践](#最佳实践)
+1. [目录结构](#目录结构)
+2. [模板使用指南](#模板使用指南)
+3. [快速开始指南](#快速开始指南)
+4. [常见实验场景示例](#常见实验场景示例)
+5. [实验报告解读指南](#实验报告解读指南)
+6. [LLM 报告模式使用说明](#llm-报告模式使用说明)
+7. [配置文件格式](#配置文件格式)
+8. [最佳实践](#最佳实践)
+
+---
+
+## 目录结构
+
+```
+exp_configs/
+├── templates/                  # 模板文件
+│   ├── _minimal.yaml          # 极简模板 - 开箱即用
+│   ├── _complete.yaml         # 完整模板 - 所有选项
+│   ├── _preset_chunk.yaml     # 分块实验预设
+│   ├── _preset_retrieval.yaml # 检索实验预设
+│   └── _preset_reranker.yaml  # 重排实验预设
+├── baseline/                   # 基线实验
+│   └── baseline.yaml
+├── experiments/                # 正式实验
+│   ├── chunk_comparison.yaml
+│   ├── chunking_strategy_comparison.yaml
+│   ├── retrieval_comparison.yaml
+│   ├── reranker_comparison.yaml
+│   ├── query_rewrite_comparison.yaml
+│   └── strategy_comparison.yaml
+├── smoke_tests/                # 冒烟测试
+│   ├── smoke_quick.yaml       # 小冒烟测试 - 最小链路
+│   └── smoke_full.yaml        # 大冒烟测试 - 全功能覆盖
+└── golden_tests/               # 回归测试
+    └── golden_test.yaml
+```
+
+---
+
+## 模板使用指南
+
+### 极简模板 (`templates/_minimal.yaml`)
+
+**适用场景**：快速开始一个新实验，只需修改少量参数。
+
+**使用方法**：
+1. 复制 `templates/_minimal.yaml` 到目标位置
+2. 修改 `name` 和 `description`
+3. 根据需要调整 `data.meal`、`test_sets` 和 `variants`
+4. 运行实验
+
+### 完整模板 (`templates/_complete.yaml`)
+
+**适用场景**：需要了解所有可配置选项，或进行复杂配置。
+
+**包含内容**：
+- 数据源配置（采样比例、随机种子）
+- 问题集配置（策略、数量、类型分布）
+- 变体配置（分块、Embedding、向量存储、检索方式）
+- 评测配置（指标、LLM报告）
+- LLM配置（问题生成、回答生成）
+
+### 特化模板
+
+| 模板 | 用途 |
+|------|------|
+| `_preset_chunk.yaml` | 分块参数对比实验 |
+| `_preset_retrieval.yaml` | 检索方式对比实验 |
+| `_preset_reranker.yaml` | 重排序对比实验 |
+
+### YAML 锚点使用
+
+当配置文件有多个变体共享部分配置时，可使用 YAML 锚点减少重复：
+
+```yaml
+# 定义共享配置
+x-base-config: &base-config
+  retrieval:
+    method: "vector"
+    top_k: 5
+
+# 使用锚点
+variants:
+  - name: "variant_1"
+    config_overrides:
+      <<: *base-config
+      chunker:
+        chunk_size: 256
+
+  - name: "variant_2"
+    config_overrides:
+      <<: *base-config
+      chunker:
+        chunk_size: 512
+```
+
+**注意**：锚点只能在同一个文件内使用，无法跨文件引用。
 
 ---
 

@@ -1,25 +1,23 @@
-name: "test_llm_report_321"
-description: " v0.1.x 快速测试，稍微给一点问题，测试LLM报告总结的功能"
+name: "my_experiment"
+description: "实验描述"
 
 data:
-  meal: "test1"
+  meal: "my_meal"
   create_if_missing:
-    sample_ratio: 0.05
+    sample_ratio: 0.1
     seed: 42
 
 test_sets:
   - strategy: "document"
-    num_questions: 6
-
+    num_questions: 10
 
 variants:
   - name: "baseline"
-    description: "baseline without any overrides. (chunk_size: 512, chunk_overlap: 0)"
+    description: "基线配置"
     config_overrides: {}
 
 evaluation:
   llm_preset: "default"
-  llm_report: true
   metrics:
     retrieval:
       - "hit_rate"

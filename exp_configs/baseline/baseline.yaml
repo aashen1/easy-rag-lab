@@ -12,12 +12,9 @@ test_sets:
     num_questions: 35
 
 variants:
-  - name: "chunk_512_overlap_0"
-    description: "chunk_size=512, overlap=0"
-    config_overrides:
-      chunker:
-        chunk_size: 512
-        chunk_overlap: 0
+  - name: "baseline"
+    description: "基线配置 (chunk_size: 512, chunk_overlap: 0)"
+    config_overrides: {}
 
 evaluation:
   llm_preset: "default"
@@ -31,5 +28,5 @@ evaluation:
       - "answer_relevancy"
 
 llm:
-  question_generation: "sonnet"
+  question_generation: "default"
   answering: "default"

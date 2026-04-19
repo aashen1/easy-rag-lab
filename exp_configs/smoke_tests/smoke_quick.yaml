@@ -1,20 +1,19 @@
-name: "quicktest111"
-description: " v0.1.x 快速测试，三种问题各1个，冒烟用，只测实验功能是否正常"
+name: "smoke_quick"
+description: "快速冒烟测试 - 最小链路验证，用于调试时快速检查"
 
 data:
-  meal: "test1"
+  meal: "smoke_quick"
   create_if_missing:
-    sample_ratio: 0.05
+    sample_ratio: 0.03
     seed: 42
 
 test_sets:
   - strategy: "document"
-    num_questions: 3
-
+    num_questions: 1
 
 variants:
   - name: "baseline"
-    description: "baseline without any overrides. (chunk_size: 512, chunk_overlap: 0)"
+    description: "基线配置 - 验证基本流程"
     config_overrides: {}
 
 evaluation:

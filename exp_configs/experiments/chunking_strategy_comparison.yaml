@@ -63,5 +63,5 @@ evaluation:
       - "answer_relevancy"
 
 llm:
-  question_generation: "sonnet"
+  question_generation: "default"
   answering: "default"

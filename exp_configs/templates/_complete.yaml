@@ -1,0 +1,113 @@
+# ============================================================
+# 完整实验配置模板 - 展示所有可用选项
+# ============================================================
+
+name: "complete_template"
+description: "完整配置模板 - 包含所有可用选项的示例"
+
+# ------------------------------------------------------------
+# 数据源配置
+# ------------------------------------------------------------
+data:
+  meal: "my_meal"
+  create_if_missing:
+    sample_ratio: 0.1
+    sample_count: null
+    seed: 42
+
+# ------------------------------------------------------------
+# 问题集配置
+# ------------------------------------------------------------
+test_sets:
+  - strategy: "document"
+    num_questions: 20
+    seed: 100
+    type_distribution:
+      single_fact: 0.30
+      multi_fact: 0.25
+      reasoning: 0.15
+      comparative: 0.15
+      missing: 0.10
+      irrelevant: 0.05
+
+# ------------------------------------------------------------
+# 变体配置 - 核心实验参数
+# ------------------------------------------------------------
+variants:
+  - name: "baseline"
+    description: "基线配置"
+    config_overrides: {}
+
+  - name: "custom_chunk"
+    description: "自定义分块配置"
+    config_overrides:
+      chunker:
+        strategy: "fixed"
+        chunk_size: 512
+        chunk_overlap: 50
+        semantic:
+          similarity_threshold: 0.5
+          min_chunk_size: 100
+          breakpoint_percentile: 25
+
+  - name: "custom_embedding"
+    description: "自定义Embedding配置"
+    config_overrides:
+      embedding:
+        model_name: "BAAI/bge-large-zh-v1.5"
+        device: "cuda"
+        batch_size: 32
+
+  - name: "custom_vector_store"
+    description: "自定义向量存储配置"
+    config_overrides:
+      vector_store:
+        type: "qdrant"
+        collection_name: "my_collection"
+        persist_dir: "data/vector_store"
+        distance: "Cosine"
+
+  - name: "hybrid_retrieval"
+    description: "混合检索配置"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 5
+        bm25:
+          k1: 1.5
+          b: 0.75
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+          vector_weight: 0.7
+          bm25_weight: 0.3
+        reranker:
+          enabled: true
+          model_name: "BAAI/bge-reranker-large"
+          top_n: 3
+        query_rewrite:
+          enabled: true
+          strategy: "hyde"
+          num_queries: 3
+
+# ------------------------------------------------------------
+# 评测配置
+# ------------------------------------------------------------
+evaluation:
+  llm_preset: "default"
+  llm_report: false
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+
+# ------------------------------------------------------------
+# LLM配置
+# ------------------------------------------------------------
+llm:
+  question_generation: "default"
+  answering: "default"

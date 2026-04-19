@@ -1,0 +1,63 @@
+name: "retrieval_experiment"
+description: "检索方式对比实验模板"
+
+data:
+  meal: "meal_retrieval"
+  create_if_missing:
+    sample_ratio: 0.1
+    seed: 42
+
+test_sets:
+  - strategy: "document"
+    num_questions: 30
+
+variants:
+  - name: "vector_only"
+    description: "纯向量语义检索"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        top_k: 5
+
+  - name: "bm25_only"
+    description: "纯BM25稀疏检索"
+    config_overrides:
+      retrieval:
+        method: "bm25"
+        top_k: 5
+
+  - name: "hybrid_rrf"
+    description: "混合检索 - RRF融合"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 5
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+
+  - name: "hybrid_weighted"
+    description: "混合检索 - 加权融合"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 5
+        hybrid:
+          fusion: "weighted"
+          vector_weight: 0.7
+          bm25_weight: 0.3
+
+evaluation:
+  llm_preset: "default"
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+
+llm:
+  question_generation: "default"
+  answering: "default"

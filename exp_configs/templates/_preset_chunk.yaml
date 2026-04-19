@@ -1,15 +1,15 @@
-name: "chunk_smoke_test"
-description: "分块参数冒烟测试 - 2x3因子设计(chunk_size x overlap)，用于快速验证流程，验证后可放大num_questions和sample_ratio"
+name: "chunk_experiment"
+description: "分块参数对比实验模板"
 
 data:
-  meal: "meal_chunk_smoke_test"
+  meal: "meal_chunk"
   create_if_missing:
     sample_ratio: 0.1
     seed: 42
 
 test_sets:
   - strategy: "document"
-    num_questions: 5
+    num_questions: 30
     type_distribution:
       single_fact: 0.30
       multi_fact: 0.25
@@ -18,48 +18,43 @@ test_sets:
       missing: 0.10
       irrelevant: 0.05
 
+x-base-config: &base-config
+  retrieval:
+    method: "vector"
+    top_k: 5
+
 variants:
   - name: "chunk_256_overlap_0"
     description: "small chunk, no overlap"
     config_overrides:
+      <<: *base-config
       chunker:
         chunk_size: 256
         chunk_overlap: 0
 
-  - name: "chunk_256_overlap_32"
-    description: "small chunk, small overlap (~12.5%)"
+  - name: "chunk_512_overlap_0"
+    description: "medium chunk, no overlap"
     config_overrides:
+      <<: *base-config
       chunker:
-        chunk_size: 256
-        chunk_overlap: 32
+        chunk_size: 512
+        chunk_overlap: 0
 
-  - name: "chunk_256_overlap_64"
-    description: "small chunk, large overlap (~25%)"
+  - name: "chunk_512_overlap_50"
+    description: "medium chunk, small overlap"
     config_overrides:
+      <<: *base-config
       chunker:
-        chunk_size: 256
-        chunk_overlap: 64
+        chunk_size: 512
+        chunk_overlap: 50
 
   - name: "chunk_1024_overlap_0"
     description: "large chunk, no overlap"
     config_overrides:
+      <<: *base-config
       chunker:
         chunk_size: 1024
         chunk_overlap: 0
-
-  - name: "chunk_1024_overlap_128"
-    description: "large chunk, small overlap (~12.5%)"
-    config_overrides:
-      chunker:
-        chunk_size: 1024
-        chunk_overlap: 128
-
-  - name: "chunk_1024_overlap_256"
-    description: "large chunk, large overlap (~25%)"
-    config_overrides:
-      chunker:
-        chunk_size: 1024
-        chunk_overlap: 256
 
 evaluation:
   llm_preset: "default"
