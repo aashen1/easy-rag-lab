@@ -336,7 +336,7 @@ class RAGPipeline:
         Returns:
             A dictionary containing at minimum ``question`` and ``answer`` keys.
             When ``return_contexts`` is True, also includes ``contexts``,
-            ``scores``, ``sources``, and optionally ``token_usage``.
+            ``scores``, ``sources``, ``chunk_ids``, and optionally ``token_usage``.
 
         Raises:
             ValueError: If ``question`` is empty or not a string.
@@ -387,6 +387,7 @@ class RAGPipeline:
                     contexts = [r["text"] for r in results]
                     scores = [r.get("rerank_score", r["score"]) if "rerank_score" in r else r["score"] for r in results]
                     sources = [r["metadata"].get("source", "Unknown") for r in results]
+                    chunk_ids = [r.get("chunk_id", "") for r in results]
 
                     logger.debug("Generating answer...")
                     answer = self.generator.generate(question, contexts)
@@ -396,6 +397,7 @@ class RAGPipeline:
                         response["contexts"] = contexts
                         response["scores"] = scores
                         response["sources"] = sources
+                        response["chunk_ids"] = chunk_ids
                     if self.generator.last_token_usage is not None:
                         response["token_usage"] = self.generator.last_token_usage.to_dict()
 
@@ -423,6 +425,7 @@ class RAGPipeline:
             sources = [
                 result["metadata"].get("source", "Unknown") for result in results
             ]
+            chunk_ids = [result.get("chunk_id", "") for result in results]
 
             logger.debug("Generating answer...")
             answer = self.generator.generate(question, contexts)
@@ -436,6 +439,7 @@ class RAGPipeline:
                 response["contexts"] = contexts
                 response["scores"] = scores
                 response["sources"] = sources
+                response["chunk_ids"] = chunk_ids
 
             if self.generator.last_token_usage is not None:
                 response["token_usage"] = self.generator.last_token_usage.to_dict()
