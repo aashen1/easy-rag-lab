@@ -48,6 +48,7 @@ from eval.metrics import (
     calculate_dedup_mrr,
     calculate_dedup_ndcg,
     normalize_source,
+    normalize_source_with_equivalence,
 )
 from eval.experiment_reporter import ExperimentReporter
 
@@ -546,6 +547,7 @@ def evaluate_test_set(
     test_set: Dict[str, Any],
     llm_config: Optional[Dict[str, str]] = None,
     llm_retrieval_metrics: Optional[List[str]] = None,
+    equivalence_groups: Optional[Dict[str, List[str]]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Evaluate a single test set against the pipeline.
@@ -556,6 +558,9 @@ def evaluate_test_set(
         llm_config: Optional LLM configuration for LLM-based metrics.
         llm_retrieval_metrics: Optional list of LLM-based retrieval metrics to calculate.
             Supports "context_precision" and "context_recall".
+        equivalence_groups: Optional dict mapping group keys to lists of file paths
+            for document equivalence matching. When provided, documents in the same
+            group are treated as identical for retrieval evaluation.
 
     Returns:
         List of evaluation result dictionaries.
@@ -593,12 +598,30 @@ def evaluate_test_set(
             contexts = response.get("contexts", [])
 
             if expect_retrieval and expected_sources:
-                hit_rate = calculate_hit_rate(retrieved_sources, expected_sources)
-                mrr = calculate_mrr(retrieved_sources, expected_sources)
-                ndcg = calculate_ndcg(retrieved_sources, expected_sources, k=5)
-                dedup_hit_rate = calculate_dedup_hit_rate(retrieved_sources, expected_sources)
-                dedup_mrr = calculate_dedup_mrr(retrieved_sources, expected_sources)
-                dedup_ndcg = calculate_dedup_ndcg(retrieved_sources, expected_sources)
+                if equivalence_groups:
+                    normalized_retrieved = [
+                        normalize_source_with_equivalence(s, equivalence_groups)
+                        for s in retrieved_sources
+                    ]
+                    normalized_expected = [
+                        normalize_source_with_equivalence(s, equivalence_groups)
+                        for s in expected_sources
+                    ]
+                    hit_rate = calculate_hit_rate(normalized_retrieved, normalized_expected)
+                    mrr = calculate_mrr(normalized_retrieved, normalized_expected)
+                    ndcg = calculate_ndcg(normalized_retrieved, normalized_expected, k=5)
+                else:
+                    hit_rate = calculate_hit_rate(retrieved_sources, expected_sources)
+                    mrr = calculate_mrr(retrieved_sources, expected_sources)
+                    ndcg = calculate_ndcg(retrieved_sources, expected_sources, k=5)
+                if equivalence_groups:
+                    dedup_hit_rate = calculate_dedup_hit_rate(normalized_retrieved, normalized_expected)
+                    dedup_mrr = calculate_dedup_mrr(normalized_retrieved, normalized_expected)
+                    dedup_ndcg = calculate_dedup_ndcg(normalized_retrieved, normalized_expected)
+                else:
+                    dedup_hit_rate = calculate_dedup_hit_rate(retrieved_sources, expected_sources)
+                    dedup_mrr = calculate_dedup_mrr(retrieved_sources, expected_sources)
+                    dedup_ndcg = calculate_dedup_ndcg(retrieved_sources, expected_sources)
             else:
                 hit_rate = None
                 mrr = None
@@ -920,6 +943,7 @@ def run_variant_evaluation(
                 test_set,
                 llm_config=llm_config,
                 llm_retrieval_metrics=llm_retrieval_metrics,
+                equivalence_groups=meal_config.equivalence_groups if meal_config.equivalence_groups else None,
             )
             all_results.extend(results)
 
