@@ -165,6 +165,94 @@ LLM_REPORT_PROMPT_TEMPLATE = """你是一位专业的RAG系统分析师。请根
 class ExperimentReporter:
     """Experiment report generator supporting template and LLM modes."""
 
+    @staticmethod
+    def _dict_to_yaml_lines(data: Any, indent: int = 0) -> List[str]:
+        """Convert a dict to YAML-like lines with arbitrary nesting depth.
+
+        Args:
+            data: Data to convert (dict, list, or scalar).
+            indent: Current indentation level.
+
+        Returns:
+            List of YAML-formatted lines.
+        """
+        lines = []
+        prefix = "  " * indent
+
+        if isinstance(data, dict):
+            for k, v in data.items():
+                if isinstance(v, dict):
+                    lines.append(f"{prefix}{k}:")
+                    lines.extend(ExperimentReporter._dict_to_yaml_lines(v, indent + 1))
+                elif isinstance(v, list):
+                    lines.append(f"{prefix}{k}:")
+                    for item in v:
+                        if isinstance(item, dict):
+                            lines.append(f"{prefix}  -")
+                            lines.extend(ExperimentReporter._dict_to_yaml_lines(item, indent + 2))
+                        else:
+                            lines.append(f"{prefix}  - {item}")
+                else:
+                    lines.append(f"{prefix}{k}: {v}")
+        elif isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
+                    lines.append(f"{prefix}-")
+                    lines.extend(ExperimentReporter._dict_to_yaml_lines(item, indent + 1))
+                else:
+                    lines.append(f"{prefix}- {item}")
+        else:
+            lines.append(f"{prefix}{data}")
+
+        return lines
+
+    @staticmethod
+    def _generate_tech_summary(merged_config: Dict[str, Any]) -> List[str]:
+        """Generate a concise technology summary from merged config.
+
+        Args:
+            merged_config: Full merged configuration dictionary.
+
+        Returns:
+            List of markdown lines summarizing key technology choices.
+        """
+        lines = []
+        retrieval = merged_config.get("retrieval", {})
+        chunker = merged_config.get("chunker", {})
+        embedding = merged_config.get("embedding", {})
+        vector_store = merged_config.get("vector_store", {})
+
+        method = retrieval.get("method", "vector")
+        method_labels = {
+            "vector": "Vector (dense)",
+            "bm25": "BM25 (sparse)",
+            "hybrid": "Hybrid (dense + sparse)",
+        }
+        lines.append(f"- Retrieval: {method_labels.get(method, method)}")
+        lines.append(f"- Top-K: {retrieval.get('top_k', 5)}")
+
+        reranker = retrieval.get("reranker", {})
+        if reranker.get("enabled", False):
+            lines.append(f"- Reranker: {reranker.get('model_name', 'N/A')} (top_n={reranker.get('top_n', 3)})")
+        else:
+            lines.append("- Reranker: Disabled")
+
+        query_rewrite = retrieval.get("query_rewrite", {})
+        if query_rewrite.get("enabled", False):
+            lines.append(f"- Query Rewrite: {query_rewrite.get('strategy', 'N/A')}")
+        else:
+            lines.append("- Query Rewrite: Disabled")
+
+        if method == "hybrid":
+            hybrid = retrieval.get("hybrid", {})
+            lines.append(f"- Fusion: {hybrid.get('fusion', 'rrf')} (rrf_k={hybrid.get('rrf_k', 60)})")
+
+        lines.append(f"- Chunking: {chunker.get('strategy', 'fixed')} (size={chunker.get('chunk_size', 512)}, overlap={chunker.get('chunk_overlap', 0)})")
+        lines.append(f"- Embedding: {embedding.get('model_name', 'N/A')}")
+        lines.append(f"- Vector Store: {vector_store.get('type', 'N/A')} ({vector_store.get('distance', 'Cosine')})")
+
+        return lines
+
     def __init__(
         self,
         llm_api_key: Optional[str] = None,
@@ -492,14 +580,13 @@ class ExperimentReporter:
 
         config_snapshot = best.get("config_snapshot", {})
         if config_snapshot and "merged" in config_snapshot:
+            merged = config_snapshot["merged"]
+            lines.append("**Technology Summary**:")
+            lines.extend(self._generate_tech_summary(merged))
+            lines.append("")
             lines.append("**Configuration**:")
             lines.append("```yaml")
-            merged = config_snapshot["merged"]
-            for section, config in merged.items():
-                lines.append(f"{section}:")
-                if isinstance(config, dict):
-                    for k, v in config.items():
-                        lines.append(f"  {k}: {v}")
+            lines.extend(self._dict_to_yaml_lines(merged))
             lines.append("```")
             lines.append("")
 
@@ -540,14 +627,13 @@ class ExperimentReporter:
 
                 config_snapshot = vr.get("config_snapshot", {})
                 if config_snapshot and "merged" in config_snapshot:
+                    merged = config_snapshot["merged"]
+                    lines.append("**Technology Summary**:")
+                    lines.extend(self._generate_tech_summary(merged))
+                    lines.append("")
                     lines.append("**Configuration**:")
                     lines.append("```yaml")
-                    merged = config_snapshot["merged"]
-                    for section, config in merged.items():
-                        lines.append(f"{section}:")
-                        if isinstance(config, dict):
-                            for k, v in config.items():
-                                lines.append(f"  {k}: {v}")
+                    lines.extend(self._dict_to_yaml_lines(merged))
                     lines.append("```")
                     lines.append("")
             else:
@@ -573,13 +659,9 @@ class ExperimentReporter:
                     continue
                 lines.append(f"{section}:")
                 if isinstance(config, dict):
-                    for k, v in config.items():
-                        if isinstance(v, dict):
-                            lines.append(f"  {k}:")
-                            for k2, v2 in v.items():
-                                lines.append(f"    {k2}: {v2}")
-                        else:
-                            lines.append(f"  {k}: {v}")
+                    lines.extend(self._dict_to_yaml_lines(config, indent=1))
+                else:
+                    lines.append(f"  {config}")
             lines.append("```")
             lines.append("")
 
@@ -816,16 +898,17 @@ class ExperimentReporter:
         lines = ["## 3. Technical Configuration", ""]
 
         if result.config_snapshot:
+            merged = result.config_snapshot.get("merged", result.config_snapshot)
+            if "retrieval" in merged or "chunker" in merged:
+                lines.append("### Technology Summary")
+                lines.append("")
+                lines.extend(self._generate_tech_summary(merged))
+                lines.append("")
+
             lines.append("### Configuration Snapshot")
             lines.append("")
             lines.append("```yaml")
-            for section, config in result.config_snapshot.items():
-                lines.append(f"{section}:")
-                if isinstance(config, dict):
-                    for k, v in config.items():
-                        lines.append(f"  {k}: {v}")
-                else:
-                    lines.append(f"  {config}")
+            lines.extend(self._dict_to_yaml_lines(result.config_snapshot))
             lines.append("```")
             lines.append("")
 
