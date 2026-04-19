@@ -296,26 +296,45 @@ Context Recall = 可推断句子数 / Ground Truth 总句子数
 
 ---
 
-## 问题有效性检查
+## 问题类型的检索指标适用性
 
-### 为什么需要
+### 设计原则
 
-当测试集中某些问题的 `expected_sources` 指向不在检索库中的文档时，这些问题注定无法命中，会人为拉低检索指标。
+评测系统生成 6 种问题类型，其中 irrelevant 和 missing 类型用于测试系统的拒答能力。不同类型对检索指标的适用性不同：
 
-### 使用方法
+| 问题类型 | 检索指标 | 生成指标 | 标记 | 说明 |
+|----------|---------|---------|------|------|
+| single_fact | 适用 | 适用 | — | 标准评测 |
+| multi_fact | 适用 | 适用 | — | 标准评测 |
+| reasoning | 适用 | 适用 | — | 标准评测 |
+| comparative | 适用 | 适用 | — | 标准评测 |
+| missing | 适用 | 适用 | `expect_no_answer=True` | 测试"不知道"能力 |
+| irrelevant | **不适用** | 适用 | `expect_retrieval=False` | 测试拒答能力 |
+
+### irrelevant 类型
+
+irrelevant 问题故意与文档主题无关，测试系统的拒答能力。这类问题：
+
+- `source_files = []`：不期望检索到任何相关文档
+- `expect_retrieval = False`：跳过检索指标计算
+- 生成指标正常计算（关注是否正确拒答）
+
+### missing 类型
+
+missing 问题询问文档中没有的信息，测试系统处理"不知道"的能力。这类问题：
+
+- `source_files = [source_path]`：文档主题相关，检索器可能正确返回该文档
+- `expect_no_answer = True`：标记期望系统拒答
+- 检索指标正常计算
+
+### 聚合指标
+
+聚合指标区分"适用检索指标的问题数"和"总问题数"：
 
 ```python
-from eval.metrics import validate_question, filter_valid_questions
-
-# 验证单个问题
-validity = validate_question(
-    question={"source_files": ["doc1.pdf"]},
-    corpus_sources={"doc1", "doc2", "doc3"}
-)
-print(validity.is_valid)  # True
-
-# 批量过滤无效问题
-valid_questions = filter_valid_questions(all_questions, corpus_sources)
+metrics = compute_aggregate_metrics(results)
+# metrics["retrieval_applicable_questions"]  # 参与检索指标计算的问题数
+# metrics["total_questions"]                  # 总问题数（含 irrelevant）
 ```
 
 ---
@@ -403,3 +422,4 @@ evaluation:
 - [实验系统指南](experiment-system.md)
 - [配置参考](../config-reference.md)
 - [评测指标 Bug 修复报告](../troubleshooting/eval-metrics-bugfix.md)
+- [评测系统验收修复报告](../troubleshooting/eval-system-acceptance-fix.md)

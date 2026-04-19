@@ -175,6 +175,12 @@ Context Recall = 2/2 = 1.0
 
 ## 四、问题有效性检查
 
+> **注意**：此方案已在后续验收中被判定为方向错误并移除。详见 [评测系统验收修复报告](eval-system-acceptance-fix.md)。
+>
+> 正确做法：不是在评测时过滤无效问题，而是在问题生成阶段正确设置 `source_files`。
+> - irrelevant 类型：`source_files = []`，`expect_retrieval = False`
+> - missing 类型：保留 `source_files`，`expect_no_answer = True`
+
 ### 4.1 问题描述
 
 在实验 `exp_20260420_004941_smoke_quick` 中，6 个测试问题中有 4 个（q003-q006）的 `expected_sources` 指向不在检索库中的文档。这些"不可能命中"的问题会人为拉低检索指标。
