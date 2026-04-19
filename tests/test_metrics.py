@@ -1373,3 +1373,105 @@ class TestCalculateContextRecall:
         )
 
         assert score == pytest.approx(2/3)
+
+
+@pytest.mark.unit
+class TestValidateQuestion:
+    """Tests for validate_question function."""
+
+    def test_valid_question_with_source_files(self):
+        from eval.metrics import validate_question
+        question = {"id": "q1", "source_files": ["doc1.pdf", "doc2.md"]}
+        corpus = {"doc1", "doc2", "doc3"}
+        validity = validate_question(question, corpus)
+        assert validity.is_valid is True
+        assert validity.expected_sources_in_corpus is True
+        assert validity.answerable is True
+
+    def test_valid_question_with_expected_sources(self):
+        from eval.metrics import validate_question
+        question = {"id": "q1", "expected_sources": ["doc1.pdf"]}
+        corpus = {"doc1", "doc2", "doc3"}
+        validity = validate_question(question, corpus)
+        assert validity.is_valid is True
+
+    def test_invalid_question_source_not_in_corpus(self):
+        from eval.metrics import validate_question
+        question = {"id": "q1", "source_files": ["doc_not_exist.pdf"]}
+        corpus = {"doc1", "doc2", "doc3"}
+        validity = validate_question(question, corpus)
+        assert validity.is_valid is False
+        assert validity.expected_sources_in_corpus is False
+        assert validity.answerable is False
+
+    def test_invalid_question_no_sources(self):
+        from eval.metrics import validate_question
+        question = {"id": "q1", "question": "test question"}
+        corpus = {"doc1", "doc2", "doc3"}
+        validity = validate_question(question, corpus)
+        assert validity.is_valid is False
+        assert validity.reason == "no expected sources"
+
+    def test_partial_match_still_valid(self):
+        from eval.metrics import validate_question
+        question = {"id": "q1", "source_files": ["doc1.pdf", "doc_not_exist.pdf"]}
+        corpus = {"doc1", "doc2", "doc3"}
+        validity = validate_question(question, corpus)
+        assert validity.is_valid is True
+
+    def test_cross_format_match(self):
+        from eval.metrics import validate_question
+        question = {"id": "q1", "source_files": ["reports/doc1.pdf"]}
+        corpus = {"doc1"}
+        validity = validate_question(question, corpus)
+        assert validity.is_valid is True
+
+
+@pytest.mark.unit
+class TestFilterValidQuestions:
+    """Tests for filter_valid_questions function."""
+
+    def test_filter_all_valid(self):
+        from eval.metrics import filter_valid_questions
+        questions = [
+            {"id": "q1", "source_files": ["doc1.pdf"]},
+            {"id": "q2", "source_files": ["doc2.pdf"]},
+        ]
+        corpus = {"doc1", "doc2", "doc3"}
+        valid = filter_valid_questions(questions, corpus)
+        assert len(valid) == 2
+        assert all("validity" in q for q in valid)
+
+    def test_filter_all_invalid(self):
+        from eval.metrics import filter_valid_questions
+        questions = [
+            {"id": "q1", "source_files": ["not_exist1.pdf"]},
+            {"id": "q2", "source_files": ["not_exist2.pdf"]},
+        ]
+        corpus = {"doc1", "doc2", "doc3"}
+        valid = filter_valid_questions(questions, corpus)
+        assert len(valid) == 0
+
+    def test_filter_mixed(self):
+        from eval.metrics import filter_valid_questions
+        questions = [
+            {"id": "q1", "source_files": ["doc1.pdf"]},
+            {"id": "q2", "source_files": ["not_exist.pdf"]},
+            {"id": "q3", "source_files": ["doc3.pdf"]},
+        ]
+        corpus = {"doc1", "doc2", "doc3"}
+        valid = filter_valid_questions(questions, corpus)
+        assert len(valid) == 2
+        assert valid[0]["id"] == "q1"
+        assert valid[1]["id"] == "q3"
+
+    def test_empty_questions(self):
+        from eval.metrics import filter_valid_questions
+        valid = filter_valid_questions([], {"doc1"})
+        assert valid == []
+
+    def test_empty_corpus(self):
+        from eval.metrics import filter_valid_questions
+        questions = [{"id": "q1", "source_files": ["doc1.pdf"]}]
+        valid = filter_valid_questions(questions, set())
+        assert len(valid) == 0
