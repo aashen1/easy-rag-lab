@@ -411,16 +411,64 @@ def prepare_test_sets(
                     test_set_data = json.load(f)
 
                 existing_count = len(test_set_data.get("questions", []))
-                if existing_count != num_questions:
+                if existing_count < num_questions:
                     logger.warning(
                         f"Existing test set has {existing_count} questions, "
-                        f"but {num_questions} requested. Regenerating."
+                        f"but {num_questions} requested. Supplementing "
+                        f"{num_questions - existing_count} more questions."
                     )
-                    test_set_path.unlink()
+                    if skip_preprocessing:
+                        raise FileNotFoundError(
+                            f"Test set '{filename}' has insufficient questions "
+                            f"({existing_count}/{num_questions}) and "
+                            f"skip_preprocessing is enabled. "
+                            f"Cannot supplement in skip_preprocessing mode."
+                        )
+                    try:
+                        generator = TestSetGenerator(system_config)
+                        llm_preset = exp_config.evaluation.get("llm_preset", "default")
+
+                        if strategy == "document":
+                            test_set_data = generator.supplement_document_based_questions(
+                                meal_name=meal_name,
+                                existing_test_set=test_set_data,
+                                target_count=num_questions,
+                                llm_preset=llm_preset,
+                                token_tracker=token_tracker,
+                            )
+                        else:
+                            logger.warning(
+                                f"Supplement not supported for strategy "
+                                f"'{strategy}', regenerating from scratch"
+                            )
+                            test_set_path.unlink()
+                            test_set_data = None
+
+                        if test_set_data is not None:
+                            test_sets.append(test_set_data)
+                            final_count = len(test_set_data.get("questions", []))
+                            logger.success(f"Test set '{filename}' supplemented ({final_count} questions)")
+                            continue
+                    except Exception as e:
+                        logger.error(f"Failed to supplement test set '{filename}': {str(e)}")
+                        logger.warning("Falling back to full regeneration")
+                        test_set_path.unlink()
+                elif existing_count > num_questions:
+                    logger.warning(
+                        f"Existing test set has {existing_count} questions, "
+                        f"but {num_questions} requested. Truncating to "
+                        f"{num_questions}."
+                    )
+                    test_set_data["questions"] = test_set_data["questions"][:num_questions]
+                    test_sets.append(test_set_data)
+                    logger.success(f"Test set '{filename}' truncated ({num_questions} questions)")
+                    continue
                 else:
                     test_sets.append(test_set_data)
                     logger.success(f"Test set '{filename}' loaded ({existing_count} questions)")
                     continue
+            except FileNotFoundError:
+                raise
             except Exception as e:
                 logger.warning(f"Failed to load test set '{filename}': {str(e)}, will regenerate")
 

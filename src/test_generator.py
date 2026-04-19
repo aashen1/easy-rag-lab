@@ -869,6 +869,64 @@ class TestSetGenerator:
                         f"{failed_count}/{total_attempts}"
                     )
 
+        if len(questions) < num_questions:
+            deficit = num_questions - len(questions)
+            logger.info(
+                f"Main loop generated {len(questions)}/{num_questions} questions. "
+                f"Supplementing {deficit} more questions..."
+            )
+            doc_names = list(document_contents.keys())
+            all_types = list(self.TYPE_DISTRIBUTION.keys())
+            extra_attempt = 0
+            max_extra_attempts = deficit * 3
+
+            while len(questions) < num_questions and extra_attempt < max_extra_attempts:
+                extra_attempt += 1
+                doc_name = doc_names[extra_attempt % len(doc_names)]
+                q_type = all_types[extra_attempt % len(all_types)]
+                doc_data = document_contents[doc_name]
+                doc_content = doc_data["content"]
+                source_path = doc_data["source_path"]
+
+                logger.info(
+                    f"Supplemental question {len(questions) + 1}/{num_questions} "
+                    f"(type={q_type}, doc={doc_name})..."
+                )
+
+                qa = self._generate_single_document_question(
+                    doc_content, q_type, generator
+                )
+
+                if qa is not None:
+                    qa["id"] = f"q{question_id:03d}"
+                    qa["source_document"] = doc_name
+                    qa["category"] = "document"
+
+                    if q_type == "irrelevant":
+                        qa["source_files"] = []
+                        qa["source_chunks"] = []
+                        qa["expect_retrieval"] = False
+                    elif q_type == "missing":
+                        qa["source_files"] = [source_path]
+                        qa["source_chunks"] = []
+                        qa["expect_no_answer"] = True
+                        qa["expect_retrieval"] = False
+                    else:
+                        qa["source_files"] = [source_path]
+                        answer_text = qa.get("answer", "")
+                        qa["source_chunks"] = self._locate_answer_chunks(
+                            answer_text, source_path
+                        )
+
+                    questions.append(qa)
+                    question_id += 1
+                else:
+                    failed_count += 1
+                    logger.warning(
+                        f"Supplemental question failed, total failures: "
+                        f"{failed_count}"
+                    )
+
         if not questions:
             raise ValueError("No questions could be generated")
 
@@ -892,11 +950,160 @@ class TestSetGenerator:
         filename = f"document_level_n{num_questions}"
         self._save_test_set(meal_name, test_set, filename)
 
+        if len(questions) < num_questions:
+            logger.warning(
+                f"Could only generate {len(questions)}/{num_questions} questions "
+                f"after supplemental attempts"
+            )
+
         logger.success(
             f"Generated {len(questions)}/{num_questions} questions "
             f"for meal '{meal_name}' (strategy: document)"
         )
         return test_set
+
+    def supplement_document_based_questions(
+        self,
+        meal_name: str,
+        existing_test_set: Dict[str, Any],
+        target_count: int,
+        llm_preset: str = "default",
+        token_tracker: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """Supplement an existing test set with additional questions.
+
+        Generates only the deficit number of questions and appends them to
+        the existing test set, avoiding wasteful full regeneration.
+
+        Args:
+            meal_name: Name of the meal to generate questions for.
+            existing_test_set: Existing test set dictionary to supplement.
+            target_count: Target total number of questions.
+            llm_preset: LLM preset name from the configuration.
+            token_tracker: Optional token usage tracker.
+
+        Returns:
+            Updated test set dictionary with supplemented questions.
+
+        Raises:
+            ValueError: If no documents are found for the meal.
+        """
+        existing_questions = existing_test_set.get("questions", [])
+        deficit = target_count - len(existing_questions)
+
+        if deficit <= 0:
+            logger.info(
+                f"Existing test set already has {len(existing_questions)} "
+                f"questions, no supplementation needed"
+            )
+            return existing_test_set
+
+        logger.info(
+            f"Supplementing test set for meal '{meal_name}': "
+            f"existing={len(existing_questions)}, target={target_count}, "
+            f"deficit={deficit}"
+        )
+
+        meal_manager = MealManager(self.config)
+        meal_config = meal_manager.load_meal(meal_name)
+
+        document_contents = self._load_full_documents(meal_config)
+        if not document_contents:
+            raise ValueError(f"No documents found for meal '{meal_name}'")
+
+        llm_config = get_llm_config(self.config, llm_preset)
+        generator = Generator(
+            model_name=llm_config["model_name"],
+            api_key=llm_config["api_key"],
+            base_url=llm_config["base_url"],
+            temperature=0.7,
+            max_tokens=1024,
+            token_tracker=token_tracker,
+        )
+
+        doc_names = list(document_contents.keys())
+        all_types = list(self.TYPE_DISTRIBUTION.keys())
+        question_id = len(existing_questions) + 1
+        new_questions = []
+        failed_count = 0
+        max_attempts = deficit * 3
+        attempt = 0
+
+        while len(new_questions) < deficit and attempt < max_attempts:
+            attempt += 1
+            doc_name = doc_names[attempt % len(doc_names)]
+            q_type = all_types[attempt % len(all_types)]
+            doc_data = document_contents[doc_name]
+            doc_content = doc_data["content"]
+            source_path = doc_data["source_path"]
+
+            logger.info(
+                f"Supplementing question {len(new_questions) + 1}/{deficit} "
+                f"(type={q_type}, doc={doc_name})..."
+            )
+
+            qa = self._generate_single_document_question(
+                doc_content, q_type, generator
+            )
+
+            if qa is not None:
+                qa["id"] = f"q{question_id:03d}"
+                qa["source_document"] = doc_name
+                qa["category"] = "document"
+
+                if q_type == "irrelevant":
+                    qa["source_files"] = []
+                    qa["source_chunks"] = []
+                    qa["expect_retrieval"] = False
+                elif q_type == "missing":
+                    qa["source_files"] = [source_path]
+                    qa["source_chunks"] = []
+                    qa["expect_no_answer"] = True
+                    qa["expect_retrieval"] = False
+                else:
+                    qa["source_files"] = [source_path]
+                    answer_text = qa.get("answer", "")
+                    qa["source_chunks"] = self._locate_answer_chunks(
+                        answer_text, source_path
+                    )
+
+                new_questions.append(qa)
+                question_id += 1
+            else:
+                failed_count += 1
+                logger.warning(
+                    f"Supplemental question failed, total failures: "
+                    f"{failed_count}/{attempt}"
+                )
+
+        if not new_questions:
+            logger.warning("Could not generate any supplemental questions")
+            return existing_test_set
+
+        all_questions = existing_questions + new_questions
+        quality_metrics = self._calculate_quality_metrics(all_questions)
+
+        existing_test_set["questions"] = all_questions
+        existing_test_set["quality_metrics"] = quality_metrics
+        existing_test_set["generation_config"]["num_questions"] = target_count
+
+        num_questions = target_count
+        filename = f"document_level_n{num_questions}"
+        self._save_test_set(meal_name, existing_test_set, filename)
+
+        logger.success(
+            f"Supplemented test set: {len(existing_questions)} + "
+            f"{len(new_questions)} = {len(all_questions)}/{target_count} "
+            f"questions for meal '{meal_name}'"
+        )
+
+        if len(all_questions) < target_count:
+            logger.warning(
+                f"Could only reach {len(all_questions)}/{target_count} "
+                f"questions after supplementation"
+            )
+
+        return existing_test_set
 
     def _load_full_documents(
         self, meal_config: MealConfig
