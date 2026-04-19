@@ -2,7 +2,7 @@ import json
 import math
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from anthropic import Anthropic
 from loguru import logger
