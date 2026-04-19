@@ -34,7 +34,13 @@ from src.sampler import SamplingConfig
 from src.test_generator import TestSetGenerator
 from src.token_tracker import TokenTracker
 from src.utils import get_llm_config, load_config, setup_logger
-from eval.metrics import calculate_hit_rate, calculate_mrr, calculate_ndcg
+from eval.metrics import (
+    calculate_hit_rate,
+    calculate_mrr,
+    calculate_ndcg,
+    calculate_context_precision,
+    calculate_context_recall,
+)
 from eval.experiment_reporter import ExperimentReporter
 
 
@@ -508,6 +514,8 @@ def prepare_index_for_variant(
 def evaluate_test_set(
     pipeline: RAGPipeline,
     test_set: Dict[str, Any],
+    llm_config: Optional[Dict[str, str]] = None,
+    llm_retrieval_metrics: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Evaluate a single test set against the pipeline.
@@ -515,6 +523,9 @@ def evaluate_test_set(
     Args:
         pipeline: Configured RAG pipeline.
         test_set: Test set dictionary with questions.
+        llm_config: Optional LLM configuration for LLM-based metrics.
+        llm_retrieval_metrics: Optional list of LLM-based retrieval metrics to calculate.
+            Supports "context_precision" and "context_recall".
 
     Returns:
         List of evaluation result dictionaries.
@@ -524,11 +535,15 @@ def evaluate_test_set(
 
     logger.info(f"Evaluating test set '{test_set_name}' ({len(questions)} questions)...")
 
+    if llm_retrieval_metrics is None:
+        llm_retrieval_metrics = []
+
     results = []
     for i, question_data in enumerate(questions, 1):
         question_id = question_data.get("id", f"q{i}")
         question_text = question_data.get("question", "")
         expected_sources = question_data.get("source_files", [])
+        ground_truth = question_data.get("answer", "")
 
         if not question_text:
             logger.warning(f"Question {question_id} has no text, skipping")
@@ -542,6 +557,7 @@ def evaluate_test_set(
             case_time = time.time() - case_start_time
 
             retrieved_sources = response.get("sources", [])
+            contexts = response.get("contexts", [])
 
             hit_rate = calculate_hit_rate(retrieved_sources, expected_sources)
             mrr = calculate_mrr(retrieved_sources, expected_sources)
@@ -565,10 +581,48 @@ def evaluate_test_set(
                 "token_usage": response.get("token_usage"),
             }
 
-            logger.success(
-                f"Question {question_id}: HR={hit_rate:.4f}, MRR={mrr:.4f}, "
-                f"NDCG={ndcg:.4f} ({case_time:.2f}s)"
-            )
+            llm_retrieval = {}
+            if llm_config and llm_retrieval_metrics and contexts:
+                if "context_precision" in llm_retrieval_metrics:
+                    try:
+                        cp_score = calculate_context_precision(
+                            question=question_text,
+                            expected_output=ground_truth,
+                            retrieval_context=contexts,
+                            api_key=llm_config["api_key"],
+                            base_url=llm_config["base_url"],
+                            model_name=llm_config["model_name"],
+                        )
+                        llm_retrieval["context_precision"] = cp_score
+                    except Exception as e:
+                        logger.warning(f"Failed to calculate context precision: {str(e)}")
+                        llm_retrieval["context_precision"] = None
+
+                if "context_recall" in llm_retrieval_metrics:
+                    try:
+                        cr_score = calculate_context_recall(
+                            question=question_text,
+                            ground_truth=ground_truth,
+                            retrieval_context=contexts,
+                            api_key=llm_config["api_key"],
+                            base_url=llm_config["base_url"],
+                            model_name=llm_config["model_name"],
+                        )
+                        llm_retrieval["context_recall"] = cr_score
+                    except Exception as e:
+                        logger.warning(f"Failed to calculate context recall: {str(e)}")
+                        llm_retrieval["context_recall"] = None
+
+            if llm_retrieval:
+                result["llm_retrieval"] = llm_retrieval
+
+            metric_parts = [f"HR={hit_rate:.4f}", f"MRR={mrr:.4f}", f"NDCG={ndcg:.4f}"]
+            if llm_retrieval:
+                if "context_precision" in llm_retrieval and llm_retrieval["context_precision"] is not None:
+                    metric_parts.append(f"CP={llm_retrieval['context_precision']:.4f}")
+                if "context_recall" in llm_retrieval and llm_retrieval["context_recall"] is not None:
+                    metric_parts.append(f"CR={llm_retrieval['context_recall']:.4f}")
+            logger.success(f"Question {question_id}: {', '.join(metric_parts)} ({case_time:.2f}s)")
 
         except Exception as e:
             case_time = time.time() - case_start_time
@@ -597,7 +651,8 @@ def compute_aggregate_metrics(results: List[Dict[str, Any]]) -> Dict[str, float]
         results: List of evaluation result dictionaries.
 
     Returns:
-        Dictionary containing average hit_rate, mrr, and ndcg.
+        Dictionary containing average hit_rate, mrr, ndcg, and optionally
+        context_precision and context_recall.
     """
     valid_results = [r for r in results if "retrieval" in r]
     if valid_results:
@@ -609,11 +664,31 @@ def compute_aggregate_metrics(results: List[Dict[str, Any]]) -> Dict[str, float]
         avg_mrr = 0.0
         avg_ndcg = 0.0
 
-    return {
+    metrics = {
         "avg_hit_rate": avg_hit_rate,
         "avg_mrr": avg_mrr,
         "avg_ndcg": avg_ndcg,
     }
+
+    llm_retrieval_results = [r for r in results if "llm_retrieval" in r and r["llm_retrieval"]]
+    if llm_retrieval_results:
+        cp_values = [
+            r["llm_retrieval"]["context_precision"]
+            for r in llm_retrieval_results
+            if "context_precision" in r["llm_retrieval"] and r["llm_retrieval"]["context_precision"] is not None
+        ]
+        if cp_values:
+            metrics["avg_context_precision"] = sum(cp_values) / len(cp_values)
+
+        cr_values = [
+            r["llm_retrieval"]["context_recall"]
+            for r in llm_retrieval_results
+            if "context_recall" in r["llm_retrieval"] and r["llm_retrieval"]["context_recall"] is not None
+        ]
+        if cr_values:
+            metrics["avg_context_recall"] = sum(cr_values) / len(cr_values)
+
+    return metrics
 
 
 def run_variant_evaluation(
@@ -710,8 +785,17 @@ def run_variant_evaluation(
 
         total_start_time = time.time()
         all_results = []
+
+        llm_config = get_llm_config(merged_config, llm_preset)
+        llm_retrieval_metrics = exp_config.evaluation.get("llm_retrieval_metrics", [])
+
         for test_set in test_sets:
-            results = evaluate_test_set(pipeline, test_set)
+            results = evaluate_test_set(
+                pipeline,
+                test_set,
+                llm_config=llm_config,
+                llm_retrieval_metrics=llm_retrieval_metrics,
+            )
             all_results.extend(results)
 
         total_time = time.time() - total_start_time
@@ -739,6 +823,8 @@ def run_variant_evaluation(
             f"Variant '{variant_name}' evaluation completed: "
             f"HR={metrics['avg_hit_rate']:.4f}, MRR={metrics['avg_mrr']:.4f}, "
             f"NDCG={metrics['avg_ndcg']:.4f}"
+            + (f", CP={metrics['avg_context_precision']:.4f}" if "avg_context_precision" in metrics else "")
+            + (f", CR={metrics['avg_context_recall']:.4f}" if "avg_context_recall" in metrics else "")
         )
 
         token_total = variant_tracker.get_total()

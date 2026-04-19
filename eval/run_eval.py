@@ -10,6 +10,8 @@ from eval.metrics import (
     calculate_ndcg,
     calculate_faithfulness,
     calculate_answer_relevancy,
+    calculate_context_precision,
+    calculate_context_recall,
 )
 from src.experiment import ExperimentConfig, load_experiment_config, merge_config
 from src.meal import MealManager, MealStatus
@@ -25,6 +27,7 @@ sys.path.insert(0, str(project_root))
 
 DEFAULT_RETRIEVAL_METRICS = ["hit_rate", "mrr", "ndcg"]
 DEFAULT_GENERATION_METRICS = ["faithfulness", "answer_relevancy"]
+DEFAULT_LLM_RETRIEVAL_METRICS = ["context_precision", "context_recall"]
 
 
 def run_evaluation(
@@ -35,6 +38,7 @@ def run_evaluation(
     meal_data_id: str = None,
     metrics_config: Optional[List[str]] = None,
     generation_metrics_config: Optional[List[str]] = None,
+    llm_retrieval_metrics_config: Optional[List[str]] = None,
     llm_config: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
     """Run evaluation on test data using the provided RAG pipeline.
@@ -49,6 +53,8 @@ def run_evaluation(
             Defaults to ["hit_rate", "mrr", "ndcg"] when None.
         generation_metrics_config: Optional list of generation metric names to calculate.
             Supports "faithfulness" and "answer_relevancy". Defaults to empty list.
+        llm_retrieval_metrics_config: Optional list of LLM-based retrieval metrics.
+            Supports "context_precision" and "context_recall". Defaults to empty list.
         llm_config: Optional LLM configuration for generation metrics.
             Must contain api_key, base_url, and model_name keys.
 
@@ -59,6 +65,8 @@ def run_evaluation(
         metrics_config = list(DEFAULT_RETRIEVAL_METRICS)
     if generation_metrics_config is None:
         generation_metrics_config = []
+    if llm_retrieval_metrics_config is None:
+        llm_retrieval_metrics_config = []
     test_data_path = Path(test_data_path)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -111,6 +119,7 @@ def run_evaluation(
                 contexts = response.get("contexts", [])
                 answer = response.get("answer", "")
                 question = test_case.get("question", "")
+                ground_truth = test_case.get("answer", "")
 
                 if "faithfulness" in generation_metrics_config:
                     try:
@@ -142,6 +151,43 @@ def run_evaluation(
                         logger.error(f"Failed to calculate answer relevancy: {str(e)}")
                         generation["answer_relevancy"] = None
 
+            llm_retrieval = {}
+            if llm_retrieval_metrics_config and llm_config and contexts:
+                question = test_case.get("question", "")
+                ground_truth = test_case.get("answer", "")
+
+                if "context_precision" in llm_retrieval_metrics_config:
+                    try:
+                        logger.info(f"Calculating context precision for test case {test_case['id']}")
+                        cp_score = calculate_context_precision(
+                            question=question,
+                            expected_output=ground_truth,
+                            retrieval_context=contexts,
+                            api_key=llm_config["api_key"],
+                            base_url=llm_config["base_url"],
+                            model_name=llm_config["model_name"],
+                        )
+                        llm_retrieval["context_precision"] = cp_score
+                    except Exception as e:
+                        logger.error(f"Failed to calculate context precision: {str(e)}")
+                        llm_retrieval["context_precision"] = None
+
+                if "context_recall" in llm_retrieval_metrics_config:
+                    try:
+                        logger.info(f"Calculating context recall for test case {test_case['id']}")
+                        cr_score = calculate_context_recall(
+                            question=question,
+                            ground_truth=ground_truth,
+                            retrieval_context=contexts,
+                            api_key=llm_config["api_key"],
+                            base_url=llm_config["base_url"],
+                            model_name=llm_config["model_name"],
+                        )
+                        llm_retrieval["context_recall"] = cr_score
+                    except Exception as e:
+                        logger.error(f"Failed to calculate context recall: {str(e)}")
+                        llm_retrieval["context_recall"] = None
+
             result = {
                 "id": test_case["id"],
                 "question": test_case["question"],
@@ -153,6 +199,9 @@ def run_evaluation(
 
             if generation:
                 result["generation"] = generation
+
+            if llm_retrieval:
+                result["llm_retrieval"] = llm_retrieval
 
             metric_parts = []
             if "hit_rate" in retrieval:
@@ -166,6 +215,11 @@ def run_evaluation(
                     metric_parts.append(f"FA={generation['faithfulness']:.2f}")
                 if "answer_relevancy" in generation and generation["answer_relevancy"] is not None:
                     metric_parts.append(f"AR={generation['answer_relevancy']:.2f}")
+            if llm_retrieval:
+                if "context_precision" in llm_retrieval and llm_retrieval["context_precision"] is not None:
+                    metric_parts.append(f"CP={llm_retrieval['context_precision']:.2f}")
+                if "context_recall" in llm_retrieval and llm_retrieval["context_recall"] is not None:
+                    metric_parts.append(f"CR={llm_retrieval['context_recall']:.2f}")
             metric_str = ", ".join(metric_parts)
             logger.success(
                 f"Test case {test_case['id']}: {metric_str} ({case_time:.2f}s)"
@@ -208,6 +262,18 @@ def run_evaluation(
             if values:
                 generation_metrics[f"avg_{metric_name}"] = sum(values) / len(values)
 
+    llm_retrieval_metrics = {}
+    valid_llm_retrieval_results = [r for r in results if "llm_retrieval" in r and r["llm_retrieval"]]
+    if valid_llm_retrieval_results:
+        for metric_name in llm_retrieval_metrics_config:
+            values = [
+                r["llm_retrieval"][metric_name]
+                for r in valid_llm_retrieval_results
+                if metric_name in r["llm_retrieval"] and r["llm_retrieval"][metric_name] is not None
+            ]
+            if values:
+                llm_retrieval_metrics[f"avg_{metric_name}"] = sum(values) / len(values)
+
     summary = {
         "timestamp": datetime.now().isoformat(),
         "meal_data_id": meal_data_id,
@@ -220,6 +286,9 @@ def run_evaluation(
 
     if generation_metrics:
         summary["generation_metrics"] = generation_metrics
+
+    if llm_retrieval_metrics:
+        summary["llm_retrieval_metrics"] = llm_retrieval_metrics
 
     output_file = output_dir / "baseline_report.json"
     with open(output_file, "w", encoding="utf-8") as f:
@@ -264,6 +333,16 @@ def print_summary(summary: Dict[str, Any]) -> None:
         }
         for key, value in summary["generation_metrics"].items():
             label = generation_label_map.get(key, key)
+            print(f"  {label}: {value:.4f}")
+
+    if summary.get("llm_retrieval_metrics"):
+        print("\nLLM Retrieval Metrics:")
+        llm_retrieval_label_map = {
+            "avg_context_precision": "Context Precision",
+            "avg_context_recall": "Context Recall",
+        }
+        for key, value in summary["llm_retrieval_metrics"].items():
+            label = llm_retrieval_label_map.get(key, key)
             print(f"  {label}: {value:.4f}")
 
     print("=" * 60)
