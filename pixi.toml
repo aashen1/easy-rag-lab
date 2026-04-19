@@ -90,6 +90,7 @@ pytest = ">=9.0.3, <10" # Testing framework
 ragas = ">=0.4.3, <0.5" # RAG evaluation
 langchain-anthropic = ">=1.4.0, <2"
 langchain-community = ">=0.4.1, <0.5"
+sentence-transformers = ">=5.4.1, <6"
 
 # ==============================
 # Web & Hugging Face
