@@ -300,6 +300,76 @@ class TestCalculateNDCG:
 
 
 @pytest.mark.unit
+class TestCalculateNDCGDeduplication:
+    """Tests for NDCG deduplication fix - ensures NDCG never exceeds 1.0."""
+
+    def test_duplicate_documents_should_not_exceed_one(self):
+        retrieved = ["doc1", "doc1", "doc1", "doc1", "doc1"]
+        expected = ["doc1"]
+        score = calculate_ndcg(retrieved, expected, k=5)
+        assert score == 1.0
+
+    def test_duplicate_with_mixed_results(self):
+        retrieved = ["doc1", "doc1", "doc2", "doc1", "doc2"]
+        expected = ["doc1", "doc2"]
+        score = calculate_ndcg(retrieved, expected, k=5)
+        assert score == 1.0
+        assert score <= 1.0
+
+    def test_duplicate_first_position_optimal(self):
+        retrieved = ["doc1", "doc1", "doc1"]
+        expected = ["doc1"]
+        score = calculate_ndcg(retrieved, expected, k=5)
+        assert score == 1.0
+
+    def test_duplicate_later_position(self):
+        retrieved = ["doc3", "doc1", "doc1", "doc1"]
+        expected = ["doc1"]
+        score = calculate_ndcg(retrieved, expected, k=5)
+        dcg = (2**1 - 1) / math.log2(3)
+        ideal_dcg = (2**1 - 1) / math.log2(2)
+        assert score == pytest.approx(dcg / ideal_dcg)
+        assert score <= 1.0
+
+    def test_all_duplicates_no_match(self):
+        retrieved = ["doc3", "doc3", "doc3", "doc3"]
+        expected = ["doc1", "doc2"]
+        score = calculate_ndcg(retrieved, expected, k=5)
+        assert score == 0.0
+
+    def test_partial_duplicates_with_match(self):
+        retrieved = ["doc1", "doc1", "doc3", "doc3"]
+        expected = ["doc1", "doc2"]
+        score = calculate_ndcg(retrieved, expected, k=5)
+        dcg = (2**1 - 1) / math.log2(2)
+        ideal_dcg = (2**1 - 1) / math.log2(2) + (2**1 - 1) / math.log2(3)
+        assert score == pytest.approx(dcg / ideal_dcg)
+        assert score <= 1.0
+
+    def test_multilevel_relevance_with_duplicates(self):
+        retrieved = ["doc1", "doc1", "doc2", "doc2"]
+        expected = ["doc1", "doc2"]
+        rel_scores = {"doc1": 3, "doc2": 1}
+        score = calculate_ndcg(retrieved, expected, k=5, relevance_scores=rel_scores)
+        assert score == 1.0
+        assert score <= 1.0
+
+    def test_large_k_with_duplicates(self):
+        retrieved = ["doc1"] * 100
+        expected = ["doc1"]
+        score = calculate_ndcg(retrieved, expected, k=100)
+        assert score == 1.0
+        assert score <= 1.0
+
+    def test_boundary_check_never_exceeds_one(self):
+        for num_duplicates in [1, 5, 10, 100]:
+            retrieved = ["doc1"] * num_duplicates
+            expected = ["doc1"]
+            score = calculate_ndcg(retrieved, expected, k=num_duplicates)
+            assert score <= 1.0, f"NDCG exceeded 1.0 with {num_duplicates} duplicates"
+
+
+@pytest.mark.unit
 class TestCalculateNDCGMultilevel:
 
     def test_binary_relevance_backward_compatibility(self):
