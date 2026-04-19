@@ -849,6 +849,7 @@ class TestSetGenerator:
                     elif q_type == "missing":
                         qa["source_files"] = [source_path]
                         qa["expect_no_answer"] = True
+                        qa["expect_retrieval"] = False
                     else:
                         qa["source_files"] = [source_path]
 
