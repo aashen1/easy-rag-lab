@@ -22,6 +22,7 @@ from src.experiment import (
     load_experiment_config,
     merge_config,
 )
+from src.generator import Generator
 from src.hybrid_retriever import HybridRetriever
 from src.meal import MealManager, MealStatus, compute_file_sha256
 from src.meal import (
@@ -783,6 +784,8 @@ def _collect_rag_samples(
                 "expected_sources": question_data.get("source_files", []),
                 "expected_answer": question_data.get("answer"),
                 "retrieved_sources": response.get("sources", []),
+                "chunk_ids": response.get("chunk_ids", []),
+                "question_type": question_data.get("question_type", "factual"),
                 "time_seconds": case_time,
                 "test_set": test_set_name,
                 "category": question_data.get("category"),
@@ -805,6 +808,8 @@ def _collect_rag_samples(
                 "expected_sources": question_data.get("source_files", []),
                 "expected_answer": question_data.get("answer"),
                 "retrieved_sources": [],
+                "chunk_ids": [],
+                "question_type": question_data.get("question_type", "factual"),
                 "time_seconds": case_time,
                 "test_set": test_set_name,
                 "category": question_data.get("category"),
@@ -1302,6 +1307,17 @@ def run_variant_evaluation(
         pipeline.indexer = indexer
 
         pipeline._setup_retrievers()
+
+        llm_config_merged = get_llm_config(merged_config, llm_preset)
+        pipeline.generator = Generator(
+            model_name=llm_config_merged["model_name"],
+            api_key=llm_config_merged["api_key"],
+            base_url=llm_config_merged["base_url"],
+            temperature=llm_config_merged["temperature"],
+            max_tokens=llm_config_merged["max_tokens"],
+            token_tracker=variant_tracker,
+            system_prompt=merged_config.get("generation", {}).get("system_prompt"),
+        )
 
         retrieval_method = merged_config.get("retrieval", {}).get("method", "vector")
         if retrieval_method in ("bm25", "hybrid") and pipeline.bm25_retriever is not None:
