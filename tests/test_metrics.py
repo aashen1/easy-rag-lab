@@ -544,10 +544,10 @@ class TestCalculateAnswerRelevancy:
                 api_key="test-key"
             )
 
-    @patch("eval.metrics.utils.Anthropic")
-    def test_successful_relevancy_calculation(self, mock_anthropic):
+    @patch("eval.metrics.generation._create_llm_client")
+    def test_successful_relevancy_calculation(self, mock_create_client):
         mock_client = MagicMock()
-        mock_anthropic.return_value = mock_client
+        mock_create_client.return_value = mock_client
 
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
@@ -563,10 +563,10 @@ class TestCalculateAnswerRelevancy:
         assert score == 1.0
         mock_client.messages.create.assert_called_once()
 
-    @patch("eval.metrics.utils.Anthropic")
-    def test_low_relevancy_calculation(self, mock_anthropic):
+    @patch("eval.metrics.generation._create_llm_client")
+    def test_low_relevancy_calculation(self, mock_create_client):
         mock_client = MagicMock()
-        mock_anthropic.return_value = mock_client
+        mock_create_client.return_value = mock_client
 
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
@@ -581,10 +581,10 @@ class TestCalculateAnswerRelevancy:
 
         assert score == 0.1
 
-    @patch("eval.metrics.utils.Anthropic")
-    def test_missing_overall_score_calculates_from_dimensions(self, mock_anthropic):
+    @patch("eval.metrics.generation._create_llm_client")
+    def test_missing_overall_score_calculates_from_dimensions(self, mock_create_client):
         mock_client = MagicMock()
-        mock_anthropic.return_value = mock_client
+        mock_create_client.return_value = mock_client
 
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
@@ -600,10 +600,10 @@ class TestCalculateAnswerRelevancy:
         expected_score = (4 + 4 + 3) / 15.0
         assert score == pytest.approx(expected_score)
 
-    @patch("eval.metrics.utils.Anthropic")
-    def test_score_clamped_to_range(self, mock_anthropic):
+    @patch("eval.metrics.generation._create_llm_client")
+    def test_score_clamped_to_range(self, mock_create_client):
         mock_client = MagicMock()
-        mock_anthropic.return_value = mock_client
+        mock_create_client.return_value = mock_client
 
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
@@ -618,10 +618,10 @@ class TestCalculateAnswerRelevancy:
 
         assert score == 1.0
 
-    @patch("eval.metrics.utils.Anthropic")
-    def test_negative_score_clamped_to_zero(self, mock_anthropic):
+    @patch("eval.metrics.generation._create_llm_client")
+    def test_negative_score_clamped_to_zero(self, mock_create_client):
         mock_client = MagicMock()
-        mock_anthropic.return_value = mock_client
+        mock_create_client.return_value = mock_client
 
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
@@ -636,10 +636,10 @@ class TestCalculateAnswerRelevancy:
 
         assert score == 0.0
 
-    @patch("eval.metrics.utils.Anthropic")
-    def test_llm_api_error_raises_exception(self, mock_anthropic):
+    @patch("eval.metrics.generation._create_llm_client")
+    def test_llm_api_error_raises_exception(self, mock_create_client):
         mock_client = MagicMock()
-        mock_anthropic.return_value = mock_client
+        mock_create_client.return_value = mock_client
         mock_client.messages.create.side_effect = Exception("API Error")
 
         with pytest.raises(Exception, match="Failed to calculate answer relevancy"):
@@ -649,10 +649,10 @@ class TestCalculateAnswerRelevancy:
                 api_key="test-api-key"
             )
 
-    @patch("eval.metrics.utils.Anthropic")
-    def test_custom_model_parameters(self, mock_anthropic):
+    @patch("eval.metrics.generation._create_llm_client")
+    def test_custom_model_parameters(self, mock_create_client):
         mock_client = MagicMock()
-        mock_anthropic.return_value = mock_client
+        mock_create_client.return_value = mock_client
 
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
@@ -679,10 +679,10 @@ class TestCalculateAnswerRelevancy:
 class TestCreateLLMClient:
     """Tests for _create_llm_client function."""
 
-    @patch("eval.metrics.utils.Anthropic")
-    def test_create_client_success(self, mock_anthropic):
+    @patch("src.utils.create_llm_client")
+    def test_create_client_success(self, mock_create_llm_client):
         mock_client = MagicMock()
-        mock_anthropic.return_value = mock_client
+        mock_create_llm_client.return_value = mock_client
 
         client = _create_llm_client(
             api_key="test-api-key",
@@ -690,20 +690,21 @@ class TestCreateLLMClient:
         )
 
         assert client == mock_client
-        mock_anthropic.assert_called_once()
+        mock_create_llm_client.assert_called_once()
 
-    @patch("eval.metrics.utils.Anthropic")
-    def test_create_client_with_custom_url(self, mock_anthropic):
+    @patch("src.utils.create_llm_client")
+    def test_create_client_with_custom_url(self, mock_create_llm_client):
         mock_client = MagicMock()
-        mock_anthropic.return_value = mock_client
+        mock_create_llm_client.return_value = mock_client
 
         _create_llm_client(
             api_key="test-key",
             base_url="https://custom.url/api"
         )
 
-        call_kwargs = mock_anthropic.call_args[1]
-        assert call_kwargs["base_url"] == "https://custom.url/api"
+        mock_create_llm_client.assert_called_once()
+        call_kwargs = mock_create_llm_client.call_args[1]
+        assert call_kwargs["llm_config"]["base_url"] == "https://custom.url/api"
 
 
 @pytest.mark.unit
