@@ -13,7 +13,7 @@
 | 类型 | 待处理 | 进行中 | 已完成 | 已延期 |
 |------|--------|--------|--------|--------|
 | Bug | 0 | 0 | 15 | 2 |
-| Feature | 10 | 0 | 18 | 0 |
+| Feature | 9 | 0 | 19 | 0 |
 | Refactor | 7 | 0 | 10 | 0 |
 | Optimization | 4 | 0 | 0 | 0 |
 | Investigation | 8 | 0 | 3 | 0 |
@@ -46,7 +46,7 @@
 | FEAT-013 | 部分评测支持 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 如仅评测 PDF→MD 环节，不停换提取策略对比 |
 | FEAT-014 | 透明版完整实验报告 | [TODO.md](../TODO.md) | 📋 待处理 | 大 | 含问题/答案/emb/recall/提示词/回复/指标计算过程 |
 | FEAT-015 | 更细粒度实验记录 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | token per chunk、文档分布、meal 分布、统计量 |
-| FEAT-016 | DATA_DIR 配置项支持 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 替代 mklink，系统级 RAG 数据源指定 |
+| FEAT-016 | DATA_DIR 配置项支持 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 替代 mklink，系统级 RAG 数据源指定 |
 | FEAT-017 | CI/CD 集成 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 学习并实施 CI/CD |
 | FEAT-018 | pre-commit 钩子 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 添加 pre-commit 配置 |
 | FEAT-019 | .trae 目录 plan/spec 文档定期归档机制 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | .trae/documents 和 .trae/specs 下文档需定期归档；IDE 可能对 .trae 目录有保护；与 inbox/TODO 归档机制高度类似 |
@@ -128,6 +128,7 @@
 | FEAT-007 | TestSet 独立管理系统 | 设计文档 | 2026-04-20 |
 | FEAT-009 | TODO 归档机制（TODO↔backlog 双向异步） | [TODO.md](../TODO.md) | 2026-04-21 |
 | FEAT-018 | pre-commit 钩子 → 已配置 ruff + trailing-whitespace + yaml + merge-conflict | [TODO.md](../TODO.md) | 2026-04-21 |
+| FEAT-016 | DATA_DIR 配置项支持 → load_config 自动解析 data/ 前缀路径 | [TODO.md](../TODO.md) | 2026-04-21 |
 | FEAT-DONE-001 | 文档系统重构 | [原 TODO.md](../TODO.md) | 2026-04-18 |
 | FEAT-DONE-002 | LLM 报告功能修复 | [原 TODO.md](../TODO.md) | 2026-04-17 |
 | FEAT-DONE-003 | Token 统计功能 | [原 TODO.md](../TODO.md) | 2026-04-17 |
