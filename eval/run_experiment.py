@@ -863,12 +863,15 @@ def _evaluate_with_builtin(
             question_id=question_id,
             question=sample["question"],
             answer=sample["answer"],
-            contexts=sample.get("retrieved_sources", []),
+            contexts=sample.get("contexts", []),
             expected_sources=sample.get("expected_sources"),
             expected_answer=sample.get("expected_answer"),
             llm_config=llm_config,
             retrieval_metrics=retrieval_metrics,
             generation_metrics=generation_metrics,
+            chunk_ids=sample.get("chunk_ids"),
+            question_type=sample.get("question_type"),
+            retrieved_sources=sample.get("retrieved_sources", []),
         )
 
         result = {
