@@ -13,8 +13,8 @@
 | 类型 | 待处理 | 进行中 | 已完成 | 已延期 |
 |------|--------|--------|--------|--------|
 | Bug | 0 | 0 | 15 | 2 |
-| Feature | 10 | 0 | 17 | 0 |
-| Refactor | 8 | 0 | 8 | 0 |
+| Feature | 11 | 0 | 17 | 0 |
+| Refactor | 9 | 0 | 8 | 0 |
 | Optimization | 4 | 0 | 0 | 0 |
 | Investigation | 9 | 0 | 2 | 0 |
 
@@ -49,6 +49,7 @@
 | FEAT-016 | DATA_DIR 配置项支持 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 替代 mklink，系统级 RAG 数据源指定 |
 | FEAT-017 | CI/CD 集成 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 学习并实施 CI/CD |
 | FEAT-018 | pre-commit 钩子 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 添加 pre-commit 配置 |
+| FEAT-019 | .trae 目录 plan/spec 文档定期归档机制 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | .trae/documents 和 .trae/specs 下文档需定期归档；IDE 可能对 .trae 目录有保护；与 inbox/TODO 归档机制高度类似 |
 
 ---
 
@@ -64,6 +65,7 @@
 | RF-008 | backlog issue 详细信息记录 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 参考 GitHub 做法，支持超链接引用详情 |
 | RF-009 | commit-rule 与 CLAUDE.md 渐进式披露 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 分离为 skill/rule，减少提示词长度 |
 | RF-010 | lint/ruff 配置 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 添加代码检查工具 |
+| RF-011 | docs 目录组织度维护 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 打扫卫生时考量 docs 目录组织度，恢复整洁度 |
 | RF-006 | TestSet 独立管理系统重构 | 设计文档 | ✅ 已完成 | 大 | 新增 TestSetManager，重构 prepare_test_sets，支持 on_missing 三种模式 |
 
 ---
