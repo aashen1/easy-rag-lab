@@ -1,0 +1,33 @@
+name: "baseline-5kpage"
+description: "取五千页PDF，看看结果是否变差"
+
+data:
+  meal: "5kpage"
+  create_if_missing:
+    sample_pages: 5000
+    seed: 3388
+
+test_sets:
+  - strategy: "document"
+    num_questions: 100
+
+variants:
+  - name: "baseline"
+    description: "基线配置 (chunk_size: 512, chunk_overlap: 0)"
+    config_overrides: {}
+
+evaluation:
+  llm_preset: "default"
+  llm_report: true
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+
+llm:
+  question_generation: "default"
+  answering: "default"
