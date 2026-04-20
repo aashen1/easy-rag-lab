@@ -665,6 +665,122 @@ class TestSetManager:
 
         return (False, "")
 
+    def resolve_test_set(
+        self,
+        meal_name: str,
+        test_set_config: Dict[str, Any],
+        meal_config: "MealConfig",
+        generator: Optional["TestSetGenerator"] = None,
+        llm_preset: str = "default",
+        token_tracker: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """
+        Resolve a test set according to the experiment configuration.
+
+        This method implements the on_missing routing logic:
+        - auto: Use/clean existing, or generate if not found
+        - clean_only: Use/clean existing, error if not found
+        - strict: Only use valid existing, error otherwise
+
+        Args:
+            meal_name: Name of the meal.
+            test_set_config: Test set configuration from experiment.
+            meal_config: MealConfig for the current meal.
+            generator: Optional TestSetGenerator for generating/supplementing.
+            llm_preset: LLM preset for generation.
+            token_tracker: Optional token tracker.
+
+        Returns:
+            Resolved test set dictionary.
+
+        Raises:
+            ValueError: If resolution fails according to on_missing policy.
+        """
+        name = test_set_config.get("name")
+        on_missing = test_set_config.get("on_missing", "auto")
+        generation_config = test_set_config.get("generation")
+
+        test_set_data = self.find_by_name(meal_name, name)
+
+        if test_set_data is not None:
+            is_valid, invalid_questions = self.validate_test_set(
+                test_set_data, meal_config
+            )
+
+            if is_valid:
+                return test_set_data
+
+            if on_missing == "strict":
+                raise ValueError(
+                    f'Test set "{name}" is invalid (some data sources missing) '
+                    f'and on_missing is "strict".'
+                )
+
+            user_defined = test_set_data["metadata"].get("user_defined", False)
+
+            if user_defined:
+                return self._clean_user_test_set(
+                    test_set_data,
+                    meal_config,
+                    invalid_questions,
+                    generator,
+                    llm_preset,
+                    token_tracker,
+                )
+            else:
+                return self._clean_machine_test_set(
+                    test_set_data,
+                    meal_config,
+                    invalid_questions,
+                    generation_config,
+                    generator,
+                    llm_preset,
+                    token_tracker,
+                )
+
+        if on_missing == "clean_only":
+            raise ValueError(
+                f'Test set "{name}" not found and on_missing is "clean_only". '
+                f'Please create the test set first or change on_missing to "auto".'
+            )
+
+        if on_missing == "strict":
+            raise ValueError(
+                f'Test set "{name}" not found and on_missing is "strict".'
+            )
+
+        if generator is None:
+            raise ValueError(
+                f'Test set "{name}" not found and no generator provided for auto generation.'
+            )
+
+        if generation_config is not None:
+            strategy = generation_config.get("strategy", "document")
+            num_questions = generation_config.get("num_questions", 20)
+            logger.info(
+                f"Generating test set '{name}' with strategy={strategy}, "
+                f"num_questions={num_questions}"
+            )
+            return generator.generate_document_based_questions(
+                meal_name=meal_name,
+                num_questions=num_questions,
+                name=name,
+                llm_preset=llm_preset,
+                token_tracker=token_tracker,
+            )
+
+        logger.info(
+            f"Generating test set '{name}' with defaults (10 document questions) - "
+            f"no generation config provided"
+        )
+        return generator.generate_document_based_questions(
+            meal_name=meal_name,
+            num_questions=10,
+            name=name,
+            llm_preset=llm_preset,
+            token_tracker=token_tracker,
+        )
+
     def _clean_machine_test_set(
         self,
         test_set_data: Dict[str, Any],

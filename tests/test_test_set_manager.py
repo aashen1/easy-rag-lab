@@ -1495,3 +1495,331 @@ class TestCleanMachineTestSet:
         assert result["metadata"]["meal_id"] == "new_meal_id"
         assert result["metadata"]["audit_log"][0]["removed_count"] == 0
         assert result["metadata"]["audit_log"][0]["added_count"] == 0
+
+
+class TestResolveTestSet:
+    @pytest.fixture
+    def env(self, tmp_path):
+        config = _make_config(tmp_path)
+        manager = TestSetManager(config)
+        return manager, config
+
+    def test_auto_mode_valid_test_set_found_returned_directly(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(
+            data_id="matching_id",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+        _create_meal_dir(config, meal_config.name)
+        test_set_data = {
+            "metadata": {
+                "name": "valid_set",
+                "meal_id": "matching_id",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+                "user_defined": False,
+            },
+            "questions": [
+                {"id": 1, "question": "Q1", "source_files": ["reports/report_0.pdf"]},
+            ],
+        }
+        manager.save_test_set(meal_config.name, test_set_data)
+        test_set_config = {"name": "valid_set", "on_missing": "auto"}
+        result = manager.resolve_test_set(
+            meal_name=meal_config.name,
+            test_set_config=test_set_config,
+            meal_config=meal_config,
+        )
+        assert result["metadata"]["name"] == "valid_set"
+        assert len(result["questions"]) == 1
+
+    def test_auto_mode_invalid_machine_test_set_cleaned_and_returned(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(
+            data_id="current_meal",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+        _create_meal_dir(config, meal_config.name)
+        test_set_data = {
+            "metadata": {
+                "name": "machine_set",
+                "meal_id": "old_meal_id",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+                "user_defined": False,
+                "generation": {"strategy": "document", "num_questions": 5},
+                "audit_log": [],
+            },
+            "questions": [
+                {"id": 1, "question": "Q1", "source_files": ["reports/report_0.pdf"]},
+                {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]},
+            ],
+        }
+        manager.save_test_set(meal_config.name, test_set_data)
+        test_set_config = {"name": "machine_set", "on_missing": "auto"}
+        result = manager.resolve_test_set(
+            meal_name=meal_config.name,
+            test_set_config=test_set_config,
+            meal_config=meal_config,
+        )
+        assert result["metadata"]["name"] == "machine_set"
+        assert result["metadata"]["meal_id"] == "current_meal"
+        assert len(result["questions"]) == 1
+
+    def test_auto_mode_invalid_user_test_set_cleaned_and_returned(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(
+            data_id="current_meal",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+        _create_meal_dir(config, meal_config.name)
+        test_set_data = {
+            "metadata": {
+                "name": "user_set",
+                "meal_id": "old_meal_id",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+                "user_defined": True,
+                "invalid_policy": "trim",
+                "audit_log": [],
+            },
+            "questions": [
+                {"id": 1, "question": "Q1", "source_files": ["reports/report_0.pdf"]},
+                {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]},
+            ],
+        }
+        manager.save_test_set(meal_config.name, test_set_data)
+        test_set_config = {"name": "user_set", "on_missing": "auto"}
+        result = manager.resolve_test_set(
+            meal_name=meal_config.name,
+            test_set_config=test_set_config,
+            meal_config=meal_config,
+        )
+        assert result["metadata"]["name"] == "user_set"
+        assert len(result["questions"]) == 1
+
+    def test_auto_mode_not_found_with_generation_config_generated(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(
+            data_id="current_meal",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+        _create_meal_dir(config, meal_config.name)
+
+        class MockGenerator:
+            def generate_document_based_questions(
+                self, meal_name, num_questions, name, llm_preset, token_tracker
+            ):
+                return {
+                    "metadata": {
+                        "name": name,
+                        "meal_id": "current_meal",
+                        "created_at": "2026-04-20T10:00:00",
+                        "updated_at": "2026-04-20T10:00:00",
+                        "generation": {"strategy": "document", "num_questions": num_questions},
+                    },
+                    "questions": [
+                        {"id": i, "question": f"Q{i}"} for i in range(num_questions)
+                    ],
+                }
+
+        test_set_config = {
+            "name": "new_set",
+            "on_missing": "auto",
+            "generation": {"strategy": "document", "num_questions": 5},
+        }
+        result = manager.resolve_test_set(
+            meal_name=meal_config.name,
+            test_set_config=test_set_config,
+            meal_config=meal_config,
+            generator=MockGenerator(),
+        )
+        assert result["metadata"]["name"] == "new_set"
+        assert len(result["questions"]) == 5
+
+    def test_auto_mode_not_found_without_generation_config_generated_with_defaults(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(
+            data_id="current_meal",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+        _create_meal_dir(config, meal_config.name)
+
+        class MockGenerator:
+            def generate_document_based_questions(
+                self, meal_name, num_questions, name, llm_preset, token_tracker
+            ):
+                return {
+                    "metadata": {
+                        "name": name,
+                        "meal_id": "current_meal",
+                        "created_at": "2026-04-20T10:00:00",
+                        "updated_at": "2026-04-20T10:00:00",
+                        "generation": {"strategy": "document", "num_questions": num_questions},
+                    },
+                    "questions": [
+                        {"id": i, "question": f"Q{i}"} for i in range(num_questions)
+                    ],
+                }
+
+        test_set_config = {
+            "name": "default_set",
+            "on_missing": "auto",
+        }
+        result = manager.resolve_test_set(
+            meal_name=meal_config.name,
+            test_set_config=test_set_config,
+            meal_config=meal_config,
+            generator=MockGenerator(),
+        )
+        assert result["metadata"]["name"] == "default_set"
+        assert len(result["questions"]) == 10
+
+    def test_clean_only_mode_valid_test_set_found_returned_directly(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(
+            data_id="matching_id",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+        _create_meal_dir(config, meal_config.name)
+        test_set_data = {
+            "metadata": {
+                "name": "valid_set",
+                "meal_id": "matching_id",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+            },
+            "questions": [
+                {"id": 1, "question": "Q1", "source_files": ["reports/report_0.pdf"]},
+            ],
+        }
+        manager.save_test_set(meal_config.name, test_set_data)
+        test_set_config = {"name": "valid_set", "on_missing": "clean_only"}
+        result = manager.resolve_test_set(
+            meal_name=meal_config.name,
+            test_set_config=test_set_config,
+            meal_config=meal_config,
+        )
+        assert result["metadata"]["name"] == "valid_set"
+
+    def test_clean_only_mode_invalid_test_set_cleaned_and_returned(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(
+            data_id="current_meal",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+        _create_meal_dir(config, meal_config.name)
+        test_set_data = {
+            "metadata": {
+                "name": "machine_set",
+                "meal_id": "old_meal_id",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+                "user_defined": False,
+                "generation": {"strategy": "document", "num_questions": 5},
+                "audit_log": [],
+            },
+            "questions": [
+                {"id": 1, "question": "Q1", "source_files": ["reports/report_0.pdf"]},
+                {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]},
+            ],
+        }
+        manager.save_test_set(meal_config.name, test_set_data)
+        test_set_config = {"name": "machine_set", "on_missing": "clean_only"}
+        result = manager.resolve_test_set(
+            meal_name=meal_config.name,
+            test_set_config=test_set_config,
+            meal_config=meal_config,
+        )
+        assert result["metadata"]["name"] == "machine_set"
+        assert len(result["questions"]) == 1
+
+    def test_clean_only_mode_not_found_raises_value_error(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(
+            data_id="current_meal",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+        _create_meal_dir(config, meal_config.name)
+        test_set_config = {"name": "nonexistent", "on_missing": "clean_only"}
+        with pytest.raises(ValueError) as exc_info:
+            manager.resolve_test_set(
+                meal_name=meal_config.name,
+                test_set_config=test_set_config,
+                meal_config=meal_config,
+            )
+        assert "not found" in str(exc_info.value)
+        assert "clean_only" in str(exc_info.value)
+
+    def test_strict_mode_valid_test_set_found_returned_directly(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(
+            data_id="matching_id",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+        _create_meal_dir(config, meal_config.name)
+        test_set_data = {
+            "metadata": {
+                "name": "valid_set",
+                "meal_id": "matching_id",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+            },
+            "questions": [
+                {"id": 1, "question": "Q1", "source_files": ["reports/report_0.pdf"]},
+            ],
+        }
+        manager.save_test_set(meal_config.name, test_set_data)
+        test_set_config = {"name": "valid_set", "on_missing": "strict"}
+        result = manager.resolve_test_set(
+            meal_name=meal_config.name,
+            test_set_config=test_set_config,
+            meal_config=meal_config,
+        )
+        assert result["metadata"]["name"] == "valid_set"
+
+    def test_strict_mode_invalid_test_set_raises_value_error(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(
+            data_id="current_meal",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+        _create_meal_dir(config, meal_config.name)
+        test_set_data = {
+            "metadata": {
+                "name": "invalid_set",
+                "meal_id": "old_meal_id",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+            },
+            "questions": [
+                {"id": 1, "question": "Q1", "source_files": ["missing.pdf"]},
+            ],
+        }
+        manager.save_test_set(meal_config.name, test_set_data)
+        test_set_config = {"name": "invalid_set", "on_missing": "strict"}
+        with pytest.raises(ValueError) as exc_info:
+            manager.resolve_test_set(
+                meal_name=meal_config.name,
+                test_set_config=test_set_config,
+                meal_config=meal_config,
+            )
+        assert "invalid" in str(exc_info.value).lower()
+        assert "strict" in str(exc_info.value)
+
+    def test_strict_mode_not_found_raises_value_error(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(
+            data_id="current_meal",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+        _create_meal_dir(config, meal_config.name)
+        test_set_config = {"name": "nonexistent", "on_missing": "strict"}
+        with pytest.raises(ValueError) as exc_info:
+            manager.resolve_test_set(
+                meal_name=meal_config.name,
+                test_set_config=test_set_config,
+                meal_config=meal_config,
+            )
+        assert "not found" in str(exc_info.value)
+        assert "strict" in str(exc_info.value)
