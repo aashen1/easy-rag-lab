@@ -335,6 +335,8 @@ class BuiltinEvaluator(BaseEvaluator):
                 expected_chunks=sample.get("expected_chunks"),
                 equivalence_groups=sample.get("equivalence_groups"),
                 expect_retrieval=sample.get("expect_retrieval", True),
+                retrieved_sources=sample.get("retrieved_sources"),
+                question_type=sample.get("question_type"),
             )
             results.append(result)
         return results
