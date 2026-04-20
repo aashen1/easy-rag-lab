@@ -125,11 +125,67 @@
 - backlog.md 中的条目引用来源文档，便于追溯上下文
 - 完成后更新状态，保留历史记录
 
+### TODO ↔ Backlog 双向异步机制
+
+`TODO.md` 和 `docs/backlog.md` 构成双文档 issue 追踪体系：
+
+| 文档 | 管理者 | 性质 | 内容 |
+|------|--------|------|------|
+| `TODO.md` | 人类 | 随笔式待办笔记 | 开发者随时记录的改进思路 |
+| `docs/backlog.md` | AI | 结构化 issue 追踪 | 按 Bug/Feature/Refactor/Optimization/Investigation 分类的正式 issue |
+
+#### 归档流程（单向：TODO → backlog）
+
+```
+人类在 TODO.md 写下新 issue（- [ ] 格式）
+    ↓
+AI 检测到未归档的 issue
+    ↓
+分类 + 分配 ID → 写入 backlog.md
+    ↓
+在 TODO.md 原条目后追加归档时间戳：📋 YYYY-MM-DD 归档为 [RF-007]
+（不删除原内容，不打钩，不移动位置）
+```
+
+#### 完成同步（反向：backlog → TODO）
+
+```
+backlog.md 中某 issue 标记为 ✅ 已完成
+    ↓
+下次归档检查时，AI 发现 TODO.md 中对应条目已归档但未打钩
+    ↓
+打钩 + 追加完成时间戳：✅ YYYY-MM-DD 该issue已确认完成
+    ↓
+将条目移动到对应完成日期的标题下
+```
+
+#### TODO.md 条目状态标记
+
+| 状态 | 标记格式 | 含义 |
+|------|---------|------|
+| 新建 | `- [ ] 描述内容` | 人类刚写，AI 尚未归档 |
+| 已归档 | `- [ ] 描述内容 📋 2026-04-21 归档为 [RF-007]` | AI 已归入 backlog |
+| 已完成 | `- [x] 描述内容 📋 2026-04-21 归档为 [RF-007] ✅ 2026-04-22 该issue已确认完成` | backlog 已完成，同步回 TODO |
+
+#### 触发方式
+
+- **自动触发**：每次对话开始时，AI 检查 TODO.md 是否有未归档 issue
+- **手动触发**：用户说"打扫卫生""归档TODO"等指令
+
+#### 日期标题结构
+
+每个日期标题下包含 summary 和 verbose 两个子节：
+
+- **verbose**：人类原始表述 + AI 追加的时间戳
+- **summary**：AI 根据 verbose 生成的简洁摘要
+
 ### ID 命名规范
 
 - Bug: `BUG-NNN`
 - Feature: `FEAT-NNN`
 - Refactor: `RF-NNN`
+- Optimization: `OPT-NNN`
+- Investigation: `INV-NNN`
 
 ---
 
