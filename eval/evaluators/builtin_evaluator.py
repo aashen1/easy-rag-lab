@@ -106,6 +106,8 @@ class BuiltinEvaluator(BaseEvaluator):
         expected_chunks: Optional[List[str]] = None,
         equivalence_groups: Optional[Dict[str, List[str]]] = None,
         expect_retrieval: bool = True,
+        retrieved_sources: Optional[List[str]] = None,
+        question_type: Optional[str] = None,
     ) -> EvaluationResult:
         """
         Evaluate a single sample using builtin metrics.
@@ -114,7 +116,10 @@ class BuiltinEvaluator(BaseEvaluator):
             question_id: Unique identifier for the question.
             question: The question text.
             answer: The generated answer.
-            contexts: List of retrieved context strings.
+            contexts: List of retrieved context strings (text content).
+                Used for generation metrics (faithfulness, context_precision,
+                context_recall). When retrieved_sources is not provided, also
+                used as fallback for retrieval metrics.
             expected_sources: Optional list of expected source documents.
             expected_answer: Optional expected answer for reference.
             llm_config: Optional LLM configuration for generation metrics.
@@ -129,6 +134,12 @@ class BuiltinEvaluator(BaseEvaluator):
                 equivalent file paths for dedup normalization.
             expect_retrieval: Whether the question expects retrieval results.
                 Defaults to True. Set to False for irrelevant questions.
+            retrieved_sources: Optional list of retrieved source file paths.
+                Used for retrieval metrics (hit_rate, mrr, ndcg, dedup, FPR).
+                When not provided, falls back to contexts for backward
+                compatibility.
+            question_type: Optional question type string (e.g., 'factual',
+                'irrelevant'). Used for logging and result metadata.
 
         Returns:
             EvaluationResult containing the evaluation scores.
@@ -139,6 +150,8 @@ class BuiltinEvaluator(BaseEvaluator):
         if generation_metrics is None and llm_config:
             generation_metrics = self._generation_metrics
 
+        sources_for_retrieval = retrieved_sources if retrieved_sources is not None else contexts
+
         retrieval_results = {}
         generation_results = {}
         error = None
@@ -147,17 +160,17 @@ class BuiltinEvaluator(BaseEvaluator):
             if expected_sources and expect_retrieval:
                 if "hit_rate" in retrieval_metrics:
                     retrieval_results["hit_rate"] = calculate_hit_rate(
-                        retrieved_sources=contexts,
+                        retrieved_sources=sources_for_retrieval,
                         expected_sources=expected_sources,
                     )
                 if "mrr" in retrieval_metrics:
                     retrieval_results["mrr"] = calculate_mrr(
-                        retrieved_sources=contexts,
+                        retrieved_sources=sources_for_retrieval,
                         expected_sources=expected_sources,
                     )
                 if "ndcg" in retrieval_metrics:
                     retrieval_results["ndcg"] = calculate_ndcg(
-                        retrieved_sources=contexts,
+                        retrieved_sources=sources_for_retrieval,
                         expected_sources=expected_sources,
                     )
 
@@ -177,10 +190,10 @@ class BuiltinEvaluator(BaseEvaluator):
 
             if expected_sources and expect_retrieval:
                 if equivalence_groups:
-                    norm_retrieved = [normalize_source_with_equivalence(s, equivalence_groups) for s in contexts]
+                    norm_retrieved = [normalize_source_with_equivalence(s, equivalence_groups) for s in sources_for_retrieval]
                     norm_expected = [normalize_source_with_equivalence(s, equivalence_groups) for s in expected_sources]
                 else:
-                    norm_retrieved = contexts
+                    norm_retrieved = sources_for_retrieval
                     norm_expected = expected_sources
 
                 if "dedup_hit_rate" in retrieval_metrics:
@@ -199,7 +212,7 @@ class BuiltinEvaluator(BaseEvaluator):
             if not expect_retrieval and not expected_sources:
                 if "false_positive_rate" in retrieval_metrics:
                     retrieval_results["false_positive_rate"] = calculate_false_positive_rate(
-                        contexts, k=5
+                        sources_for_retrieval, k=5
                     )
 
             if llm_config and contexts:
