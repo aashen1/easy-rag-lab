@@ -701,7 +701,9 @@ class ExperimentReporter:
         lines.append("### Retrieval Performance Analysis")
         lines.append("")
 
-        if best_hr >= 0.8:
+        if best_hr >= 0.95:
+            hr_assessment = "⚠️ WARNING: Hit rate is unusually high (>0.95). This may indicate test set leakage or overly broad ground truth. Please verify the test set quality."
+        elif best_hr >= 0.8:
             hr_assessment = "Excellent retrieval performance."
         elif best_hr >= 0.6:
             hr_assessment = "Good retrieval performance with room for improvement."

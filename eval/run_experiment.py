@@ -254,6 +254,42 @@ def verify_experiment_assets(
     return result
 
 
+def collect_environment_info() -> Dict[str, Any]:
+    """Collect environment version information for reproducibility.
+
+    Returns:
+        Dictionary containing environment version information.
+    """
+    env_info = {
+        "timestamp": datetime.now().isoformat(),
+    }
+
+    try:
+        import platform
+        env_info["os"] = platform.platform()
+        env_info["python_version"] = platform.python_version()
+    except Exception:
+        pass
+
+    try:
+        import pkg_resources
+        key_packages = [
+            "torch", "transformers", "qdrant-client", "langchain",
+            "langchain-community", "pymupdf", "pymupdf4llllm",
+            "sentence-transformers", "rank-bm25", "loguru",
+        ]
+        installed = {}
+        for pkg in pkg_resources.working_set:
+            if pkg.key.lower() in key_packages:
+                installed[pkg.key] = pkg.version
+        if installed:
+            env_info["key_packages"] = installed
+    except Exception:
+        pass
+
+    return env_info
+
+
 def prepare_meal(
     system_config: Dict[str, Any],
     exp_config: ExperimentConfig,
@@ -695,7 +731,8 @@ def evaluate_test_set(
     Returns:
         List of evaluation result dictionaries.
     """
-    test_set_name = test_set.get("name", "unknown")
+    metadata = test_set.get("metadata", {})
+    test_set_name = test_set.get("name") or metadata.get("name") or "unknown"
     questions = test_set.get("questions", [])
 
     logger.info(f"Evaluating test set '{test_set_name}' ({len(questions)} questions)...")
@@ -1164,6 +1201,14 @@ def run_experiment(
     exp_manager = ExperimentManager(system_config)
     exp_dir = exp_manager.create_experiment_dir(exp_config)
 
+    experiment_log_path = exp_dir / "experiment.log"
+    experiment_log_handler = logger.add(
+        str(experiment_log_path),
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
+        level="INFO",
+        encoding="utf-8",
+    )
+
     logger.info(f"Experiment directory: {exp_dir}")
 
     try:
@@ -1182,12 +1227,15 @@ def run_experiment(
 
         test_set_snapshots = []
         for test_set in test_sets:
+            metadata = test_set.get("metadata", {})
+            generation = metadata.get("generation", {})
             test_set_snapshots.append({
-                "name": test_set.get("name"),
-                "strategy": test_set.get("strategy"),
+                "name": test_set.get("name") or metadata.get("name"),
+                "strategy": test_set.get("strategy") or generation.get("strategy"),
                 "num_questions": len(test_set.get("questions", [])),
-                "created_at": test_set.get("created_at"),
-                "meal_data_id": test_set.get("meal_data_id"),
+                "created_at": test_set.get("created_at") or metadata.get("created_at"),
+                "meal_data_id": test_set.get("meal_data_id") or metadata.get("meal_id"),
+                "questions": test_set.get("questions", []),
             })
 
         config_snapshot = {
@@ -1196,6 +1244,7 @@ def run_experiment(
             "evaluation": exp_config.evaluation,
             "llm": exp_config.llm,
             "system_config": sanitize_config(system_config),
+            "environment": collect_environment_info(),
         }
 
         exp_manager.save_snapshots(
