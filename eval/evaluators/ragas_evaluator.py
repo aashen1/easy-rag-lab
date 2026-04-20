@@ -66,7 +66,18 @@ class RagasEvaluator(BaseEvaluator):
         )
 
     def _create_llm(self, llm_config: Dict[str, str]) -> Any:
-        """Create RAGAS-compatible LLM using LangchainLLMWrapper.
+        """
+        Create RAGAS-compatible LLM using LangchainLLMWrapper.
+
+        Uses ChatAnthropic with api_key='dummy' and the real key passed
+        via the Authorization: Bearer header, matching the pattern used
+        by src.llm_client.create_anthropic_client. This is required because
+        the LongCat API proxy expects the key in the Authorization header
+        rather than the x-api-key header that the Anthropic SDK uses.
+
+        The LangchainLLMWrapper preserves these custom headers through
+        to the actual HTTP calls, unlike llm_factory + instructor which
+        strips them during client patching.
 
         Args:
             llm_config: Dictionary containing api_key, base_url, model_name.

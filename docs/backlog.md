@@ -12,11 +12,11 @@
 
 | 类型 | 待处理 | 进行中 | 已完成 | 已延期 |
 |------|--------|--------|--------|--------|
-| Bug | 0 | 0 | 15 | 2 |
-| Feature | 10 | 0 | 17 | 0 |
-| Refactor | 8 | 0 | 8 | 0 |
+| Bug | 1 | 0 | 15 | 2 |
+| Feature | 9 | 0 | 19 | 0 |
+| Refactor | 8 | 0 | 10 | 0 |
 | Optimization | 4 | 0 | 0 | 0 |
-| Investigation | 9 | 0 | 2 | 0 |
+| Investigation | 9 | 0 | 3 | 0 |
 
 ---
 
@@ -28,6 +28,7 @@
 |----|------|------|------|------|
 | BUG-001 | 测试数据占位符未填充 | [v0.1.5 code-review](reviews/v0.1.5/code-review.md) | ⏳ 已延期 | 需人工从 PDF 查阅填入 |
 | BUG-003 | NDCG 分级相关性 | [v0.1.5 code-review](reviews/v0.1.5/code-review.md) | ⏳ 已延期 | 当前阶段无明确收益 |
+| BUG-017 | pytest tmp 目录配置导致 FileExistsError | [TODO.md](../TODO.md) | 📋 待处理 | 从 %TEMP% 改为项目目录后引入隐患 |
 
 ---
 
@@ -46,9 +47,10 @@
 | FEAT-013 | 部分评测支持 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 如仅评测 PDF→MD 环节，不停换提取策略对比 |
 | FEAT-014 | 透明版完整实验报告 | [TODO.md](../TODO.md) | 📋 待处理 | 大 | 含问题/答案/emb/recall/提示词/回复/指标计算过程 |
 | FEAT-015 | 更细粒度实验记录 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | token per chunk、文档分布、meal 分布、统计量 |
-| FEAT-016 | DATA_DIR 配置项支持 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 替代 mklink，系统级 RAG 数据源指定 |
+| FEAT-016 | DATA_DIR 配置项支持 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 替代 mklink，系统级 RAG 数据源指定 |
 | FEAT-017 | CI/CD 集成 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 学习并实施 CI/CD |
-| FEAT-018 | pre-commit 钩子 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 添加 pre-commit 配置 |
+| FEAT-018 | pre-commit 钩子 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 添加 pre-commit 配置 |
+| FEAT-019 | .trae 目录 plan/spec 文档定期归档机制 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | .trae/documents 和 .trae/specs 下文档需定期归档；IDE 可能对 .trae 目录有保护；与 inbox/TODO 归档机制高度类似 |
 
 ---
 
@@ -59,11 +61,13 @@
 | RF-001 | CLI 输出规范化（172 处 print） | [v0.1.5 code-review](reviews/v0.1.5/code-review.md) | 📋 待处理 | 中 | 替换为 loguru 会改变输出格式 |
 | RF-002 | 项目结构整理（根目录 .py 文件） | [原 TODO.md](../TODO.md) | 📋 待处理 | 小 | 需评估影响范围 |
 | RF-004 | 硬编码配置值提取到 config.yaml | v0.1.7 合并验收 | 📋 待处理 | 中 | metrics.py/experiment_reporter.py/test_generator.py 中模型名、API URL、max_tokens、temperature 硬编码 |
-| RF-005 | Anthropic 客户端创建统一抽象 | v0.1.7 合并验收 | 📋 待处理 | 小 | metrics.py calculate_answer_relevancy 重复创建客户端，api_key="dummy" 模式散布多处 |
+| RF-005 | Anthropic 客户端创建统一抽象 | v0.1.7 合并验收 | ✅ 已完成 | 小 | 提取 create_anthropic_client 到 src/llm_client.py，4处→1处 |
 | RF-007 | exp_configs 版本维护机制沉淀 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 随版本演进清洗模板，考虑沉淀为 skill 或系统提示词 |
 | RF-008 | backlog issue 详细信息记录 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 参考 GitHub 做法，支持超链接引用详情 |
 | RF-009 | commit-rule 与 CLAUDE.md 渐进式披露 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 分离为 skill/rule，减少提示词长度 |
-| RF-010 | lint/ruff 配置 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 添加代码检查工具 |
+| RF-010 | lint/ruff 配置 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 添加代码检查工具 |
+| RF-011 | docs 目录组织度维护 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 打扫卫生时考量 docs 目录组织度，恢复整洁度 |
+| RF-012 | 旧格式 test_sets DeprecationWarning 清理 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 测试中大量旧格式警告，后续版本逐步清理 |
 | RF-006 | TestSet 独立管理系统重构 | 设计文档 | ✅ 已完成 | 大 | 新增 TestSetManager，重构 prepare_test_sets，支持 on_missing 三种模式 |
 
 ---
@@ -89,10 +93,11 @@
 | INV-005 | 05-open-source-readiness 核实 | [TODO.md](../TODO.md) | 📋 待处理 | 核实开源准备度检查清单 |
 | INV-006 | golden test 是否基于老策略 | [TODO.md](../TODO.md) | 📋 待处理 | 需确认是否需要重做 |
 | INV-007 | 评测系统可靠性全面审查 | [TODO.md](../TODO.md) | 📋 待处理 | 从一个 PDF 和一个问题开始精调 |
-| INV-008 | LLM 报告假设性问题类型提示词更新 | [TODO.md](../TODO.md) | 📋 待处理 | 3.1 节提示词仍为旧策略分析方法 |
+| INV-008 | LLM 报告假设性问题类型提示词更新 | [TODO.md](../TODO.md) | ✅ 已完成 | 3.1 节提示词仍为旧策略分析方法 |
 | INV-009 | 问题集扩大与指标收敛趋势 | [TODO.md](../TODO.md) | 📋 待处理 | 等 v0.1.9 发版确认数据有效性后推进 |
 | INV-010 | 元数据增强改善 chunk 命中 | [TODO.md](../TODO.md) | 📋 待处理 | PDF 页码 + MD 标题层级，需入库对话记录并实装 |
 | INV-011 | 开源许可证评估（Apache 2.0） | [TODO.md](../TODO.md) | 📋 待处理 | 了解 Apache 2.0 及自动化标记源文件 |
+| INV-012 | 测试体系深度审查（883条是否过多） | [TODO.md](../TODO.md) | 📋 待处理 | 排查过度测试、重复测试、不合理测试、缺失测试、无意义测试 |
 
 ---
 
@@ -125,6 +130,8 @@
 | FEAT-006 | 重写问题生成策略，与 chunk 解耦，基于整个 MD | [原 TODO.md](../TODO.md) | 2026-04-18 |
 | FEAT-007 | TestSet 独立管理系统 | 设计文档 | 2026-04-20 |
 | FEAT-009 | TODO 归档机制（TODO↔backlog 双向异步） | [TODO.md](../TODO.md) | 2026-04-21 |
+| FEAT-018 | pre-commit 钩子 → 已配置 ruff + trailing-whitespace + yaml + merge-conflict | [TODO.md](../TODO.md) | 2026-04-21 |
+| FEAT-016 | DATA_DIR 配置项支持 → load_config 自动解析 data/ 前缀路径 | [TODO.md](../TODO.md) | 2026-04-21 |
 | FEAT-DONE-001 | 文档系统重构 | [原 TODO.md](../TODO.md) | 2026-04-18 |
 | FEAT-DONE-002 | LLM 报告功能修复 | [原 TODO.md](../TODO.md) | 2026-04-17 |
 | FEAT-DONE-003 | Token 统计功能 | [原 TODO.md](../TODO.md) | 2026-04-17 |
@@ -138,12 +145,15 @@
 | RF-DONE-001 | CHANGELOG 清洗 | [原 TODO.md](../TODO.md) | 2026-04-18 |
 | RF-DONE-002 | README 和 CLAUDE 更新 | [原 TODO.md](../TODO.md) | 2026-04-18 |
 | RF-DONE-003 | PytestCollectionWarning 修复 | [原 TODO.md](../TODO.md) | 2026-04-18 |
+| RF-010 | lint/ruff 配置 → 已配置 ruff + pyproject.toml + pixi tasks | [TODO.md](../TODO.md) | 2026-04-21 |
+| RF-005 | Anthropic 客户端统一抽象 → 提取 create_anthropic_client 到 src/llm_client.py | v0.1.7 合并验收 | 2026-04-21 |
 
 ### Investigation
 
 | ID | 描述 | 来源 | 完成日期 |
 |----|------|------|---------|
 | INV-004 | 实验资产包 token summary 记录 → 已实现保存 token_summary.json/txt | [原 TODO.md](../TODO.md) | 2026-04-19 |
+| INV-008 | LLM 报告假设性问题类型提示词更新 → 已更新为 document 策略六类 | [TODO.md](../TODO.md) | 2026-04-21 |
 
 ---
 

@@ -1,8 +1,8 @@
 from typing import Any, Dict, List, Optional
 
-from anthropic import Anthropic
 from loguru import logger
 
+from src.llm_client import create_anthropic_client
 from src.token_tracker import (
     DetailedTokenUsage,
     TokenTracker,
@@ -46,13 +46,9 @@ class Generator:
         try:
             logger.info("Initializing Anthropic client")
 
-            self.client = Anthropic(
-                api_key="dummy",
+            self.client = create_anthropic_client(
+                api_key=api_key,
                 base_url=base_url,
-                default_headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
             )
 
             logger.success("Anthropic client initialized successfully")

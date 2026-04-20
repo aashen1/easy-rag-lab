@@ -499,7 +499,7 @@ if __name__ == "__main__":
                     test_set_path = test_sets_dir / f"{test_set_name}.json"
                     logger.info(f"Using test set: {test_set_name}")
             else:
-                strategy = first_test_set.get("strategy", "factual")
+                strategy = first_test_set.get("strategy", "document")
                 num_questions = first_test_set.get("num_questions", 20)
                 test_set_path = test_sets_dir / f"auto_{strategy}_n{num_questions}.json"
 

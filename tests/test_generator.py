@@ -8,7 +8,7 @@ from src.token_tracker import TokenTracker
 @pytest.mark.unit
 class TestGenerator:
 
-    @patch("src.generator.Anthropic")
+    @patch("src.llm_client.Anthropic")
     def test_generate_success(self, mock_anthropic_cls, mock_anthropic_client):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
@@ -19,21 +19,21 @@ class TestGenerator:
         assert answer == "This is a test answer from the LLM."
         mock_anthropic_client.messages.create.assert_called_once()
 
-    @patch("src.generator.Anthropic")
+    @patch("src.llm_client.Anthropic")
     def test_generate_empty_query(self, mock_anthropic_cls, mock_anthropic_client):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
         with pytest.raises(ValueError, match="Query must be a non-empty string"):
             generator.generate(query="", contexts=["some context"])
 
-    @patch("src.generator.Anthropic")
+    @patch("src.llm_client.Anthropic")
     def test_generate_non_string_query(self, mock_anthropic_cls, mock_anthropic_client):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
         with pytest.raises(ValueError, match="Query must be a non-empty string"):
             generator.generate(query=123, contexts=["some context"])
 
-    @patch("src.generator.Anthropic")
+    @patch("src.llm_client.Anthropic")
     def test_generate_empty_contexts_warning(self, mock_anthropic_cls, mock_anthropic_client):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
@@ -42,7 +42,7 @@ class TestGenerator:
             mock_logger.warning.assert_any_call("No contexts provided for generation")
         assert answer == "This is a test answer from the LLM."
 
-    @patch("src.generator.Anthropic")
+    @patch("src.llm_client.Anthropic")
     def test_generate_api_error(self, mock_anthropic_cls, mock_anthropic_client):
         mock_anthropic_client.messages.create.side_effect = Exception("API timeout")
         mock_anthropic_cls.return_value = mock_anthropic_client
@@ -50,7 +50,7 @@ class TestGenerator:
         with pytest.raises(Exception, match="Failed to generate answer"):
             generator.generate(query="What is the revenue?", contexts=["some context"])
 
-    @patch("src.generator.Anthropic")
+    @patch("src.llm_client.Anthropic")
     def test_generate_custom_system_prompt(self, mock_anthropic_cls, mock_anthropic_client):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
@@ -63,7 +63,7 @@ class TestGenerator:
         call_kwargs = mock_anthropic_client.messages.create.call_args
         assert call_kwargs.kwargs["system"] == custom_prompt
 
-    @patch("src.generator.Anthropic")
+    @patch("src.llm_client.Anthropic")
     def test_generate_token_tracker_records(self, mock_anthropic_cls, mock_anthropic_client):
         mock_anthropic_cls.return_value = mock_anthropic_client
         tracker = TokenTracker()

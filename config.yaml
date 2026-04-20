@@ -22,6 +22,13 @@
 # 当前激活的 LLM 预设名称
 active_mode: "default"
 
+# 数据根目录：所有以 "data/" 开头的路径都会基于此目录解析。
+# 默认值 "data" 表示使用项目根目录下的 data/ 文件夹。
+# 如果你的数据存放在其他位置（如独立硬盘），可以修改此值，
+# 例如：data_dir: "D:/rag-data"
+# 这样就无需使用 mklink 创建符号链接了。
+data_dir: "data"
+
 # LLM 预设配置：定义不同的模型配置方案
 llm_presets:
   default:
@@ -155,7 +162,7 @@ evaluation:
 
 # 测试集生成配置
 test_generation:
-  default_strategy: "factual"
+  default_strategy: "document"
   default_num_questions: 20
   max_retries: 3
   document_level:
