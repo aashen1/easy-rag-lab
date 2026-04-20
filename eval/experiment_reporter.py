@@ -1330,15 +1330,14 @@ class ExperimentReporter:
             raise ValueError("LLM API key is required for LLM report generation")
 
         try:
-            from anthropic import Anthropic
+            from src.utils import create_llm_client
 
-            self._llm_client = Anthropic(
-                api_key="dummy",
-                base_url=self.llm_base_url or "https://api.longcat.chat/anthropic",
-                default_headers={
-                    "Authorization": f"Bearer {self.llm_api_key}",
-                    "Content-Type": "application/json",
+            self._llm_client = create_llm_client(
+                llm_config={
+                    "api_key": self.llm_api_key,
+                    "base_url": self.llm_base_url or "https://api.longcat.chat/anthropic",
                 },
+                mode="sdk",
             )
             logger.info("LLM client initialized for report generation")
         except ImportError:
