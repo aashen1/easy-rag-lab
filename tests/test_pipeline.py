@@ -13,6 +13,7 @@ def _make_config():
             "distance": "Cosine",
         },
         "retrieval": {"top_k": 5},
+        "generation": {"system_prompt": None},
         "logging": {
             "level": "INFO",
             "log_dir": "/tmp/logs",
@@ -70,6 +71,7 @@ class TestRAGPipeline:
             indexer=mock_indexer.return_value,
             embedder=mock_embedder.return_value,
             top_k=5,
+            score_threshold=0,
         )
         mock_generator.assert_called_once_with(
             model_name="test-llm",
@@ -78,6 +80,7 @@ class TestRAGPipeline:
             temperature=0.0,
             max_tokens=1024,
             token_tracker=pipeline.token_tracker,
+            system_prompt=None,
         )
         assert pipeline.meal_name is None
         assert pipeline.meal_config is None
@@ -258,6 +261,7 @@ class TestRAGPipeline:
             indexer=mock_indexer.return_value,
             embedder=mock_embedder.return_value,
             top_k=5,
+            score_threshold=0,
         )
 
     @patch("src.pipeline.Generator")

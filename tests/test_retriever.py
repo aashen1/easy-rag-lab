@@ -110,3 +110,99 @@ class TestRetriever:
         assert results[0]["chunk_id"] == ""
         assert results[0]["text"] == ""
         assert results[0]["metadata"] == {}
+
+    def test_score_threshold_zero_does_not_filter(self, mock_embedder, mock_qdrant_client):
+        indexer = self._make_mock_indexer(mock_qdrant_client)
+
+        point1 = MagicMock()
+        point1.payload = {"chunk_id": "c1", "text": "low score", "metadata": {}}
+        point1.score = 0.1
+
+        point2 = MagicMock()
+        point2.payload = {"chunk_id": "c2", "text": "high score", "metadata": {}}
+        point2.score = 0.9
+
+        mock_result = MagicMock()
+        mock_result.points = [point1, point2]
+        mock_qdrant_client.query_points.return_value = mock_result
+
+        retriever = Retriever(
+            indexer=indexer, embedder=mock_embedder, top_k=5, score_threshold=0
+        )
+        results = retriever.retrieve("test query")
+
+        assert len(results) == 2
+
+    def test_score_threshold_filters_low_scores(self, mock_embedder, mock_qdrant_client):
+        indexer = self._make_mock_indexer(mock_qdrant_client)
+
+        point1 = MagicMock()
+        point1.payload = {"chunk_id": "c1", "text": "high score", "metadata": {}}
+        point1.score = 0.8
+
+        point2 = MagicMock()
+        point2.payload = {"chunk_id": "c2", "text": "medium score", "metadata": {}}
+        point2.score = 0.4
+
+        point3 = MagicMock()
+        point3.payload = {"chunk_id": "c3", "text": "low score", "metadata": {}}
+        point3.score = 0.1
+
+        mock_result = MagicMock()
+        mock_result.points = [point1, point2, point3]
+        mock_qdrant_client.query_points.return_value = mock_result
+
+        retriever = Retriever(
+            indexer=indexer, embedder=mock_embedder, top_k=5, score_threshold=0.5
+        )
+        results = retriever.retrieve("test query")
+
+        assert len(results) == 1
+        assert results[0]["chunk_id"] == "c1"
+        assert results[0]["score"] == 0.8
+
+    def test_score_threshold_filters_all_results(self, mock_embedder, mock_qdrant_client):
+        indexer = self._make_mock_indexer(mock_qdrant_client)
+
+        point1 = MagicMock()
+        point1.payload = {"chunk_id": "c1", "text": "low score", "metadata": {}}
+        point1.score = 0.1
+
+        point2 = MagicMock()
+        point2.payload = {"chunk_id": "c2", "text": "also low", "metadata": {}}
+        point2.score = 0.2
+
+        mock_result = MagicMock()
+        mock_result.points = [point1, point2]
+        mock_qdrant_client.query_points.return_value = mock_result
+
+        retriever = Retriever(
+            indexer=indexer, embedder=mock_embedder, top_k=5, score_threshold=0.5
+        )
+        results = retriever.retrieve("test query")
+
+        assert len(results) == 0
+
+    def test_score_threshold_boundary_inclusive(self, mock_embedder, mock_qdrant_client):
+        indexer = self._make_mock_indexer(mock_qdrant_client)
+
+        point1 = MagicMock()
+        point1.payload = {"chunk_id": "c1", "text": "exact threshold", "metadata": {}}
+        point1.score = 0.5
+
+        point2 = MagicMock()
+        point2.payload = {"chunk_id": "c2", "text": "below threshold", "metadata": {}}
+        point2.score = 0.49
+
+        mock_result = MagicMock()
+        mock_result.points = [point1, point2]
+        mock_qdrant_client.query_points.return_value = mock_result
+
+        retriever = Retriever(
+            indexer=indexer, embedder=mock_embedder, top_k=5, score_threshold=0.5
+        )
+        results = retriever.retrieve("test query")
+
+        assert len(results) == 1
+        assert results[0]["chunk_id"] == "c1"
+        assert results[0]["score"] == 0.5

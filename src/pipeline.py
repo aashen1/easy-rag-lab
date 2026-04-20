@@ -33,6 +33,7 @@ class RAGPipeline:
         self.embedder = Embedder(
             model_name=embedding_config["model_name"],
             device=embedding_config["device"],
+            query_instruction=embedding_config.get("query_instruction"),
         )
 
         vector_store_config = self.config["vector_store"]
@@ -62,6 +63,7 @@ class RAGPipeline:
             temperature=llm_config["temperature"],
             max_tokens=llm_config["max_tokens"],
             token_tracker=self.token_tracker,
+            system_prompt=self.config.get("generation", {}).get("system_prompt"),
         )
 
         logger.success("RAG Pipeline initialized successfully")
@@ -81,6 +83,7 @@ class RAGPipeline:
             indexer=self.indexer,
             embedder=self.embedder,
             top_k=top_k,
+            score_threshold=retrieval_config.get("score_threshold", 0),
         )
 
         self.bm25_retriever: Optional[BM25Retriever] = None
