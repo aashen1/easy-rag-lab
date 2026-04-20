@@ -30,16 +30,19 @@ data:
 # 问题集配置
 # ------------------------------------------------------------
 test_sets:
-  - strategy: "document"
-    num_questions: 20
-    seed: 100
-    type_distribution:
-      single_fact: 0.30
-      multi_fact: 0.25
-      reasoning: 0.15
-      comparative: 0.15
-      missing: 0.10
-      irrelevant: 0.05
+  - name: "golden_test"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 20
+      seed: 100
+      type_distribution:
+        single_fact: 0.30
+        multi_fact: 0.25
+        reasoning: 0.15
+        comparative: 0.15
+        missing: 0.10
+        irrelevant: 0.05
 
 # ------------------------------------------------------------
 # 变体配置 - 核心实验参数
