@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
-from src.meal import MealManager
+from src.meal import MealConfig, MealFile, MealManager
 from src.utils import ensure_dir
 
 
@@ -87,7 +87,8 @@ class TestSetManager:
 
         try:
             with open(file_path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+            return self._migrate_test_set(data)
         except Exception as e:
             logger.error(f"Failed to load test set '{test_set_name}' from meal '{meal_name}': {str(e)}")
             return None
@@ -148,10 +149,39 @@ class TestSetManager:
 
         try:
             with open(file_path, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+            return self._migrate_test_set(data)
         except Exception as e:
             logger.error(f"Failed to load test set '{test_set_name}' from meal '{meal_name}': {str(e)}")
             raise
+
+    def _migrate_test_set(self, test_set_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Migrate old format test set to new format.
+
+        Args:
+            test_set_data: Test set dictionary that may be in old or new format.
+
+        Returns:
+            Test set dictionary in new format with 'metadata' key.
+        """
+        if "metadata" in test_set_data:
+            return test_set_data
+
+        return {
+            "metadata": {
+                "name": test_set_data.get("name", "unknown"),
+                "meal_id": test_set_data.get("meal_data_id", ""),
+                "created_at": test_set_data.get("created_at", ""),
+                "updated_at": test_set_data.get("created_at", ""),
+                "generation": test_set_data.get("generation_config", {}),
+                "user_defined": False,
+                "invalid_policy": None,
+                "audit_log": [],
+                "suppress_warnings": False,
+            },
+            "quality_metrics": test_set_data.get("quality_metrics", {}),
+            "questions": test_set_data.get("questions", []),
+        }
 
     def list_test_sets(self, meal_name: str) -> List[Dict[str, Any]]:
         """List all test sets in a meal's test_sets directory.
@@ -225,3 +255,105 @@ class TestSetManager:
         test_sets_dir = self.get_test_sets_dir(meal_name)
         file_path = test_sets_dir / f"{test_set_name}.json"
         return file_path.exists()
+
+    def validate_test_set(
+        self,
+        test_set_data: Dict[str, Any],
+        meal_config: "MealConfig",
+    ) -> tuple[bool, List[Dict[str, Any]]]:
+        """
+        Validate a test set against a meal configuration.
+
+        A test set is valid if all questions reference data sources that exist
+        in the current meal's sample.
+
+        Args:
+            test_set_data: Test set dictionary with 'metadata' and 'questions'.
+            meal_config: MealConfig instance for the current meal.
+
+        Returns:
+            Tuple of (is_valid, invalid_questions):
+            - is_valid: True if all questions are valid
+            - invalid_questions: List of questions with missing data sources
+        """
+        meal_id = test_set_data["metadata"]["meal_id"]
+        if meal_id == meal_config.data_id:
+            return (True, [])
+        invalid_questions = self._check_questions_validity(
+            test_set_data.get("questions", []),
+            meal_config,
+        )
+        return (len(invalid_questions) == 0, invalid_questions)
+
+    def _check_questions_validity(
+        self,
+        questions: List[Dict[str, Any]],
+        meal_config: "MealConfig",
+    ) -> List[Dict[str, Any]]:
+        """
+        Check each question's data sources against the meal's PDF files.
+
+        Args:
+            questions: List of question dictionaries.
+            meal_config: MealConfig instance for the current meal.
+
+        Returns:
+            List of questions that have missing data sources.
+        """
+        meal_pdf_paths = {mf.path for mf in meal_config.pdf_files}
+        invalid_questions: List[Dict[str, Any]] = []
+
+        for question in questions:
+            question_type = question.get("question_type", "")
+            source_files = question.get("source_files", [])
+
+            if question_type == "irrelevant":
+                continue
+            if not source_files:
+                continue
+
+            if not all(sf in meal_pdf_paths for sf in source_files):
+                invalid_questions.append(question)
+
+        return invalid_questions
+
+    def _update_meal_id(
+        self,
+        test_set_data: Dict[str, Any],
+        new_meal_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Update the meal_id in test set metadata.
+
+        Args:
+            test_set_data: Test set dictionary.
+            new_meal_id: New meal_id to set.
+
+        Returns:
+            Updated test set dictionary.
+        """
+        test_set_data["metadata"]["meal_id"] = new_meal_id
+        test_set_data["metadata"]["updated_at"] = datetime.now().isoformat()
+        return test_set_data
+
+    def update_meal_id(
+        self,
+        meal_name: str,
+        test_set_name: str,
+        new_meal_id: str,
+    ) -> Dict[str, Any]:
+        """Update the meal_id in a test set's metadata and save.
+
+        Args:
+            meal_name: Name of the meal.
+            test_set_name: Name of the test set.
+            new_meal_id: New meal data_id to set.
+
+        Returns:
+            Updated test set dictionary.
+        """
+        test_set_data = self.load_test_set(meal_name, test_set_name)
+        test_set_data["metadata"]["meal_id"] = new_meal_id
+        test_set_data["metadata"]["updated_at"] = datetime.now().isoformat()
+        self.save_test_set(meal_name, test_set_data)
+        return test_set_data

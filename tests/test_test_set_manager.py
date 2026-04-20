@@ -3,7 +3,25 @@ from pathlib import Path
 
 import pytest
 
+from src.meal import MealConfig, MealFile
 from src.test_set_manager import TestSetManager, TestSetMetadata
+
+
+def _make_meal_config(data_id: str = "abc123", pdf_paths: list = None) -> MealConfig:
+    if pdf_paths is None:
+        pdf_paths = ["reports/report_0.pdf", "reports/report_1.pdf"]
+    pdf_files = [
+        MealFile(path=p, sha256=f"hash_{i}", size_bytes=100)
+        for i, p in enumerate(pdf_paths)
+    ]
+    return MealConfig(
+        data_id=data_id,
+        name="test_meal",
+        created_at="2026-04-20T10:00:00",
+        sampling_config={"mode": "count", "value": 2},
+        collection_name="m_test123456",
+        pdf_files=pdf_files,
+    )
 
 
 class TestTestSetMetadata:
@@ -300,3 +318,127 @@ class TestTestSetManager:
         manager, config = env
         _create_meal_dir(config, "my_meal")
         assert manager.test_set_exists("my_meal", "nope") is False
+
+
+class TestValidateTestSet:
+    @pytest.fixture
+    def env(self, tmp_path):
+        config = _make_config(tmp_path)
+        manager = TestSetManager(config)
+        return manager, config
+
+    def test_fast_path_meal_id_matches(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(data_id="matching_id")
+        test_set_data = {
+            "metadata": {
+                "name": "test_set",
+                "meal_id": "matching_id",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+            },
+            "questions": [
+                {"id": 1, "question": "What?", "source_files": ["nonexistent.pdf"]},
+            ],
+        }
+        is_valid, invalid = manager.validate_test_set(test_set_data, meal_config)
+        assert is_valid is True
+        assert invalid == []
+
+    def test_slow_path_all_questions_valid(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(
+            data_id="current_meal",
+            pdf_paths=["reports/report_0.pdf", "reports/report_1.pdf"],
+        )
+        test_set_data = {
+            "metadata": {
+                "name": "test_set",
+                "meal_id": "different_meal",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+            },
+            "questions": [
+                {"id": 1, "question": "Q1", "source_files": ["reports/report_0.pdf"]},
+                {"id": 2, "question": "Q2", "source_files": ["reports/report_1.pdf"]},
+            ],
+        }
+        is_valid, invalid = manager.validate_test_set(test_set_data, meal_config)
+        assert is_valid is True
+        assert invalid == []
+
+    def test_slow_path_some_questions_invalid(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(
+            data_id="current_meal",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+        test_set_data = {
+            "metadata": {
+                "name": "test_set",
+                "meal_id": "different_meal",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+            },
+            "questions": [
+                {"id": 1, "question": "Q1", "source_files": ["reports/report_0.pdf"]},
+                {"id": 2, "question": "Q2", "source_files": ["reports/report_1.pdf"]},
+                {"id": 3, "question": "Q3", "source_files": ["reports/report_0.pdf", "reports/report_2.pdf"]},
+            ],
+        }
+        is_valid, invalid = manager.validate_test_set(test_set_data, meal_config)
+        assert is_valid is False
+        assert len(invalid) == 2
+        invalid_ids = {q["id"] for q in invalid}
+        assert invalid_ids == {2, 3}
+
+    def test_empty_questions_list_valid(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(data_id="current_meal")
+        test_set_data = {
+            "metadata": {
+                "name": "test_set",
+                "meal_id": "different_meal",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+            },
+            "questions": [],
+        }
+        is_valid, invalid = manager.validate_test_set(test_set_data, meal_config)
+        assert is_valid is True
+        assert invalid == []
+
+    def test_questions_without_source_files_valid(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(data_id="current_meal")
+        test_set_data = {
+            "metadata": {
+                "name": "test_set",
+                "meal_id": "different_meal",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+            },
+            "questions": [
+                {"id": 1, "question": "Q1"},
+                {"id": 2, "question": "Q2", "source_files": []},
+                {"id": 3, "question": "Q3", "question_type": "irrelevant", "source_files": ["nonexistent.pdf"]},
+            ],
+        }
+        is_valid, invalid = manager.validate_test_set(test_set_data, meal_config)
+        assert is_valid is True
+        assert invalid == []
+
+    def test_update_meal_id(self, env):
+        manager, config = env
+        test_set_data = {
+            "metadata": {
+                "name": "test_set",
+                "meal_id": "old_id",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+            },
+            "questions": [],
+        }
+        updated = manager._update_meal_id(test_set_data, "new_id")
+        assert updated["metadata"]["meal_id"] == "new_id"
+        assert updated["metadata"]["updated_at"] != "2026-04-20T10:00:00"
