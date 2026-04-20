@@ -131,3 +131,62 @@ class TestGenerator:
         assert record.usage.input_tokens == 100
         assert record.usage.output_tokens == 50
         assert record.metadata["question_id"] == "q1"
+
+    @patch("src.generator.Anthropic")
+    def test_sources_included_in_context_format(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key")
+        generator.generate(
+            query="What is the revenue?",
+            contexts=["Revenue was 100 billion.", "Profit was 50 billion."],
+            sources=[
+                "research_reports/2026年光伏行业分析.md",
+                "annual_reports/贵州茅台2023年报.md",
+            ],
+        )
+        call_kwargs = mock_anthropic_client.messages.create.call_args
+        user_content = call_kwargs.kwargs["messages"][0]["content"]
+        assert "参考资料 1（来源：2026年光伏行业分析）:" in user_content
+        assert "参考资料 2（来源：贵州茅台2023年报）:" in user_content
+
+    @patch("src.generator.Anthropic")
+    def test_sources_none_preserves_old_format(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key")
+        generator.generate(
+            query="What is the revenue?",
+            contexts=["Revenue was 100 billion.", "Profit was 50 billion."],
+        )
+        call_kwargs = mock_anthropic_client.messages.create.call_args
+        user_content = call_kwargs.kwargs["messages"][0]["content"]
+        assert "参考资料 1:\n" in user_content
+        assert "参考资料 2:\n" in user_content
+        assert "来源" not in user_content
+
+    @patch("src.generator.Anthropic")
+    def test_sources_empty_list_preserves_old_format(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key")
+        generator.generate(
+            query="What is the revenue?",
+            contexts=["Revenue was 100 billion."],
+            sources=[],
+        )
+        call_kwargs = mock_anthropic_client.messages.create.call_args
+        user_content = call_kwargs.kwargs["messages"][0]["content"]
+        assert "参考资料 1:\n" in user_content
+        assert "来源" not in user_content
+
+    @patch("src.generator.Anthropic")
+    def test_sources_fewer_than_contexts_uses_unknown(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key")
+        generator.generate(
+            query="What is the revenue?",
+            contexts=["Revenue was 100 billion.", "Profit was 50 billion."],
+            sources=["research_reports/2026年光伏行业分析.md"],
+        )
+        call_kwargs = mock_anthropic_client.messages.create.call_args
+        user_content = call_kwargs.kwargs["messages"][0]["content"]
+        assert "参考资料 1（来源：2026年光伏行业分析）:" in user_content
+        assert "参考资料 2（来源：未知）:" in user_content

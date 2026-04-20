@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
@@ -77,6 +78,7 @@ class Generator:
         contexts: List[str],
         system_prompt: str = None,
         category: str = "rag_qa",
+        sources: Optional[List[str]] = None,
         **metadata: Any,
     ) -> str:
         """Generate an answer using the LLM.
@@ -88,6 +90,11 @@ class Generator:
                 falls back to self.default_system_prompt, then to the
                 hardcoded DEFAULT_SYSTEM_PROMPT.
             category: Token tracking category (default "rag_qa").
+            sources: Optional list of source document paths, one per
+                context. When provided, each context is annotated with
+                its source name (filename stem) so the LLM can cite
+                sources. When None or empty, the old format without
+                source names is used for backward compatibility.
             **metadata: Additional metadata for token tracking.
 
         Returns:
@@ -111,9 +118,17 @@ class Generator:
             if system_prompt is None:
                 system_prompt = self.DEFAULT_SYSTEM_PROMPT
 
-            context_text = "\n\n".join(
-                [f"参考资料 {i+1}:\n{ctx}" for i, ctx in enumerate(contexts)]
-            )
+            if sources:
+                context_text = "\n\n".join(
+                    [
+                        f"参考资料 {i+1}（来源：{Path(sources[i]).stem if i < len(sources) else '未知'}）:\n{ctx}"
+                        for i, ctx in enumerate(contexts)
+                    ]
+                )
+            else:
+                context_text = "\n\n".join(
+                    [f"参考资料 {i+1}:\n{ctx}" for i, ctx in enumerate(contexts)]
+                )
 
             user_message = f"""{context_text}
 

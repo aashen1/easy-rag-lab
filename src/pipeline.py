@@ -393,7 +393,7 @@ class RAGPipeline:
                     chunk_ids = [r.get("chunk_id", "") for r in results]
 
                     logger.debug("Generating answer...")
-                    answer = self.generator.generate(question, contexts)
+                    answer = self.generator.generate(question, contexts, sources=sources)
 
                     response = {"question": question, "answer": answer}
                     if return_contexts:
@@ -431,7 +431,7 @@ class RAGPipeline:
             chunk_ids = [result.get("chunk_id", "") for result in results]
 
             logger.debug("Generating answer...")
-            answer = self.generator.generate(question, contexts)
+            answer = self.generator.generate(question, contexts, sources=sources)
 
             response = {
                 "question": question,
