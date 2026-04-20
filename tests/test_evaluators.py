@@ -595,6 +595,65 @@ class TestRagasEvaluatorConfigReading:
             )
 
 
+class TestRagasEvaluatorReferenceWarning:
+    """Tests for reference-missing warning behavior in RagasEvaluator."""
+
+    def test_evaluate_single_skips_ref_required_metrics_when_no_expected_answer(self):
+        """Test that reference-required metrics are skipped when expected_answer is None."""
+        evaluator = RagasEvaluator()
+
+        result = evaluator.evaluate_single(
+            question_id="test_no_ref",
+            question="What is Python?",
+            answer="Python is a programming language.",
+            contexts=["Python is a high-level programming language."],
+            expected_answer=None,
+            generation_metrics=["faithfulness", "context_precision", "context_recall"],
+        )
+
+        assert result.error is not None
+        assert "llm_config" in result.error.lower() or result.generation_metrics == {}
+
+    def test_evaluate_single_with_ref_required_metrics_and_no_answer(self):
+        """Test that when expected_answer is None and only ref-required metrics are requested,
+        the result has empty generation_metrics (no crash)."""
+        evaluator = RagasEvaluator()
+
+        result = evaluator.evaluate_single(
+            question_id="test_no_ref_2",
+            question="What is Python?",
+            answer="Python is a programming language.",
+            contexts=["Python is a high-level programming language."],
+            expected_answer=None,
+            generation_metrics=["context_precision", "context_recall"],
+        )
+
+        assert result.generation_metrics == {}
+
+    def test_evaluate_batch_does_not_crash_on_missing_reference(self):
+        """Test that evaluate_batch handles missing expected_answer gracefully."""
+        evaluator = RagasEvaluator()
+
+        samples = [
+            {
+                "question_id": "q1",
+                "question": "What is X?",
+                "answer": "X is Y.",
+                "contexts": ["X is Y."],
+                "expected_answer": None,
+            },
+        ]
+
+        with patch.object(evaluator, "_create_llm", side_effect=Exception("no LLM")):
+            result = evaluator.evaluate_batch(
+                samples=samples,
+                llm_config={"api_key": "test"},
+                generation_metrics=["context_precision", "faithfulness"],
+            )
+
+        assert isinstance(result, list)
+
+
 class TestRagasEvaluatorMocked:
     """Tests for RagasEvaluator with mocked RAGAS dependencies."""
 

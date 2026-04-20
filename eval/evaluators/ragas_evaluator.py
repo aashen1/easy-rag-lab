@@ -19,6 +19,8 @@ from loguru import logger
 
 from eval.evaluators.base import BaseEvaluator, EvaluationResult
 
+REFERENCE_REQUIRED_METRICS = {"context_precision", "context_recall", "answer_correctness", "semantic_similarity"}
+
 
 class RagasEvaluator(BaseEvaluator):
     """
@@ -211,23 +213,41 @@ class RagasEvaluator(BaseEvaluator):
             List of RAGAS metric instances.
         """
         try:
-            from ragas.metrics import (
-                _Faithfulness as Faithfulness,
-                _AnswerRelevancy as AnswerRelevancy,
-                _ContextPrecision as ContextPrecision,
-                _ContextRecall as ContextRecall,
-                _AnswerCorrectness as AnswerCorrectness,
-                _SemanticSimilarity as SemanticSimilarity,
-            )
-
-            metric_map = {
-                "faithfulness": Faithfulness,
-                "answer_relevancy": AnswerRelevancy,
-                "context_precision": ContextPrecision,
-                "context_recall": ContextRecall,
-                "answer_correctness": AnswerCorrectness,
-                "semantic_similarity": SemanticSimilarity,
-            }
+            metric_map = {}
+            try:
+                from ragas.metrics._metrics import (
+                    Faithfulness,
+                    AnswerRelevancy,
+                    ContextPrecision,
+                    ContextRecall,
+                    AnswerCorrectness,
+                    SemanticSimilarity,
+                )
+                metric_map = {
+                    "faithfulness": Faithfulness,
+                    "answer_relevancy": AnswerRelevancy,
+                    "context_precision": ContextPrecision,
+                    "context_recall": ContextRecall,
+                    "answer_correctness": AnswerCorrectness,
+                    "semantic_similarity": SemanticSimilarity,
+                }
+            except ImportError:
+                from ragas.metrics import (
+                    _Faithfulness as Faithfulness,
+                    _AnswerRelevancy as AnswerRelevancy,
+                    _ContextPrecision as ContextPrecision,
+                    _ContextRecall as ContextRecall,
+                    _AnswerCorrectness as AnswerCorrectness,
+                    _SemanticSimilarity as SemanticSimilarity,
+                )
+                metric_map = {
+                    "faithfulness": Faithfulness,
+                    "answer_relevancy": AnswerRelevancy,
+                    "context_precision": ContextPrecision,
+                    "context_recall": ContextRecall,
+                    "answer_correctness": AnswerCorrectness,
+                    "semantic_similarity": SemanticSimilarity,
+                }
 
             metrics = []
             for name in metric_names:
@@ -317,6 +337,25 @@ class RagasEvaluator(BaseEvaluator):
         if generation_metrics is None:
             generation_metrics = self._generation_metrics
 
+        if expected_answer is None:
+            ref_required = [m for m in generation_metrics if m in REFERENCE_REQUIRED_METRICS]
+            if ref_required:
+                logger.warning(
+                    f"Metrics {ref_required} require reference (expected_answer) "
+                    f"but none provided for {question_id}. Skipping these metrics."
+                )
+                generation_metrics = [m for m in generation_metrics if m not in REFERENCE_REQUIRED_METRICS]
+
+        if not generation_metrics:
+            return EvaluationResult(
+                question_id=question_id,
+                question=question,
+                answer=answer,
+                contexts=contexts,
+                retrieval_metrics={},
+                generation_metrics={},
+            )
+
         generation_results = {}
         error = None
 
@@ -351,8 +390,6 @@ class RagasEvaluator(BaseEvaluator):
             result = evaluate(
                 dataset=dataset,
                 metrics=metrics,
-                llm=self._llm,
-                embeddings=self._embeddings,
                 run_config=run_config,
                 show_progress=False,
                 raise_exceptions=True,
@@ -404,6 +441,19 @@ class RagasEvaluator(BaseEvaluator):
         if generation_metrics is None:
             generation_metrics = self._generation_metrics
 
+        samples_without_ref = [
+            s for s in samples
+            if s.get("expected_answer") is None
+        ]
+        if samples_without_ref:
+            ref_required = [m for m in generation_metrics if m in REFERENCE_REQUIRED_METRICS]
+            if ref_required:
+                logger.warning(
+                    f"Metrics {ref_required} require reference (expected_answer) "
+                    f"but {len(samples_without_ref)}/{len(samples)} samples lack it. "
+                    f"These metrics may return NaN for those samples."
+                )
+
         results = []
 
         try:
@@ -431,8 +481,6 @@ class RagasEvaluator(BaseEvaluator):
             eval_result = evaluate(
                 dataset=dataset,
                 metrics=metrics,
-                llm=self._llm,
-                embeddings=self._embeddings,
                 run_config=run_config,
                 show_progress=True,
                 raise_exceptions=False,

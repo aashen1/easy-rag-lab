@@ -1,5 +1,5 @@
 name: "ragas_only_evaluation"
-description: "RAGAS评测 - 仅使用RAGAS框架进行生成质量评测（不含检索指标）"
+description: "RAGAS评测 - 使用RAGAS框架进行检索与生成质量评测"
 
 data:
   meal: "meal_ragas"
@@ -16,19 +16,19 @@ test_sets:
 
 variants:
   - name: "baseline_ragas"
-    description: "基线配置 - RAGAS生成指标评测"
+    description: "基线配置 - RAGAS检索+生成指标评测"
     config_overrides: {}
 
 evaluation:
   backends: ["ragas"]
   llm_preset: "default"
   metrics:
-    retrieval: []
+    retrieval:
+      - "context_precision"
+      - "context_recall"
     generation:
       - "faithfulness"
       - "answer_relevancy"
-      - "context_precision"
-      - "context_recall"
       - "answer_correctness"
 
 llm:

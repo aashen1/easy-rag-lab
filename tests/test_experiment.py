@@ -236,8 +236,67 @@ class TestExperimentConfig:
             "chunk_hit_rate", "chunk_mrr", "chunk_ndcg",
             "dedup_hit_rate", "dedup_mrr", "dedup_ndcg",
             "false_positive_rate",
+            "context_precision", "context_recall",
         }
         assert VALID_GENERATION_METRICS == {"faithfulness", "answer_relevancy"}
+
+    @pytest.mark.unit
+    def test_context_precision_in_retrieval_with_ragas_backend(self):
+        data = self._make_config_dict()
+        data["evaluation"]["backends"] = ["ragas"]
+        data["evaluation"]["metrics"] = {
+            "retrieval": ["context_precision", "context_recall"],
+            "generation": ["faithfulness", "answer_relevancy", "answer_correctness"],
+        }
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        assert not any("Invalid retrieval metrics" in e for e in errors)
+
+    @pytest.mark.unit
+    def test_context_precision_in_retrieval_with_builtin_backend(self):
+        data = self._make_config_dict()
+        data["evaluation"]["backends"] = ["builtin"]
+        data["evaluation"]["metrics"] = {
+            "retrieval": ["context_precision", "context_recall"],
+        }
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        assert not any("Invalid retrieval metrics" in e for e in errors)
+
+    @pytest.mark.unit
+    def test_context_precision_in_retrieval_without_supported_backend(self):
+        data = self._make_config_dict()
+        data["evaluation"]["backends"] = ["nonexistent"]
+        data["evaluation"]["metrics"] = {
+            "retrieval": ["context_precision"],
+        }
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        assert any("LLM-based retrieval metrics" in e for e in errors)
+
+    @pytest.mark.unit
+    def test_non_builtin_generation_metrics_require_ragas(self):
+        data = self._make_config_dict()
+        data["evaluation"]["backends"] = ["builtin"]
+        data["evaluation"]["metrics"] = {
+            "retrieval": ["hit_rate"],
+            "generation": ["faithfulness", "answer_correctness"],
+        }
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        assert any("require 'ragas' in evaluation.backends" in e for e in errors)
+
+    @pytest.mark.unit
+    def test_context_precision_in_generation_with_ragas_backend(self):
+        data = self._make_config_dict()
+        data["evaluation"]["backends"] = ["ragas"]
+        data["evaluation"]["metrics"] = {
+            "retrieval": [],
+            "generation": ["context_precision", "context_recall", "answer_correctness"],
+        }
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        assert not any("metrics" in e.lower() for e in errors)
 
 
 class TestDeepMerge:
