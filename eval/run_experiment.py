@@ -1007,18 +1007,27 @@ def evaluate_test_set(
 
     all_results: Dict[str, Dict[str, Any]] = {}
 
+    use_namespace = len(backends) > 1
+
     if "builtin" in backends and "builtin" in evaluators:
+        builtin_generation_metrics = generation_metrics
+        if builtin_generation_metrics:
+            builtin_generation_metrics = [
+                m for m in builtin_generation_metrics
+                if m in evaluators["builtin"].supported_generation_metrics
+            ]
         builtin_results = _evaluate_with_builtin(
             samples=samples,
             evaluator=evaluators["builtin"],
-            llm_config=llm_config if generation_metrics else None,
+            llm_config=llm_config if builtin_generation_metrics else None,
             retrieval_metrics=retrieval_metrics,
-            generation_metrics=generation_metrics if "ragas" not in backends else [
-                m for m in (generation_metrics or [])
-                if m in evaluators["builtin"].supported_generation_metrics
-            ],
+            generation_metrics=builtin_generation_metrics,
         )
         for r in builtin_results:
+            if use_namespace and "generation" in r and r["generation"]:
+                r["generation"] = {
+                    f"builtin_{k}": v for k, v in r["generation"].items()
+                }
             all_results[r["id"]] = r
 
     if "ragas" in backends and "ragas" in evaluators:
@@ -1034,6 +1043,10 @@ def evaluate_test_set(
                 generation_metrics=ragas_only_metrics,
             )
             for r in ragas_results:
+                if use_namespace and "generation" in r and r["generation"]:
+                    r["generation"] = {
+                        f"ragas_{k}": v for k, v in r["generation"].items()
+                    }
                 qid = r["id"]
                 if qid in all_results:
                     if "generation" in r:

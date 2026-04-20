@@ -848,3 +848,60 @@ class TestGenerationMetrics:
         assert "Experiment Overview" in report
         assert "Evaluation Results" in report
         assert "Generation Quality Metrics" not in report
+
+
+class TestGenerationMetricDescription:
+    @pytest.mark.unit
+    def test_unprefixed_metric_descriptions(self):
+        reporter = ExperimentReporter()
+        assert "grounded" in reporter._get_generation_metric_description("avg_faithfulness").lower()
+        assert "relevant" in reporter._get_generation_metric_description("avg_answer_relevancy").lower()
+
+    @pytest.mark.unit
+    def test_builtin_prefixed_metric_descriptions(self):
+        reporter = ExperimentReporter()
+        desc = reporter._get_generation_metric_description("avg_builtin_faithfulness")
+        assert "Builtin" in desc
+        assert "grounded" in desc.lower()
+
+        desc = reporter._get_generation_metric_description("avg_builtin_answer_relevancy")
+        assert "Builtin" in desc
+        assert "relevant" in desc.lower()
+
+    @pytest.mark.unit
+    def test_ragas_prefixed_metric_descriptions(self):
+        reporter = ExperimentReporter()
+        desc = reporter._get_generation_metric_description("avg_ragas_faithfulness")
+        assert "RAGAS" in desc
+        assert "grounded" in desc.lower()
+
+        desc = reporter._get_generation_metric_description("avg_ragas_answer_relevancy")
+        assert "RAGAS" in desc
+        assert "relevant" in desc.lower()
+
+        desc = reporter._get_generation_metric_description("avg_ragas_context_precision")
+        assert "RAGAS" in desc
+        assert "precise" in desc.lower()
+
+        desc = reporter._get_generation_metric_description("avg_ragas_context_recall")
+        assert "RAGAS" in desc
+        assert "completely" in desc.lower()
+
+        desc = reporter._get_generation_metric_description("avg_ragas_answer_correctness")
+        assert "RAGAS" in desc
+        assert "correct" in desc.lower()
+
+    @pytest.mark.unit
+    def test_unknown_prefixed_metric_fallback(self):
+        reporter = ExperimentReporter()
+        desc = reporter._get_generation_metric_description("avg_ragas_some_new_metric")
+        assert "RAGAS" in desc
+
+        desc = reporter._get_generation_metric_description("avg_builtin_some_new_metric")
+        assert "BUILTIN" in desc
+
+    @pytest.mark.unit
+    def test_completely_unknown_metric_fallback(self):
+        reporter = ExperimentReporter()
+        desc = reporter._get_generation_metric_description("avg_unknown_metric")
+        assert desc == "Generation quality metric"
