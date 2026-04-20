@@ -8,15 +8,18 @@ data:
     seed: 42
 
 test_sets:
-  - strategy: "document"
-    num_questions: 6
-    type_distribution:
-      single_fact: 0.20
-      multi_fact: 0.20
-      reasoning: 0.15
-      comparative: 0.15
-      missing: 0.15
-      irrelevant: 0.15
+  - name: "smoke_full_test"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 6
+      type_distribution:
+        single_fact: 0.20
+        multi_fact: 0.20
+        reasoning: 0.15
+        comparative: 0.15
+        missing: 0.15
+        irrelevant: 0.15
 
 variants:
   - name: "baseline"

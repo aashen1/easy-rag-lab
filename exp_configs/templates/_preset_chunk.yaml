@@ -8,15 +8,18 @@ data:
     seed: 42
 
 test_sets:
-  - strategy: "document"
-    num_questions: 30
-    type_distribution:
-      single_fact: 0.30
-      multi_fact: 0.25
-      reasoning: 0.15
-      comparative: 0.15
-      missing: 0.10
-      irrelevant: 0.05
+  - name: "chunk_preset_eval"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 30
+      type_distribution:
+        single_fact: 0.30
+        multi_fact: 0.25
+        reasoning: 0.15
+        comparative: 0.15
+        missing: 0.10
+        irrelevant: 0.05
 
 x-base-config: &base-config
   retrieval:

@@ -8,8 +8,11 @@ data:
     seed: 3388
 
 test_sets:
-  - strategy: "document"
-    num_questions: 100
+  - name: "baseline_test_5kpage"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 100
 
 variants:
   - name: "baseline"

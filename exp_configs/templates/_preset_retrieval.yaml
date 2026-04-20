@@ -8,8 +8,11 @@ data:
     seed: 42
 
 test_sets:
-  - strategy: "document"
-    num_questions: 30
+  - name: "retrieval_preset_eval"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 30
 
 variants:
   - name: "vector_only"

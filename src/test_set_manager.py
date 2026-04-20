@@ -665,6 +665,33 @@ class TestSetManager:
 
         return (False, "")
 
+    def _derive_test_set_name(
+        self,
+        generation_config: Optional[Dict[str, Any]],
+    ) -> str:
+        """Derive a test set name from generation config when name is not specified.
+
+        The naming convention follows strategy + num_questions pattern:
+        - With generation config: "{strategy}_n{num_questions}"
+        - Without generation config: "document_n{default_num}"
+
+        This enables cache hitting: the same generation config will always
+        produce the same test set name, allowing reuse of previously generated sets.
+
+        Args:
+            generation_config: Generation config from the test set specification.
+                May be None if no generation parameters are specified.
+
+        Returns:
+            Auto-derived test set name string.
+        """
+        if generation_config is None:
+            return f"document_n{self.config.get('test_generator', {}).get('default_num_questions', 10)}"
+
+        strategy = generation_config.get("strategy", "document")
+        num_questions = generation_config.get("num_questions", 10)
+        return f"{strategy}_n{num_questions}"
+
     def resolve_test_set(
         self,
         meal_name: str,
@@ -681,6 +708,10 @@ class TestSetManager:
         - auto: Use/clean existing, or generate if not found
         - clean_only: Use/clean existing, error if not found
         - strict: Only use valid existing, error otherwise
+
+        If the test set name is not specified, it will be auto-derived from
+        the generation config (strategy + num_questions) to enable cache
+        hitting without explicit naming.
 
         Args:
             meal_name: Name of the meal.
@@ -699,6 +730,10 @@ class TestSetManager:
         name = test_set_config.get("name")
         on_missing = test_set_config.get("on_missing", "auto")
         generation_config = test_set_config.get("generation")
+
+        if name is None:
+            name = self._derive_test_set_name(generation_config)
+            logger.info(f"Auto-derived test set name: '{name}'")
 
         test_set_data = self.find_by_name(meal_name, name)
 
