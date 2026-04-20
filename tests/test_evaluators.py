@@ -421,6 +421,98 @@ class TestRagasEvaluator:
         assert "llm_config" in result.error.lower()
 
 
+class TestRagasEvaluatorMocked:
+    """Tests for RagasEvaluator with mocked RAGAS dependencies."""
+
+    def test_evaluate_single_with_mock_llm(self):
+        """Test single evaluation with mocked LLM and embeddings."""
+        config = {
+            "ragas": {
+                "run_config": {"max_workers": 2, "timeout": 30},
+                "embedding": {"model_name": "test-model", "device": "cpu"},
+            }
+        }
+        evaluator = RagasEvaluator(config=config)
+
+        mock_result = MagicMock()
+        mock_result.scores = [{"faithfulness": 0.85, "answer_relevancy": 0.72}]
+
+        with patch.object(RagasEvaluator, "_create_llm", return_value=MagicMock()), \
+             patch.object(RagasEvaluator, "_create_embeddings", return_value=MagicMock()), \
+             patch.object(RagasEvaluator, "_create_metrics", return_value=[MagicMock()]), \
+             patch.object(RagasEvaluator, "_build_ragas_dataset", return_value=MagicMock()), \
+             patch.object(RagasEvaluator, "_build_run_config", return_value=MagicMock()), \
+             patch("ragas.evaluate", return_value=mock_result):
+
+            result = evaluator.evaluate_single(
+                question_id="q1",
+                question="What is RAG?",
+                answer="RAG is retrieval-augmented generation.",
+                contexts=["RAG combines retrieval and generation."],
+                expected_answer="RAG is a technique that combines retrieval with generation.",
+                llm_config={"api_key": "test", "base_url": "http://test", "model_name": "test-model"},
+                generation_metrics=["faithfulness", "answer_relevancy"],
+            )
+
+            assert result.question_id == "q1"
+            assert result.generation_metrics.get("faithfulness") == 0.85
+            assert result.generation_metrics.get("answer_relevancy") == 0.72
+            assert result.error is None
+
+    def test_evaluate_batch_with_mock(self):
+        """Test batch evaluation with mocked RAGAS."""
+        evaluator = RagasEvaluator(config={})
+
+        mock_result = MagicMock()
+        mock_result.scores = [
+            {"faithfulness": 0.9, "answer_relevancy": 0.8},
+            {"faithfulness": 0.7, "answer_relevancy": 0.6},
+        ]
+
+        samples = [
+            {"question_id": "q1", "question": "Q1", "answer": "A1", "contexts": ["C1"]},
+            {"question_id": "q2", "question": "Q2", "answer": "A2", "contexts": ["C2"]},
+        ]
+
+        with patch.object(RagasEvaluator, "_create_llm", return_value=MagicMock()), \
+             patch.object(RagasEvaluator, "_create_embeddings", return_value=MagicMock()), \
+             patch.object(RagasEvaluator, "_create_metrics", return_value=[MagicMock()]), \
+             patch.object(RagasEvaluator, "_build_ragas_dataset", return_value=MagicMock()), \
+             patch.object(RagasEvaluator, "_build_run_config", return_value=MagicMock()), \
+             patch("ragas.evaluate", return_value=mock_result):
+
+            results = evaluator.evaluate_batch(
+                samples=samples,
+                llm_config={"api_key": "test", "base_url": "http://test", "model_name": "test-model"},
+                generation_metrics=["faithfulness", "answer_relevancy"],
+            )
+
+            assert len(results) == 2
+            assert results[0].generation_metrics.get("faithfulness") == 0.9
+            assert results[1].generation_metrics.get("faithfulness") == 0.7
+
+    def test_ragas_exclusive_metrics_validated(self):
+        """Test that RAGAS-exclusive metrics are properly validated."""
+        evaluator = RagasEvaluator(config={})
+
+        assert "answer_correctness" in evaluator.supported_generation_metrics
+        assert "semantic_similarity" in evaluator.supported_generation_metrics
+
+        errors = evaluator.validate_metrics(
+            generation_metrics=["answer_correctness", "semantic_similarity"]
+        )
+        assert len(errors) == 0
+
+    def test_ragas_unsupported_metrics(self):
+        """Test that unsupported metrics are caught."""
+        evaluator = RagasEvaluator(config={})
+
+        errors = evaluator.validate_metrics(
+            generation_metrics=["nonexistent_metric"]
+        )
+        assert len(errors) > 0
+
+
 class TestEvaluatorIntegration:
     """Integration tests for evaluators."""
 
