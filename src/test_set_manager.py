@@ -1,6 +1,6 @@
 import json
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -357,3 +357,310 @@ class TestSetManager:
         test_set_data["metadata"]["updated_at"] = datetime.now().isoformat()
         self.save_test_set(meal_name, test_set_data)
         return test_set_data
+
+    def _create_archive_backup(
+        self,
+        test_set_data: Dict[str, Any],
+        meal_name: str,
+    ) -> Path:
+        """Create an archive backup of a test set before modification.
+
+        Args:
+            test_set_data: Test set dictionary to backup.
+            meal_name: Name of the meal.
+
+        Returns:
+            Path to the archive file.
+        """
+        test_sets_dir = self.get_test_sets_dir(meal_name)
+        ensure_dir(str(test_sets_dir))
+
+        name = test_set_data["metadata"]["name"]
+        timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        archive_name = f"{name}.archive.{timestamp}.json"
+        archive_path = test_sets_dir / archive_name
+
+        with open(archive_path, "w", encoding="utf-8") as f:
+            json.dump(test_set_data, f, ensure_ascii=False, indent=2)
+
+        logger.info(f"Created archive backup at {archive_path}")
+        return archive_path
+
+    def _clean_user_test_set(
+        self,
+        test_set_data: Dict[str, Any],
+        meal_config: "MealConfig",
+        invalid_questions: List[Dict[str, Any]],
+        generator: Optional[Any] = None,
+        llm_preset: str = "default",
+        token_tracker: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """Clean a user-defined test set according to its invalid_policy.
+
+        Args:
+            test_set_data: Test set dictionary to clean.
+            meal_config: MealConfig for the current meal.
+            invalid_questions: List of questions that are invalid.
+            generator: Optional TestSetGenerator for regenerate policy.
+            llm_preset: LLM preset for generation.
+            token_tracker: Optional token tracker.
+
+        Returns:
+            Cleaned test set dictionary.
+
+        Raises:
+            ValueError: If cleaning fails according to invalid_policy.
+        """
+        invalid_policy = test_set_data["metadata"].get("invalid_policy")
+
+        if invalid_policy == "immutable":
+            return self._clean_immutable_policy(
+                test_set_data, meal_config, invalid_questions
+            )
+        elif invalid_policy == "trim":
+            return self._clean_trim_policy(
+                test_set_data, meal_config, invalid_questions
+            )
+        elif invalid_policy == "regenerate":
+            return self._clean_regenerate_policy(
+                test_set_data,
+                meal_config,
+                invalid_questions,
+                generator,
+                llm_preset,
+                token_tracker,
+            )
+        else:
+            raise ValueError(f"Unknown invalid_policy: {invalid_policy}")
+
+    def _clean_immutable_policy(
+        self,
+        test_set_data: Dict[str, Any],
+        meal_config: "MealConfig",
+        invalid_questions: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Clean a test set with immutable policy.
+
+        For invalid_policy: "immutable":
+        - If no invalid questions (only meal_id changed), just update meal_id and return
+        - If any invalid questions, raise ValueError with message about immutable policy
+
+        Args:
+            test_set_data: Test set dictionary to clean.
+            meal_config: MealConfig for the current meal.
+            invalid_questions: List of questions that are invalid.
+
+        Returns:
+            Cleaned test set dictionary with updated meal_id.
+
+        Raises:
+            ValueError: If any invalid questions exist.
+        """
+        if invalid_questions:
+            invalid_ids = [q.get("id", "?") for q in invalid_questions]
+            raise ValueError(
+                f"Test set has immutable policy but contains {len(invalid_questions)} "
+                f"invalid questions with IDs: {invalid_ids}. "
+                "Cannot modify immutable test set."
+            )
+
+        test_set_data = self._update_meal_id(test_set_data, meal_config.data_id)
+        return test_set_data
+
+    def _clean_trim_policy(
+        self,
+        test_set_data: Dict[str, Any],
+        meal_config: "MealConfig",
+        invalid_questions: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Clean a test set with trim policy.
+
+        For invalid_policy: "trim":
+        1. If all questions are invalid, raise ValueError
+        2. Create archive backup
+        3. Remove invalid questions
+        4. Update metadata (meal_id, updated_at, audit_log)
+        5. Save and return
+
+        Args:
+            test_set_data: Test set dictionary to clean.
+            meal_config: MealConfig for the current meal.
+            invalid_questions: List of questions that are invalid.
+
+        Returns:
+            Cleaned test set dictionary.
+
+        Raises:
+            ValueError: If all questions are invalid.
+        """
+        total_questions = len(test_set_data.get("questions", []))
+
+        if len(invalid_questions) == total_questions:
+            raise ValueError(
+                f"Cannot trim test set: all {total_questions} questions are invalid. "
+                "No valid questions remain."
+            )
+
+        meal_name = meal_config.name
+        self._create_archive_backup(test_set_data, meal_name)
+
+        invalid_ids = {q.get("id") for q in invalid_questions}
+        test_set_data["questions"] = [
+            q for q in test_set_data.get("questions", [])
+            if q.get("id") not in invalid_ids
+        ]
+
+        test_set_data["metadata"]["meal_id"] = meal_config.data_id
+        test_set_data["metadata"]["updated_at"] = datetime.now().isoformat()
+
+        audit_entry = {
+            "action": "trimmed",
+            "timestamp": datetime.now().isoformat(),
+            "removed_count": len(invalid_questions),
+            "removed_ids": list(invalid_ids),
+        }
+        test_set_data["metadata"]["audit_log"].append(audit_entry)
+
+        self.save_test_set(meal_name, test_set_data)
+
+        logger.info(
+            f"Trimmed {len(invalid_questions)} invalid questions from test set "
+            f"'{test_set_data['metadata']['name']}'"
+        )
+
+        return test_set_data
+
+    def _clean_regenerate_policy(
+        self,
+        test_set_data: Dict[str, Any],
+        meal_config: "MealConfig",
+        invalid_questions: List[Dict[str, Any]],
+        generator: Optional[Any],
+        llm_preset: str,
+        token_tracker: Optional[Any],
+    ) -> Dict[str, Any]:
+        """Clean a test set with regenerate policy.
+
+        For invalid_policy: "regenerate":
+        1. Check that generation config exists in metadata, else raise ValueError
+        2. Create archive backup
+        3. Remove invalid questions
+        4. If generator provided, supplement questions to restore count
+        5. Update metadata (meal_id, updated_at, audit_log)
+        6. If all questions were replaced, add full_regeneration to audit_log
+        7. Save and return
+
+        Args:
+            test_set_data: Test set dictionary to clean.
+            meal_config: MealConfig for the current meal.
+            invalid_questions: List of questions that are invalid.
+            generator: Optional TestSetGenerator for regeneration.
+            llm_preset: LLM preset for generation.
+            token_tracker: Optional token tracker.
+
+        Returns:
+            Cleaned test set dictionary.
+
+        Raises:
+            ValueError: If generation config is missing.
+        """
+        generation_config = test_set_data["metadata"].get("generation")
+        if not generation_config:
+            raise ValueError(
+                "Test set has regenerate policy but no generation config in metadata. "
+                "Cannot regenerate questions without generation configuration."
+            )
+
+        meal_name = meal_config.name
+        self._create_archive_backup(test_set_data, meal_name)
+
+        original_count = len(test_set_data.get("questions", []))
+        invalid_ids = {q.get("id") for q in invalid_questions}
+        all_were_invalid = len(invalid_questions) == original_count
+
+        test_set_data["questions"] = [
+            q for q in test_set_data.get("questions", [])
+            if q.get("id") not in invalid_ids
+        ]
+
+        if generator is not None and invalid_questions:
+            num_to_generate = len(invalid_questions)
+            try:
+                new_questions = generator.generate_questions(
+                    meal_config=meal_config,
+                    num_questions=num_to_generate,
+                    llm_preset=llm_preset,
+                    token_tracker=token_tracker,
+                )
+                test_set_data["questions"].extend(new_questions)
+                logger.info(
+                    f"Regenerated {len(new_questions)} questions for test set "
+                    f"'{test_set_data['metadata']['name']}'"
+                )
+            except Exception as e:
+                logger.error(f"Failed to regenerate questions: {str(e)}")
+
+        test_set_data["metadata"]["meal_id"] = meal_config.data_id
+        test_set_data["metadata"]["updated_at"] = datetime.now().isoformat()
+
+        audit_entry = {
+            "action": "regenerated",
+            "timestamp": datetime.now().isoformat(),
+            "removed_count": len(invalid_questions),
+            "removed_ids": list(invalid_ids),
+        }
+        if all_were_invalid:
+            audit_entry["full_regeneration"] = True
+
+        test_set_data["metadata"]["audit_log"].append(audit_entry)
+
+        self.save_test_set(meal_name, test_set_data)
+
+        return test_set_data
+
+    def _should_warn_about_cleaning(
+        self,
+        test_set_data: Dict[str, Any],
+    ) -> tuple[bool, str]:
+        """Check if a warning should be emitted about previous cleaning.
+
+        Args:
+            test_set_data: Test set dictionary.
+
+        Returns:
+            Tuple of (should_warn, warning_message).
+        """
+        metadata = test_set_data.get("metadata", {})
+
+        if metadata.get("suppress_warnings", False):
+            return (False, "")
+
+        audit_log = metadata.get("audit_log", [])
+
+        for entry in audit_log:
+            action = entry.get("action", "")
+            if action == "trimmed":
+                removed_count = entry.get("removed_count", 0)
+                timestamp = entry.get("timestamp", "unknown time")
+                return (
+                    True,
+                    f"Test set was previously trimmed at {timestamp}. "
+                    f"{removed_count} questions were removed."
+                )
+            elif action == "regenerated":
+                timestamp = entry.get("timestamp", "unknown time")
+                if entry.get("full_regeneration"):
+                    return (
+                        True,
+                        f"Test set underwent full regeneration at {timestamp}. "
+                        "All questions were replaced."
+                    )
+                else:
+                    removed_count = entry.get("removed_count", 0)
+                    return (
+                        True,
+                        f"Test set was previously regenerated at {timestamp}. "
+                        f"{removed_count} questions were replaced."
+                    )
+
+        return (False, "")
