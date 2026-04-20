@@ -8,7 +8,7 @@ import yaml
 from loguru import logger
 
 
-VALID_RETRIEVAL_METRICS = {"hit_rate", "mrr", "ndcg", "chunk_hit_rate", "chunk_mrr", "chunk_ndcg", "dedup_hit_rate", "dedup_mrr", "dedup_ndcg", "false_positive_rate"}
+VALID_RETRIEVAL_METRICS = {"hit_rate", "mrr", "ndcg", "chunk_hit_rate", "chunk_mrr", "chunk_ndcg", "dedup_hit_rate", "dedup_mrr", "dedup_ndcg", "false_positive_rate", "context_precision", "context_recall"}
 VALID_GENERATION_METRICS = {"faithfulness", "answer_relevancy"}
 VALID_ON_MISSING_VALUES = {"auto", "clean_only", "strict"}
 VALID_EVALUATION_BACKENDS = {"builtin", "ragas"}
@@ -20,7 +20,7 @@ VALID_RAGAS_METRICS = {
     "answer_correctness",
     "semantic_similarity",
 }
-RAGAS_EXCLUSIVE_METRICS = VALID_RAGAS_METRICS - VALID_GENERATION_METRICS
+RAGAS_EXCLUSIVE_METRICS = VALID_RAGAS_METRICS - VALID_GENERATION_METRICS - VALID_RETRIEVAL_METRICS
 
 
 def is_new_format(test_set_config: Dict[str, Any]) -> bool:
@@ -237,6 +237,16 @@ class ExperimentConfig:
                                 f"Valid options: {sorted(VALID_RETRIEVAL_METRICS)}"
                             )
 
+                        llm_retrieval_in_retrieval = [
+                            m for m in retrieval_metrics
+                            if m in {"context_precision", "context_recall"}
+                        ]
+                        if llm_retrieval_in_retrieval and "ragas" not in backends and "builtin" not in backends:
+                            errors.append(
+                                f"LLM-based retrieval metrics {llm_retrieval_in_retrieval} require "
+                                f"'builtin' or 'ragas' in evaluation.backends"
+                            )
+
                 if "generation" in metrics:
                     generation_metrics = metrics["generation"]
                     if not isinstance(generation_metrics, list):
@@ -253,14 +263,14 @@ class ExperimentConfig:
                                 f"Valid options: {sorted(all_valid_generation)}"
                             )
 
-                        ragas_exclusive_in_use = [
+                        non_builtin_generation = [
                             m for m in generation_metrics
-                            if m in RAGAS_EXCLUSIVE_METRICS
+                            if m not in VALID_GENERATION_METRICS
                         ]
-                        if ragas_exclusive_in_use and "ragas" not in backends:
+                        if non_builtin_generation and "ragas" not in backends:
                             errors.append(
-                                f"RAGAS-exclusive metrics {ragas_exclusive_in_use} require "
-                                f"'ragas' in evaluation.backends"
+                                f"Metrics {non_builtin_generation} in generation require "
+                                f"'ragas' in evaluation.backends (not supported by builtin backend)"
                             )
 
         if "retrieval_granularity" in self.evaluation:
