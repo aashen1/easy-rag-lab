@@ -2,7 +2,7 @@
 
 <!-- status: active -->
 
-> 最后更新: 2026-04-18
+> 最后更新: 2026-04-21
 
 本文档详细说明 RAG 评测系统中各个指标的含义、计算方法和改进建议。
 
@@ -10,12 +10,15 @@
 
 ## 概述
 
-评测系统提供两类指标：
+评测系统提供两类指标，并支持两种评测后端：
 
-| 类别 | 指标 | 评测对象 |
-|------|------|---------|
-| **检索指标** | Hit Rate, MRR, NDCG | 检索结果质量 |
-| **生成质量指标** | Faithfulness, Answer Relevancy | 回答内容质量 |
+| 类别 | 指标 | 评测对象 | 可用后端 |
+|------|------|---------|---------|
+| **检索指标** | Hit Rate, MRR, NDCG | 检索结果质量 | builtin |
+| **生成质量指标** | Faithfulness, Answer Relevancy | 回答内容质量 | builtin, ragas |
+| **RAGAS 生成指标** | Context Precision, Context Recall, Factual Correctness, Semantic Similarity | 回答与检索质量 | ragas |
+
+> 关于 RAGAS 后端的详细使用方法，请参阅 [RAGAS 评测系统指南](ragas-evaluation.md)。
 
 ---
 
@@ -218,7 +221,7 @@ Faithfulness = 可推导陈述数 / 总陈述数
 
 **定义**：衡量检索系统是否将相关上下文排在无关上下文之前。
 
-**来源**：DeepEval
+**来源**：DeepEval / RAGAS
 
 **计算方法**：
 
@@ -255,13 +258,13 @@ Context Precision = (1/N) × Σ(Precision@k × r_k)
 
 ### Context Recall（上下文召回率）
 
-**定义**：Ground Truth 中的信息是否都能从检索上下文中推断出来。
+**定义**：Ground Truth / 参考答案中的信息是否都能从检索上下文中推断出来。
 
 **来源**：RAGAS
 
 **计算方法**：
 
-1. 将 Ground Truth 分割成句子
+1. 将 Ground Truth 分割成句子/陈述
 2. 对每个句子，判断是否可从检索上下文中推断
 3. 计算可推断句子的比例
 
@@ -293,6 +296,52 @@ Context Recall = 可推断句子数 / Ground Truth 总句子数
 - 增加 `top_k` 值
 - 优化 chunk 大小，确保关键信息完整
 - 考虑混合检索（BM25 + 向量）
+
+---
+
+## RAGAS 特有生成指标
+
+以下指标由 RAGAS 评测后端提供，需要在配置中启用 `ragas` 后端。
+
+### Factual Correctness（事实正确性）
+
+**定义**：回答与参考答案的事实一致性，基于 claim-level 对比。
+
+**计算方法**：
+
+1. 从回答和参考答案中分别提取事实声明（claims）
+2. 计算回答 claims 相对于参考答案 claims 的覆盖度
+
+**取值范围**：0.0 - 1.0
+
+**所需输入**：response, **reference**（参考答案）
+
+**解读**：
+- **0.8+**：回答事实与参考高度一致
+- **0.5-0.8**：部分事实存在偏差
+- **< 0.5**：事实偏差较大
+
+> 此指标高度依赖参考答案的质量。
+
+---
+
+### Semantic Similarity（语义相似度）
+
+**定义**：回答与参考答案的语义相似度，基于 Embedding 向量的余弦相似度。
+
+**计算方法**：
+
+1. 将回答和参考答案分别编码为向量
+2. 计算余弦相似度
+
+**取值范围**：0.0 - 1.0
+
+**所需输入**：response, **reference**（参考答案）
+
+**解读**：
+- **0.9+**：语义高度相似
+- **0.7-0.9**：语义基本相似
+- **< 0.7**：语义差异较大
 
 ---
 
@@ -341,15 +390,17 @@ metrics = compute_aggregate_metrics(results)
 
 ## 指标对比
 
-| 指标 | 评测阶段 | 是否需要 LLM | 计算成本 |
-|------|---------|-------------|---------|
-| Hit Rate | 检索 | 否 | 低 |
-| MRR | 检索 | 否 | 低 |
-| NDCG | 检索 | 否 | 低 |
-| Context Precision | LLM 检索 | 是 | 中 |
-| Context Recall | LLM 检索 | 是 | 中 |
-| Faithfulness | 生成 | 是 | 高 |
-| Answer Relevancy | 生成 | 是 | 高 |
+| 指标 | 评测阶段 | 是否需要 LLM | 需要 reference | 计算成本 | 可用后端 |
+|------|---------|-------------|---------------|---------|---------|
+| Hit Rate | 检索 | 否 | 否 | 低 | builtin |
+| MRR | 检索 | 否 | 否 | 低 | builtin |
+| NDCG | 检索 | 否 | 否 | 低 | builtin |
+| Context Precision | 生成/检索 | 是 | 可选 | 高 | builtin, ragas |
+| Context Recall | 生成/检索 | 是 | 是 | 高 | ragas |
+| Faithfulness | 生成 | 是 | 否 | 高 | builtin, ragas |
+| Answer Relevancy | 生成 | 是 | 否 | 高 | builtin, ragas |
+| Factual Correctness | 生成 | 是 | 是 | 高 | ragas |
+| Semantic Similarity | 生成 | 否（需 Embedding） | 是 | 中 | ragas |
 
 ---
 
@@ -361,6 +412,7 @@ metrics = compute_aggregate_metrics(results)
 
 ```yaml
 evaluation:
+  backends: ["builtin"]
   metrics:
     retrieval:
       - "hit_rate"
@@ -375,6 +427,7 @@ evaluation:
 ```yaml
 evaluation:
   llm_preset: "default"
+  backends: ["builtin"]
   metrics:
     retrieval:
       - "hit_rate"
@@ -395,6 +448,7 @@ evaluation:
   llm_retrieval_metrics:
     - "context_precision"
     - "context_recall"
+  backends: ["builtin"]
   metrics:
     retrieval:
       - "hit_rate"
@@ -403,6 +457,27 @@ evaluation:
     generation:
       - "faithfulness"
       - "answer_relevancy"
+```
+
+### RAGAS 评测
+
+使用 RAGAS 后端获取更丰富的生成质量指标：
+
+```yaml
+evaluation:
+  backends: ["builtin", "ragas"]
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+      - "context_precision"
+      - "context_recall"
+      - "answer_correctness"
+      - "semantic_similarity"
 ```
 
 ### 指标优先级
@@ -414,11 +489,14 @@ evaluation:
 5. **Context Precision**：检索内容相关性 + 排序质量，深度评测
 6. **Context Recall**：信息覆盖完整性，深度评测
 7. **Answer Relevancy**：反映用户体验，进阶
+8. **Factual Correctness**：事实正确性（需参考答案），进阶
+9. **Semantic Similarity**：语义相似度（需参考答案），进阶
 
 ---
 
 ## 相关文档
 
+- [RAGAS 评测系统指南](ragas-evaluation.md)
 - [实验系统指南](experiment-system.md)
 - [配置参考](../config-reference.md)
 - [评测指标 Bug 修复报告](../troubleshooting/eval-metrics-bugfix.md)

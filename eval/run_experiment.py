@@ -54,6 +54,9 @@ from eval.metrics import (
     normalize_source,
     normalize_source_with_equivalence,
 )
+from eval.evaluators.base import BaseEvaluator, EvaluationResult
+from eval.evaluators.builtin_evaluator import BuiltinEvaluator
+from eval.evaluators.ragas_evaluator import RagasEvaluator
 from eval.experiment_reporter import ExperimentReporter
 
 
@@ -708,15 +711,344 @@ def prepare_index_for_variant(
     return indexer
 
 
+def _create_evaluators(
+    exp_config: ExperimentConfig,
+    system_config: Dict[str, Any],
+) -> Dict[str, BaseEvaluator]:
+    """
+    Create evaluator instances based on experiment configuration.
+
+    Args:
+        exp_config: Experiment configuration.
+        system_config: System configuration dictionary.
+
+    Returns:
+        Dictionary mapping backend name to evaluator instance.
+    """
+    backends = exp_config.evaluation.get("backends", ["builtin"])
+    evaluators: Dict[str, BaseEvaluator] = {}
+
+    for backend in backends:
+        if backend == "builtin":
+            evaluators["builtin"] = BuiltinEvaluator(config=system_config)
+        elif backend == "ragas":
+            ragas_config = system_config.get("evaluation", {}).get("ragas", {})
+            evaluators["ragas"] = RagasEvaluator(config={**system_config, "ragas": ragas_config})
+        else:
+            logger.warning(f"Unknown evaluation backend: {backend}")
+
+    return evaluators
+
+
+def _collect_rag_samples(
+    pipeline: RAGPipeline,
+    test_set: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    """
+    Run pipeline queries and collect raw samples for evaluation.
+
+    Args:
+        pipeline: Configured RAG pipeline.
+        test_set: Test set dictionary with questions.
+
+    Returns:
+        List of sample dictionaries with query results.
+    """
+    test_set_name = test_set.get("name", "unknown")
+    questions = test_set.get("questions", [])
+
+    logger.info(f"Collecting results for test set '{test_set_name}' ({len(questions)} questions)...")
+
+    samples = []
+    for i, question_data in enumerate(questions, 1):
+        question_id = question_data.get("id", f"q{i}")
+        question_text = question_data.get("question", "")
+
+        if not question_text:
+            logger.warning(f"Question {question_id} has no text, skipping")
+            continue
+
+        logger.info(f"Processing question {i}/{len(questions)}: {question_id}")
+
+        case_start_time = time.time()
+        try:
+            response = pipeline.query(question_text)
+            case_time = time.time() - case_start_time
+
+            sample = {
+                "question_id": question_id,
+                "question": question_text,
+                "answer": response.get("answer", ""),
+                "contexts": response.get("contexts", []),
+                "expected_sources": question_data.get("source_files", []),
+                "expected_answer": question_data.get("answer"),
+                "retrieved_sources": response.get("sources", []),
+                "time_seconds": case_time,
+                "test_set": test_set_name,
+                "category": question_data.get("category"),
+                "difficulty": question_data.get("difficulty"),
+                "token_usage": response.get("token_usage"),
+            }
+
+            logger.success(
+                f"Question {question_id}: collected result ({case_time:.2f}s)"
+            )
+
+        except Exception as e:
+            case_time = time.time() - case_start_time
+            logger.error(f"Question {question_id} failed: {str(e)}")
+            sample = {
+                "question_id": question_id,
+                "question": question_text,
+                "answer": "",
+                "contexts": [],
+                "expected_sources": question_data.get("source_files", []),
+                "expected_answer": question_data.get("answer"),
+                "retrieved_sources": [],
+                "time_seconds": case_time,
+                "test_set": test_set_name,
+                "category": question_data.get("category"),
+                "error": str(e),
+            }
+
+        samples.append(sample)
+
+    return samples
+
+
+def _evaluate_with_builtin(
+    samples: List[Dict[str, Any]],
+    evaluator: BuiltinEvaluator,
+    llm_config: Optional[Dict[str, str]] = None,
+    retrieval_metrics: Optional[List[str]] = None,
+    generation_metrics: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Evaluate samples using the builtin evaluator.
+
+    Args:
+        samples: List of sample dictionaries from _collect_rag_samples.
+        evaluator: BuiltinEvaluator instance.
+        llm_config: Optional LLM configuration for generation metrics.
+        retrieval_metrics: Optional list of retrieval metrics to compute.
+        generation_metrics: Optional list of generation metrics to compute.
+
+    Returns:
+        List of evaluation result dictionaries.
+    """
+    results = []
+    for sample in samples:
+        question_id = sample["question_id"]
+
+        if "error" in sample:
+            result = {
+                "id": question_id,
+                "question": sample["question"],
+                "answer": None,
+                "error": sample["error"],
+                "expected_sources": sample.get("expected_sources", []),
+                "time_seconds": sample.get("time_seconds", 0),
+                "test_set": sample.get("test_set", ""),
+                "category": sample.get("category"),
+            }
+            results.append(result)
+            continue
+
+        eval_result = evaluator.evaluate_single(
+            question_id=question_id,
+            question=sample["question"],
+            answer=sample["answer"],
+            contexts=sample.get("retrieved_sources", []),
+            expected_sources=sample.get("expected_sources"),
+            expected_answer=sample.get("expected_answer"),
+            llm_config=llm_config,
+            retrieval_metrics=retrieval_metrics,
+            generation_metrics=generation_metrics,
+        )
+
+        result = {
+            "id": question_id,
+            "question": sample["question"],
+            "answer": sample["answer"],
+            "retrieval": eval_result.retrieval_metrics,
+            "sources": sample.get("retrieved_sources", []),
+            "expected_sources": sample.get("expected_sources", []),
+            "time_seconds": sample.get("time_seconds", 0),
+            "test_set": sample.get("test_set", ""),
+            "category": sample.get("category"),
+            "difficulty": sample.get("difficulty"),
+            "token_usage": sample.get("token_usage"),
+        }
+
+        if eval_result.generation_metrics:
+            result["generation"] = eval_result.generation_metrics
+
+        if eval_result.error:
+            result["error"] = eval_result.error
+
+        metric_parts = []
+        for k, v in eval_result.retrieval_metrics.items():
+            if v is not None:
+                metric_parts.append(f"{k.upper()}={v:.4f}")
+        for k, v in eval_result.generation_metrics.items():
+            if v is not None:
+                metric_parts.append(f"{k}={v:.4f}")
+        metric_str = ", ".join(metric_parts) if metric_parts else "no metrics"
+        logger.success(f"Question {question_id}: {metric_str}")
+
+        results.append(result)
+
+    return results
+
+
+def _evaluate_with_ragas(
+    samples: List[Dict[str, Any]],
+    evaluator: RagasEvaluator,
+    llm_config: Dict[str, str],
+    generation_metrics: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Evaluate samples using the RAGAS evaluator.
+
+    Args:
+        samples: List of sample dictionaries from _collect_rag_samples.
+        evaluator: RagasEvaluator instance.
+        llm_config: LLM configuration for RAGAS.
+        generation_metrics: Optional list of generation metrics to compute.
+
+    Returns:
+        List of evaluation result dictionaries.
+    """
+    valid_samples = [s for s in samples if "error" not in s]
+
+    if not valid_samples:
+        logger.warning("No valid samples for RAGAS evaluation")
+        return []
+
+    logger.info(f"Running RAGAS evaluation on {len(valid_samples)} samples...")
+
+    ragas_results = evaluator.evaluate_batch(
+        samples=valid_samples,
+        llm_config=llm_config,
+        generation_metrics=generation_metrics,
+    )
+
+    results = []
+    for i, eval_result in enumerate(ragas_results):
+        sample = valid_samples[i]
+        result = {
+            "id": sample["question_id"],
+            "question": sample["question"],
+            "answer": sample["answer"],
+            "generation": eval_result.generation_metrics,
+            "sources": sample.get("retrieved_sources", []),
+            "expected_sources": sample.get("expected_sources", []),
+            "time_seconds": sample.get("time_seconds", 0),
+            "test_set": sample.get("test_set", ""),
+            "category": sample.get("category"),
+            "difficulty": sample.get("difficulty"),
+        }
+
+        if eval_result.error:
+            result["ragas_error"] = eval_result.error
+
+        metric_parts = []
+        for k, v in eval_result.generation_metrics.items():
+            if v is not None:
+                metric_parts.append(f"{k}={v:.4f}")
+        metric_str = ", ".join(metric_parts) if metric_parts else "no metrics"
+        logger.success(f"Question {sample['question_id']} (RAGAS): {metric_str}")
+
+        results.append(result)
+
+    return results
+
+
 def evaluate_test_set(
     pipeline: RAGPipeline,
     test_set: Dict[str, Any],
-    llm_config: Optional[Dict[str, str]] = None,
-    llm_retrieval_metrics: Optional[List[str]] = None,
-    equivalence_groups: Optional[Dict[str, List[str]]] = None,
+    exp_config: Optional[ExperimentConfig] = None,
+    system_config: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Evaluate a single test set against the pipeline.
+
+    When exp_config and system_config are provided, uses the evaluator
+    abstraction layer with backend selection. Otherwise, falls back to
+    legacy direct metric computation for backward compatibility.
+
+    Args:
+        pipeline: Configured RAG pipeline.
+        test_set: Test set dictionary with questions.
+        exp_config: Optional experiment configuration for backend selection.
+        system_config: Optional system configuration for evaluator creation.
+
+    Returns:
+        List of evaluation result dictionaries.
+    """
+    if exp_config is None or system_config is None:
+        return _evaluate_test_set_legacy(pipeline, test_set)
+
+    evaluators = _create_evaluators(exp_config, system_config)
+    backends = exp_config.evaluation.get("backends", ["builtin"])
+
+    retrieval_metrics = exp_config.evaluation.get("metrics", {}).get("retrieval")
+    generation_metrics = exp_config.evaluation.get("metrics", {}).get("generation")
+
+    llm_preset = exp_config.evaluation.get("llm_preset", "default")
+    llm_config = get_llm_config(system_config, llm_preset)
+
+    samples = _collect_rag_samples(pipeline, test_set)
+
+    all_results: Dict[str, Dict[str, Any]] = {}
+
+    if "builtin" in backends and "builtin" in evaluators:
+        builtin_results = _evaluate_with_builtin(
+            samples=samples,
+            evaluator=evaluators["builtin"],
+            llm_config=llm_config if generation_metrics else None,
+            retrieval_metrics=retrieval_metrics,
+            generation_metrics=generation_metrics if "ragas" not in backends else [
+                m for m in (generation_metrics or [])
+                if m in evaluators["builtin"].supported_generation_metrics
+            ],
+        )
+        for r in builtin_results:
+            all_results[r["id"]] = r
+
+    if "ragas" in backends and "ragas" in evaluators:
+        ragas_only_metrics = [
+            m for m in (generation_metrics or [])
+            if m in evaluators["ragas"].supported_generation_metrics
+        ]
+        if ragas_only_metrics:
+            ragas_results = _evaluate_with_ragas(
+                samples=samples,
+                evaluator=evaluators["ragas"],
+                llm_config=llm_config,
+                generation_metrics=ragas_only_metrics,
+            )
+            for r in ragas_results:
+                qid = r["id"]
+                if qid in all_results:
+                    if "generation" in r:
+                        if "generation" not in all_results[qid]:
+                            all_results[qid]["generation"] = {}
+                        all_results[qid]["generation"].update(r["generation"])
+                    if "ragas_error" in r:
+                        all_results[qid]["ragas_error"] = r["ragas_error"]
+                else:
+                    all_results[qid] = r
+
+    return list(all_results.values())
+
+
+def _evaluate_test_set_legacy(
+    pipeline: RAGPipeline,
+    test_set: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    """
+    Legacy evaluation using direct metric function calls.
 
     Args:
         pipeline: Configured RAG pipeline.
@@ -916,9 +1248,11 @@ def evaluate_test_set(
     return results
 
 
-def compute_aggregate_metrics(results: List[Dict[str, Any]]) -> Dict[str, float]:
+def compute_aggregate_metrics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
-    Compute aggregate retrieval metrics from evaluation results.
+    Compute aggregate metrics from evaluation results.
+
+    Supports both retrieval and generation metrics.
 
     Questions with expect_retrieval=False (irrelevant type) are excluded
     from retrieval metric averages since they have no expected sources.
@@ -927,28 +1261,53 @@ def compute_aggregate_metrics(results: List[Dict[str, Any]]) -> Dict[str, float]
         results: List of evaluation result dictionaries.
 
     Returns:
-        Dictionary containing average hit_rate, mrr, ndcg, and optionally
-        context_precision and context_recall. Also includes
-        retrieval_applicable_questions count.
+        Dictionary containing average metrics including hit_rate, mrr, ndcg,
+        chunk_level_metrics, dedup_metrics, and generation_metrics.
     """
-    retrieval_results = [r for r in results if r.get("retrieval") is not None]
-    if retrieval_results:
-        avg_hit_rate = sum(r["retrieval"]["hit_rate"] for r in retrieval_results) / len(retrieval_results)
-        avg_mrr = sum(r["retrieval"]["mrr"] for r in retrieval_results) / len(retrieval_results)
-        avg_ndcg = sum(r["retrieval"]["ndcg"] for r in retrieval_results) / len(retrieval_results)
+    metrics: Dict[str, Any] = {}
+
+    # Basic retrieval metrics
+    valid_retrieval = [r for r in results if "retrieval" in r and r["retrieval"]]
+    if valid_retrieval:
+        for metric_name in ["hit_rate", "mrr", "ndcg"]:
+            values = [
+                r["retrieval"][metric_name]
+                for r in valid_retrieval
+                if metric_name in r["retrieval"] and r["retrieval"][metric_name] is not None
+            ]
+            if values:
+                metrics[f"avg_{metric_name}"] = sum(values) / len(values)
+            else:
+                metrics[f"avg_{metric_name}"] = 0.0
     else:
-        avg_hit_rate = 0.0
-        avg_mrr = 0.0
-        avg_ndcg = 0.0
+        metrics["avg_hit_rate"] = 0.0
+        metrics["avg_mrr"] = 0.0
+        metrics["avg_ndcg"] = 0.0
 
-    metrics = {
-        "avg_hit_rate": avg_hit_rate,
-        "avg_mrr": avg_mrr,
-        "avg_ndcg": avg_ndcg,
-        "retrieval_applicable_questions": len(retrieval_results),
-        "total_questions": len(results),
-    }
+    metrics["retrieval_applicable_questions"] = len(valid_retrieval)
+    metrics["total_questions"] = len(results)
 
+    # Generation metrics (from RAGAS or builtin)
+    valid_generation = [r for r in results if "generation" in r and r["generation"]]
+    if valid_generation:
+        generation_metrics = set()
+        for r in valid_generation:
+            generation_metrics.update(r["generation"].keys())
+
+        generation_aggregate = {}
+        for metric_name in sorted(generation_metrics):
+            values = [
+                r["generation"][metric_name]
+                for r in valid_generation
+                if metric_name in r["generation"] and r["generation"][metric_name] is not None
+            ]
+            if values:
+                generation_aggregate[f"avg_{metric_name}"] = sum(values) / len(values)
+
+        if generation_aggregate:
+            metrics["generation_metrics"] = generation_aggregate
+
+    # Chunk-level metrics
     chunk_results = [r for r in results if r.get("chunk_retrieval") is not None]
     if chunk_results:
         avg_chunk_hit_rate = sum(r["chunk_retrieval"]["hit_rate"] for r in chunk_results) / len(chunk_results)
@@ -1106,11 +1465,9 @@ def run_variant_evaluation(
 
         for test_set in test_sets:
             results = evaluate_test_set(
-                pipeline,
-                test_set,
-                llm_config=llm_config,
-                llm_retrieval_metrics=llm_retrieval_metrics,
-                equivalence_groups=meal_config.equivalence_groups if meal_config.equivalence_groups else None,
+                pipeline, test_set,
+                exp_config=exp_config,
+                system_config=system_config,
             )
             all_results.extend(results)
 
@@ -1129,18 +1486,32 @@ def run_variant_evaluation(
             "total_questions": len(all_results),
             "total_time_seconds": total_time,
             "avg_time_per_question": total_time / len(all_results) if all_results else 0,
-            "retrieval_metrics": metrics,
+            "retrieval_metrics": {k: v for k, v in metrics.items() if k != "generation_metrics"},
             "config_snapshot": config_snapshot,
             "results": all_results,
             "token_usage": token_usage_data,
         }
 
+        if "generation_metrics" in metrics:
+            variant_result["generation_metrics"] = metrics["generation_metrics"]
+
+        log_parts = [
+            f"HR={metrics.get('avg_hit_rate', 0):.4f}",
+            f"MRR={metrics.get('avg_mrr', 0):.4f}",
+            f"NDCG={metrics.get('avg_ndcg', 0):.4f}",
+        ]
+        if "generation_metrics" in metrics:
+            for gk, gv in metrics["generation_metrics"].items():
+                log_parts.append(f"{gk}={gv:.4f}")
+
+        if "avg_context_precision" in metrics:
+            log_parts.append(f"CP={metrics['avg_context_precision']:.4f}")
+        if "avg_context_recall" in metrics:
+            log_parts.append(f"CR={metrics['avg_context_recall']:.4f}")
+
         logger.success(
             f"Variant '{variant_name}' evaluation completed: "
-            f"HR={metrics['avg_hit_rate']:.4f}, MRR={metrics['avg_mrr']:.4f}, "
-            f"NDCG={metrics['avg_ndcg']:.4f}"
-            + (f", CP={metrics['avg_context_precision']:.4f}" if "avg_context_precision" in metrics else "")
-            + (f", CR={metrics['avg_context_recall']:.4f}" if "avg_context_recall" in metrics else "")
+            + ", ".join(log_parts)
         )
 
         token_total = variant_tracker.get_total()

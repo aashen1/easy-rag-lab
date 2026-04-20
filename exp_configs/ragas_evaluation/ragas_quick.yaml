@@ -1,0 +1,30 @@
+name: "ragas_quick_smoke"
+description: "RAGAS快速冒烟测试 - 最小链路验证，确认RAGAS评测流程可正常运行"
+
+data:
+  meal: "smoke_ragas"
+  create_if_missing:
+    sample_ratio: 0.03
+    seed: 42
+
+test_sets:
+  - strategy: "document"
+    num_questions: 1
+
+variants:
+  - name: "ragas_smoke"
+    description: "冒烟测试 - 验证RAGAS评测基本流程"
+    config_overrides: {}
+
+evaluation:
+  backends: ["ragas"]
+  llm_preset: "default"
+  metrics:
+    retrieval: []
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+
+llm:
+  question_generation: "default"
+  answering: "default"

@@ -11,6 +11,16 @@ from loguru import logger
 VALID_RETRIEVAL_METRICS = {"hit_rate", "mrr", "ndcg", "chunk_hit_rate", "chunk_mrr", "chunk_ndcg", "dedup_hit_rate", "dedup_mrr", "dedup_ndcg", "false_positive_rate"}
 VALID_GENERATION_METRICS = {"faithfulness", "answer_relevancy"}
 VALID_ON_MISSING_VALUES = {"auto", "clean_only", "strict"}
+VALID_EVALUATION_BACKENDS = {"builtin", "ragas"}
+VALID_RAGAS_METRICS = {
+    "faithfulness",
+    "answer_relevancy",
+    "context_precision",
+    "context_recall",
+    "answer_correctness",
+    "semantic_similarity",
+}
+RAGAS_EXCLUSIVE_METRICS = VALID_RAGAS_METRICS - VALID_GENERATION_METRICS
 
 
 def is_new_format(test_set_config: Dict[str, Any]) -> bool:
@@ -197,6 +207,19 @@ class ExperimentConfig:
             if not isinstance(metrics, dict):
                 errors.append("Evaluation 'metrics' must be a dictionary")
             else:
+                backends = self.evaluation.get("backends", ["builtin"])
+                if not isinstance(backends, list):
+                    errors.append("Evaluation 'backends' must be a list")
+                else:
+                    invalid_backends = [
+                        b for b in backends if b not in VALID_EVALUATION_BACKENDS
+                    ]
+                    if invalid_backends:
+                        errors.append(
+                            f"Invalid evaluation backends: {invalid_backends}. "
+                            f"Valid options: {sorted(VALID_EVALUATION_BACKENDS)}"
+                        )
+
                 if "retrieval" not in metrics:
                     errors.append("Evaluation metrics must include 'retrieval' field")
                 else:
@@ -219,14 +242,25 @@ class ExperimentConfig:
                     if not isinstance(generation_metrics, list):
                         errors.append("Generation metrics must be a list")
                     else:
+                        all_valid_generation = VALID_GENERATION_METRICS | VALID_RAGAS_METRICS
                         invalid_generation = [
                             m for m in generation_metrics
-                            if m not in VALID_GENERATION_METRICS
+                            if m not in all_valid_generation
                         ]
                         if invalid_generation:
                             errors.append(
                                 f"Invalid generation metrics: {invalid_generation}. "
-                                f"Valid options: {sorted(VALID_GENERATION_METRICS)}"
+                                f"Valid options: {sorted(all_valid_generation)}"
+                            )
+
+                        ragas_exclusive_in_use = [
+                            m for m in generation_metrics
+                            if m in RAGAS_EXCLUSIVE_METRICS
+                        ]
+                        if ragas_exclusive_in_use and "ragas" not in backends:
+                            errors.append(
+                                f"RAGAS-exclusive metrics {ragas_exclusive_in_use} require "
+                                f"'ragas' in evaluation.backends"
                             )
 
         if "retrieval_granularity" in self.evaluation:

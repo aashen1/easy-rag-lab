@@ -131,6 +131,25 @@ artifacts:
   dir: "data/artifacts"
 
 # ============================================================
+# 评测系统配置
+# ============================================================
+
+# 评测系统配置
+evaluation:
+  # 评测后端选择：["builtin"], ["ragas"], 或 ["builtin", "ragas"]
+  backends: ["builtin"]
+  
+  # RAGAS 专用配置
+  ragas:
+    enabled: false
+    llm_backend: "anthropic"        # 使用 LangChain Anthropic 接口（推荐）
+    embeddings_backend: "local"     # 使用本地 BGE 或 "openai"
+    run_config:
+      max_workers: 5
+      timeout: 60
+      max_retries: 3
+
+# ============================================================
 # 测试与日志配置
 # ============================================================
 

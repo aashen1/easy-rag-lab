@@ -27,6 +27,7 @@
 - [实验评测系统](guides/experiment-system.md)
 - [文档级问题生成](guides/question-generation.md)
 - [评测指标详解](guides/evaluation-metrics.md)
+- [RAGAS 评测系统](guides/ragas-evaluation.md)
 - [Token 追踪](guides/token-tracking.md)
 - [测试运行指南](guides/testing.md)
 - [RAG 泛超参数使用指南](guides/hyperparameter-guide.md)
@@ -58,6 +59,7 @@ docs/
 │   ├── experiment-system.md
 │   ├── question-generation.md
 │   ├── evaluation-metrics.md
+│   ├── ragas-evaluation.md
 │   ├── token-tracking.md
 │   └── testing.md
 │

@@ -62,6 +62,9 @@ PDF 解析 → 分块 → Embedding → 向量索引 → 检索 → [重排序] 
 | 模块 | 功能 |
 |------|------|
 | `metrics.py` | 评测指标计算（Hit Rate, MRR, NDCG, Faithfulness, Answer Relevancy） |
+| `evaluators/base.py` | 评测器抽象基类，定义统一接口 |
+| `evaluators/builtin_evaluator.py` | 自研评测器，封装现有指标计算 |
+| `evaluators/ragas_evaluator.py` | RAGAS 评测器，集成 RAGAS 框架指标 |
 | `run_eval.py` | 基础评测脚本 |
 | `run_experiment.py` | 自动化实验系统 |
 | `experiment_reporter.py` | 实验报告生成 |
@@ -137,6 +140,10 @@ ash-easy-rag/
 │   └── token_tracker.py
 ├── eval/                # 评测模块
 │   ├── metrics.py
+│   ├── evaluators/      # 评测器抽象层
+│   │   ├── base.py      # 评测器基类
+│   │   ├── builtin_evaluator.py  # 自研评测器
+│   │   └── ragas_evaluator.py    # RAGAS 评测器
 │   ├── run_eval.py
 │   ├── run_experiment.py
 │   ├── experiment_reporter.py
