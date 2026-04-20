@@ -12,11 +12,11 @@
 
 | 类型 | 待处理 | 进行中 | 已完成 | 已延期 |
 |------|--------|--------|--------|--------|
-| Bug | 0 | 0 | 15 | 2 |
+| Bug | 1 | 0 | 15 | 2 |
 | Feature | 9 | 0 | 19 | 0 |
-| Refactor | 7 | 0 | 10 | 0 |
+| Refactor | 8 | 0 | 10 | 0 |
 | Optimization | 4 | 0 | 0 | 0 |
-| Investigation | 8 | 0 | 3 | 0 |
+| Investigation | 9 | 0 | 3 | 0 |
 
 ---
 
@@ -28,6 +28,7 @@
 |----|------|------|------|------|
 | BUG-001 | 测试数据占位符未填充 | [v0.1.5 code-review](reviews/v0.1.5/code-review.md) | ⏳ 已延期 | 需人工从 PDF 查阅填入 |
 | BUG-003 | NDCG 分级相关性 | [v0.1.5 code-review](reviews/v0.1.5/code-review.md) | ⏳ 已延期 | 当前阶段无明确收益 |
+| BUG-017 | pytest tmp 目录配置导致 FileExistsError | [TODO.md](../TODO.md) | 📋 待处理 | 从 %TEMP% 改为项目目录后引入隐患 |
 
 ---
 
@@ -66,6 +67,7 @@
 | RF-009 | commit-rule 与 CLAUDE.md 渐进式披露 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 分离为 skill/rule，减少提示词长度 |
 | RF-010 | lint/ruff 配置 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 添加代码检查工具 |
 | RF-011 | docs 目录组织度维护 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 打扫卫生时考量 docs 目录组织度，恢复整洁度 |
+| RF-012 | 旧格式 test_sets DeprecationWarning 清理 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 测试中大量旧格式警告，后续版本逐步清理 |
 | RF-006 | TestSet 独立管理系统重构 | 设计文档 | ✅ 已完成 | 大 | 新增 TestSetManager，重构 prepare_test_sets，支持 on_missing 三种模式 |
 
 ---
@@ -95,6 +97,7 @@
 | INV-009 | 问题集扩大与指标收敛趋势 | [TODO.md](../TODO.md) | 📋 待处理 | 等 v0.1.9 发版确认数据有效性后推进 |
 | INV-010 | 元数据增强改善 chunk 命中 | [TODO.md](../TODO.md) | 📋 待处理 | PDF 页码 + MD 标题层级，需入库对话记录并实装 |
 | INV-011 | 开源许可证评估（Apache 2.0） | [TODO.md](../TODO.md) | 📋 待处理 | 了解 Apache 2.0 及自动化标记源文件 |
+| INV-012 | 测试体系深度审查（883条是否过多） | [TODO.md](../TODO.md) | 📋 待处理 | 排查过度测试、重复测试、不合理测试、缺失测试、无意义测试 |
 
 ---
 
