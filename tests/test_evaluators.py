@@ -6,6 +6,7 @@ This module tests the evaluator base classes and implementations.
 
 import pytest
 from typing import Dict, List
+from unittest.mock import patch, MagicMock
 
 from eval.evaluators.base import BaseEvaluator, EvaluationResult
 from eval.evaluators.builtin_evaluator import BuiltinEvaluator
@@ -84,6 +85,15 @@ class TestBuiltinEvaluator:
         assert "hit_rate" in metrics
         assert "mrr" in metrics
         assert "ndcg" in metrics
+        assert "chunk_hit_rate" in metrics
+        assert "chunk_mrr" in metrics
+        assert "chunk_ndcg" in metrics
+        assert "dedup_hit_rate" in metrics
+        assert "dedup_mrr" in metrics
+        assert "dedup_ndcg" in metrics
+        assert "false_positive_rate" in metrics
+        assert "context_precision" in metrics
+        assert "context_recall" in metrics
 
     def test_supported_generation_metrics(self):
         """Test supported generation metrics."""
@@ -148,6 +158,225 @@ class TestBuiltinEvaluator:
         )
 
         assert len(errors) == 0
+
+    def test_evaluate_single_chunk_metrics(self):
+        """Test evaluating with chunk-level metrics."""
+        evaluator = BuiltinEvaluator()
+
+        result = evaluator.evaluate_single(
+            question_id="test_chunk_001",
+            question="What is the revenue?",
+            answer="Revenue is $1M.",
+            contexts=["doc1.pdf", "doc2.pdf"],
+            expected_sources=["doc1.pdf"],
+            chunk_ids=["doc1_001", "doc2_003"],
+            expected_chunks=["doc1_001", "doc1_002"],
+            retrieval_metrics=["chunk_hit_rate", "chunk_mrr", "chunk_ndcg"],
+        )
+
+        assert "chunk_hit_rate" in result.retrieval_metrics
+        assert "chunk_mrr" in result.retrieval_metrics
+        assert "chunk_ndcg" in result.retrieval_metrics
+        assert result.retrieval_metrics["chunk_hit_rate"] == 1.0
+        assert result.retrieval_metrics["chunk_mrr"] == 1.0
+        assert result.error is None
+
+    def test_evaluate_single_chunk_metrics_not_computed_without_data(self):
+        """Test that chunk metrics are not computed when chunk_ids are missing."""
+        evaluator = BuiltinEvaluator()
+
+        result = evaluator.evaluate_single(
+            question_id="test_chunk_002",
+            question="What is the revenue?",
+            answer="Revenue is $1M.",
+            contexts=["doc1.pdf"],
+            expected_sources=["doc1.pdf"],
+            retrieval_metrics=["chunk_hit_rate", "chunk_mrr", "chunk_ndcg"],
+        )
+
+        assert "chunk_hit_rate" not in result.retrieval_metrics
+        assert "chunk_mrr" not in result.retrieval_metrics
+        assert "chunk_ndcg" not in result.retrieval_metrics
+
+    def test_evaluate_single_dedup_metrics(self):
+        """Test evaluating with dedup metrics."""
+        evaluator = BuiltinEvaluator()
+
+        result = evaluator.evaluate_single(
+            question_id="test_dedup_001",
+            question="What is the revenue?",
+            answer="Revenue is $1M.",
+            contexts=["doc1.pdf", "doc1.pdf", "doc2.pdf"],
+            expected_sources=["doc1.pdf"],
+            retrieval_metrics=["dedup_hit_rate", "dedup_mrr", "dedup_ndcg"],
+        )
+
+        assert "dedup_hit_rate" in result.retrieval_metrics
+        assert "dedup_mrr" in result.retrieval_metrics
+        assert "dedup_ndcg" in result.retrieval_metrics
+        assert result.retrieval_metrics["dedup_hit_rate"] == 1.0
+        assert result.error is None
+
+    def test_evaluate_single_dedup_metrics_with_equivalence_groups(self):
+        """Test evaluating dedup metrics with equivalence groups."""
+        evaluator = BuiltinEvaluator()
+
+        equivalence_groups = {
+            "doc1": ["doc1.pdf", "doc1_summary.pdf"],
+        }
+
+        result = evaluator.evaluate_single(
+            question_id="test_dedup_eq_001",
+            question="What is the revenue?",
+            answer="Revenue is $1M.",
+            contexts=["doc1_summary.pdf", "doc2.pdf"],
+            expected_sources=["doc1.pdf"],
+            equivalence_groups=equivalence_groups,
+            retrieval_metrics=["dedup_hit_rate", "dedup_mrr", "dedup_ndcg"],
+        )
+
+        assert "dedup_hit_rate" in result.retrieval_metrics
+        assert result.retrieval_metrics["dedup_hit_rate"] == 1.0
+        assert result.error is None
+
+    def test_evaluate_single_fpr_metric(self):
+        """Test evaluating with false positive rate for irrelevant questions."""
+        evaluator = BuiltinEvaluator()
+
+        result = evaluator.evaluate_single(
+            question_id="test_fpr_001",
+            question="Tell me a joke.",
+            answer="I don't know.",
+            contexts=["doc1.pdf", "doc2.pdf", "doc3.pdf"],
+            expect_retrieval=False,
+            retrieval_metrics=["false_positive_rate"],
+        )
+
+        assert "false_positive_rate" in result.retrieval_metrics
+        assert result.retrieval_metrics["false_positive_rate"] == 0.6
+        assert result.error is None
+
+    def test_evaluate_single_fpr_not_computed_for_retrieval_questions(self):
+        """Test that FPR is not computed for questions that expect retrieval."""
+        evaluator = BuiltinEvaluator()
+
+        result = evaluator.evaluate_single(
+            question_id="test_fpr_002",
+            question="What is the revenue?",
+            answer="Revenue is $1M.",
+            contexts=["doc1.pdf"],
+            expected_sources=["doc1.pdf"],
+            expect_retrieval=True,
+            retrieval_metrics=["false_positive_rate"],
+        )
+
+        assert "false_positive_rate" not in result.retrieval_metrics
+
+    @patch("eval.evaluators.builtin_evaluator.calculate_context_precision")
+    @patch("eval.evaluators.builtin_evaluator.calculate_context_recall")
+    def test_evaluate_single_context_precision_recall(self, mock_recall, mock_precision):
+        """Test evaluating with context precision and recall metrics."""
+        mock_precision.return_value = 0.85
+        mock_recall.return_value = 0.72
+
+        evaluator = BuiltinEvaluator()
+        llm_config = {
+            "api_key": "test-key",
+            "base_url": "https://api.example.com",
+            "model_name": "test-model",
+        }
+
+        result = evaluator.evaluate_single(
+            question_id="test_ctx_001",
+            question="What is the revenue?",
+            answer="Revenue is $1M.",
+            contexts=["Revenue was $1M in 2023."],
+            expected_answer="The revenue was $1 million in 2023.",
+            llm_config=llm_config,
+            retrieval_metrics=["context_precision", "context_recall"],
+        )
+
+        assert "context_precision" in result.retrieval_metrics
+        assert "context_recall" in result.retrieval_metrics
+        assert result.retrieval_metrics["context_precision"] == 0.85
+        assert result.retrieval_metrics["context_recall"] == 0.72
+        assert result.error is None
+
+    @patch("eval.evaluators.builtin_evaluator.calculate_context_precision")
+    def test_evaluate_single_context_precision_error_handling(self, mock_precision):
+        """Test that context_precision errors are handled gracefully."""
+        mock_precision.side_effect = Exception("LLM API error")
+
+        evaluator = BuiltinEvaluator()
+        llm_config = {
+            "api_key": "test-key",
+            "base_url": "https://api.example.com",
+            "model_name": "test-model",
+        }
+
+        result = evaluator.evaluate_single(
+            question_id="test_ctx_err_001",
+            question="What is the revenue?",
+            answer="Revenue is $1M.",
+            contexts=["Revenue was $1M in 2023."],
+            llm_config=llm_config,
+            retrieval_metrics=["context_precision"],
+        )
+
+        assert "context_precision" in result.retrieval_metrics
+        assert result.retrieval_metrics["context_precision"] is None
+
+    def test_evaluate_single_no_retrieval_for_irrelevant_question(self):
+        """Test that basic retrieval metrics are skipped for irrelevant questions."""
+        evaluator = BuiltinEvaluator()
+
+        result = evaluator.evaluate_single(
+            question_id="test_irrelevant_001",
+            question="Tell me a joke.",
+            answer="I don't know.",
+            contexts=["doc1.pdf"],
+            expected_sources=["doc1.pdf"],
+            expect_retrieval=False,
+            retrieval_metrics=["hit_rate", "mrr", "ndcg"],
+        )
+
+        assert "hit_rate" not in result.retrieval_metrics
+        assert "mrr" not in result.retrieval_metrics
+        assert "ndcg" not in result.retrieval_metrics
+
+    def test_evaluate_batch_with_new_params(self):
+        """Test batch evaluation with new parameters."""
+        evaluator = BuiltinEvaluator()
+
+        samples = [
+            {
+                "question_id": "batch_001",
+                "question": "What is the revenue?",
+                "answer": "Revenue is $1M.",
+                "contexts": ["doc1.pdf", "doc2.pdf"],
+                "expected_sources": ["doc1.pdf"],
+                "chunk_ids": ["doc1_001", "doc2_003"],
+                "expected_chunks": ["doc1_001"],
+                "expect_retrieval": True,
+            },
+            {
+                "question_id": "batch_002",
+                "question": "Tell me a joke.",
+                "answer": "I don't know.",
+                "contexts": ["doc3.pdf", "doc4.pdf"],
+                "expect_retrieval": False,
+            },
+        ]
+
+        results = evaluator.evaluate_batch(
+            samples,
+            retrieval_metrics=["hit_rate", "chunk_hit_rate", "false_positive_rate"],
+        )
+
+        assert len(results) == 2
+        assert "hit_rate" in results[0].retrieval_metrics
+        assert "chunk_hit_rate" in results[0].retrieval_metrics
+        assert "false_positive_rate" in results[1].retrieval_metrics
 
 
 class TestRagasEvaluator:
