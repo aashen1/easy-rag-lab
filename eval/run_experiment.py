@@ -1331,7 +1331,6 @@ def run_variant_evaluation(
         all_results = []
 
         llm_config = get_llm_config(merged_config, llm_preset)
-        llm_retrieval_metrics = exp_config.evaluation.get("llm_retrieval_metrics", [])
 
         for test_set in test_sets:
             results = evaluate_test_set(

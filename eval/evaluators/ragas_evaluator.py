@@ -390,8 +390,6 @@ class RagasEvaluator(BaseEvaluator):
             result = evaluate(
                 dataset=dataset,
                 metrics=metrics,
-                llm=self._llm,
-                embeddings=self._embeddings,
                 run_config=run_config,
                 show_progress=False,
                 raise_exceptions=True,
@@ -483,8 +481,6 @@ class RagasEvaluator(BaseEvaluator):
             eval_result = evaluate(
                 dataset=dataset,
                 metrics=metrics,
-                llm=self._llm,
-                embeddings=self._embeddings,
                 run_config=run_config,
                 show_progress=True,
                 raise_exceptions=False,
