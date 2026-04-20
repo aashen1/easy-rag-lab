@@ -435,7 +435,7 @@ def _prepare_legacy_test_set(
     meal_dir = meal_manager.get_meal_dir(meal_name)
     test_sets_dir = meal_dir / "test_sets"
 
-    strategy = test_set_config.get("strategy", "factual")
+    strategy = test_set_config.get("strategy", "document")
     num_questions = test_set_config.get("num_questions", 20)
     seed = test_set_config.get("seed")
     type_distribution = test_set_config.get("type_distribution")

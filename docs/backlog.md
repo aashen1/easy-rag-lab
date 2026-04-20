@@ -16,7 +16,7 @@
 | Feature | 11 | 0 | 17 | 0 |
 | Refactor | 9 | 0 | 8 | 0 |
 | Optimization | 4 | 0 | 0 | 0 |
-| Investigation | 9 | 0 | 2 | 0 |
+| Investigation | 8 | 0 | 3 | 0 |
 
 ---
 
@@ -91,7 +91,7 @@
 | INV-005 | 05-open-source-readiness 核实 | [TODO.md](../TODO.md) | 📋 待处理 | 核实开源准备度检查清单 |
 | INV-006 | golden test 是否基于老策略 | [TODO.md](../TODO.md) | 📋 待处理 | 需确认是否需要重做 |
 | INV-007 | 评测系统可靠性全面审查 | [TODO.md](../TODO.md) | 📋 待处理 | 从一个 PDF 和一个问题开始精调 |
-| INV-008 | LLM 报告假设性问题类型提示词更新 | [TODO.md](../TODO.md) | 📋 待处理 | 3.1 节提示词仍为旧策略分析方法 |
+| INV-008 | LLM 报告假设性问题类型提示词更新 | [TODO.md](../TODO.md) | ✅ 已完成 | 3.1 节提示词仍为旧策略分析方法 |
 | INV-009 | 问题集扩大与指标收敛趋势 | [TODO.md](../TODO.md) | 📋 待处理 | 等 v0.1.9 发版确认数据有效性后推进 |
 | INV-010 | 元数据增强改善 chunk 命中 | [TODO.md](../TODO.md) | 📋 待处理 | PDF 页码 + MD 标题层级，需入库对话记录并实装 |
 | INV-011 | 开源许可证评估（Apache 2.0） | [TODO.md](../TODO.md) | 📋 待处理 | 了解 Apache 2.0 及自动化标记源文件 |
@@ -146,6 +146,7 @@
 | ID | 描述 | 来源 | 完成日期 |
 |----|------|------|---------|
 | INV-004 | 实验资产包 token summary 记录 → 已实现保存 token_summary.json/txt | [原 TODO.md](../TODO.md) | 2026-04-19 |
+| INV-008 | LLM 报告假设性问题类型提示词更新 → 已更新为 document 策略六类 | [TODO.md](../TODO.md) | 2026-04-21 |
 
 ---
 

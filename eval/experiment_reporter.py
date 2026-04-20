@@ -1382,7 +1382,7 @@ class ExperimentReporter:
 - 识别各配置的优势和不足
 
 ### 3. 问题类型分析
-- 分析不同问题类型（factual、boundary、multi-hop）的表现差异
+- 分析不同问题类型（single_fact、multi_fact、reasoning、comparative、missing、irrelevant）的表现差异
 - 识别哪些问题类型更具挑战性
 - 讨论性能差异的潜在原因
 
