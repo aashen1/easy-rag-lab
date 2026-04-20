@@ -1,7 +1,6 @@
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
-from anthropic import Anthropic
 from loguru import logger
 
 
@@ -87,30 +86,19 @@ def _parse_chunk_id(chunk_id: str) -> tuple:
 def _create_llm_client(
     api_key: str,
     base_url: str,
-) -> Anthropic:
-    """Create an Anthropic client for LLM calls.
+) -> Any:
+    """Create an Anthropic LLM client with LongCat API adaptation.
 
     Args:
         api_key: API key for authentication.
         base_url: Base URL for the API endpoint.
 
     Returns:
-        Configured Anthropic client instance.
-
-    Raises:
-        Exception: If client creation fails.
+        Anthropic client instance.
     """
-    try:
-        client = Anthropic(
-            api_key="dummy",
-            base_url=base_url,
-            default_headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-        )
-        return client
-    except Exception as e:
-        error_msg = f"Failed to create LLM client: {str(e)}"
-        logger.error(error_msg)
-        raise Exception(error_msg)
+    from src.utils import create_llm_client
+
+    return create_llm_client(
+        llm_config={"api_key": api_key, "base_url": base_url, "model_name": ""},
+        mode="sdk",
+    )
