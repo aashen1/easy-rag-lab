@@ -27,11 +27,11 @@ evaluation:
       - "hit_rate"
       - "mrr"
       - "ndcg"
+      - "context_precision"
+      - "context_recall"
     generation:
       - "faithfulness"
       - "answer_relevancy"
-      - "context_precision"
-      - "context_recall"
       - "answer_correctness"
 
 llm:
