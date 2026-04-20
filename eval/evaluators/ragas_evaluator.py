@@ -213,23 +213,41 @@ class RagasEvaluator(BaseEvaluator):
             List of RAGAS metric instances.
         """
         try:
-            from ragas.metrics import (
-                _Faithfulness as Faithfulness,
-                _AnswerRelevancy as AnswerRelevancy,
-                _ContextPrecision as ContextPrecision,
-                _ContextRecall as ContextRecall,
-                _AnswerCorrectness as AnswerCorrectness,
-                _SemanticSimilarity as SemanticSimilarity,
-            )
-
-            metric_map = {
-                "faithfulness": Faithfulness,
-                "answer_relevancy": AnswerRelevancy,
-                "context_precision": ContextPrecision,
-                "context_recall": ContextRecall,
-                "answer_correctness": AnswerCorrectness,
-                "semantic_similarity": SemanticSimilarity,
-            }
+            metric_map = {}
+            try:
+                from ragas.metrics._metrics import (
+                    Faithfulness,
+                    AnswerRelevancy,
+                    ContextPrecision,
+                    ContextRecall,
+                    AnswerCorrectness,
+                    SemanticSimilarity,
+                )
+                metric_map = {
+                    "faithfulness": Faithfulness,
+                    "answer_relevancy": AnswerRelevancy,
+                    "context_precision": ContextPrecision,
+                    "context_recall": ContextRecall,
+                    "answer_correctness": AnswerCorrectness,
+                    "semantic_similarity": SemanticSimilarity,
+                }
+            except ImportError:
+                from ragas.metrics import (
+                    _Faithfulness as Faithfulness,
+                    _AnswerRelevancy as AnswerRelevancy,
+                    _ContextPrecision as ContextPrecision,
+                    _ContextRecall as ContextRecall,
+                    _AnswerCorrectness as AnswerCorrectness,
+                    _SemanticSimilarity as SemanticSimilarity,
+                )
+                metric_map = {
+                    "faithfulness": Faithfulness,
+                    "answer_relevancy": AnswerRelevancy,
+                    "context_precision": ContextPrecision,
+                    "context_recall": ContextRecall,
+                    "answer_correctness": AnswerCorrectness,
+                    "semantic_similarity": SemanticSimilarity,
+                }
 
             metrics = []
             for name in metric_names:
