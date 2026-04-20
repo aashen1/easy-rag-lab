@@ -906,6 +906,7 @@ def _evaluate_with_ragas(
     evaluator: RagasEvaluator,
     llm_config: Dict[str, str],
     generation_metrics: Optional[List[str]] = None,
+    retrieval_metrics: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Evaluate samples using the RAGAS evaluator.
@@ -915,6 +916,8 @@ def _evaluate_with_ragas(
         evaluator: RagasEvaluator instance.
         llm_config: LLM configuration for RAGAS.
         generation_metrics: Optional list of generation metrics to compute.
+        retrieval_metrics: Optional list of retrieval metrics to compute
+            (RAGAS-supported ones like context_precision, context_recall).
 
     Returns:
         List of evaluation result dictionaries.
@@ -925,22 +928,45 @@ def _evaluate_with_ragas(
         logger.warning("No valid samples for RAGAS evaluation")
         return []
 
+    ragas_from_retrieval = [
+        m for m in (retrieval_metrics or [])
+        if m in evaluator.supported_generation_metrics
+    ]
+
+    all_ragas_metrics = list(dict.fromkeys(
+        (generation_metrics or []) + ragas_from_retrieval
+    ))
+
+    if not all_ragas_metrics:
+        return []
+
     logger.info(f"Running RAGAS evaluation on {len(valid_samples)} samples...")
 
     ragas_results = evaluator.evaluate_batch(
         samples=valid_samples,
         llm_config=llm_config,
-        generation_metrics=generation_metrics,
+        generation_metrics=all_ragas_metrics,
     )
+
+    retrieval_metric_names = set(ragas_from_retrieval)
 
     results = []
     for i, eval_result in enumerate(ragas_results):
         sample = valid_samples[i]
+
+        generation_part = {}
+        llm_retrieval_part = {}
+        for k, v in eval_result.generation_metrics.items():
+            if k in retrieval_metric_names:
+                llm_retrieval_part[k] = v
+            else:
+                generation_part[k] = v
+
         result = {
             "id": sample["question_id"],
             "question": sample["question"],
             "answer": sample["answer"],
-            "generation": eval_result.generation_metrics,
+            "generation": generation_part,
             "sources": sample.get("retrieved_sources", []),
             "expected_sources": sample.get("expected_sources", []),
             "time_seconds": sample.get("time_seconds", 0),
@@ -948,6 +974,9 @@ def _evaluate_with_ragas(
             "category": sample.get("category"),
             "difficulty": sample.get("difficulty"),
         }
+
+        if llm_retrieval_part:
+            result["llm_retrieval"] = llm_retrieval_part
 
         if eval_result.error:
             result["ragas_error"] = eval_result.error
@@ -1031,21 +1060,31 @@ def evaluate_test_set(
             all_results[r["id"]] = r
 
     if "ragas" in backends and "ragas" in evaluators:
-        ragas_only_metrics = [
+        ragas_from_generation = [
             m for m in (generation_metrics or [])
             if m in evaluators["ragas"].supported_generation_metrics
         ]
+        ragas_from_retrieval = [
+            m for m in (retrieval_metrics or [])
+            if m in evaluators["ragas"].supported_generation_metrics
+        ]
+        ragas_only_metrics = list(dict.fromkeys(ragas_from_generation + ragas_from_retrieval))
         if ragas_only_metrics:
             ragas_results = _evaluate_with_ragas(
                 samples=samples,
                 evaluator=evaluators["ragas"],
                 llm_config=llm_config,
-                generation_metrics=ragas_only_metrics,
+                generation_metrics=ragas_from_generation or None,
+                retrieval_metrics=retrieval_metrics,
             )
             for r in ragas_results:
                 if use_namespace and "generation" in r and r["generation"]:
                     r["generation"] = {
                         f"ragas_{k}": v for k, v in r["generation"].items()
+                    }
+                if use_namespace and "llm_retrieval" in r and r["llm_retrieval"]:
+                    r["llm_retrieval"] = {
+                        f"ragas_{k}": v for k, v in r["llm_retrieval"].items()
                     }
                 qid = r["id"]
                 if qid in all_results:
@@ -1053,6 +1092,10 @@ def evaluate_test_set(
                         if "generation" not in all_results[qid]:
                             all_results[qid]["generation"] = {}
                         all_results[qid]["generation"].update(r["generation"])
+                    if "llm_retrieval" in r:
+                        if "llm_retrieval" not in all_results[qid]:
+                            all_results[qid]["llm_retrieval"] = {}
+                        all_results[qid]["llm_retrieval"].update(r["llm_retrieval"])
                     if "ragas_error" in r:
                         all_results[qid]["ragas_error"] = r["ragas_error"]
                 else:
