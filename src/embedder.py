@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import torch
@@ -13,6 +13,7 @@ class Embedder:
         model_name: str = "BAAI/bge-large-zh-v1.5",
         device: str = "cuda",
         use_fp16: bool = True,
+        query_instruction: Optional[str] = None,
     ):
         """Initialize the Embedder by loading a transformer model and tokenizer.
 
@@ -22,6 +23,11 @@ class Embedder:
             model_name: Hugging Face model identifier for the embedding model.
             device: Device to run inference on (``"cuda"`` or ``"cpu"``).
             use_fp16: Whether to use half-precision on CUDA. Ignored on CPU.
+            query_instruction: Instruction prefix prepended to queries in
+                ``embed_query()``. When ``None`` (default), auto-detects BGE
+                models and uses the recommended Chinese instruction; for
+                non-BGE models defaults to ``None`` (no prefix). An explicit
+                value (including empty string ``""``) overrides auto-detection.
 
         Raises:
             Exception: If the model or tokenizer fails to load.
@@ -29,6 +35,13 @@ class Embedder:
         self.model_name = model_name
         self.device = device
         self.use_fp16 = use_fp16
+
+        if query_instruction is not None:
+            self.query_instruction = query_instruction
+        elif "bge" in model_name.lower():
+            self.query_instruction = "为这个句子生成表示以用于检索相关文章："
+        else:
+            self.query_instruction = None
 
         try:
             logger.info(f"Loading embedding model: {model_name}")
@@ -153,6 +166,10 @@ class Embedder:
     def embed_query(self, query: str) -> np.ndarray:
         """Generate an embedding for a single query string.
 
+        If ``self.query_instruction`` is set, it is prepended to the query
+        before encoding. This is recommended for BGE models to improve
+        retrieval quality.
+
         Args:
             query: The query text to embed. Must be a non-empty string.
 
@@ -170,9 +187,14 @@ class Embedder:
             raise ValueError(error_msg)
 
         try:
+            prefixed_query = query
+            if self.query_instruction:
+                prefixed_query = self.query_instruction + query
+                logger.debug(f"Prepended query instruction to query: {query[:30]}...")
+
             logger.debug(f"Embedding query: {query[:50]}...")
 
-            embeddings = self._encode_batch([query], batch_size=1)
+            embeddings = self._encode_batch([prefixed_query], batch_size=1)
 
             logger.debug("Query embedded successfully")
 
@@ -203,6 +225,7 @@ if __name__ == "__main__":
     embedder = Embedder(
         model_name=embedding_config["model_name"],
         device=embedding_config["device"],
+        query_instruction=embedding_config.get("query_instruction"),
     )
 
     test_texts = [
