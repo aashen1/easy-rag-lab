@@ -9,6 +9,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes yet._
 
+## [0.1.8] - 2026-04-20
+
+Evaluation system reliability improvements and TestSetManager architecture.
+
+### Added
+
+- Context Precision and Context Recall metrics for RAG generation quality evaluation
+- Chunk-level retrieval metrics for fine-grained evaluation
+- Deduplication metrics (Dedup) and False Positive Rate (FPR)
+- Equivalence group support in meal building and metric normalization
+- TestSetManager system for structured test set lifecycle management
+- New test_sets configuration format with automatic migration from old format
+- Question validity checking to filter out unanswerable questions
+- `--name` parameter for test set generation CLI
+- Technology summary and improved YAML rendering in experiment reports
+- Full merged config saving in experiment snapshots
+- Template-based experiment configuration structure (_complete, _minimal, _preset_*)
+
+### Changed
+
+- Reorganized exp_configs into categorized structure (baseline/, experiments/, golden_tests/, smoke_tests/)
+- Integrated Context Precision and Context Recall into evaluation pipeline
+- Enhanced experiment reporter to display LLM-based retrieval metrics
+- Added source_chunks field to document-level question generation
+- Improved test set generation to reach target count incrementally
+
+### Fixed
+
+- NDCG calculation deduplication to ensure values in [0,1] range
+- source_files for irrelevant/missing question types in test generator
+- Chunker config hash to include strategy and semantic parameters
+- Question generation not reaching target num_questions
+
+### Refactored
+
+- Extracted TestSetManager from run_experiment.py for better separation of concerns
+- Removed validate_question and filter_valid_questions from metrics module (replaced by validity check)
+
 ## [0.1.7] - 2026-04-19
 
 Evaluation system enhancement — document-level question generation and generation quality metrics.
