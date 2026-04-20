@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
@@ -20,6 +21,8 @@ class Generator:
         temperature: Sampling temperature.
         max_tokens: Maximum tokens in the response.
         token_tracker: Optional TokenTracker for recording usage.
+        system_prompt: Optional default system prompt. When None, the
+            hardcoded default is used as the final fallback in generate().
 
     Returns:
         Generator instance.
@@ -27,6 +30,15 @@ class Generator:
     Raises:
         Exception: If Anthropic client initialization fails.
     """
+
+    DEFAULT_SYSTEM_PROMPT = """你是一个金融研报分析助手。请基于以下参考资料回答用户问题。
+
+要求：
+1. 回答要准确、简洁、专业
+2. 如果参考资料中有相关信息，请基于资料回答
+3. 如果参考资料中没有相关信息，请明确说明"根据提供的参考资料，我无法回答这个问题"
+4. 回答时请引用具体的来源（如"根据贵州茅台2023年年度报告..."）
+5. 直接以回答内容开头，禁止使用"好的"、"当然"、"我来"等对话性用语开头"""
 
     def __init__(
         self,
@@ -36,11 +48,13 @@ class Generator:
         temperature: float = 0.0,
         max_tokens: int = 1024,
         token_tracker: Optional[TokenTracker] = None,
+        system_prompt: Optional[str] = None,
     ):
         self.model_name = model_name
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.token_tracker = token_tracker
+        self.default_system_prompt = system_prompt
         self.last_token_usage: Optional[DetailedTokenUsage] = None
 
         try:
@@ -64,6 +78,7 @@ class Generator:
         contexts: List[str],
         system_prompt: str = None,
         category: str = "rag_qa",
+        sources: Optional[List[str]] = None,
         **metadata: Any,
     ) -> str:
         """Generate an answer using the LLM.
@@ -71,8 +86,15 @@ class Generator:
         Args:
             query: The user's question.
             contexts: List of retrieved context strings.
-            system_prompt: Optional system prompt override.
+            system_prompt: Optional system prompt override. When None,
+                falls back to self.default_system_prompt, then to the
+                hardcoded DEFAULT_SYSTEM_PROMPT.
             category: Token tracking category (default "rag_qa").
+            sources: Optional list of source document paths, one per
+                context. When provided, each context is annotated with
+                its source name (filename stem) so the LLM can cite
+                sources. When None or empty, the old format without
+                source names is used for backward compatibility.
             **metadata: Additional metadata for token tracking.
 
         Returns:
@@ -92,18 +114,21 @@ class Generator:
 
         try:
             if system_prompt is None:
-                system_prompt = """你是一个金融研报分析助手。请基于以下参考资料回答用户问题。
+                system_prompt = self.default_system_prompt
+            if system_prompt is None:
+                system_prompt = self.DEFAULT_SYSTEM_PROMPT
 
-要求：
-1. 回答要准确、简洁、专业
-2. 如果参考资料中有相关信息，请基于资料回答
-3. 如果参考资料中没有相关信息，请明确说明"根据提供的参考资料，我无法回答这个问题"
-4. 回答时请引用具体的来源（如"根据贵州茅台2023年年度报告..."）
-5. 直接以回答内容开头，禁止使用"好的"、"当然"、"我来"等对话性用语开头"""
-
-            context_text = "\n\n".join(
-                [f"参考资料 {i+1}:\n{ctx}" for i, ctx in enumerate(contexts)]
-            )
+            if sources:
+                context_text = "\n\n".join(
+                    [
+                        f"参考资料 {i+1}（来源：{Path(sources[i]).stem if i < len(sources) else '未知'}）:\n{ctx}"
+                        for i, ctx in enumerate(contexts)
+                    ]
+                )
+            else:
+                context_text = "\n\n".join(
+                    [f"参考资料 {i+1}:\n{ctx}" for i, ctx in enumerate(contexts)]
+                )
 
             user_message = f"""{context_text}
 

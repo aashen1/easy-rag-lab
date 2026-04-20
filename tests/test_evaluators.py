@@ -378,6 +378,176 @@ class TestBuiltinEvaluator:
         assert "chunk_hit_rate" in results[0].retrieval_metrics
         assert "false_positive_rate" in results[1].retrieval_metrics
 
+    def test_retrieved_sources_used_for_retrieval_metrics(self):
+        """Test that retrieved_sources is used for retrieval metrics when provided."""
+        evaluator = BuiltinEvaluator()
+
+        result = evaluator.evaluate_single(
+            question_id="test_sep_001",
+            question="What is the revenue?",
+            answer="Revenue is $1M.",
+            contexts=["Revenue was $1M in 2023.", "Profit was $500K."],
+            expected_sources=["doc1.pdf", "doc4.pdf"],
+            retrieved_sources=["doc1.pdf", "doc2.pdf", "doc3.pdf"],
+            retrieval_metrics=["hit_rate", "mrr", "ndcg"],
+        )
+
+        assert result.retrieval_metrics["hit_rate"] == 1.0
+        assert result.retrieval_metrics["mrr"] == 1.0
+        assert result.error is None
+
+    def test_contexts_used_for_generation_metrics(self):
+        """Test that contexts (text content) is used for faithfulness, not retrieved_sources."""
+        evaluator = BuiltinEvaluator()
+        llm_config = {
+            "api_key": "test-key",
+            "base_url": "https://api.example.com",
+            "model_name": "test-model",
+        }
+
+        with patch("eval.evaluators.builtin_evaluator.calculate_faithfulness") as mock_faith:
+            mock_faith.return_value = 0.9
+
+            result = evaluator.evaluate_single(
+                question_id="test_sep_002",
+                question="What is the revenue?",
+                answer="Revenue is $1M.",
+                contexts=["Revenue was $1M in 2023."],
+                expected_sources=["doc1.pdf"],
+                retrieved_sources=["doc1.pdf", "doc2.pdf"],
+                llm_config=llm_config,
+                generation_metrics=["faithfulness"],
+            )
+
+            mock_faith.assert_called_once()
+            call_kwargs = mock_faith.call_args.kwargs
+            assert call_kwargs["contexts"] == ["Revenue was $1M in 2023."]
+            assert call_kwargs["contexts"] != ["doc1.pdf", "doc2.pdf"]
+            assert result.generation_metrics["faithfulness"] == 0.9
+
+    def test_backward_compat_contexts_used_for_retrieval_without_retrieved_sources(self):
+        """Test backward compatibility: contexts is used for retrieval when retrieved_sources is not provided."""
+        evaluator = BuiltinEvaluator()
+
+        result = evaluator.evaluate_single(
+            question_id="test_compat_001",
+            question="What is Python?",
+            answer="Python is a programming language.",
+            contexts=["doc1.pdf", "doc2.pdf", "doc3.pdf"],
+            expected_sources=["doc1.pdf", "doc4.pdf"],
+        )
+
+        assert result.retrieval_metrics["hit_rate"] == 1.0
+        assert result.error is None
+
+    @patch("eval.evaluators.builtin_evaluator.calculate_context_precision")
+    @patch("eval.evaluators.builtin_evaluator.calculate_context_recall")
+    def test_contexts_used_for_context_precision_recall_not_sources(self, mock_recall, mock_precision):
+        """Test that contexts (text) is used for context_precision/recall, not retrieved_sources (paths)."""
+        mock_precision.return_value = 0.85
+        mock_recall.return_value = 0.72
+
+        evaluator = BuiltinEvaluator()
+        llm_config = {
+            "api_key": "test-key",
+            "base_url": "https://api.example.com",
+            "model_name": "test-model",
+        }
+
+        result = evaluator.evaluate_single(
+            question_id="test_sep_ctx_001",
+            question="What is the revenue?",
+            answer="Revenue is $1M.",
+            contexts=["Revenue was $1M in 2023."],
+            expected_sources=["doc1.pdf"],
+            retrieved_sources=["doc1.pdf", "doc2.pdf"],
+            llm_config=llm_config,
+            retrieval_metrics=["context_precision", "context_recall"],
+        )
+
+        mock_precision.assert_called_once()
+        precision_kwargs = mock_precision.call_args.kwargs
+        assert precision_kwargs["retrieval_context"] == ["Revenue was $1M in 2023."]
+        assert precision_kwargs["retrieval_context"] != ["doc1.pdf", "doc2.pdf"]
+
+        mock_recall.assert_called_once()
+        recall_kwargs = mock_recall.call_args.kwargs
+        assert recall_kwargs["retrieval_context"] == ["Revenue was $1M in 2023."]
+
+        assert result.retrieval_metrics["context_precision"] == 0.85
+        assert result.retrieval_metrics["context_recall"] == 0.72
+
+    def test_retrieved_sources_used_for_dedup_metrics(self):
+        """Test that retrieved_sources is used for dedup metrics when provided."""
+        evaluator = BuiltinEvaluator()
+
+        result = evaluator.evaluate_single(
+            question_id="test_sep_dedup_001",
+            question="What is the revenue?",
+            answer="Revenue is $1M.",
+            contexts=["Revenue was $1M in 2023."],
+            expected_sources=["doc1.pdf"],
+            retrieved_sources=["doc1.pdf", "doc1.pdf", "doc2.pdf"],
+            retrieval_metrics=["dedup_hit_rate", "dedup_mrr", "dedup_ndcg"],
+        )
+
+        assert "dedup_hit_rate" in result.retrieval_metrics
+        assert result.retrieval_metrics["dedup_hit_rate"] == 1.0
+        assert result.error is None
+
+    def test_retrieved_sources_used_for_fpr(self):
+        """Test that retrieved_sources is used for FPR metric when provided."""
+        evaluator = BuiltinEvaluator()
+
+        result = evaluator.evaluate_single(
+            question_id="test_sep_fpr_001",
+            question="Tell me a joke.",
+            answer="I don't know.",
+            contexts=["Some text content here."],
+            retrieved_sources=["doc1.pdf", "doc2.pdf", "doc3.pdf"],
+            expect_retrieval=False,
+            retrieval_metrics=["false_positive_rate"],
+        )
+
+        assert "false_positive_rate" in result.retrieval_metrics
+        assert result.retrieval_metrics["false_positive_rate"] == 0.6
+        assert result.error is None
+
+    def test_evaluate_batch_passes_retrieved_sources(self):
+        """Test that evaluate_batch forwards retrieved_sources to evaluate_single."""
+        evaluator = BuiltinEvaluator()
+
+        samples = [
+            {
+                "question_id": "batch_sep_001",
+                "question": "What is the revenue?",
+                "answer": "Revenue is $1M.",
+                "contexts": ["Revenue was $1M in 2023."],
+                "expected_sources": ["doc1.pdf"],
+                "retrieved_sources": ["doc1.pdf", "doc2.pdf"],
+                "question_type": "factual",
+            },
+            {
+                "question_id": "batch_sep_002",
+                "question": "Tell me a joke.",
+                "answer": "I don't know.",
+                "contexts": ["Some text."],
+                "retrieved_sources": ["doc3.pdf"],
+                "expect_retrieval": False,
+                "question_type": "irrelevant",
+            },
+        ]
+
+        results = evaluator.evaluate_batch(
+            samples,
+            retrieval_metrics=["hit_rate", "false_positive_rate"],
+        )
+
+        assert len(results) == 2
+        assert "hit_rate" in results[0].retrieval_metrics
+        assert results[0].retrieval_metrics["hit_rate"] == 1.0
+        assert "false_positive_rate" in results[1].retrieval_metrics
+
 
 class TestRagasEvaluator:
     """Tests for RagasEvaluator."""

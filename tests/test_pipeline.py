@@ -13,6 +13,7 @@ def _make_config():
             "distance": "Cosine",
         },
         "retrieval": {"top_k": 5},
+        "generation": {"system_prompt": None},
         "logging": {
             "level": "INFO",
             "log_dir": "/tmp/logs",
@@ -59,7 +60,7 @@ class TestRAGPipeline:
         pipeline = RAGPipeline(config_path="dummy.yaml")
 
         mock_embedder.assert_called_once_with(
-            model_name="test-model", device="cpu"
+            model_name="test-model", device="cpu", query_instruction=None
         )
         mock_indexer.assert_called_once_with(
             persist_dir="/tmp/vs",
@@ -70,6 +71,7 @@ class TestRAGPipeline:
             indexer=mock_indexer.return_value,
             embedder=mock_embedder.return_value,
             top_k=5,
+            score_threshold=0,
         )
         mock_generator.assert_called_once_with(
             model_name="test-llm",
@@ -78,6 +80,7 @@ class TestRAGPipeline:
             temperature=0.0,
             max_tokens=1024,
             token_tracker=pipeline.token_tracker,
+            system_prompt=None,
         )
         assert pipeline.meal_name is None
         assert pipeline.meal_config is None
@@ -171,6 +174,7 @@ class TestRAGPipeline:
         mock_generator_instance.generate.assert_called_once_with(
             "What is the revenue?",
             ["Revenue was 100 billion.", "Profit increased by 10%."],
+            sources=["report_2023.pdf", "report_2024.pdf"],
         )
         assert result["question"] == "What is the revenue?"
         assert result["answer"] == "Revenue was 100 billion."
@@ -258,6 +262,7 @@ class TestRAGPipeline:
             indexer=mock_indexer.return_value,
             embedder=mock_embedder.return_value,
             top_k=5,
+            score_threshold=0,
         )
 
     @patch("src.pipeline.Generator")

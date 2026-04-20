@@ -85,6 +85,7 @@ embedding:
   model_name: "BAAI/bge-large-zh-v1.5"
   device: "cuda"
   batch_size: 32
+  query_instruction: null    # Instruction prefix for queries; null = auto-detect (BGE models use "为这个句子生成表示以用于检索相关文章：")
 
 # 向量存储配置
 vector_store:
@@ -97,6 +98,7 @@ vector_store:
 retrieval:
   method: "vector"          # Retrieval method: "vector", "bm25", or "hybrid"
   top_k: 5
+  score_threshold: 0        # Minimum similarity score to include (0 = no filtering; typical: 0.3-0.5)
   bm25:                     # BM25 参数（method=bm25 或 hybrid 时生效）
     k1: 1.5                 # BM25 term frequency saturation parameter
     b: 0.75                 # BM25 length normalization parameter
@@ -114,6 +116,10 @@ retrieval:
     enabled: false          # Enable query rewriting
     strategy: "hyde"        # Strategy: "hyde" or "multi_query"
     num_queries: 3          # Number of sub-queries for multi_query strategy
+
+# 生成配置（基线：使用硬编码默认 system prompt，通过实验配置覆盖）
+generation:
+  system_prompt: null       # Custom system prompt for the generator (null = use hardcoded default)
 
 # ============================================================
 # 实验管理配置
