@@ -544,10 +544,10 @@ class TestCalculateAnswerRelevancy:
                 api_key="test-key"
             )
 
-    @patch("src.llm_client.Anthropic")
-    def test_successful_relevancy_calculation(self, mock_anthropic):
+    @patch("eval.metrics.generation._create_llm_client")
+    def test_successful_relevancy_calculation(self, mock_create_client):
         mock_client = MagicMock()
-        mock_anthropic.return_value = mock_client
+        mock_create_client.return_value = mock_client
 
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
@@ -563,10 +563,10 @@ class TestCalculateAnswerRelevancy:
         assert score == 1.0
         mock_client.messages.create.assert_called_once()
 
-    @patch("src.llm_client.Anthropic")
-    def test_low_relevancy_calculation(self, mock_anthropic):
+    @patch("eval.metrics.generation._create_llm_client")
+    def test_low_relevancy_calculation(self, mock_create_client):
         mock_client = MagicMock()
-        mock_anthropic.return_value = mock_client
+        mock_create_client.return_value = mock_client
 
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
@@ -581,10 +581,10 @@ class TestCalculateAnswerRelevancy:
 
         assert score == 0.1
 
-    @patch("src.llm_client.Anthropic")
-    def test_missing_overall_score_calculates_from_dimensions(self, mock_anthropic):
+    @patch("eval.metrics.generation._create_llm_client")
+    def test_missing_overall_score_calculates_from_dimensions(self, mock_create_client):
         mock_client = MagicMock()
-        mock_anthropic.return_value = mock_client
+        mock_create_client.return_value = mock_client
 
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
@@ -600,10 +600,10 @@ class TestCalculateAnswerRelevancy:
         expected_score = (4 + 4 + 3) / 15.0
         assert score == pytest.approx(expected_score)
 
-    @patch("src.llm_client.Anthropic")
-    def test_score_clamped_to_range(self, mock_anthropic):
+    @patch("eval.metrics.generation._create_llm_client")
+    def test_score_clamped_to_range(self, mock_create_client):
         mock_client = MagicMock()
-        mock_anthropic.return_value = mock_client
+        mock_create_client.return_value = mock_client
 
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
@@ -618,10 +618,10 @@ class TestCalculateAnswerRelevancy:
 
         assert score == 1.0
 
-    @patch("src.llm_client.Anthropic")
-    def test_negative_score_clamped_to_zero(self, mock_anthropic):
+    @patch("eval.metrics.generation._create_llm_client")
+    def test_negative_score_clamped_to_zero(self, mock_create_client):
         mock_client = MagicMock()
-        mock_anthropic.return_value = mock_client
+        mock_create_client.return_value = mock_client
 
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
@@ -636,10 +636,10 @@ class TestCalculateAnswerRelevancy:
 
         assert score == 0.0
 
-    @patch("src.llm_client.Anthropic")
-    def test_llm_api_error_raises_exception(self, mock_anthropic):
+    @patch("eval.metrics.generation._create_llm_client")
+    def test_llm_api_error_raises_exception(self, mock_create_client):
         mock_client = MagicMock()
-        mock_anthropic.return_value = mock_client
+        mock_create_client.return_value = mock_client
         mock_client.messages.create.side_effect = Exception("API Error")
 
         with pytest.raises(Exception, match="Failed to calculate answer relevancy"):
@@ -649,10 +649,10 @@ class TestCalculateAnswerRelevancy:
                 api_key="test-api-key"
             )
 
-    @patch("src.llm_client.Anthropic")
-    def test_custom_model_parameters(self, mock_anthropic):
+    @patch("eval.metrics.generation._create_llm_client")
+    def test_custom_model_parameters(self, mock_create_client):
         mock_client = MagicMock()
-        mock_anthropic.return_value = mock_client
+        mock_create_client.return_value = mock_client
 
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
@@ -679,10 +679,10 @@ class TestCalculateAnswerRelevancy:
 class TestCreateLLMClient:
     """Tests for _create_llm_client function."""
 
-    @patch("src.llm_client.Anthropic")
-    def test_create_client_success(self, mock_anthropic):
+    @patch("src.utils.create_llm_client")
+    def test_create_client_success(self, mock_create_llm_client):
         mock_client = MagicMock()
-        mock_anthropic.return_value = mock_client
+        mock_create_llm_client.return_value = mock_client
 
         client = _create_llm_client(
             api_key="test-api-key",
@@ -690,20 +690,21 @@ class TestCreateLLMClient:
         )
 
         assert client == mock_client
-        mock_anthropic.assert_called_once()
+        mock_create_llm_client.assert_called_once()
 
-    @patch("src.llm_client.Anthropic")
-    def test_create_client_with_custom_url(self, mock_anthropic):
+    @patch("src.utils.create_llm_client")
+    def test_create_client_with_custom_url(self, mock_create_llm_client):
         mock_client = MagicMock()
-        mock_anthropic.return_value = mock_client
+        mock_create_llm_client.return_value = mock_client
 
         _create_llm_client(
             api_key="test-key",
             base_url="https://custom.url/api"
         )
 
-        call_kwargs = mock_anthropic.call_args[1]
-        assert call_kwargs["base_url"] == "https://custom.url/api"
+        mock_create_llm_client.assert_called_once()
+        call_kwargs = mock_create_llm_client.call_args[1]
+        assert call_kwargs["llm_config"]["base_url"] == "https://custom.url/api"
 
 
 @pytest.mark.unit
@@ -908,7 +909,7 @@ class TestCalculateFaithfulness:
             )
 
     def test_empty_contexts_returns_zero(self):
-        with patch("eval.metrics._create_llm_client") as mock_create_client:
+        with patch("eval.metrics.generation._create_llm_client") as mock_create_client:
             score = calculate_faithfulness(
                 answer="这是一个回答",
                 contexts=[],
@@ -917,7 +918,7 @@ class TestCalculateFaithfulness:
             assert score == 0.0
 
     def test_whitespace_only_answer_returns_zero(self):
-        with patch("eval.metrics._create_llm_client") as mock_create_client:
+        with patch("eval.metrics.generation._create_llm_client") as mock_create_client:
             score = calculate_faithfulness(
                 answer="   \n\t  ",
                 contexts=["上下文"],
@@ -925,9 +926,9 @@ class TestCalculateFaithfulness:
             )
             assert score == 0.0
 
-    @patch("eval.metrics._create_llm_client")
-    @patch("eval.metrics._extract_statements")
-    @patch("eval.metrics._verify_statements")
+    @patch("eval.metrics.generation._create_llm_client")
+    @patch("eval.metrics.generation._extract_statements")
+    @patch("eval.metrics.generation._verify_statements")
     def test_full_faithfulness_score(
         self, mock_verify, mock_extract, mock_create_client
     ):
@@ -947,9 +948,9 @@ class TestCalculateFaithfulness:
 
         assert score == 1.0
 
-    @patch("eval.metrics._create_llm_client")
-    @patch("eval.metrics._extract_statements")
-    @patch("eval.metrics._verify_statements")
+    @patch("eval.metrics.generation._create_llm_client")
+    @patch("eval.metrics.generation._extract_statements")
+    @patch("eval.metrics.generation._verify_statements")
     def test_partial_faithfulness_score(
         self, mock_verify, mock_extract, mock_create_client
     ):
@@ -969,9 +970,9 @@ class TestCalculateFaithfulness:
 
         assert score == pytest.approx(2 / 3)
 
-    @patch("eval.metrics._create_llm_client")
-    @patch("eval.metrics._extract_statements")
-    @patch("eval.metrics._verify_statements")
+    @patch("eval.metrics.generation._create_llm_client")
+    @patch("eval.metrics.generation._extract_statements")
+    @patch("eval.metrics.generation._verify_statements")
     def test_zero_faithfulness_score(
         self, mock_verify, mock_extract, mock_create_client
     ):
@@ -990,8 +991,8 @@ class TestCalculateFaithfulness:
 
         assert score == 0.0
 
-    @patch("eval.metrics._create_llm_client")
-    @patch("eval.metrics._extract_statements")
+    @patch("eval.metrics.generation._create_llm_client")
+    @patch("eval.metrics.generation._extract_statements")
     def test_no_statements_extracted_returns_zero(
         self, mock_extract, mock_create_client
     ):
@@ -1006,9 +1007,9 @@ class TestCalculateFaithfulness:
 
         assert score == 0.0
 
-    @patch("eval.metrics._create_llm_client")
-    @patch("eval.metrics._extract_statements")
-    @patch("eval.metrics._verify_statements")
+    @patch("eval.metrics.generation._create_llm_client")
+    @patch("eval.metrics.generation._extract_statements")
+    @patch("eval.metrics.generation._verify_statements")
     def test_no_verdicts_returns_zero(
         self, mock_verify, mock_extract, mock_create_client
     ):
@@ -1024,7 +1025,7 @@ class TestCalculateFaithfulness:
 
         assert score == 0.0
 
-    @patch("eval.metrics._create_llm_client")
+    @patch("eval.metrics.generation._create_llm_client")
     def test_llm_client_error_raises_exception(self, mock_create_client):
         mock_create_client.side_effect = Exception("Client creation failed")
 
@@ -1035,9 +1036,9 @@ class TestCalculateFaithfulness:
                 api_key="test-api-key"
             )
 
-    @patch("eval.metrics._create_llm_client")
-    @patch("eval.metrics._extract_statements")
-    @patch("eval.metrics._verify_statements")
+    @patch("eval.metrics.generation._create_llm_client")
+    @patch("eval.metrics.generation._extract_statements")
+    @patch("eval.metrics.generation._verify_statements")
     def test_custom_parameters_passed_correctly(
         self, mock_verify, mock_extract, mock_create_client
     ):
@@ -1062,9 +1063,9 @@ class TestCalculateFaithfulness:
             mock_client, "回答", "custom-model"
         )
 
-    @patch("eval.metrics._create_llm_client")
-    @patch("eval.metrics._extract_statements")
-    @patch("eval.metrics._verify_statements")
+    @patch("eval.metrics.generation._create_llm_client")
+    @patch("eval.metrics.generation._extract_statements")
+    @patch("eval.metrics.generation._verify_statements")
     def test_half_faithfulness_score(
         self, mock_verify, mock_extract, mock_create_client
     ):
@@ -1126,7 +1127,7 @@ class TestSplitIntoSentences:
 class TestJudgeContextRelevance:
     """Tests for _judge_context_relevance function."""
 
-    @patch("eval.metrics._create_llm_client")
+    @patch("eval.metrics.llm_retrieval._create_llm_client")
     def test_relevant_context_returns_true(self, mock_create_client):
         mock_client = MagicMock()
         mock_create_client.return_value = mock_client
@@ -1148,7 +1149,7 @@ class TestJudgeContextRelevance:
 
         assert result is True
 
-    @patch("eval.metrics._create_llm_client")
+    @patch("eval.metrics.llm_retrieval._create_llm_client")
     def test_irrelevant_context_returns_false(self, mock_create_client):
         mock_client = MagicMock()
         mock_create_client.return_value = mock_client
@@ -1170,7 +1171,7 @@ class TestJudgeContextRelevance:
 
         assert result is False
 
-    @patch("eval.metrics._create_llm_client")
+    @patch("eval.metrics.llm_retrieval._create_llm_client")
     def test_llm_error_returns_false(self, mock_create_client):
         mock_client = MagicMock()
         mock_create_client.return_value = mock_client
@@ -1203,7 +1204,7 @@ class TestCalculateContextPrecision:
         )
         assert score == 0.0
 
-    @patch("eval.metrics._judge_context_relevance")
+    @patch("eval.metrics.llm_retrieval._judge_context_relevance")
     def test_all_relevant_contexts(self, mock_judge):
         mock_judge.return_value = True
 
@@ -1218,7 +1219,7 @@ class TestCalculateContextPrecision:
         assert score == 1.0
         assert mock_judge.call_count == 3
 
-    @patch("eval.metrics._judge_context_relevance")
+    @patch("eval.metrics.llm_retrieval._judge_context_relevance")
     def test_no_relevant_contexts(self, mock_judge):
         mock_judge.return_value = False
 
@@ -1232,7 +1233,7 @@ class TestCalculateContextPrecision:
 
         assert score == 0.0
 
-    @patch("eval.metrics._judge_context_relevance")
+    @patch("eval.metrics.llm_retrieval._judge_context_relevance")
     def test_partial_relevant_contexts(self, mock_judge):
         mock_judge.side_effect = [True, False, True]
 
@@ -1246,7 +1247,7 @@ class TestCalculateContextPrecision:
 
         assert 0.0 < score < 1.0
 
-    @patch("eval.metrics._judge_context_relevance")
+    @patch("eval.metrics.llm_retrieval._judge_context_relevance")
     def test_weighted_precision_calculation(self, mock_judge):
         mock_judge.side_effect = [True, False, True]
 
@@ -1267,7 +1268,7 @@ class TestCalculateContextPrecision:
 class TestCanInferFromContext:
     """Tests for _can_infer_from_context function."""
 
-    @patch("eval.metrics._create_llm_client")
+    @patch("eval.metrics.llm_retrieval._create_llm_client")
     def test_inferable_sentence_returns_true(self, mock_create_client):
         mock_client = MagicMock()
         mock_create_client.return_value = mock_client
@@ -1288,7 +1289,7 @@ class TestCanInferFromContext:
 
         assert result is True
 
-    @patch("eval.metrics._create_llm_client")
+    @patch("eval.metrics.llm_retrieval._create_llm_client")
     def test_non_inferable_sentence_returns_false(self, mock_create_client):
         mock_client = MagicMock()
         mock_create_client.return_value = mock_client
@@ -1334,8 +1335,8 @@ class TestCalculateContextRecall:
         )
         assert score == 0.0
 
-    @patch("eval.metrics._can_infer_from_context")
-    @patch("eval.metrics._split_into_sentences")
+    @patch("eval.metrics.llm_retrieval._can_infer_from_context")
+    @patch("eval.metrics.llm_retrieval._split_into_sentences")
     def test_all_sentences_inferable(self, mock_split, mock_infer):
         mock_split.return_value = ["句子1", "句子2", "句子3"]
         mock_infer.return_value = True
@@ -1351,8 +1352,8 @@ class TestCalculateContextRecall:
         assert score == 1.0
         assert mock_infer.call_count == 3
 
-    @patch("eval.metrics._can_infer_from_context")
-    @patch("eval.metrics._split_into_sentences")
+    @patch("eval.metrics.llm_retrieval._can_infer_from_context")
+    @patch("eval.metrics.llm_retrieval._split_into_sentences")
     def test_no_sentences_inferable(self, mock_split, mock_infer):
         mock_split.return_value = ["句子1", "句子2"]
         mock_infer.return_value = False
@@ -1367,8 +1368,8 @@ class TestCalculateContextRecall:
 
         assert score == 0.0
 
-    @patch("eval.metrics._can_infer_from_context")
-    @patch("eval.metrics._split_into_sentences")
+    @patch("eval.metrics.llm_retrieval._can_infer_from_context")
+    @patch("eval.metrics.llm_retrieval._split_into_sentences")
     def test_partial_sentences_inferable(self, mock_split, mock_infer):
         mock_split.return_value = ["句子1", "句子2", "句子3"]
         mock_infer.side_effect = [True, False, True]

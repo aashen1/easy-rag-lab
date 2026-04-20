@@ -155,6 +155,66 @@ def get_llm_config(config: Dict[str, Any], preset_name: str = None) -> Dict[str,
     }
 
 
+def create_llm_client(
+    llm_config: Dict[str, Any],
+    mode: str = "sdk",
+) -> Any:
+    """Create an LLM client with LongCat API adaptation.
+
+    Supports two modes:
+    - "sdk": Returns an Anthropic SDK client (for direct API calls)
+    - "langchain": Returns a LangchainLLMWrapper with ChatAnthropic (for RAGAS)
+
+    Both modes use the same LongCat API adaptation pattern:
+    api_key="dummy" with real key passed via Authorization: Bearer header.
+
+    Args:
+        llm_config: Dictionary containing api_key, base_url, model_name,
+            and optionally max_tokens, temperature.
+        mode: Client mode - "sdk" for Anthropic SDK, "langchain" for LangChain.
+
+    Returns:
+        LLM client instance (Anthropic or LangchainLLMWrapper).
+
+    Raises:
+        ValueError: If mode is not "sdk" or "langchain".
+        ImportError: If required dependencies are not installed.
+    """
+    base_url = llm_config["base_url"].rstrip("/")
+    if not base_url.endswith("/anthropic"):
+        base_url = f"{base_url}/anthropic"
+
+    if mode == "sdk":
+        from anthropic import Anthropic
+
+        return Anthropic(
+            api_key="dummy",
+            base_url=base_url,
+            default_headers={
+                "Authorization": f"Bearer {llm_config['api_key']}",
+                "Content-Type": "application/json",
+            },
+        )
+    elif mode == "langchain":
+        from langchain_anthropic import ChatAnthropic
+        from ragas.llms import LangchainLLMWrapper
+
+        chat_model = ChatAnthropic(
+            model=llm_config["model_name"],
+            api_key="dummy",
+            base_url=base_url,
+            default_headers={
+                "Authorization": f"Bearer {llm_config['api_key']}",
+                "Content-Type": "application/json",
+            },
+            max_tokens=llm_config.get("max_tokens", 4096),
+            temperature=llm_config.get("temperature", 0.0),
+        )
+        return LangchainLLMWrapper(chat_model)
+    else:
+        raise ValueError(f"Unsupported LLM client mode: {mode}. Use 'sdk' or 'langchain'.")
+
+
 def get_env_var(key: str, default: str = None, required: bool = False) -> str:
     """Retrieve an environment variable value with optional default and required check.
 

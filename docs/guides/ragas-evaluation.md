@@ -2,7 +2,7 @@
 
 <!-- status: active -->
 
-> 最后更新: 2026-04-20
+> 最后更新: 2026-04-21
 
 本文档介绍如何使用 RAGAS 评测后端进行 RAG 系统评测，以及如何与自研评测系统并行使用。
 
@@ -16,9 +16,9 @@ RAGAS（Retrieval Augmented Generation Assessment）是一个主流的开源 RAG
 
 | 特性 | 自研（builtin） | RAGAS |
 |------|----------------|-------|
-| **检索指标** | hit_rate, mrr, ndcg | 无 |
+| **检索指标** | hit_rate, mrr, ndcg, chunk_*, dedup_*, false_positive_rate, context_precision, context_recall | 无 |
 | **生成指标** | faithfulness, answer_relevancy | faithfulness, answer_relevancy, context_precision, context_recall, answer_correctness, semantic_similarity |
-| **LLM 调用方式** | Anthropic SDK 直连 | LangChain Anthropic 接口 |
+| **LLM 调用方式** | 统一 LLM 客户端工厂（`create_llm_client`） | 统一 LLM 客户端工厂（`create_llm_client`，langchain 模式） |
 | **评测模式** | 逐条串行 | 批量并行（推荐） |
 | **额外依赖** | 无 | ragas, langchain-anthropic, langchain-community |
 
@@ -26,12 +26,12 @@ RAGAS（Retrieval Augmented Generation Assessment）是一个主流的开源 RAG
 
 | 指标 | 所需输入 | 说明 |
 |------|---------|------|
-| **context_precision** | question, contexts, reference | 检索结果中相关文档是否排在前面 |
-| **context_recall** | question, contexts, reference | 检索结果是否覆盖了回答所需的信息 |
+| **context_precision** | question, contexts, reference | 检索结果中相关文档是否排在前面（builtin 也支持此指标） |
+| **context_recall** | question, contexts, reference | 检索结果是否覆盖了回答所需的信息（builtin 也支持此指标） |
 | **answer_correctness** | response, reference | 答案正确性（事实重叠 + 语义相似度加权） |
 | **semantic_similarity** | response, reference | 回答与参考答案的语义相似度 |
 
-> **注意**：`context_precision`、`context_recall`、`answer_correctness`、`semantic_similarity` 需要 `reference`（参考答案）才能计算。测试数据中的 `expected_answer` 字段将自动映射为 `reference`。
+> **注意**：`context_precision`、`context_recall`、`answer_correctness`、`semantic_similarity` 需要 `reference`（参考答案）才能计算。测试数据中的 `expected_answer` 字段将自动映射为 `reference`。其中 `context_precision` 和 `context_recall` 两个后端均支持，但计算方式不同。
 
 ---
 
@@ -104,6 +104,9 @@ evaluation:
       max_workers: 5                  # 并行评测的最大工作线程数
       timeout: 60                     # 单次评测超时时间（秒）
       max_retries: 3                  # 失败重试次数
+    embedding:                        # Embeddings 模型配置（可选，覆盖全局 embedding 配置）
+      model_name: "BAAI/bge-large-zh-v1.5"  # RAGAS 使用的 Embeddings 模型
+      device: "cuda"                  # 运行设备："cuda" 或 "cpu"
 ```
 
 | 参数 | 默认值 | 说明 |
@@ -114,6 +117,10 @@ evaluation:
 | `ragas.run_config.max_workers` | `5` | RAGAS 批量评测的并行度 |
 | `ragas.run_config.timeout` | `60` | 单次评测超时时间（秒） |
 | `ragas.run_config.max_retries` | `3` | 评测失败时的重试次数 |
+| `ragas.embedding.model_name` | `"BAAI/bge-large-zh-v1.5"` | RAGAS 使用的 Embeddings 模型名称 |
+| `ragas.embedding.device` | `"cuda"` | Embeddings 模型运行设备 |
+
+> **配置读取优先级**：`ragas.embedding.model_name` 优先于 `ragas.embedding_model`（旧字段），两者均未设置时回退到全局 `embedding.model_name`。`ragas.embedding.device` 未设置时回退到全局 `embedding.device`。
 
 ### 实验配置中的评测后端
 
@@ -142,7 +149,7 @@ evaluation:
 
 ### 仅使用自研评测
 
-适用于：快速评测、仅关注检索指标、无需额外依赖。
+适用于：快速评测、关注检索指标与生成指标、无需额外依赖。
 
 ```yaml
 evaluation:
@@ -152,10 +159,26 @@ evaluation:
       - "hit_rate"
       - "mrr"
       - "ndcg"
+      - "chunk_hit_rate"
+      - "chunk_mrr"
+      - "chunk_ndcg"
+      - "dedup_hit_rate"
+      - "dedup_mrr"
+      - "dedup_ndcg"
+      - "false_positive_rate"
+      - "context_precision"
+      - "context_recall"
     generation:
       - "faithfulness"
       - "answer_relevancy"
 ```
+
+> **builtin 检索指标说明**：
+> - **基础指标**：`hit_rate`、`mrr`、`ndcg` — 基于文档级别的检索评估
+> - **chunk 级别指标**：`chunk_hit_rate`、`chunk_mrr`、`chunk_ndcg` — 基于切块级别的检索评估
+> - **去重指标**：`dedup_hit_rate`、`dedup_mrr`、`dedup_ndcg` — 去除同一文档重复结果后的检索评估
+> - **FPR**：`false_positive_rate` — 针对无关问题的误检率
+> - **LLM 检索指标**：`context_precision`、`context_recall` — 需要调用 LLM，需提供 `llm_config`
 
 ### 仅使用 RAGAS 评测
 
@@ -201,7 +224,23 @@ evaluation:
 此模式下：
 - **检索指标**（hit_rate, mrr, ndcg）由 builtin 后端计算
 - **faithfulness, answer_relevancy** 由两个后端分别计算，可对比结果差异
-- **context_precision, context_recall** 由 RAGAS 后端计算
+- **context_precision, context_recall** 由两个后端分别计算（计算方式不同）
+- **answer_correctness, semantic_similarity** 仅由 RAGAS 后端计算
+
+### 指标命名空间前缀
+
+当使用双后端（`["builtin", "ragas"]`）时，生成指标会自动添加后端名称前缀以区分来源：
+
+| 原始指标名 | builtin 结果键名 | RAGAS 结果键名 |
+|-----------|----------------|---------------|
+| `faithfulness` | `builtin_faithfulness` | `ragas_faithfulness` |
+| `answer_relevancy` | `builtin_answer_relevancy` | `ragas_answer_relevancy` |
+| `context_precision` | `builtin_context_precision` | `ragas_context_precision` |
+| `context_recall` | `builtin_context_recall` | `ragas_context_recall` |
+
+当仅使用单个后端时，不添加前缀，指标键名保持原始名称（如 `faithfulness`、`answer_relevancy`）。
+
+> **注意**：检索指标不受前缀影响，始终由 builtin 后端计算，保持原始名称。
 
 ---
 
@@ -229,7 +268,7 @@ evaluation:
 
 - **所需输入**：question, contexts, **reference**
 - **取值范围**：0.0 - 1.0
-- **自研系统无此指标**
+- **两个后端均支持**：builtin 使用自定义 prompt 逐条判断上下文相关性；RAGAS 使用框架自带逻辑
 
 **解读**：
 - **0.8+**：相关文档排名靠前，检索排序质量优秀
@@ -247,7 +286,7 @@ evaluation:
 
 - **所需输入**：question, contexts, **reference**
 - **取值范围**：0.0 - 1.0
-- **自研系统无此指标**
+- **两个后端均支持**：builtin 使用自定义 prompt 逐句判断信息覆盖度；RAGAS 使用框架自带逻辑
 
 **解读**：
 - **0.8+**：检索结果信息覆盖充分
@@ -285,20 +324,32 @@ evaluation:
 
 ## LongCat API 适配
 
-RAGAS 评测器通过 LangChain Anthropic 接口连接 LongCat API，适配方式如下：
+两个评测后端均通过统一的 LLM 客户端工厂 `create_llm_client()`（位于 `src/utils.py`）连接 LongCat API，适配方式如下：
 
-1. **接口选择**：使用 `langchain-anthropic` 的 `ChatAnthropic` 类
+1. **统一工厂**：`create_llm_client(llm_config, mode)` 支持两种模式
+   - `mode="sdk"`：返回 Anthropic SDK 客户端（builtin 后端使用）
+   - `mode="langchain"`：返回 `LangchainLLMWrapper(ChatAnthropic)` （RAGAS 后端使用）
 2. **URL 适配**：自动在 `base_url` 后追加 `/anthropic` 路径
-3. **认证方式**：通过 `default_headers` 传递 Bearer Token 认证
-4. **LLM 包装**：使用 `LangchainLLMWrapper` 将 LangChain LLM 包装为 RAGAS 兼容格式
+3. **认证方式**：通过 `default_headers` 传递 Bearer Token 认证（`api_key="dummy"` + 真实 key 在 Header 中）
+4. **LLM 包装**：RAGAS 模式下使用 `LangchainLLMWrapper` 将 LangChain LLM 包装为 RAGAS 兼容格式
 
 ```python
 # 内部实现逻辑（无需手动配置）
+# SDK 模式（builtin）
+Anthropic(
+    api_key="dummy",
+    base_url=base_url,
+    default_headers={
+        "Authorization": f"Bearer {llm_config['api_key']}",
+        "Content-Type": "application/json",
+    },
+)
+
+# LangChain 模式（RAGAS）
 ChatAnthropic(
     model=llm_config["model_name"],
-    temperature=0.0,
-    base_url=f"{llm_config['base_url']}/anthropic",
     api_key="dummy",
+    base_url=base_url,
     default_headers={
         "Authorization": f"Bearer {llm_config['api_key']}",
         "Content-Type": "application/json",
@@ -334,8 +385,13 @@ result = builtin.evaluate_single(
     },
 )
 
-# 创建 RAGAS 评测器
-ragas = RagasEvaluator(config={"embedding": {"model_name": "BAAI/bge-large-zh-v1.5"}})
+# 创建 RAGAS 评测器（config 参数中的 ragas 子键会被读取）
+ragas = RagasEvaluator(config={
+    "ragas": {
+        "run_config": {"max_workers": 5, "timeout": 60, "max_retries": 3},
+        "embedding": {"model_name": "BAAI/bge-large-zh-v1.5", "device": "cuda"},
+    }
+})
 result = ragas.evaluate_single(
     question_id="q001",
     question="贵州茅台2023年营收是多少？",
@@ -388,22 +444,59 @@ results = ragas.evaluate_batch(
 
 ### 工厂模式
 
-根据配置动态创建评测器：
+根据配置动态创建评测器（与 `run_experiment.py` 中的 `_create_evaluators` 一致）：
 
 ```python
 from eval.evaluators import BuiltinEvaluator, RagasEvaluator
 
-def create_evaluators(backends: list) -> list:
-    evaluators = []
+def create_evaluators(backends: list, system_config: dict) -> dict:
+    evaluators = {}
     for backend in backends:
         if backend == "builtin":
-            evaluators.append(BuiltinEvaluator())
+            evaluators["builtin"] = BuiltinEvaluator(config=system_config)
         elif backend == "ragas":
-            evaluators.append(RagasEvaluator())
+            ragas_config = system_config.get("evaluation", {}).get("ragas", {})
+            evaluators["ragas"] = RagasEvaluator(config={**system_config, "ragas": ragas_config})
     return evaluators
 
-evaluators = create_evaluators(["builtin", "ragas"])
+evaluators = create_evaluators(["builtin", "ragas"], system_config)
 ```
+
+---
+
+## 架构变更记录
+
+### run_eval.py 已废弃
+
+`eval/run_eval.py` 已废弃，将在未来版本中移除。请使用 `eval/run_experiment.py` 配合实验配置 YAML 文件：
+
+```bash
+# 旧方式（已废弃）
+pixi run python eval/run_eval.py --test-data eval/test_data.json
+
+# 新方式（推荐）
+pixi run python eval/run_experiment.py --config exp_configs/your_experiment.yaml
+```
+
+### 旧版评测路径已移除
+
+`_evaluate_test_set_legacy()` 函数已被移除。所有评测现在通过 Evaluator 抽象层（`BuiltinEvaluator` / `RagasEvaluator`）进行，必须提供 `exp_config` 和 `system_config`。
+
+### metrics.py 拆分为子模块
+
+`eval/metrics.py` 已拆分为 `eval/metrics/` 目录下的子模块：
+
+| 子模块 | 内容 |
+|--------|------|
+| `retrieval.py` | `calculate_hit_rate`, `calculate_mrr`, `calculate_ndcg` |
+| `chunk.py` | `calculate_chunk_hit_rate`, `calculate_chunk_mrr`, `calculate_chunk_ndcg` |
+| `dedup.py` | `deduplicate_by_document`, `calculate_dedup_hit_rate`, `calculate_dedup_mrr`, `calculate_dedup_ndcg` |
+| `fpr.py` | `calculate_false_positive_rate` |
+| `generation.py` | `calculate_faithfulness`, `calculate_answer_relevancy` |
+| `llm_retrieval.py` | `calculate_context_precision`, `calculate_context_recall` |
+| `utils.py` | `normalize_source`, `normalize_source_with_equivalence` 等工具函数 |
+
+> **向后兼容**：`eval/metrics/__init__.py` 重新导出了所有公共函数，原有 `from eval.metrics import calculate_hit_rate` 等导入方式仍然有效。
 
 ---
 

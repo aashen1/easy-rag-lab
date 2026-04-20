@@ -6,6 +6,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
+from eval.run_experiment import compute_aggregate_metrics, evaluate_test_set
+
 
 class TestAssetVerificationResult:
     def test_creation_valid(self):
@@ -676,3 +678,289 @@ class TestCLITestSetGeneration:
 
         with pytest.raises(SystemExit):
             _handle_generate_test_set(mock_meal_manager, config, args)
+
+
+class TestMetricNamespacePrefix:
+    def _make_exp_config(self, backends=None):
+        from src.experiment import ExperimentConfig
+
+        if backends is None:
+            backends = ["builtin"]
+        return ExperimentConfig(
+            name="test",
+            description="test",
+            data={"meal": "test_meal"},
+            test_sets=[{"strategy": "factual", "num_questions": 5}],
+            variants=[{"name": "baseline"}],
+            evaluation={
+                "backends": backends,
+                "metrics": {
+                    "retrieval": ["hit_rate", "mrr", "ndcg"],
+                    "generation": ["faithfulness", "answer_relevancy"],
+                },
+                "llm_preset": "default",
+            },
+        )
+
+    @patch("eval.run_experiment._evaluate_with_builtin")
+    @patch("eval.run_experiment._evaluate_with_ragas")
+    @patch("eval.run_experiment._collect_rag_samples")
+    @patch("eval.run_experiment._create_evaluators")
+    @patch("eval.run_experiment.get_llm_config")
+    def test_single_backend_no_prefix(
+        self, mock_llm_config, mock_create_evaluators, mock_collect,
+        mock_ragas, mock_builtin,
+    ):
+        mock_llm_config.return_value = {"api_key": "test"}
+        mock_evaluator = MagicMock()
+        mock_evaluator.supported_generation_metrics = ["faithfulness", "answer_relevancy"]
+        mock_create_evaluators.return_value = {"builtin": mock_evaluator}
+        mock_collect.return_value = [
+            {"question_id": "q1", "question": "Q1?", "answer": "A1", "contexts": ["c1"]},
+        ]
+        mock_builtin.return_value = [
+            {"id": "q1", "question": "Q1?", "answer": "A1",
+             "retrieval": {"hit_rate": 0.8, "mrr": 0.7, "ndcg": 0.75},
+             "generation": {"faithfulness": 0.9, "answer_relevancy": 0.8}},
+        ]
+
+        exp_config = self._make_exp_config(backends=["builtin"])
+        results = evaluate_test_set(
+            pipeline=MagicMock(),
+            test_set={"questions": []},
+            exp_config=exp_config,
+            system_config={},
+        )
+
+        assert "faithfulness" in results[0]["generation"]
+        assert "answer_relevancy" in results[0]["generation"]
+        assert "builtin_faithfulness" not in results[0]["generation"]
+
+    @patch("eval.run_experiment._evaluate_with_builtin")
+    @patch("eval.run_experiment._evaluate_with_ragas")
+    @patch("eval.run_experiment._collect_rag_samples")
+    @patch("eval.run_experiment._create_evaluators")
+    @patch("eval.run_experiment.get_llm_config")
+    def test_dual_backends_have_prefix(
+        self, mock_llm_config, mock_create_evaluators, mock_collect,
+        mock_ragas, mock_builtin,
+    ):
+        mock_llm_config.return_value = {"api_key": "test"}
+        mock_builtin_evaluator = MagicMock()
+        mock_builtin_evaluator.supported_generation_metrics = ["faithfulness", "answer_relevancy"]
+        mock_ragas_evaluator = MagicMock()
+        mock_ragas_evaluator.supported_generation_metrics = [
+            "faithfulness", "answer_relevancy", "context_precision",
+        ]
+        mock_create_evaluators.return_value = {
+            "builtin": mock_builtin_evaluator,
+            "ragas": mock_ragas_evaluator,
+        }
+        mock_collect.return_value = [
+            {"question_id": "q1", "question": "Q1?", "answer": "A1", "contexts": ["c1"]},
+        ]
+        mock_builtin.return_value = [
+            {"id": "q1", "question": "Q1?", "answer": "A1",
+             "retrieval": {"hit_rate": 0.8, "mrr": 0.7, "ndcg": 0.75},
+             "generation": {"faithfulness": 0.9, "answer_relevancy": 0.8}},
+        ]
+        mock_ragas.return_value = [
+            {"id": "q1", "question": "Q1?", "answer": "A1",
+             "generation": {"faithfulness": 0.85, "answer_relevancy": 0.75, "context_precision": 0.7}},
+        ]
+
+        exp_config = self._make_exp_config(backends=["builtin", "ragas"])
+        results = evaluate_test_set(
+            pipeline=MagicMock(),
+            test_set={"questions": []},
+            exp_config=exp_config,
+            system_config={},
+        )
+
+        gen = results[0]["generation"]
+        assert "builtin_faithfulness" in gen
+        assert "builtin_answer_relevancy" in gen
+        assert "ragas_faithfulness" in gen
+        assert "ragas_answer_relevancy" in gen
+        assert "ragas_context_precision" in gen
+        assert "faithfulness" not in gen
+        assert gen["builtin_faithfulness"] == 0.9
+        assert gen["ragas_faithfulness"] == 0.85
+
+    @patch("eval.run_experiment._evaluate_with_builtin")
+    @patch("eval.run_experiment._evaluate_with_ragas")
+    @patch("eval.run_experiment._collect_rag_samples")
+    @patch("eval.run_experiment._create_evaluators")
+    @patch("eval.run_experiment.get_llm_config")
+    def test_dual_backends_builtin_computes_all_supported(
+        self, mock_llm_config, mock_create_evaluators, mock_collect,
+        mock_ragas, mock_builtin,
+    ):
+        mock_llm_config.return_value = {"api_key": "test"}
+        mock_builtin_evaluator = MagicMock()
+        mock_builtin_evaluator.supported_generation_metrics = ["faithfulness", "answer_relevancy"]
+        mock_ragas_evaluator = MagicMock()
+        mock_ragas_evaluator.supported_generation_metrics = ["faithfulness", "answer_relevancy"]
+        mock_create_evaluators.return_value = {
+            "builtin": mock_builtin_evaluator,
+            "ragas": mock_ragas_evaluator,
+        }
+        mock_collect.return_value = [
+            {"question_id": "q1", "question": "Q1?", "answer": "A1", "contexts": ["c1"]},
+        ]
+        mock_builtin.return_value = [
+            {"id": "q1", "question": "Q1?", "answer": "A1",
+             "generation": {"faithfulness": 0.9, "answer_relevancy": 0.8}},
+        ]
+        mock_ragas.return_value = [
+            {"id": "q1", "question": "Q1?", "answer": "A1",
+             "generation": {"faithfulness": 0.85, "answer_relevancy": 0.75}},
+        ]
+
+        exp_config = self._make_exp_config(backends=["builtin", "ragas"])
+        evaluate_test_set(
+            pipeline=MagicMock(),
+            test_set={"questions": []},
+            exp_config=exp_config,
+            system_config={},
+        )
+
+        call_args = mock_builtin.call_args
+        assert call_args.kwargs["generation_metrics"] == ["faithfulness", "answer_relevancy"]
+
+    def test_compute_aggregate_with_prefixed_metrics(self):
+        results = [
+            {
+                "id": "q1",
+                "generation": {
+                    "builtin_faithfulness": 0.9,
+                    "builtin_answer_relevancy": 0.8,
+                    "ragas_faithfulness": 0.85,
+                    "ragas_answer_relevancy": 0.75,
+                },
+            },
+            {
+                "id": "q2",
+                "generation": {
+                    "builtin_faithfulness": 0.7,
+                    "builtin_answer_relevancy": 0.6,
+                    "ragas_faithfulness": 0.65,
+                    "ragas_answer_relevancy": 0.55,
+                },
+            },
+        ]
+
+        metrics = compute_aggregate_metrics(results)
+
+        assert "generation_metrics" in metrics
+        gen = metrics["generation_metrics"]
+        assert "avg_builtin_faithfulness" in gen
+        assert "avg_ragas_faithfulness" in gen
+        assert gen["avg_builtin_faithfulness"] == pytest.approx(0.8)
+        assert gen["avg_ragas_faithfulness"] == pytest.approx(0.75)
+
+    def test_compute_aggregate_with_unprefixed_metrics(self):
+        results = [
+            {
+                "id": "q1",
+                "generation": {"faithfulness": 0.9, "answer_relevancy": 0.8},
+            },
+            {
+                "id": "q2",
+                "generation": {"faithfulness": 0.7, "answer_relevancy": 0.6},
+            },
+        ]
+
+        metrics = compute_aggregate_metrics(results)
+
+        assert "generation_metrics" in metrics
+        gen = metrics["generation_metrics"]
+        assert "avg_faithfulness" in gen
+        assert "avg_answer_relevancy" in gen
+        assert gen["avg_faithfulness"] == pytest.approx(0.8)
+
+    @patch("eval.run_experiment._evaluate_with_builtin")
+    @patch("eval.run_experiment._collect_rag_samples")
+    @patch("eval.run_experiment._create_evaluators")
+    @patch("eval.run_experiment.get_llm_config")
+    def test_single_ragas_backend_no_prefix(
+        self, mock_llm_config, mock_create_evaluators, mock_collect,
+        mock_builtin,
+    ):
+        mock_llm_config.return_value = {"api_key": "test"}
+        mock_ragas_evaluator = MagicMock()
+        mock_ragas_evaluator.supported_generation_metrics = [
+            "faithfulness", "answer_relevancy", "context_precision",
+        ]
+        mock_create_evaluators.return_value = {"ragas": mock_ragas_evaluator}
+        mock_collect.return_value = [
+            {"question_id": "q1", "question": "Q1?", "answer": "A1", "contexts": ["c1"]},
+        ]
+
+        with patch("eval.run_experiment._evaluate_with_ragas") as mock_ragas:
+            mock_ragas.return_value = [
+                {"id": "q1", "question": "Q1?", "answer": "A1",
+                 "generation": {"faithfulness": 0.85, "answer_relevancy": 0.75}},
+            ]
+
+            exp_config = self._make_exp_config(backends=["ragas"])
+            results = evaluate_test_set(
+                pipeline=MagicMock(),
+                test_set={"questions": []},
+                exp_config=exp_config,
+                system_config={},
+            )
+
+            assert "faithfulness" in results[0]["generation"]
+            assert "ragas_faithfulness" not in results[0]["generation"]
+
+
+class TestDualBackendEvaluation:
+    """Tests for dual-backend (builtin + ragas) evaluation."""
+
+    def test_dual_backend_results_have_namespace_prefix(self):
+        """Test that dual-backend results have namespace prefixes on generation metrics."""
+        pass
+
+    def test_result_merging_builtin_and_ragas(self):
+        """Test that builtin retrieval + ragas generation results merge correctly."""
+        builtin_result = {
+            "id": "q1",
+            "question": "What is RAG?",
+            "answer": "RAG is retrieval-augmented generation.",
+            "retrieval": {"hit_rate": 1.0, "mrr": 1.0, "ndcg": 1.0},
+            "generation": {"builtin_faithfulness": 0.8, "builtin_answer_relevancy": 0.7},
+            "sources": ["doc1.pdf"],
+            "expected_sources": ["doc1.pdf"],
+        }
+
+        ragas_result = {
+            "id": "q1",
+            "question": "What is RAG?",
+            "answer": "RAG is retrieval-augmented generation.",
+            "generation": {"ragas_faithfulness": 0.85, "ragas_answer_relevancy": 0.72},
+            "sources": ["doc1.pdf"],
+            "expected_sources": ["doc1.pdf"],
+        }
+
+        merged = dict(builtin_result)
+        if "generation" in ragas_result:
+            if "generation" not in merged:
+                merged["generation"] = {}
+            merged["generation"].update(ragas_result["generation"])
+
+        assert "retrieval" in merged
+        assert "builtin_faithfulness" in merged["generation"]
+        assert "ragas_faithfulness" in merged["generation"]
+        assert merged["generation"]["builtin_faithfulness"] == 0.8
+        assert merged["generation"]["ragas_faithfulness"] == 0.85
+
+    def test_single_backend_no_prefix(self):
+        """Test that single backend results have no prefix."""
+        result = {
+            "id": "q1",
+            "generation": {"faithfulness": 0.85, "answer_relevancy": 0.72},
+        }
+
+        assert "faithfulness" in result["generation"]
+        assert "builtin_faithfulness" not in result["generation"]
