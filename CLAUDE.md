@@ -77,6 +77,16 @@
 - 处理完成后，在 `docs/inbox-log.md` 中记录处理结果
 - 原始文件移动到 `docs/inbox-processed/`
 
+### TODO归档检查规则
+
+- 每次对话开始时，检查 `TODO.md` 中是否有未归档的 issue（即 `- [ ]` 且无 `📋` 标记的条目）
+- 如有未归档 issue，提示用户"发现 TODO.md 有 N 条未归档 issue，是否执行归档？"
+- 用户说"打扫卫生""归档TODO"等指令时，也触发归档流程
+- 归档流程：调用 todo-archiver skill，将 issue 单向归档到 `docs/backlog.md`
+- 归档后在 TODO.md 原条目追加 `📋 YYYY-MM-DD 归档为 [ID]` 时间戳，不删除原内容，不打钩
+- 如发现已归档 issue 在 backlog 中已完成，则打钩、追加 `✅ YYYY-MM-DD 该issue已确认完成` 时间戳、移动到对应日期标题下
+- 为每个日期标题的 verbose 生成 summary 摘要
+
 ---
 
 ## 当前状态

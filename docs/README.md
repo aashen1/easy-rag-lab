@@ -95,6 +95,18 @@ docs/
 
 ---
 
+## TODO 归档机制
+
+`TODO.md`（人类管理）与 `docs/backlog.md`（AI 管理）构成双向异步 issue 追踪体系：
+
+- **归档**：AI 自动将 TODO.md 中未归档的 issue 单向归档到 backlog.md，追加 `📋` 时间戳
+- **完成同步**：backlog 中已完成的 issue 同步回 TODO.md，打钩并移动到对应日期标题
+- **触发**：每次对话开始自动检查，或用户说"打扫卫生""归档TODO"
+
+详见 [抛接球年轮方法论](methodology.md) 中的"TODO ↔ Backlog 双向异步机制"章节。
+
+---
+
 ## 文档规范
 
 ### 文件命名
