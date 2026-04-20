@@ -13,10 +13,11 @@ from eval.metrics import (
     calculate_context_precision,
     calculate_context_recall,
 )
-from src.experiment import ExperimentConfig, load_experiment_config, merge_config
+from src.experiment import ExperimentConfig, load_experiment_config, merge_config, is_new_format, get_test_set_name
 from src.meal import MealManager, MealStatus
 from src.sampler import SamplingConfig
 from src.pipeline import RAGPipeline
+from src.test_set_manager import TestSetManager
 from src.utils import load_config, setup_logger, get_llm_config
 import sys
 from pathlib import Path
@@ -462,30 +463,47 @@ if __name__ == "__main__":
 
         test_sets_dir = meal_manager.get_meal_dir(meal_name) / "test_sets"
         test_set_configs = exp_config.test_sets
+        test_set_manager = TestSetManager(config)
 
         if test_set_configs:
             first_test_set = test_set_configs[0]
-            strategy = first_test_set.get("strategy", "factual")
-            num_questions = first_test_set.get("num_questions", 20)
-            test_set_path = test_sets_dir / \
-                f"auto_{strategy}_n{num_questions}.json"
-
-            if not test_set_path.exists():
-                test_set_files = sorted(test_sets_dir.glob(
-                    "*.json")) if test_sets_dir.exists() else []
-                if test_set_files:
-                    test_set_path = test_set_files[0]
-                    logger.info(
-                        f"Specified test set not found, using: {test_set_path.stem}")
+            if is_new_format(first_test_set):
+                test_set_name = first_test_set.get("name")
+                test_set_data = test_set_manager.find_by_name(meal_name, test_set_name)
+                if test_set_data is None:
+                    test_set_files = sorted(test_sets_dir.glob("*.json")) if test_sets_dir.exists() else []
+                    if test_set_files:
+                        test_set_path = test_set_files[0]
+                        logger.warning(
+                            f"Test set '{test_set_name}' not found, using: {test_set_path.stem}")
+                    else:
+                        logger.error(
+                            f"No test sets found for meal '{meal_name}'. "
+                            "Generate one with: python main.py --generate-test-set {meal_name}"
+                        )
+                        sys.exit(1)
                 else:
-                    logger.error(
-                        f"No test sets found for meal '{meal_name}'. "
-                        "Generate one with: python main.py --generate-test-set {meal_name}"
-                    )
-                    sys.exit(1)
+                    test_set_path = test_sets_dir / f"{test_set_name}.json"
+                    logger.info(f"Using test set: {test_set_name}")
+            else:
+                strategy = first_test_set.get("strategy", "factual")
+                num_questions = first_test_set.get("num_questions", 20)
+                test_set_path = test_sets_dir / f"auto_{strategy}_n{num_questions}.json"
+
+                if not test_set_path.exists():
+                    test_set_files = sorted(test_sets_dir.glob("*.json")) if test_sets_dir.exists() else []
+                    if test_set_files:
+                        test_set_path = test_set_files[0]
+                        logger.info(
+                            f"Specified test set not found, using: {test_set_path.stem}")
+                    else:
+                        logger.error(
+                            f"No test sets found for meal '{meal_name}'. "
+                            "Generate one with: python main.py --generate-test-set {meal_name}"
+                        )
+                        sys.exit(1)
         else:
-            test_set_files = sorted(test_sets_dir.glob(
-                "*.json")) if test_sets_dir.exists() else []
+            test_set_files = sorted(test_sets_dir.glob("*.json")) if test_sets_dir.exists() else []
             if not test_set_files:
                 logger.error(
                     f"No test sets found for meal '{meal_name}'. "

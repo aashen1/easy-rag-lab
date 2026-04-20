@@ -3,6 +3,7 @@ import hashlib
 import json
 import sys
 import time
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -16,6 +17,8 @@ sys.path.insert(0, str(project_root))
 from src.experiment import (
     ExperimentConfig,
     ExperimentManager,
+    is_new_format,
+    get_test_set_name,
     load_experiment_config,
     merge_config,
 )
@@ -32,6 +35,7 @@ from src.meal import (
 from src.pipeline import RAGPipeline
 from src.sampler import SamplingConfig
 from src.test_generator import TestSetGenerator
+from src.test_set_manager import TestSetManager
 from src.token_tracker import TokenTracker
 from src.utils import get_llm_config, load_config, setup_logger
 from eval.metrics import (
@@ -360,6 +364,145 @@ def prepare_meal(
         raise
 
 
+def _prepare_legacy_test_set(
+    system_config: Dict[str, Any],
+    meal_name: str,
+    test_set_config: Dict[str, Any],
+    meal_manager: "MealManager",
+    generator: "TestSetGenerator",
+    llm_preset: str,
+    skip_preprocessing: bool,
+    token_tracker: Optional[TokenTracker],
+) -> Dict[str, Any]:
+    """
+    Legacy test set preparation for old format configs.
+
+    Args:
+        system_config: System configuration dictionary.
+        meal_name: Name of the meal.
+        test_set_config: Test set configuration dictionary (old format).
+        meal_manager: MealManager instance.
+        generator: TestSetGenerator instance.
+        llm_preset: LLM preset name.
+        skip_preprocessing: If True, skip generation even if test sets don't exist.
+        token_tracker: Optional token tracker.
+
+    Returns:
+        Test set dictionary.
+
+    Raises:
+        FileNotFoundError: If test set doesn't exist and skip_preprocessing is True.
+    """
+    meal_dir = meal_manager.get_meal_dir(meal_name)
+    test_sets_dir = meal_dir / "test_sets"
+
+    strategy = test_set_config.get("strategy", "factual")
+    num_questions = test_set_config.get("num_questions", 20)
+    seed = test_set_config.get("seed")
+    type_distribution = test_set_config.get("type_distribution")
+
+    if strategy == "document":
+        filename = f"document_level_n{num_questions}"
+    else:
+        filename = f"auto_{strategy}_n{num_questions}"
+    test_set_path = test_sets_dir / f"{filename}.json"
+
+    if test_set_path.exists():
+        logger.info(f"Test set '{filename}' found, loading...")
+        try:
+            with open(test_set_path, "r", encoding="utf-8") as f:
+                test_set_data = json.load(f)
+
+            existing_count = len(test_set_data.get("questions", []))
+            if existing_count < num_questions:
+                logger.warning(
+                    f"Existing test set has {existing_count} questions, "
+                    f"but {num_questions} requested. Supplementing "
+                    f"{num_questions - existing_count} more questions."
+                )
+                if skip_preprocessing:
+                    raise FileNotFoundError(
+                        f"Test set '{filename}' has insufficient questions "
+                        f"({existing_count}/{num_questions}) and "
+                        f"skip_preprocessing is enabled. "
+                        f"Cannot supplement in skip_preprocessing mode."
+                    )
+                try:
+                    if strategy == "document":
+                        test_set_data = generator.supplement_document_based_questions(
+                            meal_name=meal_name,
+                            existing_test_set=test_set_data,
+                            target_count=num_questions,
+                            llm_preset=llm_preset,
+                            token_tracker=token_tracker,
+                        )
+                    else:
+                        logger.warning(
+                            f"Supplement not supported for strategy "
+                            f"'{strategy}', regenerating from scratch"
+                        )
+                        test_set_path.unlink()
+                        test_set_data = None
+
+                    if test_set_data is not None:
+                        final_count = len(test_set_data.get("questions", []))
+                        logger.success(f"Test set '{filename}' supplemented ({final_count} questions)")
+                        return test_set_data
+                except Exception as e:
+                    logger.error(f"Failed to supplement test set '{filename}': {str(e)}")
+                    logger.warning("Falling back to full regeneration")
+                    test_set_path.unlink()
+            elif existing_count > num_questions:
+                logger.warning(
+                    f"Existing test set has {existing_count} questions, "
+                    f"but {num_questions} requested. Truncating to "
+                    f"{num_questions}."
+                )
+                test_set_data["questions"] = test_set_data["questions"][:num_questions]
+                logger.success(f"Test set '{filename}' truncated ({num_questions} questions)")
+                return test_set_data
+            else:
+                logger.success(f"Test set '{filename}' loaded ({existing_count} questions)")
+                return test_set_data
+        except FileNotFoundError:
+            raise
+        except Exception as e:
+            logger.warning(f"Failed to load test set '{filename}': {str(e)}, will regenerate")
+
+    if skip_preprocessing:
+        raise FileNotFoundError(
+            f"Test set '{filename}' not found and skip_preprocessing is enabled. "
+            "Cannot generate test set in skip_preprocessing mode."
+        )
+
+    logger.info(f"Generating test set '{filename}' ({strategy}, {num_questions} questions)...")
+
+    try:
+        if strategy == "document":
+            test_set_data = generator.generate_document_based_questions(
+                meal_name=meal_name,
+                num_questions=num_questions,
+                type_distribution=type_distribution,
+                llm_preset=llm_preset,
+                token_tracker=token_tracker,
+            )
+        else:
+            test_set_data = generator.generate_test_set(
+                meal_name=meal_name,
+                strategy=strategy,
+                num_questions=num_questions,
+                llm_preset=llm_preset,
+                seed=seed,
+                token_tracker=token_tracker,
+            )
+
+        logger.success(f"Test set '{filename}' generated ({len(test_set_data.get('questions', []))} questions)")
+        return test_set_data
+    except Exception as e:
+        logger.error(f"Failed to generate test set '{filename}': {str(e)}")
+        raise
+
+
 def prepare_test_sets(
     system_config: Dict[str, Any],
     exp_config: ExperimentConfig,
@@ -370,143 +513,82 @@ def prepare_test_sets(
     """
     Prepare test sets for experiment.
 
-    Checks if the specified test sets exist. If not, generates them automatically.
+    For new format (has 'name' field): uses TestSetManager.resolve_test_set()
+    For old format: uses legacy logic with deprecation warning
 
     Args:
         system_config: System configuration dictionary.
         exp_config: Experiment configuration.
         meal_info: Meal information dictionary from prepare_meal.
         skip_preprocessing: If True, skip generation even if test sets don't exist.
+        token_tracker: Optional token tracker.
 
     Returns:
         List of test set dictionaries.
 
     Raises:
         FileNotFoundError: If test set doesn't exist and skip_preprocessing is True.
-        ValueError: If test set generation fails.
+        ValueError: If test set resolution fails.
     """
     meal_name = meal_info["name"]
     meal_manager = MealManager(system_config)
-    meal_dir = meal_manager.get_meal_dir(meal_name)
-    test_sets_dir = meal_dir / "test_sets"
+    meal_config = meal_manager.load_meal(meal_name)
+
+    test_set_manager = TestSetManager(system_config)
+    generator = TestSetGenerator(system_config)
+    llm_preset = exp_config.evaluation.get("llm_preset", "default")
 
     test_sets = []
 
     for test_set_config in exp_config.test_sets:
-        strategy = test_set_config.get("strategy", "factual")
-        num_questions = test_set_config.get("num_questions", 20)
-        seed = test_set_config.get("seed")
-        type_distribution = test_set_config.get("type_distribution")
-
-        if strategy == "document":
-            filename = f"document_level_n{num_questions}"
-        else:
-            filename = f"auto_{strategy}_n{num_questions}"
-        test_set_path = test_sets_dir / f"{filename}.json"
-
-        if test_set_path.exists():
-            logger.info(f"Test set '{filename}' found, loading...")
-            try:
-                with open(test_set_path, "r", encoding="utf-8") as f:
-                    test_set_data = json.load(f)
-
-                existing_count = len(test_set_data.get("questions", []))
-                if existing_count < num_questions:
-                    logger.warning(
-                        f"Existing test set has {existing_count} questions, "
-                        f"but {num_questions} requested. Supplementing "
-                        f"{num_questions - existing_count} more questions."
+        if is_new_format(test_set_config):
+            if skip_preprocessing:
+                name = test_set_config.get("name")
+                test_set_data = test_set_manager.find_by_name(meal_name, name)
+                if test_set_data is None:
+                    raise FileNotFoundError(
+                        f"Test set '{name}' not found and skip_preprocessing is enabled."
                     )
-                    if skip_preprocessing:
-                        raise FileNotFoundError(
-                            f"Test set '{filename}' has insufficient questions "
-                            f"({existing_count}/{num_questions}) and "
-                            f"skip_preprocessing is enabled. "
-                            f"Cannot supplement in skip_preprocessing mode."
-                        )
-                    try:
-                        generator = TestSetGenerator(system_config)
-                        llm_preset = exp_config.evaluation.get("llm_preset", "default")
-
-                        if strategy == "document":
-                            test_set_data = generator.supplement_document_based_questions(
-                                meal_name=meal_name,
-                                existing_test_set=test_set_data,
-                                target_count=num_questions,
-                                llm_preset=llm_preset,
-                                token_tracker=token_tracker,
-                            )
-                        else:
-                            logger.warning(
-                                f"Supplement not supported for strategy "
-                                f"'{strategy}', regenerating from scratch"
-                            )
-                            test_set_path.unlink()
-                            test_set_data = None
-
-                        if test_set_data is not None:
-                            test_sets.append(test_set_data)
-                            final_count = len(test_set_data.get("questions", []))
-                            logger.success(f"Test set '{filename}' supplemented ({final_count} questions)")
-                            continue
-                    except Exception as e:
-                        logger.error(f"Failed to supplement test set '{filename}': {str(e)}")
-                        logger.warning("Falling back to full regeneration")
-                        test_set_path.unlink()
-                elif existing_count > num_questions:
-                    logger.warning(
-                        f"Existing test set has {existing_count} questions, "
-                        f"but {num_questions} requested. Truncating to "
-                        f"{num_questions}."
-                    )
-                    test_set_data["questions"] = test_set_data["questions"][:num_questions]
-                    test_sets.append(test_set_data)
-                    logger.success(f"Test set '{filename}' truncated ({num_questions} questions)")
-                    continue
-                else:
-                    test_sets.append(test_set_data)
-                    logger.success(f"Test set '{filename}' loaded ({existing_count} questions)")
-                    continue
-            except FileNotFoundError:
-                raise
-            except Exception as e:
-                logger.warning(f"Failed to load test set '{filename}': {str(e)}, will regenerate")
-
-        if skip_preprocessing:
-            raise FileNotFoundError(
-                f"Test set '{filename}' not found and skip_preprocessing is enabled. "
-                "Cannot generate test set in skip_preprocessing mode."
-            )
-
-        logger.info(f"Generating test set '{filename}' ({strategy}, {num_questions} questions)...")
-
-        try:
-            generator = TestSetGenerator(system_config)
-            llm_preset = exp_config.evaluation.get("llm_preset", "default")
-
-            if strategy == "document":
-                test_set_data = generator.generate_document_based_questions(
-                    meal_name=meal_name,
-                    num_questions=num_questions,
-                    type_distribution=type_distribution,
-                    llm_preset=llm_preset,
-                    token_tracker=token_tracker,
+                is_valid, invalid_qs = test_set_manager.validate_test_set(
+                    test_set_data, meal_config
                 )
+                if not is_valid:
+                    raise ValueError(
+                        f"Test set '{name}' is invalid and skip_preprocessing is enabled."
+                    )
             else:
-                test_set_data = generator.generate_test_set(
+                test_set_data = test_set_manager.resolve_test_set(
                     meal_name=meal_name,
-                    strategy=strategy,
-                    num_questions=num_questions,
+                    test_set_config=test_set_config,
+                    meal_config=meal_config,
+                    generator=generator,
                     llm_preset=llm_preset,
-                    seed=seed,
                     token_tracker=token_tracker,
                 )
-
             test_sets.append(test_set_data)
-            logger.success(f"Test set '{filename}' generated ({len(test_set_data.get('questions', []))} questions)")
-        except Exception as e:
-            logger.error(f"Failed to generate test set '{filename}': {str(e)}")
-            raise
+        else:
+            warnings.warn(
+                "test_sets uses deprecated configuration format. "
+                "The experiment will run normally, but please consider migrating to the new format:\n"
+                "  test_sets:\n"
+                "    - name: \"<custom_name>\"\n"
+                "      on_missing: \"auto\"\n"
+                "      generation:\n"
+                "        strategy: \"document\"\n"
+                "        num_questions: 10",
+                DeprecationWarning,
+            )
+            test_set_data = _prepare_legacy_test_set(
+                system_config=system_config,
+                meal_name=meal_name,
+                test_set_config=test_set_config,
+                meal_manager=meal_manager,
+                generator=generator,
+                llm_preset=llm_preset,
+                skip_preprocessing=skip_preprocessing,
+                token_tracker=token_tracker,
+            )
+            test_sets.append(test_set_data)
 
     return test_sets
 
