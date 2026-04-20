@@ -1031,7 +1031,7 @@ class ExperimentReporter:
         """Get description for a generation quality metric.
 
         Args:
-            metric: Metric name (e.g., 'avg_faithfulness', 'avg_answer_relevancy').
+            metric: Metric name (e.g., 'avg_faithfulness', 'avg_builtin_faithfulness').
 
         Returns:
             Human-readable description of the metric.
@@ -1039,7 +1039,24 @@ class ExperimentReporter:
         descriptions = {
             "avg_faithfulness": "How well the answer is grounded in retrieved contexts",
             "avg_answer_relevancy": "How relevant the answer is to the question",
+            "avg_builtin_faithfulness": "Builtin: How well the answer is grounded in retrieved contexts",
+            "avg_builtin_answer_relevancy": "Builtin: How relevant the answer is to the question",
+            "avg_ragas_faithfulness": "RAGAS: How well the answer is grounded in retrieved contexts",
+            "avg_ragas_answer_relevancy": "RAGAS: How relevant the answer is to the question",
+            "avg_ragas_context_precision": "RAGAS: How precise the retrieved contexts are",
+            "avg_ragas_context_recall": "RAGAS: How completely the contexts cover the ground truth",
+            "avg_ragas_answer_correctness": "RAGAS: How correct the answer is compared to reference",
+            "avg_ragas_semantic_similarity": "RAGAS: Semantic similarity between answer and reference",
         }
+        if metric not in descriptions:
+            for prefix in ["builtin_", "ragas_"]:
+                if prefix in metric:
+                    base_metric = metric.replace(prefix, "")
+                    base_desc = descriptions.get(f"avg_{base_metric}", "")
+                    backend = prefix.rstrip("_").upper()
+                    if base_desc:
+                        return f"{backend}: {base_desc}"
+                    return f"{backend}: Generation quality metric"
         return descriptions.get(metric, "Generation quality metric")
 
     def _generate_results_section(self, result: ExperimentResult) -> str:
@@ -1313,15 +1330,14 @@ class ExperimentReporter:
             raise ValueError("LLM API key is required for LLM report generation")
 
         try:
-            from anthropic import Anthropic
+            from src.utils import create_llm_client
 
-            self._llm_client = Anthropic(
-                api_key="dummy",
-                base_url=self.llm_base_url or "https://api.longcat.chat/anthropic",
-                default_headers={
-                    "Authorization": f"Bearer {self.llm_api_key}",
-                    "Content-Type": "application/json",
+            self._llm_client = create_llm_client(
+                llm_config={
+                    "api_key": self.llm_api_key,
+                    "base_url": self.llm_base_url or "https://api.longcat.chat/anthropic",
                 },
+                mode="sdk",
             )
             logger.info("LLM client initialized for report generation")
         except ImportError:

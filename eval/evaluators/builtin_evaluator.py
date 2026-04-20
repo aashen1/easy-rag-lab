@@ -14,8 +14,19 @@ from eval.metrics import (
     calculate_hit_rate,
     calculate_mrr,
     calculate_ndcg,
+    calculate_chunk_hit_rate,
+    calculate_chunk_mrr,
+    calculate_chunk_ndcg,
+    calculate_dedup_hit_rate,
+    calculate_dedup_mrr,
+    calculate_dedup_ndcg,
+    calculate_false_positive_rate,
     calculate_faithfulness,
     calculate_answer_relevancy,
+    calculate_context_precision,
+    calculate_context_recall,
+    normalize_source_with_equivalence,
+    deduplicate_by_document,
 )
 
 
@@ -41,7 +52,13 @@ class BuiltinEvaluator(BaseEvaluator):
             config: Optional configuration dictionary.
         """
         super().__init__(config)
-        self._retrieval_metrics = ["hit_rate", "mrr", "ndcg"]
+        self._retrieval_metrics = [
+            "hit_rate", "mrr", "ndcg",
+            "chunk_hit_rate", "chunk_mrr", "chunk_ndcg",
+            "dedup_hit_rate", "dedup_mrr", "dedup_ndcg",
+            "false_positive_rate",
+            "context_precision", "context_recall",
+        ]
         self._generation_metrics = ["faithfulness", "answer_relevancy"]
 
     @property
@@ -85,6 +102,10 @@ class BuiltinEvaluator(BaseEvaluator):
         llm_config: Optional[Dict[str, str]] = None,
         retrieval_metrics: Optional[List[str]] = None,
         generation_metrics: Optional[List[str]] = None,
+        chunk_ids: Optional[List[str]] = None,
+        expected_chunks: Optional[List[str]] = None,
+        equivalence_groups: Optional[Dict[str, List[str]]] = None,
+        expect_retrieval: bool = True,
     ) -> EvaluationResult:
         """
         Evaluate a single sample using builtin metrics.
@@ -102,6 +123,12 @@ class BuiltinEvaluator(BaseEvaluator):
                 Defaults to all supported retrieval metrics.
             generation_metrics: Optional list of generation metrics to compute.
                 Defaults to all supported generation metrics if llm_config is provided.
+            chunk_ids: Optional list of retrieved chunk identifiers.
+            expected_chunks: Optional list of expected chunk identifiers.
+            equivalence_groups: Optional dict mapping group keys to lists of
+                equivalent file paths for dedup normalization.
+            expect_retrieval: Whether the question expects retrieval results.
+                Defaults to True. Set to False for irrelevant questions.
 
         Returns:
             EvaluationResult containing the evaluation scores.
@@ -117,7 +144,7 @@ class BuiltinEvaluator(BaseEvaluator):
         error = None
 
         try:
-            if expected_sources:
+            if expected_sources and expect_retrieval:
                 if "hit_rate" in retrieval_metrics:
                     retrieval_results["hit_rate"] = calculate_hit_rate(
                         retrieved_sources=contexts,
@@ -133,6 +160,78 @@ class BuiltinEvaluator(BaseEvaluator):
                         retrieved_sources=contexts,
                         expected_sources=expected_sources,
                     )
+
+            if chunk_ids and expected_chunks and expect_retrieval:
+                if "chunk_hit_rate" in retrieval_metrics:
+                    retrieval_results["chunk_hit_rate"] = calculate_chunk_hit_rate(
+                        chunk_ids, expected_chunks
+                    )
+                if "chunk_mrr" in retrieval_metrics:
+                    retrieval_results["chunk_mrr"] = calculate_chunk_mrr(
+                        chunk_ids, expected_chunks
+                    )
+                if "chunk_ndcg" in retrieval_metrics:
+                    retrieval_results["chunk_ndcg"] = calculate_chunk_ndcg(
+                        chunk_ids, expected_chunks, k=5
+                    )
+
+            if expected_sources and expect_retrieval:
+                if equivalence_groups:
+                    norm_retrieved = [normalize_source_with_equivalence(s, equivalence_groups) for s in contexts]
+                    norm_expected = [normalize_source_with_equivalence(s, equivalence_groups) for s in expected_sources]
+                else:
+                    norm_retrieved = contexts
+                    norm_expected = expected_sources
+
+                if "dedup_hit_rate" in retrieval_metrics:
+                    retrieval_results["dedup_hit_rate"] = calculate_dedup_hit_rate(
+                        norm_retrieved, norm_expected
+                    )
+                if "dedup_mrr" in retrieval_metrics:
+                    retrieval_results["dedup_mrr"] = calculate_dedup_mrr(
+                        norm_retrieved, norm_expected
+                    )
+                if "dedup_ndcg" in retrieval_metrics:
+                    retrieval_results["dedup_ndcg"] = calculate_dedup_ndcg(
+                        norm_retrieved, norm_expected
+                    )
+
+            if not expect_retrieval and not expected_sources:
+                if "false_positive_rate" in retrieval_metrics:
+                    retrieval_results["false_positive_rate"] = calculate_false_positive_rate(
+                        contexts, k=5
+                    )
+
+            if llm_config and contexts:
+                if "context_precision" in retrieval_metrics:
+                    try:
+                        cp_score = calculate_context_precision(
+                            question=question,
+                            expected_output=expected_answer or "",
+                            retrieval_context=contexts,
+                            api_key=llm_config["api_key"],
+                            base_url=llm_config["base_url"],
+                            model_name=llm_config["model_name"],
+                        )
+                        retrieval_results["context_precision"] = cp_score
+                    except Exception as e:
+                        logger.error(f"Failed to calculate context_precision for {question_id}: {str(e)}")
+                        retrieval_results["context_precision"] = None
+
+                if "context_recall" in retrieval_metrics:
+                    try:
+                        cr_score = calculate_context_recall(
+                            question=question,
+                            ground_truth=expected_answer or "",
+                            retrieval_context=contexts,
+                            api_key=llm_config["api_key"],
+                            base_url=llm_config["base_url"],
+                            model_name=llm_config["model_name"],
+                        )
+                        retrieval_results["context_recall"] = cr_score
+                    except Exception as e:
+                        logger.error(f"Failed to calculate context_recall for {question_id}: {str(e)}")
+                        retrieval_results["context_recall"] = None
 
             if generation_metrics and llm_config:
                 if "faithfulness" in generation_metrics:
@@ -219,6 +318,10 @@ class BuiltinEvaluator(BaseEvaluator):
                 llm_config=llm_config,
                 retrieval_metrics=retrieval_metrics,
                 generation_metrics=generation_metrics,
+                chunk_ids=sample.get("chunk_ids"),
+                expected_chunks=sample.get("expected_chunks"),
+                equivalence_groups=sample.get("equivalence_groups"),
+                expect_retrieval=sample.get("expect_retrieval", True),
             )
             results.append(result)
         return results

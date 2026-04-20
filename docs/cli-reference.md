@@ -139,15 +139,16 @@ pixi run python interactive.py
 
 ### 基础评测
 
+> ⚠️ `eval/run_eval.py` 已废弃，请使用 `eval/run_experiment.py`。
+
 ```bash
-# 运行完整评测
-pixi run python eval/run_eval.py
+# 运行完整评测（推荐使用实验系统）
+pixi run python eval/run_experiment.py --config exp_configs/your_config.yaml
 
-# 快速评测（采样）
-pixi run python eval/run_eval.py --sample-count 5
-
-# 构建索引后评测
-pixi run python eval/run_eval.py --build-index
+# 旧方式（已废弃）
+# pixi run python eval/run_eval.py
+# pixi run python eval/run_eval.py --sample-count 5
+# pixi run python eval/run_eval.py --build-index
 ```
 
 ### 实验系统

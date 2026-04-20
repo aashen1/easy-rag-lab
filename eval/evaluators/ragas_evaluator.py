@@ -57,20 +57,16 @@ class RagasEvaluator(BaseEvaluator):
             "answer_correctness",
             "semantic_similarity",
         ]
+        self._ragas_config: Dict[str, Any] = (
+            self.config.get("ragas", {}) if self.config else {}
+        )
+        self._run_config: Dict[str, Any] = self._ragas_config.get("run_config", {})
+        self._embedding_config: Dict[str, Any] = self._ragas_config.get(
+            "embedding", {}
+        )
 
     def _create_llm(self, llm_config: Dict[str, str]) -> Any:
-        """
-        Create RAGAS-compatible LLM using LangchainLLMWrapper.
-
-        Uses ChatAnthropic with api_key='dummy' and the real key passed
-        via the Authorization: Bearer header, matching the pattern used
-        by the project's Generator class. This is required because the
-        LongCat API proxy expects the key in the Authorization header
-        rather than the x-api-key header that the Anthropic SDK uses.
-
-        The LangchainLLMWrapper preserves these custom headers through
-        to the actual HTTP calls, unlike llm_factory + instructor which
-        strips them during client patching.
+        """Create RAGAS-compatible LLM using LangchainLLMWrapper.
 
         Args:
             llm_config: Dictionary containing api_key, base_url, model_name.
@@ -79,29 +75,11 @@ class RagasEvaluator(BaseEvaluator):
             RAGAS-compatible LangchainLLMWrapper instance.
         """
         try:
-            from langchain_anthropic import ChatAnthropic
-            from ragas.llms import LangchainLLMWrapper
+            from src.utils import create_llm_client
 
-            base_url = llm_config["base_url"].rstrip("/")
-            if not base_url.endswith("/anthropic"):
-                base_url = f"{base_url}/anthropic"
-
-            chat_model = ChatAnthropic(
-                model=llm_config["model_name"],
-                api_key="dummy",
-                base_url=base_url,
-                default_headers={
-                    "Authorization": f"Bearer {llm_config['api_key']}",
-                    "Content-Type": "application/json",
-                },
-                max_tokens=llm_config.get("max_tokens", 4096),
-                temperature=llm_config.get("temperature", 0.0),
-            )
-
-            return LangchainLLMWrapper(chat_model)
-
+            return create_llm_client(llm_config=llm_config, mode="langchain")
         except ImportError as e:
-            error_msg = f"Failed to import RAGAS dependencies: {str(e)}"
+            error_msg = f"Failed to create LLM client: {str(e)}"
             logger.error(error_msg)
             raise ImportError(
                 f"{error_msg}. Please install with: pixi add langchain-anthropic ragas"
@@ -125,11 +103,16 @@ class RagasEvaluator(BaseEvaluator):
         try:
             from langchain_community.embeddings import HuggingFaceEmbeddings
 
-            embedding_config = config.get("embedding", {})
-            model_name = embedding_config.get(
-                "model_name", "BAAI/bge-large-zh-v1.5"
+            fallback_config = config.get("embedding", {})
+            embedding_config = self._embedding_config or fallback_config
+            model_name = (
+                self._ragas_config.get("embedding_model")
+                or embedding_config.get("model_name", "BAAI/bge-large-zh-v1.5")
             )
-            device = embedding_config.get("device", "cuda")
+            device = (
+                self._ragas_config.get("device")
+                or embedding_config.get("device", "cuda")
+            )
 
             return HuggingFaceEmbeddings(
                 model_name=model_name,
@@ -142,6 +125,25 @@ class RagasEvaluator(BaseEvaluator):
             raise ImportError(
                 f"{error_msg}. Please install with: pixi add langchain-community sentence-transformers ragas"
             )
+
+    def _build_run_config(self) -> Optional[Any]:
+        """
+        Build a RAGAS RunConfig from self._run_config.
+
+        Returns:
+            RunConfig instance if ragas provides it, otherwise None.
+        """
+        try:
+            from ragas import RunConfig
+
+            return RunConfig(
+                max_workers=self._run_config.get("max_workers", 5),
+                timeout=self._run_config.get("timeout", 60),
+                max_retries=self._run_config.get("max_retries", 3),
+            )
+        except ImportError:
+            logger.debug("RunConfig not available in this ragas version, skipping")
+            return None
 
     def _build_ragas_dataset(
         self, samples: List[Dict[str, Any]]
@@ -333,11 +335,14 @@ class RagasEvaluator(BaseEvaluator):
 
             from ragas import evaluate
 
+            run_config = self._build_run_config()
+
             result = evaluate(
                 dataset=dataset,
                 metrics=metrics,
                 llm=self._llm,
                 embeddings=self._embeddings,
+                run_config=run_config,
                 show_progress=False,
                 raise_exceptions=True,
             )
@@ -410,11 +415,14 @@ class RagasEvaluator(BaseEvaluator):
 
             from ragas import evaluate
 
+            run_config = self._build_run_config()
+
             eval_result = evaluate(
                 dataset=dataset,
                 metrics=metrics,
                 llm=self._llm,
                 embeddings=self._embeddings,
+                run_config=run_config,
                 show_progress=True,
                 raise_exceptions=False,
             )

@@ -8,8 +8,11 @@ data:
     seed: 42
 
 test_sets:
-  - strategy: "document"
-    num_questions: 1
+  - name: "ragas_quick_test"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 1
 
 variants:
   - name: "ragas_smoke"

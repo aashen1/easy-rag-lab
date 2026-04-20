@@ -1,3 +1,11 @@
+import warnings
+warnings.warn(
+    "eval/run_eval.py is deprecated and will be removed in a future version. "
+    "Use eval/run_experiment.py with ExperimentConfig instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 import time
@@ -353,6 +361,11 @@ def print_summary(summary: Dict[str, Any]) -> None:
 
 
 if __name__ == "__main__":
+    print("=" * 60)
+    print("WARNING: eval/run_eval.py is DEPRECATED.")
+    print("Please use: pixi run python eval/run_experiment.py")
+    print("=" * 60)
+
     import argparse
 
     parser = argparse.ArgumentParser(description="RAG Evaluation Script")
