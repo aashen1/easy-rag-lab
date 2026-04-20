@@ -644,20 +644,9 @@ def _create_llm_client(
     Raises:
         Exception: If client creation fails.
     """
-    try:
-        client = Anthropic(
-            api_key="dummy",
-            base_url=base_url,
-            default_headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-        )
-        return client
-    except Exception as e:
-        error_msg = f"Failed to create LLM client: {str(e)}"
-        logger.error(error_msg)
-        raise Exception(error_msg)
+    from src.llm_client import create_anthropic_client
+
+    return create_anthropic_client(api_key=api_key, base_url=base_url)
 
 
 def _extract_statements(

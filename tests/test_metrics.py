@@ -679,7 +679,7 @@ class TestCalculateAnswerRelevancy:
 class TestCreateLLMClient:
     """Tests for _create_llm_client function."""
 
-    @patch("eval.metrics.Anthropic")
+    @patch("src.llm_client.Anthropic")
     def test_create_client_success(self, mock_anthropic):
         mock_client = MagicMock()
         mock_anthropic.return_value = mock_client
@@ -692,7 +692,7 @@ class TestCreateLLMClient:
         assert client == mock_client
         mock_anthropic.assert_called_once()
 
-    @patch("eval.metrics.Anthropic")
+    @patch("src.llm_client.Anthropic")
     def test_create_client_with_custom_url(self, mock_anthropic):
         mock_client = MagicMock()
         mock_anthropic.return_value = mock_client

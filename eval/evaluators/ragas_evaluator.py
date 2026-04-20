@@ -64,8 +64,8 @@ class RagasEvaluator(BaseEvaluator):
 
         Uses ChatAnthropic with api_key='dummy' and the real key passed
         via the Authorization: Bearer header, matching the pattern used
-        by the project's Generator class. This is required because the
-        LongCat API proxy expects the key in the Authorization header
+        by src.llm_client.create_anthropic_client. This is required because
+        the LongCat API proxy expects the key in the Authorization header
         rather than the x-api-key header that the Anthropic SDK uses.
 
         The LangchainLLMWrapper preserves these custom headers through

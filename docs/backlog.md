@@ -14,7 +14,7 @@
 |------|--------|--------|--------|--------|
 | Bug | 0 | 0 | 15 | 2 |
 | Feature | 10 | 0 | 18 | 0 |
-| Refactor | 8 | 0 | 9 | 0 |
+| Refactor | 7 | 0 | 10 | 0 |
 | Optimization | 4 | 0 | 0 | 0 |
 | Investigation | 8 | 0 | 3 | 0 |
 
@@ -60,7 +60,7 @@
 | RF-001 | CLI 输出规范化（172 处 print） | [v0.1.5 code-review](reviews/v0.1.5/code-review.md) | 📋 待处理 | 中 | 替换为 loguru 会改变输出格式 |
 | RF-002 | 项目结构整理（根目录 .py 文件） | [原 TODO.md](../TODO.md) | 📋 待处理 | 小 | 需评估影响范围 |
 | RF-004 | 硬编码配置值提取到 config.yaml | v0.1.7 合并验收 | 📋 待处理 | 中 | metrics.py/experiment_reporter.py/test_generator.py 中模型名、API URL、max_tokens、temperature 硬编码 |
-| RF-005 | Anthropic 客户端创建统一抽象 | v0.1.7 合并验收 | 📋 待处理 | 小 | metrics.py calculate_answer_relevancy 重复创建客户端，api_key="dummy" 模式散布多处 |
+| RF-005 | Anthropic 客户端创建统一抽象 | v0.1.7 合并验收 | ✅ 已完成 | 小 | 提取 create_anthropic_client 到 src/llm_client.py，4处→1处 |
 | RF-007 | exp_configs 版本维护机制沉淀 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 随版本演进清洗模板，考虑沉淀为 skill 或系统提示词 |
 | RF-008 | backlog issue 详细信息记录 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 参考 GitHub 做法，支持超链接引用详情 |
 | RF-009 | commit-rule 与 CLAUDE.md 渐进式披露 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 分离为 skill/rule，减少提示词长度 |
@@ -142,6 +142,7 @@
 | RF-DONE-002 | README 和 CLAUDE 更新 | [原 TODO.md](../TODO.md) | 2026-04-18 |
 | RF-DONE-003 | PytestCollectionWarning 修复 | [原 TODO.md](../TODO.md) | 2026-04-18 |
 | RF-010 | lint/ruff 配置 → 已配置 ruff + pyproject.toml + pixi tasks | [TODO.md](../TODO.md) | 2026-04-21 |
+| RF-005 | Anthropic 客户端统一抽象 → 提取 create_anthropic_client 到 src/llm_client.py | v0.1.7 合并验收 | 2026-04-21 |
 
 ### Investigation
 
