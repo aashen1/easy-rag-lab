@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
-from eval.run_experiment import compute_aggregate_metrics, evaluate_test_set
+from eval.run_experiment import compute_aggregate_metrics, evaluate_test_set, _evaluate_with_builtin
 
 
 class TestAssetVerificationResult:
@@ -1023,3 +1023,114 @@ class TestDualBackendEvaluation:
 
         assert "faithfulness" in result["generation"]
         assert "builtin_faithfulness" not in result["generation"]
+
+
+class TestEvaluateWithBuiltinContextsSourcesSeparation:
+    """Tests for P6-3 fix: contexts/sources separation in _evaluate_with_builtin."""
+
+    def test_evaluate_with_builtin_passes_contexts_and_retrieved_sources(self):
+        """Test that _evaluate_with_builtin passes contexts and retrieved_sources separately."""
+        from eval.evaluators.builtin_evaluator import BuiltinEvaluator
+
+        evaluator = BuiltinEvaluator()
+
+        samples = [
+            {
+                "question_id": "q1",
+                "question": "What is the revenue?",
+                "answer": "Revenue is $1M.",
+                "contexts": ["Revenue was $1M in 2023.", "Profit was $500K."],
+                "expected_sources": ["doc1.pdf"],
+                "retrieved_sources": ["doc1.pdf", "doc2.pdf"],
+                "chunk_ids": ["doc1_001", "doc2_003"],
+                "question_type": "factual",
+                "time_seconds": 1.5,
+                "test_set": "test_set_1",
+                "category": "factual",
+                "difficulty": "easy",
+                "token_usage": None,
+            },
+        ]
+
+        with patch.object(evaluator, "evaluate_single", return_value=MagicMock(
+            retrieval_metrics={"hit_rate": 1.0, "mrr": 1.0, "ndcg": 1.0},
+            generation_metrics={},
+            error=None,
+        )) as mock_eval:
+            _evaluate_with_builtin(
+                samples=samples,
+                evaluator=evaluator,
+                retrieval_metrics=["hit_rate", "mrr", "ndcg"],
+            )
+
+            mock_eval.assert_called_once()
+            call_kwargs = mock_eval.call_args.kwargs
+            assert call_kwargs["contexts"] == ["Revenue was $1M in 2023.", "Profit was $500K."]
+            assert call_kwargs["retrieved_sources"] == ["doc1.pdf", "doc2.pdf"]
+            assert call_kwargs["contexts"] != call_kwargs["retrieved_sources"]
+
+    def test_evaluate_with_builtin_passes_chunk_ids_and_question_type(self):
+        """Test that _evaluate_with_builtin passes chunk_ids and question_type."""
+        from eval.evaluators.builtin_evaluator import BuiltinEvaluator
+
+        evaluator = BuiltinEvaluator()
+
+        samples = [
+            {
+                "question_id": "q1",
+                "question": "What is the revenue?",
+                "answer": "Revenue is $1M.",
+                "contexts": ["Revenue was $1M in 2023."],
+                "expected_sources": ["doc1.pdf"],
+                "retrieved_sources": ["doc1.pdf"],
+                "chunk_ids": ["doc1_001", "doc2_003"],
+                "question_type": "single_fact",
+                "time_seconds": 1.0,
+                "test_set": "test_set_1",
+                "category": "factual",
+                "difficulty": "easy",
+                "token_usage": None,
+            },
+        ]
+
+        with patch.object(evaluator, "evaluate_single", return_value=MagicMock(
+            retrieval_metrics={"hit_rate": 1.0},
+            generation_metrics={},
+            error=None,
+        )) as mock_eval:
+            _evaluate_with_builtin(
+                samples=samples,
+                evaluator=evaluator,
+                retrieval_metrics=["hit_rate"],
+            )
+
+            call_kwargs = mock_eval.call_args.kwargs
+            assert call_kwargs["chunk_ids"] == ["doc1_001", "doc2_003"]
+            assert call_kwargs["question_type"] == "single_fact"
+
+    def test_evaluate_with_builtin_handles_error_samples(self):
+        """Test that _evaluate_with_builtin handles error samples correctly."""
+        from eval.evaluators.builtin_evaluator import BuiltinEvaluator
+
+        evaluator = BuiltinEvaluator()
+
+        samples = [
+            {
+                "question_id": "q_err",
+                "question": "What happened?",
+                "error": "Pipeline failed",
+                "time_seconds": 0.5,
+                "test_set": "test_set_1",
+            },
+        ]
+
+        results = _evaluate_with_builtin(
+            samples=samples,
+            evaluator=evaluator,
+            retrieval_metrics=["hit_rate"],
+        )
+
+        assert len(results) == 1
+        assert results[0]["id"] == "q_err"
+        assert results[0]["error"] == "Pipeline failed"
+        assert results[0]["answer"] is None
