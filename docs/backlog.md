@@ -13,14 +13,18 @@
 | 类型 | 待处理 | 进行中 | 已完成 | 已延期 |
 |------|--------|--------|--------|--------|
 | Bug | 4 | 0 | 15 | 2 |
-| Feature | 12 | 0 | 19 | 0 |
-| Refactor | 8 | 0 | 10 | 0 |
-| Optimization | 6 | 0 | 0 | 0 |
-| Investigation | 11 | 0 | 3 | 0 |
+| Feature | 15 | 0 | 19 | 0 |
+| Refactor | 10 | 0 | 10 | 0 |
+| Optimization | 7 | 0 | 0 | 0 |
+| Investigation | 14 | 0 | 3 | 0 |
 
 ---
 
 ## Bug
+
+| ID | 描述 | 来源 | 状态 | 备注 |
+|----|------|------|------|------|
+| BUG-017 | expected_sources 标注错误（LLM 生成问题涉及文档中提到的其他实体，但 source_files 仅指向生成问题时的源文档） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P6-5) | 📋 待处理 | 需重新设计问题生成策略，使 source_files 反映问题实际涉及的文档 |
 
 ### 🟡 已延期
 
@@ -57,6 +61,9 @@
 | FEAT-020 | RAGAS 版本升级与 API 适配 | [RAGAS 指南](guides/ragas-evaluation.md#5-后续优化方向) | 📋 待处理 | 中 | 兼容性矩阵 + 版本检测自动选择导入路径 + CI 集成测试 |
 | FEAT-021 | Ground Truth 手动标注工具 | [RAGAS 指南](guides/ragas-evaluation.md#5-后续优化方向) | 📋 待处理 | 大 | 交互式 CLI/Web 标注界面 + 审核/修正自动生成 expected_answer + TestSetManager 集成 |
 | FEAT-022 | RAGAS 评测 Token 消耗追踪 | [RAGAS 指南](guides/ragas-evaluation.md#5-后续优化方向) | 📋 待处理 | 中 | 记录 RAGAS 评测 Token 使用量 + 与 token-tracking 系统集成 + 成本预估 |
+| FEAT-023 | Context 长度控制（防止超出模型 context window） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P5-3) | 📋 待处理 | 中 | 5个512-token chunk约2560 token，需截断保护 |
+| FEAT-024 | 页眉页脚清洗（PDF 解析后去除页码、logo、水印等噪声） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P1-3) | 📋 待处理 | 中 | 噪声进入检索影响质量 |
+| FEAT-025 | 检索器层面文档级去重（top_k 结果按文档多样性分配） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P6-4) | 📋 待处理 | 中 | 当前 top 5 全部来自同一文档，检索多样性为零 |
 
 ---
 
@@ -74,6 +81,8 @@
 | RF-010 | lint/ruff 配置 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 添加代码检查工具 |
 | RF-011 | docs 目录组织度维护 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 打扫卫生时考量 docs 目录组织度，恢复整洁度 |
 | RF-012 | 旧格式 test_sets DeprecationWarning 清理 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 测试中大量旧格式警告，后续版本逐步清理 |
+| RF-013 | chunk_id 命名规范化（当前依赖文件名含下划线时解析脆弱） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P2-3) | 📋 待处理 | 小 | 需设计新格式并考虑迁移兼容 |
+| RF-014 | normalize_source 匹配精度提升（当前仅比较文件名 stem，过于宽松） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P6-1) | 📋 待处理 | 小 | 可能误判不同版本的同名文档 |
 | RF-006 | TestSet 独立管理系统重构 | 设计文档 | ✅ 已完成 | 大 | 新增 TestSetManager，重构 prepare_test_sets，支持 on_missing 三种模式 |
 
 ---
@@ -88,6 +97,7 @@
 | OPT-004 | Hit Rate 扩充到 Recall@3/5/10 | [TODO.md](../TODO.md) | 📋 待处理 | 需先澄清现有指标体系（RAGAS 线 vs builtin 线） |
 | OPT-005 | RAGAS/builtin 指标结果统一归一化 | [RAGAS 指南](guides/ragas-evaluation.md#5-后续优化方向) | 📋 待处理 | 后端间分数相关性分析 + 归一化映射 + prompt 版本追踪 |
 | OPT-006 | RAGAS 评测缓存与增量计算 | [RAGAS 指南](guides/ragas-evaluation.md#5-后续优化方向) | 📋 待处理 | 基于 question+answer+contexts hash 缓存 + 增量评测 + 失效策略 |
+| OPT-007 | 基线 chunk_overlap 非零优化 | [pipeline-deep-audit.md](pipeline-deep-audit.md#P2-1) | 📋 待处理 | 评测链路修复后，通过对比实验确定合适的非零 overlap 值 |
 
 ---
 
@@ -108,6 +118,8 @@
 | INV-012 | 测试体系深度审查（883条是否过多） | [TODO.md](../TODO.md) | 📋 待处理 | 排查过度测试、重复测试、不合理测试、缺失测试、无意义测试 |
 | INV-013 | 自动生成的 Ground Truth 质量有限 | [RAGAS 指南](guides/ragas-evaluation.md#4-已知未修复问题) | 📋 待处理 | LLM 生成 expected_answer 可能幻觉，影响 context_precision/context_recall/answer_correctness 可信度 |
 | INV-014 | RAGAS 指标与 Builtin 指标深度对比分析 | [RAGAS 指南](guides/ragas-evaluation.md#5-后续优化方向) | 📋 待处理 | 差异报告 + 根因分析（prompt 差异 vs 评分逻辑差异）+ 置信区间估计 |
+| INV-015 | tiktoken 与 BGE tokenizer 的 token 数差异量化 | [pipeline-deep-audit.md](pipeline-deep-audit.md#P3-1) | 📋 待处理 | chunk_size=512 tiktoken token 可能超过 BGE 512 token 限制，需实际数据验证截断影响 |
+| INV-016 | PDF 表格解析质量评估与替代方案调研 | [pipeline-deep-audit.md](pipeline-deep-audit.md#P1-1) | 📋 待处理 | pymupdf4llm 对复杂表格转换错乱，金融研报财务数据可能丢失 |
 
 ---
 
