@@ -1,5 +1,3 @@
-from typing import Optional
-
 from anthropic import Anthropic
 from loguru import logger
 
