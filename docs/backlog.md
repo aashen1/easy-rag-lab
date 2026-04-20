@@ -2,7 +2,7 @@
 
 <!-- status: active -->
 
-> 最后更新: 2026-04-19
+> 最后更新：2026-04-20
 
 本文档是项目"卫生情况"的总入口，追踪所有非阻塞性质的待做事项。
 
@@ -12,9 +12,9 @@
 
 | 类型 | 待处理 | 进行中 | 已完成 | 已延期 |
 |------|--------|--------|--------|--------|
-| Bug | 0 | 0 | 9 | 2 |
-| Feature | 4 | 0 | 10 | 0 |
-| Refactor | 4 | 0 | 4 | 0 |
+| Bug | 0 | 0 | 11 | 2 |
+| Feature | 4 | 0 | 11 | 0 |
+| Refactor | 4 | 0 | 5 | 0 |
 | Optimization | 2 | 0 | 0 | 0 |
 | Investigation | 3 | 0 | 1 | 0 |
 
@@ -50,6 +50,7 @@
 | RF-002 | 项目结构整理（根目录 .py 文件） | [原 TODO.md](../TODO.md) | 📋 待处理 | 小 | 需评估影响范围 |
 | RF-004 | 硬编码配置值提取到 config.yaml | v0.1.7 合并验收 | 📋 待处理 | 中 | metrics.py/experiment_reporter.py/test_generator.py 中模型名、API URL、max_tokens、temperature 硬编码 |
 | RF-005 | Anthropic 客户端创建统一抽象 | v0.1.7 合并验收 | 📋 待处理 | 小 | metrics.py calculate_answer_relevancy 重复创建客户端，api_key="dummy" 模式散布多处 |
+| RF-006 | TestSet 独立管理系统重构 | 设计文档 | ✅ 已完成 | 大 | 新增 TestSetManager，重构 prepare_test_sets，支持 on_missing 三种模式 |
 
 ---
 
@@ -87,6 +88,8 @@
 | BUG-009 | main.py 缺失 typing 导入（Optional/Dict/Any） | 代码审查发现 | 2026-04-19 |
 | BUG-010 | test_generator.py _save_test_set IO 写入无 try/except | v0.1.7 合并验收 | 2026-04-19 |
 | BUG-011 | experiment_reporter.py generate_markdown_report 公共方法缺 docstring | v0.1.7 合并验收 | 2026-04-19 |
+| BUG-012 | TestSetManager 类被 pytest 误识别为测试类 | 测试警告 | 2026-04-20 |
+| BUG-013 | TestSetGenerator 旧格式兼容性未测试 | v0.1.8 实现发现 | 2026-04-20 |
 
 ### Feature
 
@@ -94,6 +97,7 @@
 |----|------|------|---------|
 | FEAT-001 | 实现生成质量指标（Faithfulness, Answer Relevancy） | [v0.1.5 code-review](reviews/v0.1.5/code-review.md) | 2026-04-18 |
 | FEAT-006 | 重写问题生成策略，与 chunk 解耦，基于整个 MD | [原 TODO.md](../TODO.md) | 2026-04-18 |
+| FEAT-007 | TestSet 独立管理系统 | 设计文档 | 2026-04-20 |
 | FEAT-DONE-001 | 文档系统重构 | [原 TODO.md](../TODO.md) | 2026-04-18 |
 | FEAT-DONE-002 | LLM 报告功能修复 | [原 TODO.md](../TODO.md) | 2026-04-17 |
 | FEAT-DONE-003 | Token 统计功能 | [原 TODO.md](../TODO.md) | 2026-04-17 |

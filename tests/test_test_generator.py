@@ -845,3 +845,305 @@ class TestDocumentBasedQuestionsSourceFiles:
             assert isinstance(q["source_files"], list)
             assert len(q["source_files"]) > 0
             assert q["source_files"][0] == "research_reports/光模块行业分析.md"
+
+
+class TestGenerateDocumentBasedQuestionsSupplemental:
+    def setup_method(self):
+        self.config = {
+            "parser": {"output_dir": "data/parsed"},
+            "test_generation": {"max_retries": 3, "default_num_questions": 20},
+        }
+        self.generator = TestSetGenerator(self.config)
+
+    def _make_meal_config(self):
+        meal_config = MagicMock()
+        meal_config.data_id = "test_data_id"
+        meal_config.pdf_files = [
+            MagicMock(path="research_reports/doc_a.pdf"),
+            MagicMock(path="research_reports/doc_b.pdf"),
+        ]
+        return meal_config
+
+    def _make_parsed_dir(self, tmp_path):
+        parsed_dir = tmp_path / "parsed"
+        sub_dir = parsed_dir / "research_reports"
+        sub_dir.mkdir(parents=True)
+        (sub_dir / "doc_a.md").write_text("文档A内容" * 100, encoding="utf-8")
+        (sub_dir / "doc_b.md").write_text("文档B内容" * 100, encoding="utf-8")
+        return parsed_dir
+
+    def test_supplemental_loop_fills_gap(self, tmp_path):
+        parsed_dir = self._make_parsed_dir(tmp_path)
+        meal_config = self._make_meal_config()
+
+        mock_meal_manager = MagicMock()
+        mock_meal_manager.load_meal.return_value = meal_config
+        mock_meal_manager.get_meal_dir.return_value = tmp_path / "meals" / "test_meal"
+
+        call_count = 0
+
+        def mock_generate(query, contexts, system_prompt, category):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                return "invalid json"
+            return json.dumps({
+                "question": "营收增长多少？",
+                "answer": "20%",
+                "question_type": "single_fact",
+                "difficulty": "easy",
+                "reasoning": "",
+                "key_entities": [],
+                "answer_sources": [],
+            })
+
+        mock_llm_generator = MagicMock()
+        mock_llm_generator.generate.side_effect = mock_generate
+
+        with patch.object(
+            self.generator, "_resolve_parsed_dir", return_value=parsed_dir
+        ), patch(
+            "src.test_generator.MealManager", return_value=mock_meal_manager
+        ), patch(
+            "src.test_generator.Generator", return_value=mock_llm_generator
+        ), patch(
+            "src.test_generator.get_llm_config",
+            return_value={
+                "model_name": "test",
+                "api_key": "test",
+                "base_url": "http://test",
+            },
+        ):
+            result = self.generator.generate_document_based_questions(
+                meal_name="test_meal",
+                num_questions=3,
+                type_distribution={"single_fact": 1.0},
+            )
+
+        assert len(result["questions"]) == 3
+
+    def test_supplemental_loop_respects_max_attempts(self, tmp_path):
+        parsed_dir = self._make_parsed_dir(tmp_path)
+        meal_config = self._make_meal_config()
+
+        mock_meal_manager = MagicMock()
+        mock_meal_manager.load_meal.return_value = meal_config
+        mock_meal_manager.get_meal_dir.return_value = tmp_path / "meals" / "test_meal"
+
+        mock_llm_generator = MagicMock()
+        mock_llm_generator.generate.return_value = "invalid json"
+
+        with patch.object(
+            self.generator, "_resolve_parsed_dir", return_value=parsed_dir
+        ), patch(
+            "src.test_generator.MealManager", return_value=mock_meal_manager
+        ), patch(
+            "src.test_generator.Generator", return_value=mock_llm_generator
+        ), patch(
+            "src.test_generator.get_llm_config",
+            return_value={
+                "model_name": "test",
+                "api_key": "test",
+                "base_url": "http://test",
+            },
+        ):
+            with pytest.raises(ValueError, match="No questions could be generated"):
+                self.generator.generate_document_based_questions(
+                    meal_name="test_meal",
+                    num_questions=5,
+                    type_distribution={"single_fact": 1.0},
+                )
+
+
+class TestSupplementDocumentBasedQuestions:
+    def setup_method(self):
+        self.config = {
+            "parser": {"output_dir": "data/parsed"},
+            "test_generation": {"max_retries": 3, "default_num_questions": 20},
+        }
+        self.generator = TestSetGenerator(self.config)
+
+    def test_no_supplement_needed_when_count_matches(self):
+        existing = {
+            "metadata": {
+                "name": "test_set",
+                "meal_id": "test_id",
+                "created_at": "2026-01-01T00:00:00",
+                "updated_at": "2026-01-01T00:00:00",
+                "generation": {"num_questions": 2},
+                "user_defined": False,
+                "audit_log": [],
+            },
+            "questions": [
+                {"id": "q001", "question": "问题1？", "answer": "答案1", "question_type": "single_fact"},
+                {"id": "q002", "question": "问题2？", "answer": "答案2", "question_type": "single_fact"},
+            ],
+            "quality_metrics": {},
+        }
+        result = self.generator.supplement_document_based_questions(
+            meal_name="test_meal",
+            existing_test_set=existing,
+            target_count=2,
+        )
+        assert len(result["questions"]) == 2
+
+    def test_no_supplement_needed_when_count_exceeds(self):
+        existing = {
+            "metadata": {
+                "name": "test_set",
+                "meal_id": "test_id",
+                "created_at": "2026-01-01T00:00:00",
+                "updated_at": "2026-01-01T00:00:00",
+                "generation": {"num_questions": 3},
+                "user_defined": False,
+                "audit_log": [],
+            },
+            "questions": [
+                {"id": "q001", "question": "问题1？", "answer": "答案1", "question_type": "single_fact"},
+                {"id": "q002", "question": "问题2？", "answer": "答案2", "question_type": "single_fact"},
+                {"id": "q003", "question": "问题3？", "answer": "答案3", "question_type": "single_fact"},
+            ],
+            "quality_metrics": {},
+        }
+        result = self.generator.supplement_document_based_questions(
+            meal_name="test_meal",
+            existing_test_set=existing,
+            target_count=2,
+        )
+        assert len(result["questions"]) == 3
+
+    def test_supplement_adds_deficit_questions(self, tmp_path):
+        parsed_dir = tmp_path / "parsed"
+        sub_dir = parsed_dir / "research_reports"
+        sub_dir.mkdir(parents=True)
+        (sub_dir / "doc_a.md").write_text("文档A内容" * 100, encoding="utf-8")
+
+        meal_config = MagicMock()
+        meal_config.data_id = "test_data_id"
+        meal_config.pdf_files = [
+            MagicMock(path="research_reports/doc_a.pdf")
+        ]
+
+        mock_meal_manager = MagicMock()
+        mock_meal_manager.load_meal.return_value = meal_config
+        mock_meal_manager.get_meal_dir.return_value = tmp_path / "meals" / "test_meal"
+
+        mock_llm_generator = MagicMock()
+        mock_llm_generator.generate.return_value = json.dumps({
+            "question": "新增问题？",
+            "answer": "新增答案",
+            "question_type": "single_fact",
+            "difficulty": "easy",
+            "reasoning": "",
+            "key_entities": [],
+            "answer_sources": [],
+        })
+
+        existing = {
+            "metadata": {
+                "name": "document_level_n5",
+                "meal_id": "test_data_id",
+                "created_at": "2026-01-01T00:00:00",
+                "updated_at": "2026-01-01T00:00:00",
+                "generation": {
+                    "strategy": "document",
+                    "num_questions": 3,
+                    "type_distribution": {},
+                    "llm_preset": "default",
+                },
+                "user_defined": False,
+                "audit_log": [],
+            },
+            "questions": [
+                {"id": "q001", "question": "问题1？", "answer": "答案1", "question_type": "single_fact",
+                 "source_document": "doc_a", "category": "document", "source_files": [], "source_chunks": []},
+                {"id": "q002", "question": "问题2？", "answer": "答案2", "question_type": "single_fact",
+                 "source_document": "doc_a", "category": "document", "source_files": [], "source_chunks": []},
+                {"id": "q003", "question": "问题3？", "answer": "答案3", "question_type": "reasoning",
+                 "source_document": "doc_a", "category": "document", "source_files": [], "source_chunks": []},
+            ],
+            "quality_metrics": {},
+        }
+
+        with patch.object(
+            self.generator, "_resolve_parsed_dir", return_value=parsed_dir
+        ), patch(
+            "src.test_generator.MealManager", return_value=mock_meal_manager
+        ), patch(
+            "src.test_generator.Generator", return_value=mock_llm_generator
+        ), patch(
+            "src.test_generator.get_llm_config",
+            return_value={
+                "model_name": "test",
+                "api_key": "test",
+                "base_url": "http://test",
+            },
+        ):
+            result = self.generator.supplement_document_based_questions(
+                meal_name="test_meal",
+                existing_test_set=existing,
+                target_count=5,
+            )
+
+        assert len(result["questions"]) == 5
+        assert result["questions"][0]["id"] == "q001"
+        assert result["questions"][3]["id"] == "q004"
+        assert result["questions"][4]["id"] == "q005"
+        assert result["metadata"]["generation"]["num_questions"] == 5
+
+    def test_supplement_returns_unchanged_on_all_failures(self, tmp_path):
+        parsed_dir = tmp_path / "parsed"
+        sub_dir = parsed_dir / "research_reports"
+        sub_dir.mkdir(parents=True)
+        (sub_dir / "doc_a.md").write_text("文档A内容" * 100, encoding="utf-8")
+
+        meal_config = MagicMock()
+        meal_config.data_id = "test_data_id"
+        meal_config.pdf_files = [
+            MagicMock(path="research_reports/doc_a.pdf")
+        ]
+
+        mock_meal_manager = MagicMock()
+        mock_meal_manager.load_meal.return_value = meal_config
+        mock_meal_manager.get_meal_dir.return_value = tmp_path / "meals" / "test_meal"
+
+        mock_llm_generator = MagicMock()
+        mock_llm_generator.generate.return_value = "invalid json"
+
+        existing = {
+            "metadata": {
+                "name": "test_set",
+                "meal_id": "test_id",
+                "created_at": "2026-01-01T00:00:00",
+                "updated_at": "2026-01-01T00:00:00",
+                "generation": {"num_questions": 1},
+                "user_defined": False,
+                "audit_log": [],
+            },
+            "questions": [
+                {"id": "q001", "question": "问题1？", "answer": "答案1", "question_type": "single_fact"},
+            ],
+            "quality_metrics": {},
+        }
+
+        with patch.object(
+            self.generator, "_resolve_parsed_dir", return_value=parsed_dir
+        ), patch(
+            "src.test_generator.MealManager", return_value=mock_meal_manager
+        ), patch(
+            "src.test_generator.Generator", return_value=mock_llm_generator
+        ), patch(
+            "src.test_generator.get_llm_config",
+            return_value={
+                "model_name": "test",
+                "api_key": "test",
+                "base_url": "http://test",
+            },
+        ):
+            result = self.generator.supplement_document_based_questions(
+                meal_name="test_meal",
+                existing_test_set=existing,
+                target_count=3,
+            )
+
+        assert len(result["questions"]) == 1

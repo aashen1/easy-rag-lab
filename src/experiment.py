@@ -1,4 +1,5 @@
 import copy
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -7,8 +8,39 @@ import yaml
 from loguru import logger
 
 
-VALID_RETRIEVAL_METRICS = {"hit_rate", "mrr", "ndcg"}
+VALID_RETRIEVAL_METRICS = {"hit_rate", "mrr", "ndcg", "chunk_hit_rate", "chunk_mrr", "chunk_ndcg", "dedup_hit_rate", "dedup_mrr", "dedup_ndcg", "false_positive_rate"}
 VALID_GENERATION_METRICS = {"faithfulness", "answer_relevancy"}
+VALID_ON_MISSING_VALUES = {"auto", "clean_only", "strict"}
+
+
+def is_new_format(test_set_config: Dict[str, Any]) -> bool:
+    """Check if a test_set config uses the new format (has 'name' field).
+
+    Args:
+        test_set_config: Test set configuration dictionary.
+
+    Returns:
+        True if the config uses the new format, False otherwise.
+    """
+    return "name" in test_set_config
+
+
+def get_test_set_name(test_set_config: Dict[str, Any]) -> str:
+    """Get the name for a test_set config. New format uses 'name', old format generates from strategy/num_questions.
+
+    Args:
+        test_set_config: Test set configuration dictionary.
+
+    Returns:
+        The name string for the test set.
+    """
+    if is_new_format(test_set_config):
+        return test_set_config["name"]
+    strategy = test_set_config.get("strategy", "factual")
+    num_questions = test_set_config.get("num_questions", 20)
+    if strategy == "document":
+        return f"document_level_n{num_questions}"
+    return f"auto_{strategy}_n{num_questions}"
 
 
 @dataclass
@@ -85,6 +117,10 @@ class ExperimentConfig:
             llm=data.get("llm", {}),
         )
 
+    @property
+    def retrieval_granularity(self) -> str:
+        return self.evaluation.get("retrieval_granularity", "both")
+
     def validate(self) -> List[str]:
         """
         Validate the experiment configuration.
@@ -106,11 +142,46 @@ class ExperimentConfig:
         if not self.test_sets:
             errors.append("At least one test set must be defined")
         else:
+            has_old_format = False
             for i, test_set in enumerate(self.test_sets):
-                if "strategy" not in test_set:
-                    errors.append(f"Test set {i} missing 'strategy' field")
-                if "num_questions" not in test_set:
-                    errors.append(f"Test set {i} missing 'num_questions' field")
+                if is_new_format(test_set):
+                    name = test_set.get("name")
+                    if not name or not isinstance(name, str) or not name.strip():
+                        errors.append(f"Test set {i} 'name' must be a non-empty string")
+                    if "generation" in test_set:
+                        generation = test_set["generation"]
+                        if not isinstance(generation, dict):
+                            errors.append(f"Test set {i} 'generation' must be a dictionary")
+                        else:
+                            if "strategy" not in generation:
+                                errors.append(f"Test set {i} 'generation' missing 'strategy' field")
+                            if "num_questions" not in generation:
+                                errors.append(f"Test set {i} 'generation' missing 'num_questions' field")
+                    if "on_missing" in test_set:
+                        on_missing = test_set["on_missing"]
+                        if on_missing not in VALID_ON_MISSING_VALUES:
+                            errors.append(
+                                f"Test set {i} invalid 'on_missing' value: '{on_missing}'. "
+                                f"Valid options: {sorted(VALID_ON_MISSING_VALUES)}"
+                            )
+                else:
+                    has_old_format = True
+                    if "strategy" not in test_set:
+                        errors.append(f"Test set {i} missing 'strategy' field")
+                    if "num_questions" not in test_set:
+                        errors.append(f"Test set {i} missing 'num_questions' field")
+            if has_old_format:
+                warnings.warn(
+                    "test_sets uses deprecated configuration format. The experiment will run normally, but please consider migrating to the new format:\n"
+                    "  test_sets:\n"
+                    "    - name: \"<custom_name>\"\n"
+                    "      on_missing: \"auto\"\n"
+                    "      generation:\n"
+                    "        strategy: \"document\"\n"
+                    "        num_questions: 10",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
 
         if not self.variants:
             errors.append("At least one variant must be defined")
@@ -157,6 +228,15 @@ class ExperimentConfig:
                                 f"Invalid generation metrics: {invalid_generation}. "
                                 f"Valid options: {sorted(VALID_GENERATION_METRICS)}"
                             )
+
+        if "retrieval_granularity" in self.evaluation:
+            valid_granularities = {"chunk", "document", "both"}
+            granularity = self.evaluation["retrieval_granularity"]
+            if granularity not in valid_granularities:
+                errors.append(
+                    f"Invalid retrieval_granularity: '{granularity}'. "
+                    f"Valid options: {sorted(valid_granularities)}"
+                )
 
         return errors
 

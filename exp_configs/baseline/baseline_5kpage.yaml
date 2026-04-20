@@ -1,26 +1,27 @@
-name: "golden_test"
-description: "Golden test suite for RAG system regression testing"
+name: "baseline-5kpage"
+description: "取五千页PDF，看看结果是否变差"
 
 data:
-  meal: "golden_test"
+  meal: "5kpage"
   create_if_missing:
-    sample_ratio: 0.03
-    seed: 42
+    sample_pages: 5000
+    seed: 3388
 
 test_sets:
-  - name: "golden_test_suite"
+  - name: "baseline_test_5kpage"
     on_missing: "auto"
     generation:
       strategy: "document"
-      num_questions: 10
+      num_questions: 100
 
 variants:
   - name: "baseline"
-    description: "Baseline configuration for golden test"
+    description: "基线配置 (chunk_size: 512, chunk_overlap: 0)"
     config_overrides: {}
 
 evaluation:
   llm_preset: "default"
+  llm_report: true
   metrics:
     retrieval:
       - "hit_rate"

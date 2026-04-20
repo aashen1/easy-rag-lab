@@ -40,6 +40,7 @@ class MealConfig:
     config_snapshot: Optional[Dict[str, Any]] = None
     config_hashes: Optional[Dict[str, str]] = None
     stats: Dict[str, Any] = field(default_factory=dict)
+    equivalence_groups: Dict[str, List[str]] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
@@ -71,6 +72,7 @@ class MealConfig:
             config_snapshot=data.get("config_snapshot"),
             config_hashes=data.get("config_hashes"),
             stats=data.get("stats", {}),
+            equivalence_groups=data.get("equivalence_groups", {}),
         )
 
 
@@ -196,6 +198,30 @@ def generate_collection_name(index_key: str, prefix: str = "m_") -> str:
         Collection name string in the format '{prefix}{first_12_chars_of_index_key}'.
     """
     return f"{prefix}{index_key[:12]}"
+
+
+def _infer_equivalence_groups(pdf_files: List[str]) -> Dict[str, List[str]]:
+    """Infer equivalence groups from PDF file paths by stripping common suffixes.
+
+    For each file path, extracts the filename stem (without extension) and
+    removes common suffixes such as "摘要", "_摘要", "_英文版_", "_修订版_".
+    Files sharing the same resulting group key are placed in one group.
+
+    Args:
+        pdf_files: List of relative PDF file paths.
+
+    Returns:
+        Dictionary mapping group keys to lists of original file paths.
+    """
+    suffix_pattern = re.compile(
+        r"(摘要|_摘要|_英文版_|_修订版_)$"
+    )
+    groups: Dict[str, List[str]] = {}
+    for file_path in pdf_files:
+        stem = Path(file_path).stem
+        group_key = suffix_pattern.sub("", stem)
+        groups.setdefault(group_key, []).append(file_path)
+    return groups
 
 
 def validate_meal_name(name: str) -> bool:
@@ -653,6 +679,10 @@ class MealManager:
         }
         self.cache.save_manifest(data_id, artifact_manifest)
 
+        equivalence_groups = _infer_equivalence_groups(
+            [f.path for f in meal_files]
+        )
+
         meal_config = MealConfig(
             data_id=data_id,
             name=name,
@@ -673,6 +703,7 @@ class MealManager:
                 "cache_hit_parse": cache_hit_parse,
                 "cache_hit_chunk": cache_hit_chunk,
             },
+            equivalence_groups=equivalence_groups,
         )
 
         meal_dir = self.get_meal_dir(name)
@@ -885,6 +916,7 @@ class MealManager:
             config_snapshot=source_config.config_snapshot,
             config_hashes=source_config.config_hashes,
             stats=source_config.stats,
+            equivalence_groups=source_config.equivalence_groups,
         )
 
         manifest_path = target_dir / "manifest.json"
@@ -1083,6 +1115,10 @@ class MealManager:
         }
         self.cache.save_manifest(new_data_id, artifact_manifest)
 
+        new_equivalence_groups = _infer_equivalence_groups(
+            [f.path for f in new_pdf_files]
+        )
+
         new_config = MealConfig(
             data_id=new_data_id,
             name=target_name,
@@ -1097,6 +1133,7 @@ class MealManager:
                 "total_pages": total_pages,
                 "total_chunks": total_chunks,
             },
+            equivalence_groups=new_equivalence_groups,
         )
 
         if create_new:

@@ -14,6 +14,7 @@ class TestCaseResult:
     answer: Optional[str]
     retrieval: Optional[Dict[str, float]] = None
     generation: Optional[Dict[str, float]] = None
+    llm_retrieval: Optional[Dict[str, float]] = None
     sources: Optional[List[str]] = None
     error: Optional[str] = None
     time_seconds: float = 0.0
@@ -26,6 +27,7 @@ class VariantResult:
     variant_description: Optional[str] = None
     retrieval_metrics: Optional[Dict[str, float]] = None
     generation_metrics: Optional[Dict[str, float]] = None
+    llm_retrieval_metrics: Optional[Dict[str, float]] = None
     config_snapshot: Optional[Dict[str, Any]] = None
     total_questions: int = 0
     total_time_seconds: float = 0.0
@@ -38,6 +40,7 @@ class VariantResult:
             variant_description=data.get("variant_description"),
             retrieval_metrics=data.get("retrieval_metrics"),
             generation_metrics=data.get("generation_metrics"),
+            llm_retrieval_metrics=data.get("llm_retrieval_metrics"),
             config_snapshot=data.get("config_snapshot"),
             total_questions=data.get("total_questions", 0),
             total_time_seconds=data.get("total_time_seconds", 0.0),
@@ -54,6 +57,7 @@ class ExperimentResult:
     retrieval_metrics: Dict[str, float]
     results: List[TestCaseResult]
     generation_metrics: Optional[Dict[str, float]] = None
+    llm_retrieval_metrics: Optional[Dict[str, float]] = None
     meal_data_id: Optional[str] = None
     meal_name: Optional[str] = None
     config_snapshot: Optional[Dict[str, Any]] = None
@@ -72,6 +76,7 @@ class ExperimentResult:
                 answer=r.get("answer"),
                 retrieval=r.get("retrieval"),
                 generation=r.get("generation"),
+                llm_retrieval=r.get("llm_retrieval"),
                 sources=r.get("sources"),
                 error=r.get("error"),
                 time_seconds=r.get("time_seconds", 0.0),
@@ -92,6 +97,7 @@ class ExperimentResult:
             retrieval_metrics=data.get("retrieval_metrics", {}),
             results=results,
             generation_metrics=data.get("generation_metrics"),
+            llm_retrieval_metrics=data.get("llm_retrieval_metrics"),
             meal_data_id=data.get("meal_data_id"),
             meal_name=data.get("meal_name"),
             config_snapshot=data.get("config_snapshot"),
@@ -135,6 +141,9 @@ LLM_REPORT_PROMPT_TEMPLATE = """你是一位专业的RAG系统分析师。请根
 
 ### 4. 检索性能分析
 - 解读检索指标（Hit Rate、MRR、NDCG）
+- 解读 LLM 检索指标（Context Precision、Context Recall）
+  - Context Precision: 检索到的上下文是否与问题相关，以及排序质量
+  - Context Recall: Ground Truth 中的信息是否能从检索上下文中推断
 - 分析不同问题类型的表现差异
 - 识别潜在的瓶颈或问题
 
@@ -155,6 +164,94 @@ LLM_REPORT_PROMPT_TEMPLATE = """你是一位专业的RAG系统分析师。请根
 
 class ExperimentReporter:
     """Experiment report generator supporting template and LLM modes."""
+
+    @staticmethod
+    def _dict_to_yaml_lines(data: Any, indent: int = 0) -> List[str]:
+        """Convert a dict to YAML-like lines with arbitrary nesting depth.
+
+        Args:
+            data: Data to convert (dict, list, or scalar).
+            indent: Current indentation level.
+
+        Returns:
+            List of YAML-formatted lines.
+        """
+        lines = []
+        prefix = "  " * indent
+
+        if isinstance(data, dict):
+            for k, v in data.items():
+                if isinstance(v, dict):
+                    lines.append(f"{prefix}{k}:")
+                    lines.extend(ExperimentReporter._dict_to_yaml_lines(v, indent + 1))
+                elif isinstance(v, list):
+                    lines.append(f"{prefix}{k}:")
+                    for item in v:
+                        if isinstance(item, dict):
+                            lines.append(f"{prefix}  -")
+                            lines.extend(ExperimentReporter._dict_to_yaml_lines(item, indent + 2))
+                        else:
+                            lines.append(f"{prefix}  - {item}")
+                else:
+                    lines.append(f"{prefix}{k}: {v}")
+        elif isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
+                    lines.append(f"{prefix}-")
+                    lines.extend(ExperimentReporter._dict_to_yaml_lines(item, indent + 1))
+                else:
+                    lines.append(f"{prefix}- {item}")
+        else:
+            lines.append(f"{prefix}{data}")
+
+        return lines
+
+    @staticmethod
+    def _generate_tech_summary(merged_config: Dict[str, Any]) -> List[str]:
+        """Generate a concise technology summary from merged config.
+
+        Args:
+            merged_config: Full merged configuration dictionary.
+
+        Returns:
+            List of markdown lines summarizing key technology choices.
+        """
+        lines = []
+        retrieval = merged_config.get("retrieval", {})
+        chunker = merged_config.get("chunker", {})
+        embedding = merged_config.get("embedding", {})
+        vector_store = merged_config.get("vector_store", {})
+
+        method = retrieval.get("method", "vector")
+        method_labels = {
+            "vector": "Vector (dense)",
+            "bm25": "BM25 (sparse)",
+            "hybrid": "Hybrid (dense + sparse)",
+        }
+        lines.append(f"- Retrieval: {method_labels.get(method, method)}")
+        lines.append(f"- Top-K: {retrieval.get('top_k', 5)}")
+
+        reranker = retrieval.get("reranker", {})
+        if reranker.get("enabled", False):
+            lines.append(f"- Reranker: {reranker.get('model_name', 'N/A')} (top_n={reranker.get('top_n', 3)})")
+        else:
+            lines.append("- Reranker: Disabled")
+
+        query_rewrite = retrieval.get("query_rewrite", {})
+        if query_rewrite.get("enabled", False):
+            lines.append(f"- Query Rewrite: {query_rewrite.get('strategy', 'N/A')}")
+        else:
+            lines.append("- Query Rewrite: Disabled")
+
+        if method == "hybrid":
+            hybrid = retrieval.get("hybrid", {})
+            lines.append(f"- Fusion: {hybrid.get('fusion', 'rrf')} (rrf_k={hybrid.get('rrf_k', 60)})")
+
+        lines.append(f"- Chunking: {chunker.get('strategy', 'fixed')} (size={chunker.get('chunk_size', 512)}, overlap={chunker.get('chunk_overlap', 0)})")
+        lines.append(f"- Embedding: {embedding.get('model_name', 'N/A')}")
+        lines.append(f"- Vector Store: {vector_store.get('type', 'N/A')} ({vector_store.get('distance', 'Cosine')})")
+
+        return lines
 
     def __init__(
         self,
@@ -317,21 +414,25 @@ class ExperimentReporter:
         has_generation = any(
             vr.get("generation_metrics") for vr in variant_results
         )
+        has_llm_retrieval = any(
+            vr.get("llm_retrieval_metrics") for vr in variant_results
+        )
 
+        headers = [
+            "Variant", "Description",
+            "Hit Rate (doc)", "Hit Rate (chunk)", "Hit Rate (dedup)",
+            "MRR (doc)", "MRR (chunk)",
+            "NDCG (doc)", "NDCG (chunk)",
+            "FPR",
+        ]
+        if has_llm_retrieval:
+            headers.extend(["CP", "CR"])
         if has_generation:
-            lines.append(
-                "| Variant | Description | Hit Rate | MRR | NDCG | Faithfulness | Relevancy | Questions | Time (s) |"
-            )
-            lines.append(
-                "|---------|-------------|----------|-----|------|--------------|-----------|-----------|----------|"
-            )
-        else:
-            lines.append(
-                "| Variant | Description | Hit Rate | MRR | NDCG | Questions | Time (s) |"
-            )
-            lines.append(
-                "|---------|-------------|----------|-----|------|-----------|----------|"
-            )
+            headers.extend(["Faithfulness", "Relevancy"])
+        headers.extend(["Questions", "Time (s)"])
+
+        lines.append("| " + " | ".join(headers) + " |")
+        lines.append("|" + "|".join(["---------"] * len(headers)) + "|")
 
         best_variant = self._find_best_variant(variant_results)
 
@@ -344,38 +445,61 @@ class ExperimentReporter:
             if "retrieval_metrics" in vr:
                 metrics = vr["retrieval_metrics"]
                 hr = metrics.get("avg_hit_rate", 0)
+                chunk_hr = metrics.get("avg_chunk_hit_rate")
+                dedup_hr = metrics.get("avg_dedup_hit_rate")
                 mrr = metrics.get("avg_mrr", 0)
+                chunk_mrr = metrics.get("avg_chunk_mrr")
                 ndcg = metrics.get("avg_ndcg", 0)
+                chunk_ndcg = metrics.get("avg_chunk_ndcg")
+                fpr = metrics.get("avg_false_positive_rate")
                 q_count = vr.get("total_questions", 0)
                 time_s = vr.get("total_time_seconds", 0)
 
                 marker = " ⭐" if vr == best_variant else ""
 
-                if has_generation and vr.get("generation_metrics"):
-                    gen_metrics = vr["generation_metrics"]
+                chunk_hr_str = f"{chunk_hr:.4f}" if chunk_hr is not None else "N/A"
+                dedup_hr_str = f"{dedup_hr:.4f}" if dedup_hr is not None else "N/A"
+                chunk_mrr_str = f"{chunk_mrr:.4f}" if chunk_mrr is not None else "N/A"
+                chunk_ndcg_str = f"{chunk_ndcg:.4f}" if chunk_ndcg is not None else "N/A"
+                fpr_str = f"{fpr:.4f}" if fpr is not None else "N/A"
+
+                row = [
+                    f"{name}{marker}", desc,
+                    f"{hr:.4f}", chunk_hr_str, dedup_hr_str,
+                    f"{mrr:.4f}", chunk_mrr_str,
+                    f"{ndcg:.4f}", chunk_ndcg_str,
+                    fpr_str,
+                ]
+
+                if has_llm_retrieval:
+                    llm_metrics = vr.get("llm_retrieval_metrics", {})
+                    cp = llm_metrics.get("avg_context_precision")
+                    cr = llm_metrics.get("avg_context_recall")
+                    cp_str = f"{cp:.2f}" if cp is not None else "N/A"
+                    cr_str = f"{cr:.2f}" if cr is not None else "N/A"
+                    row.extend([cp_str, cr_str])
+
+                if has_generation:
+                    gen_metrics = vr.get("generation_metrics", {})
                     faithfulness = gen_metrics.get("avg_faithfulness")
                     relevancy = gen_metrics.get("avg_answer_relevancy")
                     fa_str = f"{faithfulness:.2f}" if faithfulness is not None else "N/A"
                     ar_str = f"{relevancy:.2f}" if relevancy is not None else "N/A"
-                    lines.append(
-                        f"| {name}{marker} | {desc} | {hr:.4f} | {mrr:.4f} | {ndcg:.4f} | {fa_str} | {ar_str} | {q_count} | {time_s:.2f} |"
-                    )
-                elif has_generation:
-                    lines.append(
-                        f"| {name}{marker} | {desc} | {hr:.4f} | {mrr:.4f} | {ndcg:.4f} | N/A | N/A | {q_count} | {time_s:.2f} |"
-                    )
-                else:
-                    lines.append(
-                        f"| {name}{marker} | {desc} | {hr:.4f} | {mrr:.4f} | {ndcg:.4f} | {q_count} | {time_s:.2f} |"
-                    )
+                    row.extend([fa_str, ar_str])
+
+                row.extend([str(q_count), f"{time_s:.2f}"])
+                lines.append("| " + " | ".join(row) + " |")
             else:
                 error = vr.get("error", "Unknown error")
                 if len(error) > 30:
                     error = error[:27] + "..."
+                n_error_cols = 10
+                if has_llm_retrieval:
+                    n_error_cols += 2
                 if has_generation:
-                    lines.append(f"| {name} | {desc} | ERROR | ERROR | ERROR | ERROR | ERROR | - | - |")
-                else:
-                    lines.append(f"| {name} | {desc} | ERROR | ERROR | ERROR | - | - |")
+                    n_error_cols += 2
+                error_parts = " | ".join(["ERROR"] * n_error_cols)
+                lines.append(f"| {name} | {desc} | {error_parts} | - | - |")
 
         lines.append("")
         lines.append("_⭐ = Best performing variant_")
@@ -413,11 +537,46 @@ class ExperimentReporter:
         lines.append(f"**Variant**: {name}")
         lines.append(f"**Description**: {desc}")
         lines.append("")
-        lines.append("**Retrieval Metrics**:")
-        lines.append(f"- Hit Rate: {metrics.get('avg_hit_rate', 0):.4f}")
-        lines.append(f"- MRR: {metrics.get('avg_mrr', 0):.4f}")
-        lines.append(f"- NDCG: {metrics.get('avg_ndcg', 0):.4f}")
+        lines.append("**Retrieval Metrics (document-level)**:")
+        lines.append(f"- Hit Rate (doc): {metrics.get('avg_hit_rate', 0):.4f}")
+        lines.append(f"- MRR (doc): {metrics.get('avg_mrr', 0):.4f}")
+        lines.append(f"- NDCG (doc): {metrics.get('avg_ndcg', 0):.4f}")
+
+        chunk_hr = metrics.get("avg_chunk_hit_rate")
+        chunk_mrr = metrics.get("avg_chunk_mrr")
+        chunk_ndcg = metrics.get("avg_chunk_ndcg")
+        dedup_hr = metrics.get("avg_dedup_hit_rate")
+        dedup_mrr = metrics.get("avg_dedup_mrr")
+        fpr = metrics.get("avg_false_positive_rate")
+
+        if any(v is not None for v in [chunk_hr, chunk_mrr, chunk_ndcg, dedup_hr, dedup_mrr, fpr]):
+            lines.append("")
+            lines.append("**Retrieval Metrics (chunk-level)**:")
+            if chunk_hr is not None:
+                lines.append(f"- Hit Rate (chunk): {chunk_hr:.4f}")
+            if chunk_mrr is not None:
+                lines.append(f"- MRR (chunk): {chunk_mrr:.4f}")
+            if chunk_ndcg is not None:
+                lines.append(f"- NDCG (chunk): {chunk_ndcg:.4f}")
+            if dedup_hr is not None:
+                lines.append(f"- Hit Rate (dedup): {dedup_hr:.4f}")
+            if dedup_mrr is not None:
+                lines.append(f"- MRR (dedup): {dedup_mrr:.4f}")
+            if fpr is not None:
+                lines.append(f"- False Positive Rate: {fpr:.4f}")
+
         lines.append("")
+
+        if best.get("llm_retrieval_metrics"):
+            llm_metrics = best["llm_retrieval_metrics"]
+            lines.append("**LLM Retrieval Metrics**:")
+            cp = llm_metrics.get("avg_context_precision")
+            cr = llm_metrics.get("avg_context_recall")
+            if cp is not None:
+                lines.append(f"- Context Precision: {cp:.4f}")
+            if cr is not None:
+                lines.append(f"- Context Recall: {cr:.4f}")
+            lines.append("")
 
         if best.get("generation_metrics"):
             gen_metrics = best["generation_metrics"]
@@ -436,14 +595,13 @@ class ExperimentReporter:
 
         config_snapshot = best.get("config_snapshot", {})
         if config_snapshot and "merged" in config_snapshot:
+            merged = config_snapshot["merged"]
+            lines.append("**Technology Summary**:")
+            lines.extend(self._generate_tech_summary(merged))
+            lines.append("")
             lines.append("**Configuration**:")
             lines.append("```yaml")
-            merged = config_snapshot["merged"]
-            for section, config in merged.items():
-                lines.append(f"{section}:")
-                if isinstance(config, dict):
-                    for k, v in config.items():
-                        lines.append(f"  {k}: {v}")
+            lines.extend(self._dict_to_yaml_lines(merged))
             lines.append("```")
             lines.append("")
 
@@ -484,14 +642,13 @@ class ExperimentReporter:
 
                 config_snapshot = vr.get("config_snapshot", {})
                 if config_snapshot and "merged" in config_snapshot:
+                    merged = config_snapshot["merged"]
+                    lines.append("**Technology Summary**:")
+                    lines.extend(self._generate_tech_summary(merged))
+                    lines.append("")
                     lines.append("**Configuration**:")
                     lines.append("```yaml")
-                    merged = config_snapshot["merged"]
-                    for section, config in merged.items():
-                        lines.append(f"{section}:")
-                        if isinstance(config, dict):
-                            for k, v in config.items():
-                                lines.append(f"  {k}: {v}")
+                    lines.extend(self._dict_to_yaml_lines(merged))
                     lines.append("```")
                     lines.append("")
             else:
@@ -517,13 +674,9 @@ class ExperimentReporter:
                     continue
                 lines.append(f"{section}:")
                 if isinstance(config, dict):
-                    for k, v in config.items():
-                        if isinstance(v, dict):
-                            lines.append(f"  {k}:")
-                            for k2, v2 in v.items():
-                                lines.append(f"    {k2}: {v2}")
-                        else:
-                            lines.append(f"  {k}: {v}")
+                    lines.extend(self._dict_to_yaml_lines(config, indent=1))
+                else:
+                    lines.append(f"  {config}")
             lines.append("```")
             lines.append("")
 
@@ -548,7 +701,9 @@ class ExperimentReporter:
         lines.append("### Retrieval Performance Analysis")
         lines.append("")
 
-        if best_hr >= 0.8:
+        if best_hr >= 0.95:
+            hr_assessment = "⚠️ WARNING: Hit rate is unusually high (>0.95). This may indicate test set leakage or overly broad ground truth. Please verify the test set quality."
+        elif best_hr >= 0.8:
             hr_assessment = "Excellent retrieval performance."
         elif best_hr >= 0.6:
             hr_assessment = "Good retrieval performance with room for improvement."
@@ -569,6 +724,50 @@ class ExperimentReporter:
         lines.append(f"- **MRR ({best_mrr:.4f})**: {mrr_assessment}")
         lines.append(f"- **NDCG ({best_ndcg:.4f})**: Overall ranking quality metric.")
         lines.append("")
+
+        has_chunk_metrics = any(
+            vr.get("retrieval_metrics", {}).get("avg_chunk_hit_rate") is not None
+            for vr in variant_results
+        )
+
+        if has_chunk_metrics:
+            lines.append("### Document vs Chunk-Level Analysis")
+            lines.append("")
+
+            best_chunk_hr = best_metrics.get("avg_chunk_hit_rate")
+            best_dedup_hr = best_metrics.get("avg_dedup_hit_rate")
+            best_fpr = best_metrics.get("avg_false_positive_rate")
+
+            if best_chunk_hr is not None:
+                doc_chunk_gap = best_hr - best_chunk_hr
+                if doc_chunk_gap > 0.1:
+                    gap_assessment = "Significant gap - chunk-level retrieval is substantially harder, suggesting fine-grained matching needs improvement."
+                elif doc_chunk_gap > 0.05:
+                    gap_assessment = "Moderate gap - chunk-level performance is lower but acceptable."
+                else:
+                    gap_assessment = "Small gap - chunk-level retrieval performs nearly as well as document-level."
+                lines.append(f"- **Doc vs Chunk Hit Rate Gap ({doc_chunk_gap:.4f})**: {gap_assessment}")
+
+            if best_dedup_hr is not None and best_chunk_hr is not None:
+                dedup_improvement = best_dedup_hr - best_chunk_hr
+                if dedup_improvement > 0.05:
+                    dedup_assessment = "Deduplication significantly improves hit rate, indicating many redundant chunks in results."
+                elif dedup_improvement > 0:
+                    dedup_assessment = "Deduplication provides marginal improvement in hit rate."
+                else:
+                    dedup_assessment = "Deduplication shows no improvement, suggesting minimal redundancy in retrieved chunks."
+                lines.append(f"- **Dedup vs Chunk Hit Rate ({dedup_improvement:+.4f})**: {dedup_assessment}")
+
+            if best_fpr is not None:
+                if best_fpr > 0.3:
+                    fpr_assessment = "High false positive rate - many retrieved chunks are irrelevant, consider improving retrieval precision."
+                elif best_fpr > 0.1:
+                    fpr_assessment = "Moderate false positive rate - some irrelevant chunks are retrieved."
+                else:
+                    fpr_assessment = "Low false positive rate - retrieved chunks are mostly relevant."
+                lines.append(f"- **False Positive Rate ({best_fpr:.4f})**: {fpr_assessment}")
+
+            lines.append("")
 
         if best.get("generation_metrics"):
             gen_metrics = best["generation_metrics"]
@@ -760,16 +959,17 @@ class ExperimentReporter:
         lines = ["## 3. Technical Configuration", ""]
 
         if result.config_snapshot:
+            merged = result.config_snapshot.get("merged", result.config_snapshot)
+            if "retrieval" in merged or "chunker" in merged:
+                lines.append("### Technology Summary")
+                lines.append("")
+                lines.extend(self._generate_tech_summary(merged))
+                lines.append("")
+
             lines.append("### Configuration Snapshot")
             lines.append("")
             lines.append("```yaml")
-            for section, config in result.config_snapshot.items():
-                lines.append(f"{section}:")
-                if isinstance(config, dict):
-                    for k, v in config.items():
-                        lines.append(f"  {k}: {v}")
-                else:
-                    lines.append(f"  {config}")
+            lines.extend(self._dict_to_yaml_lines(result.config_snapshot))
             lines.append("```")
             lines.append("")
 

@@ -1,6 +1,17 @@
 # ============================================================
 # 完整实验配置模板 - 展示所有可用选项
 # ============================================================
+#
+# config_overrides 工作原理：
+#   实验运行时，config_overrides 会与 config.yaml（最小基线）做深度合并。
+#   基线默认：纯向量检索、无重排序、无查询改写。
+#   只需在 config_overrides 中指定要修改的字段即可开启高级功能。
+#
+#   合并规则：
+#     - 字典类型：递归合并（基线 + 覆盖）
+#     - 非字典类型：覆盖基线值
+#     - 基线中不存在的字段：直接添加
+# ============================================================
 
 name: "complete_template"
 description: "完整配置模板 - 包含所有可用选项的示例"
@@ -18,24 +29,43 @@ data:
 # ------------------------------------------------------------
 # 问题集配置
 # ------------------------------------------------------------
+# 命名方式（二选一）：
+#
+#   方式 A：显式指定 name（推荐用于需要追踪/复用的测试集）
+#     测试集会持久化到磁盘，下次运行时按名称命中缓存。
+#
+#   方式 B：省略 name（快速实验，不关心测试集叫什么）
+#     系统会根据 generation 配置自动推导名称，格式为 "{strategy}_n{num_questions}"。
+#     相同 generation 配置会命中同一个缓存测试集，行为与旧版本一致。
+#     示例：
+#       test_sets:
+#         - on_missing: "auto"
+#           generation:
+#             strategy: "document"
+#             num_questions: 20
+#       # 自动命名为 "document_n20"，下次运行同配置可复用
+# ------------------------------------------------------------
 test_sets:
-  - strategy: "document"
-    num_questions: 20
-    seed: 100
-    type_distribution:
-      single_fact: 0.30
-      multi_fact: 0.25
-      reasoning: 0.15
-      comparative: 0.15
-      missing: 0.10
-      irrelevant: 0.05
+  - name: "golden_test"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 20
+      seed: 100
+      type_distribution:
+        single_fact: 0.30
+        multi_fact: 0.25
+        reasoning: 0.15
+        comparative: 0.15
+        missing: 0.10
+        irrelevant: 0.05
 
 # ------------------------------------------------------------
 # 变体配置 - 核心实验参数
 # ------------------------------------------------------------
 variants:
   - name: "baseline"
-    description: "基线配置"
+    description: "基线配置 - 使用 config.yaml 的默认值（纯向量检索，无高级功能）"
     config_overrides: {}
 
   - name: "custom_chunk"

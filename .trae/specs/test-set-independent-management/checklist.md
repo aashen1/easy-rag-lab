@@ -1,0 +1,27 @@
+- [x] TestSetMetadata dataclass 定义完整，包含所有设计文档要求的字段（name, meal_id, created_at, updated_at, generation, user_defined, invalid_policy, audit_log, suppress_warnings）
+- [x] TestSetManager 类实现 find_by_name / save_test_set / load_test_set / list_test_sets / delete_test_set 方法
+- [x] 测试集 JSON 文件包含 metadata 字段，结构符合设计文档规范
+- [x] 有效性判定逻辑正确：meal_id 一致时快速通过，不一致时逐条检查，缺失时标记为 invalid
+- [x] ExperimentConfig.validate() 支持新格式校验（name + generation 中的 strategy/num_questions）
+- [x] ExperimentConfig.validate() 支持 on_missing 值校验（auto / clean_only / strict）
+- [x] 旧格式配置触发 deprecation warning 但仍可正常运行
+- [x] on_missing: auto 模式完整流程正确（查找 → 清洗 → 生成兜底）
+- [x] on_missing: clean_only 模式完整流程正确（查找 → 清洗 → 不生成时 ERROR）
+- [x] on_missing: strict 模式完整流程正确（仅接受 valid → 否则 ERROR）
+- [x] 机器生成测试集清洗：失效问题删除 → 补充生成 → meal_id 更新 → audit_log 记录
+- [x] 机器生成测试集 generation 冲突时以实验配置为准
+- [x] 用户定义集 immutable 策略：仅更新 meal_id 或拒绝修改并 ERROR
+- [x] 用户定义集 trim 策略：备份 → 删减 → audit_log → warning → 空集时 ERROR
+- [x] 用户定义集 regenerate 策略：备份 → 删减 → 补充 → audit_log → generation 冲突以元数据为准
+- [x] 用户定义集 regenerate 缺少 generation 参数时报 ERROR
+- [x] Archive 备份命名格式为 `<name>.archive.<ISO8601_timestamp>`
+- [x] Archive 文件不参与按名称查找逻辑
+- [x] audit_log 为只追加写入，包含 event/from_meal/to_meal/removed_count/timestamp
+- [x] suppress_warnings 为 true 时不输出 audit 相关 warning
+- [x] TestSetGenerator 输出包含 metadata 的新 JSON 结构
+- [x] prepare_test_sets() 重构为使用 TestSetManager，新格式走 resolve_test_set() 路径
+- [x] 旧格式测试集 JSON 可正常加载（向后兼容读取）
+- [x] run_eval.py 测试集加载支持按名称查找
+- [x] CLI --generate-test-set 支持 name 参数
+- [x] 实验配置模板更新展示新格式用法
+- [x] 全量测试通过，无回归

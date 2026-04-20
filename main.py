@@ -79,12 +79,16 @@ def main():
     )
     testgen_group.add_argument(
         "--strategy", type=str, default="factual",
-        choices=["factual", "boundary", "multi_hop"],
+        choices=["factual", "boundary", "multi_hop", "document"],
         help="Test generation strategy (default: factual)"
     )
     testgen_group.add_argument(
         "--num-questions", type=int, default=20,
         help="Number of questions to generate (default: 20)"
+    )
+    testgen_group.add_argument(
+        "--name", type=str, default=None,
+        help="Name for the test set (new format)",
     )
 
     args = parser.parse_args()
@@ -459,13 +463,21 @@ def _handle_generate_test_set(meal_manager: MealManager, config: Dict[str, Any],
 
     generator = TestSetGenerator(config)
     try:
-        test_set = generator.generate_test_set(
-            meal_name=args.generate_test_set,
-            strategy=args.strategy,
-            num_questions=args.num_questions,
-            llm_preset=args.llm_preset or "default",
-            seed=args.seed,
-        )
+        if args.strategy == "document":
+            test_set = generator.generate_document_based_questions(
+                meal_name=args.generate_test_set,
+                name=getattr(args, 'name', None),
+                num_questions=args.num_questions,
+                llm_preset=args.llm_preset or "default",
+            )
+        else:
+            test_set = generator.generate_test_set(
+                meal_name=args.generate_test_set,
+                strategy=args.strategy,
+                num_questions=args.num_questions,
+                llm_preset=args.llm_preset or "default",
+                seed=args.seed,
+            )
         logger.success(
             f"Test set '{test_set['name']}' generated for meal '{args.generate_test_set}' "
             f"({len(test_set['questions'])} questions, strategy: {args.strategy})"

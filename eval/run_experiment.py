@@ -3,6 +3,7 @@ import hashlib
 import json
 import sys
 import time
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -16,6 +17,8 @@ sys.path.insert(0, str(project_root))
 from src.experiment import (
     ExperimentConfig,
     ExperimentManager,
+    is_new_format,
+    get_test_set_name,
     load_experiment_config,
     merge_config,
 )
@@ -32,9 +35,25 @@ from src.meal import (
 from src.pipeline import RAGPipeline
 from src.sampler import SamplingConfig
 from src.test_generator import TestSetGenerator
+from src.test_set_manager import TestSetManager
 from src.token_tracker import TokenTracker
 from src.utils import get_llm_config, load_config, setup_logger
-from eval.metrics import calculate_hit_rate, calculate_mrr, calculate_ndcg
+from eval.metrics import (
+    calculate_hit_rate,
+    calculate_mrr,
+    calculate_ndcg,
+    calculate_context_precision,
+    calculate_context_recall,
+    calculate_chunk_hit_rate,
+    calculate_chunk_mrr,
+    calculate_chunk_ndcg,
+    calculate_false_positive_rate,
+    calculate_dedup_hit_rate,
+    calculate_dedup_mrr,
+    calculate_dedup_ndcg,
+    normalize_source,
+    normalize_source_with_equivalence,
+)
 from eval.experiment_reporter import ExperimentReporter
 
 
@@ -73,6 +92,28 @@ class AssetVerificationResult:
             "pdf_issues": self.pdf_issues,
             "raw_dir": str(self.raw_dir) if self.raw_dir else None,
         }
+
+
+def sanitize_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Create a sanitized copy of configuration with sensitive fields masked.
+
+    Removes api_key values from llm_presets to prevent credential leakage
+    in experiment snapshots.
+
+    Args:
+        config: Configuration dictionary to sanitize.
+
+    Returns:
+        Deep-copied configuration with api_key values replaced by '***'.
+    """
+    import copy
+    result = copy.deepcopy(config)
+    llm_presets = result.get("llm_presets", {})
+    for preset_name, preset_config in llm_presets.items():
+        if isinstance(preset_config, dict) and "api_key" in preset_config:
+            preset_config["api_key"] = "***"
+    return result
 
 
 def verify_experiment_assets(
@@ -213,6 +254,42 @@ def verify_experiment_assets(
     return result
 
 
+def collect_environment_info() -> Dict[str, Any]:
+    """Collect environment version information for reproducibility.
+
+    Returns:
+        Dictionary containing environment version information.
+    """
+    env_info = {
+        "timestamp": datetime.now().isoformat(),
+    }
+
+    try:
+        import platform
+        env_info["os"] = platform.platform()
+        env_info["python_version"] = platform.python_version()
+    except Exception:
+        pass
+
+    try:
+        import pkg_resources
+        key_packages = [
+            "torch", "transformers", "qdrant-client", "langchain",
+            "langchain-community", "pymupdf", "pymupdf4llllm",
+            "sentence-transformers", "rank-bm25", "loguru",
+        ]
+        installed = {}
+        for pkg in pkg_resources.working_set:
+            if pkg.key.lower() in key_packages:
+                installed[pkg.key] = pkg.version
+        if installed:
+            env_info["key_packages"] = installed
+    except Exception:
+        pass
+
+    return env_info
+
+
 def prepare_meal(
     system_config: Dict[str, Any],
     exp_config: ExperimentConfig,
@@ -323,6 +400,145 @@ def prepare_meal(
         raise
 
 
+def _prepare_legacy_test_set(
+    system_config: Dict[str, Any],
+    meal_name: str,
+    test_set_config: Dict[str, Any],
+    meal_manager: "MealManager",
+    generator: "TestSetGenerator",
+    llm_preset: str,
+    skip_preprocessing: bool,
+    token_tracker: Optional[TokenTracker],
+) -> Dict[str, Any]:
+    """
+    Legacy test set preparation for old format configs.
+
+    Args:
+        system_config: System configuration dictionary.
+        meal_name: Name of the meal.
+        test_set_config: Test set configuration dictionary (old format).
+        meal_manager: MealManager instance.
+        generator: TestSetGenerator instance.
+        llm_preset: LLM preset name.
+        skip_preprocessing: If True, skip generation even if test sets don't exist.
+        token_tracker: Optional token tracker.
+
+    Returns:
+        Test set dictionary.
+
+    Raises:
+        FileNotFoundError: If test set doesn't exist and skip_preprocessing is True.
+    """
+    meal_dir = meal_manager.get_meal_dir(meal_name)
+    test_sets_dir = meal_dir / "test_sets"
+
+    strategy = test_set_config.get("strategy", "factual")
+    num_questions = test_set_config.get("num_questions", 20)
+    seed = test_set_config.get("seed")
+    type_distribution = test_set_config.get("type_distribution")
+
+    if strategy == "document":
+        filename = f"document_level_n{num_questions}"
+    else:
+        filename = f"auto_{strategy}_n{num_questions}"
+    test_set_path = test_sets_dir / f"{filename}.json"
+
+    if test_set_path.exists():
+        logger.info(f"Test set '{filename}' found, loading...")
+        try:
+            with open(test_set_path, "r", encoding="utf-8") as f:
+                test_set_data = json.load(f)
+
+            existing_count = len(test_set_data.get("questions", []))
+            if existing_count < num_questions:
+                logger.warning(
+                    f"Existing test set has {existing_count} questions, "
+                    f"but {num_questions} requested. Supplementing "
+                    f"{num_questions - existing_count} more questions."
+                )
+                if skip_preprocessing:
+                    raise FileNotFoundError(
+                        f"Test set '{filename}' has insufficient questions "
+                        f"({existing_count}/{num_questions}) and "
+                        f"skip_preprocessing is enabled. "
+                        f"Cannot supplement in skip_preprocessing mode."
+                    )
+                try:
+                    if strategy == "document":
+                        test_set_data = generator.supplement_document_based_questions(
+                            meal_name=meal_name,
+                            existing_test_set=test_set_data,
+                            target_count=num_questions,
+                            llm_preset=llm_preset,
+                            token_tracker=token_tracker,
+                        )
+                    else:
+                        logger.warning(
+                            f"Supplement not supported for strategy "
+                            f"'{strategy}', regenerating from scratch"
+                        )
+                        test_set_path.unlink()
+                        test_set_data = None
+
+                    if test_set_data is not None:
+                        final_count = len(test_set_data.get("questions", []))
+                        logger.success(f"Test set '{filename}' supplemented ({final_count} questions)")
+                        return test_set_data
+                except Exception as e:
+                    logger.error(f"Failed to supplement test set '{filename}': {str(e)}")
+                    logger.warning("Falling back to full regeneration")
+                    test_set_path.unlink()
+            elif existing_count > num_questions:
+                logger.warning(
+                    f"Existing test set has {existing_count} questions, "
+                    f"but {num_questions} requested. Truncating to "
+                    f"{num_questions}."
+                )
+                test_set_data["questions"] = test_set_data["questions"][:num_questions]
+                logger.success(f"Test set '{filename}' truncated ({num_questions} questions)")
+                return test_set_data
+            else:
+                logger.success(f"Test set '{filename}' loaded ({existing_count} questions)")
+                return test_set_data
+        except FileNotFoundError:
+            raise
+        except Exception as e:
+            logger.warning(f"Failed to load test set '{filename}': {str(e)}, will regenerate")
+
+    if skip_preprocessing:
+        raise FileNotFoundError(
+            f"Test set '{filename}' not found and skip_preprocessing is enabled. "
+            "Cannot generate test set in skip_preprocessing mode."
+        )
+
+    logger.info(f"Generating test set '{filename}' ({strategy}, {num_questions} questions)...")
+
+    try:
+        if strategy == "document":
+            test_set_data = generator.generate_document_based_questions(
+                meal_name=meal_name,
+                num_questions=num_questions,
+                type_distribution=type_distribution,
+                llm_preset=llm_preset,
+                token_tracker=token_tracker,
+            )
+        else:
+            test_set_data = generator.generate_test_set(
+                meal_name=meal_name,
+                strategy=strategy,
+                num_questions=num_questions,
+                llm_preset=llm_preset,
+                seed=seed,
+                token_tracker=token_tracker,
+            )
+
+        logger.success(f"Test set '{filename}' generated ({len(test_set_data.get('questions', []))} questions)")
+        return test_set_data
+    except Exception as e:
+        logger.error(f"Failed to generate test set '{filename}': {str(e)}")
+        raise
+
+
 def prepare_test_sets(
     system_config: Dict[str, Any],
     exp_config: ExperimentConfig,
@@ -333,95 +549,82 @@ def prepare_test_sets(
     """
     Prepare test sets for experiment.
 
-    Checks if the specified test sets exist. If not, generates them automatically.
+    For new format (has 'name' field): uses TestSetManager.resolve_test_set()
+    For old format: uses legacy logic with deprecation warning
 
     Args:
         system_config: System configuration dictionary.
         exp_config: Experiment configuration.
         meal_info: Meal information dictionary from prepare_meal.
         skip_preprocessing: If True, skip generation even if test sets don't exist.
+        token_tracker: Optional token tracker.
 
     Returns:
         List of test set dictionaries.
 
     Raises:
         FileNotFoundError: If test set doesn't exist and skip_preprocessing is True.
-        ValueError: If test set generation fails.
+        ValueError: If test set resolution fails.
     """
     meal_name = meal_info["name"]
     meal_manager = MealManager(system_config)
-    meal_dir = meal_manager.get_meal_dir(meal_name)
-    test_sets_dir = meal_dir / "test_sets"
+    meal_config = meal_manager.load_meal(meal_name)
+
+    test_set_manager = TestSetManager(system_config)
+    generator = TestSetGenerator(system_config)
+    llm_preset = exp_config.evaluation.get("llm_preset", "default")
 
     test_sets = []
 
     for test_set_config in exp_config.test_sets:
-        strategy = test_set_config.get("strategy", "factual")
-        num_questions = test_set_config.get("num_questions", 20)
-        seed = test_set_config.get("seed")
-        type_distribution = test_set_config.get("type_distribution")
-
-        if strategy == "document":
-            filename = f"document_level_n{num_questions}"
-        else:
-            filename = f"auto_{strategy}_n{num_questions}"
-        test_set_path = test_sets_dir / f"{filename}.json"
-
-        if test_set_path.exists():
-            logger.info(f"Test set '{filename}' found, loading...")
-            try:
-                with open(test_set_path, "r", encoding="utf-8") as f:
-                    test_set_data = json.load(f)
-
-                existing_count = len(test_set_data.get("questions", []))
-                if existing_count != num_questions:
-                    logger.warning(
-                        f"Existing test set has {existing_count} questions, "
-                        f"but {num_questions} requested. Regenerating."
+        if is_new_format(test_set_config):
+            if skip_preprocessing:
+                name = test_set_config.get("name")
+                test_set_data = test_set_manager.find_by_name(meal_name, name)
+                if test_set_data is None:
+                    raise FileNotFoundError(
+                        f"Test set '{name}' not found and skip_preprocessing is enabled."
                     )
-                    test_set_path.unlink()
-                else:
-                    test_sets.append(test_set_data)
-                    logger.success(f"Test set '{filename}' loaded ({existing_count} questions)")
-                    continue
-            except Exception as e:
-                logger.warning(f"Failed to load test set '{filename}': {str(e)}, will regenerate")
-
-        if skip_preprocessing:
-            raise FileNotFoundError(
-                f"Test set '{filename}' not found and skip_preprocessing is enabled. "
-                "Cannot generate test set in skip_preprocessing mode."
-            )
-
-        logger.info(f"Generating test set '{filename}' ({strategy}, {num_questions} questions)...")
-
-        try:
-            generator = TestSetGenerator(system_config)
-            llm_preset = exp_config.evaluation.get("llm_preset", "default")
-
-            if strategy == "document":
-                test_set_data = generator.generate_document_based_questions(
-                    meal_name=meal_name,
-                    num_questions=num_questions,
-                    type_distribution=type_distribution,
-                    llm_preset=llm_preset,
-                    token_tracker=token_tracker,
+                is_valid, invalid_qs = test_set_manager.validate_test_set(
+                    test_set_data, meal_config
                 )
+                if not is_valid:
+                    raise ValueError(
+                        f"Test set '{name}' is invalid and skip_preprocessing is enabled."
+                    )
             else:
-                test_set_data = generator.generate_test_set(
+                test_set_data = test_set_manager.resolve_test_set(
                     meal_name=meal_name,
-                    strategy=strategy,
-                    num_questions=num_questions,
+                    test_set_config=test_set_config,
+                    meal_config=meal_config,
+                    generator=generator,
                     llm_preset=llm_preset,
-                    seed=seed,
                     token_tracker=token_tracker,
                 )
-
             test_sets.append(test_set_data)
-            logger.success(f"Test set '{filename}' generated ({len(test_set_data.get('questions', []))} questions)")
-        except Exception as e:
-            logger.error(f"Failed to generate test set '{filename}': {str(e)}")
-            raise
+        else:
+            warnings.warn(
+                "test_sets uses deprecated configuration format. "
+                "The experiment will run normally, but please consider migrating to the new format:\n"
+                "  test_sets:\n"
+                "    - name: \"<custom_name>\"\n"
+                "      on_missing: \"auto\"\n"
+                "      generation:\n"
+                "        strategy: \"document\"\n"
+                "        num_questions: 10",
+                DeprecationWarning,
+            )
+            test_set_data = _prepare_legacy_test_set(
+                system_config=system_config,
+                meal_name=meal_name,
+                test_set_config=test_set_config,
+                meal_manager=meal_manager,
+                generator=generator,
+                llm_preset=llm_preset,
+                skip_preprocessing=skip_preprocessing,
+                token_tracker=token_tracker,
+            )
+            test_sets.append(test_set_data)
 
     return test_sets
 
@@ -508,6 +711,9 @@ def prepare_index_for_variant(
 def evaluate_test_set(
     pipeline: RAGPipeline,
     test_set: Dict[str, Any],
+    llm_config: Optional[Dict[str, str]] = None,
+    llm_retrieval_metrics: Optional[List[str]] = None,
+    equivalence_groups: Optional[Dict[str, List[str]]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Evaluate a single test set against the pipeline.
@@ -515,20 +721,34 @@ def evaluate_test_set(
     Args:
         pipeline: Configured RAG pipeline.
         test_set: Test set dictionary with questions.
+        llm_config: Optional LLM configuration for LLM-based metrics.
+        llm_retrieval_metrics: Optional list of LLM-based retrieval metrics to calculate.
+            Supports "context_precision" and "context_recall".
+        equivalence_groups: Optional dict mapping group keys to lists of file paths
+            for document equivalence matching. When provided, documents in the same
+            group are treated as identical for retrieval evaluation.
 
     Returns:
         List of evaluation result dictionaries.
     """
-    test_set_name = test_set.get("name", "unknown")
+    metadata = test_set.get("metadata", {})
+    test_set_name = test_set.get("name") or metadata.get("name") or "unknown"
     questions = test_set.get("questions", [])
 
     logger.info(f"Evaluating test set '{test_set_name}' ({len(questions)} questions)...")
+
+    if llm_retrieval_metrics is None:
+        llm_retrieval_metrics = []
 
     results = []
     for i, question_data in enumerate(questions, 1):
         question_id = question_data.get("id", f"q{i}")
         question_text = question_data.get("question", "")
         expected_sources = question_data.get("source_files", [])
+        ground_truth = question_data.get("answer", "")
+        expect_retrieval = question_data.get("expect_retrieval", True)
+        expect_no_answer = question_data.get("expect_no_answer", False)
+        question_type = question_data.get("question_type", "")
 
         if not question_text:
             logger.warning(f"Question {question_id} has no text, skipping")
@@ -542,10 +762,57 @@ def evaluate_test_set(
             case_time = time.time() - case_start_time
 
             retrieved_sources = response.get("sources", [])
+            contexts = response.get("contexts", [])
 
-            hit_rate = calculate_hit_rate(retrieved_sources, expected_sources)
-            mrr = calculate_mrr(retrieved_sources, expected_sources)
-            ndcg = calculate_ndcg(retrieved_sources, expected_sources, k=5)
+            if expect_retrieval and expected_sources:
+                if equivalence_groups:
+                    normalized_retrieved = [
+                        normalize_source_with_equivalence(s, equivalence_groups)
+                        for s in retrieved_sources
+                    ]
+                    normalized_expected = [
+                        normalize_source_with_equivalence(s, equivalence_groups)
+                        for s in expected_sources
+                    ]
+                    hit_rate = calculate_hit_rate(normalized_retrieved, normalized_expected)
+                    mrr = calculate_mrr(normalized_retrieved, normalized_expected)
+                    ndcg = calculate_ndcg(normalized_retrieved, normalized_expected, k=5)
+                else:
+                    hit_rate = calculate_hit_rate(retrieved_sources, expected_sources)
+                    mrr = calculate_mrr(retrieved_sources, expected_sources)
+                    ndcg = calculate_ndcg(retrieved_sources, expected_sources, k=5)
+                if equivalence_groups:
+                    dedup_hit_rate = calculate_dedup_hit_rate(normalized_retrieved, normalized_expected)
+                    dedup_mrr = calculate_dedup_mrr(normalized_retrieved, normalized_expected)
+                    dedup_ndcg = calculate_dedup_ndcg(normalized_retrieved, normalized_expected)
+                else:
+                    dedup_hit_rate = calculate_dedup_hit_rate(retrieved_sources, expected_sources)
+                    dedup_mrr = calculate_dedup_mrr(retrieved_sources, expected_sources)
+                    dedup_ndcg = calculate_dedup_ndcg(retrieved_sources, expected_sources)
+            else:
+                hit_rate = None
+                mrr = None
+                ndcg = None
+                dedup_hit_rate = None
+                dedup_mrr = None
+                dedup_ndcg = None
+
+            retrieved_chunk_ids = response.get("chunk_ids", [])
+            expected_chunks = question_data.get("source_chunks", [])
+
+            if expect_retrieval and expected_chunks and retrieved_chunk_ids:
+                chunk_hit_rate = calculate_chunk_hit_rate(retrieved_chunk_ids, expected_chunks)
+                chunk_mrr = calculate_chunk_mrr(retrieved_chunk_ids, expected_chunks)
+                chunk_ndcg = calculate_chunk_ndcg(retrieved_chunk_ids, expected_chunks, k=5)
+            else:
+                chunk_hit_rate = None
+                chunk_mrr = None
+                chunk_ndcg = None
+
+            if not expect_retrieval and not expected_sources:
+                false_positive_rate = calculate_false_positive_rate(retrieved_sources, k=5)
+            else:
+                false_positive_rate = None
 
             result = {
                 "id": question_id,
@@ -555,20 +822,77 @@ def evaluate_test_set(
                     "hit_rate": hit_rate,
                     "mrr": mrr,
                     "ndcg": ndcg,
-                },
+                } if hit_rate is not None else None,
+                "chunk_retrieval": {
+                    "hit_rate": chunk_hit_rate,
+                    "mrr": chunk_mrr,
+                    "ndcg": chunk_ndcg,
+                } if chunk_hit_rate is not None else None,
+                "dedup_retrieval": {
+                    "hit_rate": dedup_hit_rate,
+                    "mrr": dedup_mrr,
+                    "ndcg": dedup_ndcg,
+                } if dedup_hit_rate is not None else None,
+                "false_positive_rate": false_positive_rate,
                 "sources": retrieved_sources,
+                "chunk_ids": retrieved_chunk_ids,
                 "expected_sources": expected_sources,
+                "expected_chunks": expected_chunks,
                 "time_seconds": case_time,
                 "test_set": test_set_name,
                 "category": question_data.get("category"),
                 "difficulty": question_data.get("difficulty"),
+                "question_type": question_type,
+                "expect_retrieval": expect_retrieval,
+                "expect_no_answer": expect_no_answer,
                 "token_usage": response.get("token_usage"),
             }
 
-            logger.success(
-                f"Question {question_id}: HR={hit_rate:.4f}, MRR={mrr:.4f}, "
-                f"NDCG={ndcg:.4f} ({case_time:.2f}s)"
-            )
+            llm_retrieval = {}
+            if llm_config and llm_retrieval_metrics and contexts:
+                if "context_precision" in llm_retrieval_metrics:
+                    try:
+                        cp_score = calculate_context_precision(
+                            question=question_text,
+                            expected_output=ground_truth,
+                            retrieval_context=contexts,
+                            api_key=llm_config["api_key"],
+                            base_url=llm_config["base_url"],
+                            model_name=llm_config["model_name"],
+                        )
+                        llm_retrieval["context_precision"] = cp_score
+                    except Exception as e:
+                        logger.warning(f"Failed to calculate context precision: {str(e)}")
+                        llm_retrieval["context_precision"] = None
+
+                if "context_recall" in llm_retrieval_metrics:
+                    try:
+                        cr_score = calculate_context_recall(
+                            question=question_text,
+                            ground_truth=ground_truth,
+                            retrieval_context=contexts,
+                            api_key=llm_config["api_key"],
+                            base_url=llm_config["base_url"],
+                            model_name=llm_config["model_name"],
+                        )
+                        llm_retrieval["context_recall"] = cr_score
+                    except Exception as e:
+                        logger.warning(f"Failed to calculate context recall: {str(e)}")
+                        llm_retrieval["context_recall"] = None
+
+            if llm_retrieval:
+                result["llm_retrieval"] = llm_retrieval
+
+            if hit_rate is not None:
+                metric_parts = [f"HR={hit_rate:.4f}", f"MRR={mrr:.4f}", f"NDCG={ndcg:.4f}"]
+            else:
+                metric_parts = ["HR=N/A", "MRR=N/A", "NDCG=N/A"]
+            if llm_retrieval:
+                if "context_precision" in llm_retrieval and llm_retrieval["context_precision"] is not None:
+                    metric_parts.append(f"CP={llm_retrieval['context_precision']:.4f}")
+                if "context_recall" in llm_retrieval and llm_retrieval["context_recall"] is not None:
+                    metric_parts.append(f"CR={llm_retrieval['context_recall']:.4f}")
+            logger.success(f"Question {question_id}: {', '.join(metric_parts)} ({case_time:.2f}s)")
 
         except Exception as e:
             case_time = time.time() - case_start_time
@@ -582,6 +906,9 @@ def evaluate_test_set(
                 "time_seconds": case_time,
                 "test_set": test_set_name,
                 "category": question_data.get("category"),
+                "question_type": question_type,
+                "expect_retrieval": expect_retrieval,
+                "expect_no_answer": expect_no_answer,
             }
 
         results.append(result)
@@ -593,27 +920,94 @@ def compute_aggregate_metrics(results: List[Dict[str, Any]]) -> Dict[str, float]
     """
     Compute aggregate retrieval metrics from evaluation results.
 
+    Questions with expect_retrieval=False (irrelevant type) are excluded
+    from retrieval metric averages since they have no expected sources.
+
     Args:
         results: List of evaluation result dictionaries.
 
     Returns:
-        Dictionary containing average hit_rate, mrr, and ndcg.
+        Dictionary containing average hit_rate, mrr, ndcg, and optionally
+        context_precision and context_recall. Also includes
+        retrieval_applicable_questions count.
     """
-    valid_results = [r for r in results if "retrieval" in r]
-    if valid_results:
-        avg_hit_rate = sum(r["retrieval"]["hit_rate"] for r in valid_results) / len(valid_results)
-        avg_mrr = sum(r["retrieval"]["mrr"] for r in valid_results) / len(valid_results)
-        avg_ndcg = sum(r["retrieval"]["ndcg"] for r in valid_results) / len(valid_results)
+    retrieval_results = [r for r in results if r.get("retrieval") is not None]
+    if retrieval_results:
+        avg_hit_rate = sum(r["retrieval"]["hit_rate"] for r in retrieval_results) / len(retrieval_results)
+        avg_mrr = sum(r["retrieval"]["mrr"] for r in retrieval_results) / len(retrieval_results)
+        avg_ndcg = sum(r["retrieval"]["ndcg"] for r in retrieval_results) / len(retrieval_results)
     else:
         avg_hit_rate = 0.0
         avg_mrr = 0.0
         avg_ndcg = 0.0
 
-    return {
+    metrics = {
         "avg_hit_rate": avg_hit_rate,
         "avg_mrr": avg_mrr,
         "avg_ndcg": avg_ndcg,
+        "retrieval_applicable_questions": len(retrieval_results),
+        "total_questions": len(results),
     }
+
+    chunk_results = [r for r in results if r.get("chunk_retrieval") is not None]
+    if chunk_results:
+        avg_chunk_hit_rate = sum(r["chunk_retrieval"]["hit_rate"] for r in chunk_results) / len(chunk_results)
+        avg_chunk_mrr = sum(r["chunk_retrieval"]["mrr"] for r in chunk_results) / len(chunk_results)
+        avg_chunk_ndcg = sum(r["chunk_retrieval"]["ndcg"] for r in chunk_results) / len(chunk_results)
+    else:
+        avg_chunk_hit_rate = None
+        avg_chunk_mrr = None
+        avg_chunk_ndcg = None
+
+    dedup_results = [r for r in results if r.get("dedup_retrieval") is not None]
+    if dedup_results:
+        avg_dedup_hit_rate = sum(r["dedup_retrieval"]["hit_rate"] for r in dedup_results) / len(dedup_results)
+        avg_dedup_mrr = sum(r["dedup_retrieval"]["mrr"] for r in dedup_results) / len(dedup_results)
+        avg_dedup_ndcg = sum(r["dedup_retrieval"]["ndcg"] for r in dedup_results) / len(dedup_results)
+    else:
+        avg_dedup_hit_rate = None
+        avg_dedup_mrr = None
+        avg_dedup_ndcg = None
+
+    fpr_results = [r for r in results if r.get("false_positive_rate") is not None]
+    avg_false_positive_rate = (
+        sum(r["false_positive_rate"] for r in fpr_results) / len(fpr_results)
+        if fpr_results else None
+    )
+
+    metrics["chunk_level_metrics"] = {
+        "avg_hit_rate": avg_chunk_hit_rate,
+        "avg_mrr": avg_chunk_mrr,
+        "avg_ndcg": avg_chunk_ndcg,
+        "retrieval_applicable_questions": len(chunk_results),
+    }
+    metrics["dedup_metrics"] = {
+        "avg_hit_rate": avg_dedup_hit_rate,
+        "avg_mrr": avg_dedup_mrr,
+        "avg_ndcg": avg_dedup_ndcg,
+    }
+    metrics["avg_false_positive_rate"] = avg_false_positive_rate
+    metrics["irrelevant_questions_count"] = len(fpr_results)
+
+    llm_retrieval_results = [r for r in results if "llm_retrieval" in r and r["llm_retrieval"]]
+    if llm_retrieval_results:
+        cp_values = [
+            r["llm_retrieval"]["context_precision"]
+            for r in llm_retrieval_results
+            if "context_precision" in r["llm_retrieval"] and r["llm_retrieval"]["context_precision"] is not None
+        ]
+        if cp_values:
+            metrics["avg_context_precision"] = sum(cp_values) / len(cp_values)
+
+        cr_values = [
+            r["llm_retrieval"]["context_recall"]
+            for r in llm_retrieval_results
+            if "context_recall" in r["llm_retrieval"] and r["llm_retrieval"]["context_recall"] is not None
+        ]
+        if cr_values:
+            metrics["avg_context_recall"] = sum(cr_values) / len(cr_values)
+
+    return metrics
 
 
 def run_variant_evaluation(
@@ -656,11 +1050,7 @@ def run_variant_evaluation(
         "test_sets": exp_config.test_sets,
         "evaluation": exp_config.evaluation,
         "variant": variant,
-        "merged": {
-            "chunker": merged_config.get("chunker", {}),
-            "embedding": merged_config.get("embedding", {}),
-            "retrieval": merged_config.get("retrieval", {}),
-        },
+        "merged": sanitize_config(merged_config),
     }
 
     llm_preset = exp_config.evaluation.get("llm_preset", "default")
@@ -710,8 +1100,18 @@ def run_variant_evaluation(
 
         total_start_time = time.time()
         all_results = []
+
+        llm_config = get_llm_config(merged_config, llm_preset)
+        llm_retrieval_metrics = exp_config.evaluation.get("llm_retrieval_metrics", [])
+
         for test_set in test_sets:
-            results = evaluate_test_set(pipeline, test_set)
+            results = evaluate_test_set(
+                pipeline,
+                test_set,
+                llm_config=llm_config,
+                llm_retrieval_metrics=llm_retrieval_metrics,
+                equivalence_groups=meal_config.equivalence_groups if meal_config.equivalence_groups else None,
+            )
             all_results.extend(results)
 
         total_time = time.time() - total_start_time
@@ -739,6 +1139,8 @@ def run_variant_evaluation(
             f"Variant '{variant_name}' evaluation completed: "
             f"HR={metrics['avg_hit_rate']:.4f}, MRR={metrics['avg_mrr']:.4f}, "
             f"NDCG={metrics['avg_ndcg']:.4f}"
+            + (f", CP={metrics['avg_context_precision']:.4f}" if "avg_context_precision" in metrics else "")
+            + (f", CR={metrics['avg_context_recall']:.4f}" if "avg_context_recall" in metrics else "")
         )
 
         token_total = variant_tracker.get_total()
@@ -799,6 +1201,14 @@ def run_experiment(
     exp_manager = ExperimentManager(system_config)
     exp_dir = exp_manager.create_experiment_dir(exp_config)
 
+    experiment_log_path = exp_dir / "experiment.log"
+    experiment_log_handler = logger.add(
+        str(experiment_log_path),
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
+        level="INFO",
+        encoding="utf-8",
+    )
+
     logger.info(f"Experiment directory: {exp_dir}")
 
     try:
@@ -817,12 +1227,15 @@ def run_experiment(
 
         test_set_snapshots = []
         for test_set in test_sets:
+            metadata = test_set.get("metadata", {})
+            generation = metadata.get("generation", {})
             test_set_snapshots.append({
-                "name": test_set.get("name"),
-                "strategy": test_set.get("strategy"),
+                "name": test_set.get("name") or metadata.get("name"),
+                "strategy": test_set.get("strategy") or generation.get("strategy"),
                 "num_questions": len(test_set.get("questions", [])),
-                "created_at": test_set.get("created_at"),
-                "meal_data_id": test_set.get("meal_data_id"),
+                "created_at": test_set.get("created_at") or metadata.get("created_at"),
+                "meal_data_id": test_set.get("meal_data_id") or metadata.get("meal_id"),
+                "questions": test_set.get("questions", []),
             })
 
         config_snapshot = {
@@ -830,6 +1243,8 @@ def run_experiment(
             "test_sets": exp_config.test_sets,
             "evaluation": exp_config.evaluation,
             "llm": exp_config.llm,
+            "system_config": sanitize_config(system_config),
+            "environment": collect_environment_info(),
         }
 
         exp_manager.save_snapshots(

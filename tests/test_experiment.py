@@ -1,5 +1,6 @@
 import json
 import tempfile
+import warnings
 from pathlib import Path
 from unittest.mock import patch
 
@@ -11,10 +12,13 @@ from src.experiment import (
     ExperimentManager,
     ExperimentResult,
     VALID_GENERATION_METRICS,
+    VALID_ON_MISSING_VALUES,
     VALID_RETRIEVAL_METRICS,
     deep_merge,
     get_test_set_config,
+    get_test_set_name,
     get_variant_config,
+    is_new_format,
     list_variants,
     load_experiment_config,
     merge_config,
@@ -227,7 +231,12 @@ class TestExperimentConfig:
 
     @pytest.mark.unit
     def test_valid_metrics_constants(self):
-        assert VALID_RETRIEVAL_METRICS == {"hit_rate", "mrr", "ndcg"}
+        assert VALID_RETRIEVAL_METRICS == {
+            "hit_rate", "mrr", "ndcg",
+            "chunk_hit_rate", "chunk_mrr", "chunk_ndcg",
+            "dedup_hit_rate", "dedup_mrr", "dedup_ndcg",
+            "false_positive_rate",
+        }
         assert VALID_GENERATION_METRICS == {"faithfulness", "answer_relevancy"}
 
 
@@ -1013,3 +1022,225 @@ class TestExperimentManager:
 
             assert result_path.exists()
             assert "!" not in result_path.name
+
+
+class TestIsNewFormat:
+    @pytest.mark.unit
+    def test_new_format_with_name(self):
+        config = {"name": "my_test_set", "generation": {"strategy": "document", "num_questions": 10}}
+        assert is_new_format(config) is True
+
+    @pytest.mark.unit
+    def test_old_format_without_name(self):
+        config = {"strategy": "factual", "num_questions": 20}
+        assert is_new_format(config) is False
+
+    @pytest.mark.unit
+    def test_empty_dict(self):
+        assert is_new_format({}) is False
+
+    @pytest.mark.unit
+    def test_new_format_name_only(self):
+        config = {"name": "minimal_new"}
+        assert is_new_format(config) is True
+
+
+class TestGetTestSetName:
+    @pytest.mark.unit
+    def test_new_format_returns_name(self):
+        config = {"name": "custom_name", "generation": {"strategy": "document", "num_questions": 10}}
+        assert get_test_set_name(config) == "custom_name"
+
+    @pytest.mark.unit
+    def test_old_format_factual_strategy(self):
+        config = {"strategy": "factual", "num_questions": 20}
+        assert get_test_set_name(config) == "auto_factual_n20"
+
+    @pytest.mark.unit
+    def test_old_format_document_strategy(self):
+        config = {"strategy": "document", "num_questions": 10}
+        assert get_test_set_name(config) == "document_level_n10"
+
+    @pytest.mark.unit
+    def test_old_format_defaults(self):
+        config = {}
+        assert get_test_set_name(config) == "auto_factual_n20"
+
+    @pytest.mark.unit
+    def test_old_format_missing_num_questions(self):
+        config = {"strategy": "reasoning"}
+        assert get_test_set_name(config) == "auto_reasoning_n20"
+
+    @pytest.mark.unit
+    def test_old_format_missing_strategy(self):
+        config = {"num_questions": 15}
+        assert get_test_set_name(config) == "auto_factual_n15"
+
+
+class TestNewFormatValidation:
+    def _make_config_dict(self, **overrides) -> dict:
+        defaults = {
+            "name": "test_experiment",
+            "description": "Test experiment description",
+            "data": {"meal": "meal_baseline"},
+            "test_sets": [
+                {
+                    "name": "doc_level_test",
+                    "on_missing": "auto",
+                    "generation": {"strategy": "document", "num_questions": 10},
+                }
+            ],
+            "variants": [{"name": "v1"}],
+            "evaluation": {"metrics": {"retrieval": ["hit_rate"]}},
+        }
+        defaults.update(overrides)
+        return defaults
+
+    @pytest.mark.unit
+    def test_valid_new_format(self):
+        data = self._make_config_dict()
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        test_set_errors = [e for e in errors if "Test set" in e]
+        assert test_set_errors == []
+
+    @pytest.mark.unit
+    def test_new_format_without_generation(self):
+        data = self._make_config_dict()
+        data["test_sets"] = [{"name": "prebuilt_test", "on_missing": "strict"}]
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        test_set_errors = [e for e in errors if "Test set" in e]
+        assert test_set_errors == []
+
+    @pytest.mark.unit
+    def test_new_format_empty_name(self):
+        data = self._make_config_dict()
+        data["test_sets"] = [{"name": "", "generation": {"strategy": "document", "num_questions": 10}}]
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        assert any("'name' must be a non-empty string" in e for e in errors)
+
+    @pytest.mark.unit
+    def test_new_format_whitespace_name(self):
+        data = self._make_config_dict()
+        data["test_sets"] = [{"name": "   ", "generation": {"strategy": "document", "num_questions": 10}}]
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        assert any("'name' must be a non-empty string" in e for e in errors)
+
+    @pytest.mark.unit
+    def test_new_format_invalid_on_missing(self):
+        data = self._make_config_dict()
+        data["test_sets"] = [{"name": "test", "on_missing": "invalid_value", "generation": {"strategy": "document", "num_questions": 10}}]
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        assert any("invalid 'on_missing' value" in e for e in errors)
+
+    @pytest.mark.unit
+    def test_new_format_generation_missing_strategy(self):
+        data = self._make_config_dict()
+        data["test_sets"] = [{"name": "test", "generation": {"num_questions": 10}}]
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        assert any("'generation' missing 'strategy' field" in e for e in errors)
+
+    @pytest.mark.unit
+    def test_new_format_generation_missing_num_questions(self):
+        data = self._make_config_dict()
+        data["test_sets"] = [{"name": "test", "generation": {"strategy": "document"}}]
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        assert any("'generation' missing 'num_questions' field" in e for e in errors)
+
+    @pytest.mark.unit
+    def test_new_format_generation_not_dict(self):
+        data = self._make_config_dict()
+        data["test_sets"] = [{"name": "test", "generation": "not_a_dict"}]
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        assert any("'generation' must be a dictionary" in e for e in errors)
+
+    @pytest.mark.unit
+    def test_valid_on_missing_values(self):
+        assert VALID_ON_MISSING_VALUES == {"auto", "clean_only", "strict"}
+
+    @pytest.mark.unit
+    def test_new_format_all_valid_on_missing_values(self):
+        for on_missing_val in ["auto", "clean_only", "strict"]:
+            data = self._make_config_dict()
+            data["test_sets"] = [{"name": "test", "on_missing": on_missing_val, "generation": {"strategy": "document", "num_questions": 10}}]
+            config = ExperimentConfig.from_dict(data)
+            errors = config.validate()
+            test_set_errors = [e for e in errors if "on_missing" in e]
+            assert test_set_errors == [], f"Unexpected error for on_missing='{on_missing_val}'"
+
+
+class TestOldFormatDeprecation:
+    def _make_config_dict(self, **overrides) -> dict:
+        defaults = {
+            "name": "test_experiment",
+            "description": "Test experiment description",
+            "data": {"meal": "meal_baseline"},
+            "test_sets": [{"strategy": "factual", "num_questions": 20}],
+            "variants": [{"name": "v1"}],
+            "evaluation": {"metrics": {"retrieval": ["hit_rate"]}},
+        }
+        defaults.update(overrides)
+        return defaults
+
+    @pytest.mark.unit
+    def test_old_format_emits_deprecation_warning(self):
+        data = self._make_config_dict()
+        config = ExperimentConfig.from_dict(data)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            config.validate()
+            deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
+            assert len(deprecation_warnings) == 1
+            assert "deprecated configuration format" in str(deprecation_warnings[0].message)
+
+    @pytest.mark.unit
+    def test_old_format_still_validates(self):
+        data = self._make_config_dict()
+        config = ExperimentConfig.from_dict(data)
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            errors = config.validate()
+        test_set_errors = [e for e in errors if "Test set" in e]
+        assert test_set_errors == []
+
+    @pytest.mark.unit
+    def test_old_format_missing_strategy_still_errors(self):
+        data = self._make_config_dict()
+        data["test_sets"] = [{"num_questions": 10}]
+        config = ExperimentConfig.from_dict(data)
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            errors = config.validate()
+        assert any("missing 'strategy' field" in e for e in errors)
+
+    @pytest.mark.unit
+    def test_new_format_no_deprecation_warning(self):
+        data = self._make_config_dict()
+        data["test_sets"] = [{"name": "test", "generation": {"strategy": "document", "num_questions": 10}}]
+        config = ExperimentConfig.from_dict(data)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            config.validate()
+            deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
+            assert len(deprecation_warnings) == 0
+
+    @pytest.mark.unit
+    def test_mixed_formats_emits_warning(self):
+        data = self._make_config_dict()
+        data["test_sets"] = [
+            {"name": "new_format", "generation": {"strategy": "document", "num_questions": 10}},
+            {"strategy": "factual", "num_questions": 20},
+        ]
+        config = ExperimentConfig.from_dict(data)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            config.validate()
+            deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
+            assert len(deprecation_warnings) == 1

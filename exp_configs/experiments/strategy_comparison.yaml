@@ -1,5 +1,5 @@
 name: "strategy_comparison"
-description: "新旧问题生成策略对比实验 - 比较deprecated策略(factual/boundary/multi_hop)与新策略(document)在token消耗上的差异"
+description: "问题生成策略对比实验 - 比较不同类型分布在问答质量上的差异"
 
 data:
   meal: "meal_strategy_comparison"
@@ -8,23 +8,56 @@ data:
     seed: 42
 
 test_sets:
-  - strategy: "factual"
-    num_questions: 5
-    seed: 700
-  - strategy: "boundary"
-    num_questions: 5
-    seed: 701
-  - strategy: "multi_hop"
-    num_questions: 5
-    seed: 702
-  - strategy: "document"
-    num_questions: 15
-    type_distribution:
-      single_fact: 0.33
-      multi_fact: 0.27
-      reasoning: 0.20
-      comparative: 0.13
-      missing: 0.07
+  - name: "single_fact_focused"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 5
+      seed: 700
+      type_distribution:
+        single_fact: 0.80
+        multi_fact: 0.10
+        reasoning: 0.05
+        comparative: 0.05
+        missing: 0.0
+        irrelevant: 0.0
+  - name: "multi_fact_focused"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 5
+      seed: 701
+      type_distribution:
+        single_fact: 0.10
+        multi_fact: 0.80
+        reasoning: 0.05
+        comparative: 0.05
+        missing: 0.0
+        irrelevant: 0.0
+  - name: "reasoning_focused"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 5
+      seed: 702
+      type_distribution:
+        single_fact: 0.10
+        multi_fact: 0.10
+        reasoning: 0.70
+        comparative: 0.10
+        missing: 0.0
+        irrelevant: 0.0
+  - name: "balanced_document"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 15
+      type_distribution:
+        single_fact: 0.33
+        multi_fact: 0.27
+        reasoning: 0.20
+        comparative: 0.13
+        missing: 0.07
 
 variants:
   - name: "baseline"

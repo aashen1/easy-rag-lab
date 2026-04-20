@@ -1,5 +1,22 @@
 # ============================================================
-# 系统配置
+# 系统配置（最小基线）
+# ============================================================
+#
+# 本配置定义 RAG 管线的最小基线（baseline）：
+#   PDF → MD → 固定长度无重叠切块 → 向量化 → 纯向量检索 → 生成回答
+#
+# 高级功能（混合检索、重排序、查询改写等）默认关闭，
+# 需要通过实验配置（exp_configs/）的 config_overrides 显式开启。
+# 这样做是为了确保对比实验的基线是"无优化"状态，
+# 各优化技术的提升效果才能被清晰度量。
+#
+# 示例：在实验配置中开启重排序
+#   variants:
+#     - name: "with_reranker"
+#       config_overrides:
+#         retrieval:
+#           reranker:
+#             enabled: true
 # ============================================================
 
 # 当前激活的 LLM 预设名称
@@ -69,24 +86,24 @@ vector_store:
   persist_dir: "data/vector_store"
   distance: "Cosine"
 
-# 检索配置
+# 检索配置（基线：纯向量检索，高级功能通过实验配置开启）
 retrieval:
   method: "vector"          # Retrieval method: "vector", "bm25", or "hybrid"
   top_k: 5
-  bm25:
+  bm25:                     # BM25 参数（method=bm25 或 hybrid 时生效）
     k1: 1.5                 # BM25 term frequency saturation parameter
     b: 0.75                 # BM25 length normalization parameter
-  hybrid:
+  hybrid:                   # 混合检索参数（method=hybrid 时生效）
     fusion: "rrf"           # Fusion strategy: "rrf" or "weighted"
     rrf_k: 60               # RRF constant (higher = dampen rank impact)
     vector_weight: 0.7      # Weight for vector scores in weighted fusion
     bm25_weight: 0.3        # Weight for BM25 scores in weighted fusion
-  reranker:
+  reranker:                 # 重排序（默认关闭，通过实验配置开启）
     enabled: false          # Enable cross-encoder reranking
     model_name: "BAAI/bge-reranker-large"  # Cross-encoder model
     device: "cuda"          # Reranker device
     top_n: 3                # Number of results to keep after reranking
-  query_rewrite:
+  query_rewrite:            # 查询改写（默认关闭，通过实验配置开启）
     enabled: false          # Enable query rewriting
     strategy: "hyde"        # Strategy: "hyde" or "multi_query"
     num_queries: 3          # Number of sub-queries for multi_query strategy

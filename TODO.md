@@ -25,24 +25,20 @@
 
 ## Backlog
 
-- [x] 重写问题生成策略，与chunk解耦，看看考虑做成基于整个MD的（已于v0.1.7实现）
+
 - [ ] 实验报告`baseline.json`当中记录AI回答的`"sources"`字段，给出的来源都是大的总文件名，这策略没啥用感觉，看看能不能细化到标题头或者chunk啥的。这个不着急，跟问题生成策略一块重写
 - [ ] 现在的项目结构是不是有点乱？根目录里还放着两个`.py`文件（好像暂时没啥所谓，先放着）
 - [ ] 优化"新用户"链路的性能。PDF→parse→chunk→embed这一条还是要测一下速，有些地方可以提速或者上GPU的也做一下
 - [ ] [test-future-directions.md](.trae\documents\test-suite\test-future-directions.md)当中提到了"**可扩展性**：新功能上线只需向 `golden_qa.json` 添加条目"，验证一下，如果是换了问题生成策略是否也可以 ⏳ 待定（依赖黄金测试集落地）
 - [ ] 目前的日志系统似乎并不是"应记尽记"的，比如pytest有些就不会体现在日志里（例如`pixi run pytest tests/ -m "not integration" -v`就不会被记录），分析一下怎么做符合最佳实践
-
 - [ ] 完成 [test-future-directions.md](.trae\documents\test-suite\test-future-directions.md) 
-- [x] 全面更新文档，主要改善可读性，例如把README作为唯一且易读的文档入口，整理一些过时的文档，精简总的文档数目，重新组织目前文档的存放路径 ✅ 2026-04-18 07:45:16
 - [ ] `exp_configs`当中一些模板yaml是不是有可能已经不符合现在版本了？等实验系统新版做好可以整个整理一下。
 - [ ] `pixi run pytest tests/ -m "integration" -v` 需要`10 passed, 385 deselected, 1 warning in 182.32s (0:03:02)`，用的时间有点久啊，是不是测试策略不对？看看是否有优化空间 
-- [x] 更新README和CLAUDE两份文件，同步到目前版本，并调整开发重心
 - [ ] 核实 [05-open-source-readiness.md](.trae\code_reviews\v0.1.5\05-open-source-readiness.md) 
 - [ ] 实验资产包里有没有一并记录CLI里面打印的那个很漂亮的token summary，以及详细到每个问题消耗多少token的全部token消耗数据？一打眼好像都没看见 📋 已安排（需了解现有资产包结构）
 - [ ] 现在的backlog好像并不会记录issue的详细信息啊。有空参考github现在成熟的做法优化一下，不然光有FEAT一句话，很多细节都可能跑偏的。最好是如果新登记进来一个待办，那么在backlog文档本身里面，或者是用超链接引用，要有详细的记录Issue的地方。如果是其他地方捕捉过来的issue，就直接引用那个就可以了。
 - [ ] 我手写的TODO应该让claude.md自动给它捕捉进入backlog，省得还要我手动触发
 - [ ] 想到一种做法：TODO归我人类，backlog归AI。那么我在这里写下了新的东西（相当于提issue），AI呢把它归档到backlog，那么归档之后这边也不删（所以这边也会按时间倒序越来越长），而是在我的手写消息后面标一下，打一个时间戳，再把我前面的钩打上。意思就是说AI已经读到这条issue，并且以什么样的一个编号归进了backlog了，但这边的消息还是留给我自己翻看用。那么AI干活的时候它主要就参考backlog，TODO这边就完全是我人类的一个待办笔记了。
-- [x] 把两版TODOmerge起来 10:43 周日
 - [ ] golden_qa其实是一个`datasource_specific`的东西，而现在是写死了一版。要做一优化：从新用户的角度，TA刚部署这个项目，进来就看到这个东西，知道它是测试集的一部分，然后现在有的这一版呢，是基于哪些PDF做了一个meal，而这批PDF呢，这个用户如果手头正好有的话，可以复用；如果没有，就也要有个指引文档，告诉TA，应该怎么样子载入TA手头的研报/年报数据集，做meal，精调golden_qa，替代掉原有的测试集，并连通API跑一次保活测试确认能通（进阶：这整件事也可以写一个脚本）
 - [ ] 那个什么lint和ruff的安排添加一下可以
 - [ ] 入库一下Qwen推荐的“使用`DATA_DIR`配置项指定系统级别的RAG数据源”，免去mklink的麻烦
@@ -63,15 +59,12 @@
 
 ## 2026-04-19
 
-
-
-
-
 ### verbose
 
-
-
-
+- [x] 重写问题生成策略，与chunk解耦，看看考虑做成基于整个MD的（已于v0.1.7实现）
+- [x] 全面更新文档，主要改善可读性，例如把README作为唯一且易读的文档入口，整理一些过时的文档，精简总的文档数目，重新组织目前文档的存放路径 ✅ 2026-04-18 07:45:16
+- [x] 更新README和CLAUDE两份文件，同步到目前版本，并调整开发重心
+- [x] 把两版TODOmerge起来 10:43 周日
 
 ## 2026-04-18
 

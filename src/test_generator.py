@@ -1,5 +1,6 @@
 import json
 import random
+import re
 import warnings
 from datetime import datetime
 from pathlib import Path
@@ -9,6 +10,7 @@ from loguru import logger
 
 from src.generator import Generator
 from src.meal import ArtifactCache, MealConfig, MealManager
+from src.test_set_manager import TestSetManager, TestSetMetadata
 from src.utils import ensure_dir, get_llm_config
 
 
@@ -715,34 +717,28 @@ class TestSetGenerator:
             return None
 
     def _save_test_set(
-        self, meal_name: str, test_set: Dict[str, Any], filename: str
+        self, meal_name: str, test_set: Dict[str, Any], name: str
     ) -> Path:
         """Save a test set to a JSON file in the meal's test_sets directory.
 
         Args:
             meal_name: Name of the meal the test set belongs to.
             test_set: Test set dictionary to serialize.
-            filename: Base filename without extension.
+            name: Name for the test set file (without extension).
 
         Returns:
             Path to the saved JSON file.
         """
-        meal_manager = MealManager(self.config)
-        meal_dir = meal_manager.get_meal_dir(meal_name)
-        test_sets_dir = meal_dir / "test_sets"
-        ensure_dir(str(test_sets_dir))
-
-        output_path = test_sets_dir / f"{filename}.json"
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(test_set, f, ensure_ascii=False, indent=2)
-
-        logger.info(f"Test set saved to {output_path}")
-        return output_path
+        if "metadata" in test_set:
+            test_set["metadata"]["name"] = name
+        test_set_manager = TestSetManager(self.config)
+        return test_set_manager.save_test_set(meal_name, test_set)
 
     def generate_document_based_questions(
         self,
         meal_name: str,
         num_questions: int = None,
+        name: str = None,
         type_distribution: Optional[Dict[str, float]] = None,
         llm_preset: str = "default",
         token_tracker: Optional[Any] = None,
@@ -756,6 +752,8 @@ class TestSetGenerator:
             meal_name: Name of the meal to generate questions for.
             num_questions: Total number of questions to generate. Defaults to
                 the configured default_num_questions.
+            name: Name for the test set. Defaults to
+                f"document_level_n{num_questions}".
             type_distribution: Custom distribution of question types. Keys are
                 type names ('single_fact', 'multi_fact', etc.) and values are
                 proportions (0.0-1.0). Defaults to TYPE_DISTRIBUTION.
@@ -773,6 +771,7 @@ class TestSetGenerator:
                 could be generated.
         """
         num_questions = num_questions or self.default_num_questions
+        name = name or f"document_level_n{num_questions}"
         type_distribution = type_distribution or self.TYPE_DISTRIBUTION
 
         meal_manager = MealManager(self.config)
@@ -841,8 +840,24 @@ class TestSetGenerator:
                 if qa is not None:
                     qa["id"] = f"q{question_id:03d}"
                     qa["source_document"] = doc_name
-                    qa["source_files"] = [source_path]
                     qa["category"] = "document"
+
+                    if q_type == "irrelevant":
+                        qa["source_files"] = []
+                        qa["source_chunks"] = []
+                        qa["expect_retrieval"] = False
+                    elif q_type == "missing":
+                        qa["source_files"] = [source_path]
+                        qa["source_chunks"] = []
+                        qa["expect_no_answer"] = True
+                        qa["expect_retrieval"] = False
+                    else:
+                        qa["source_files"] = [source_path]
+                        answer_text = qa.get("answer", "")
+                        qa["source_chunks"] = self._locate_answer_chunks(
+                            answer_text, source_path
+                        )
+
                     questions.append(qa)
                     question_id += 1
                 else:
@@ -852,34 +867,259 @@ class TestSetGenerator:
                         f"{failed_count}/{total_attempts}"
                     )
 
+        if len(questions) < num_questions:
+            deficit = num_questions - len(questions)
+            logger.info(
+                f"Main loop generated {len(questions)}/{num_questions} questions. "
+                f"Supplementing {deficit} more questions..."
+            )
+            doc_names = list(document_contents.keys())
+            all_types = list(self.TYPE_DISTRIBUTION.keys())
+            extra_attempt = 0
+            max_extra_attempts = deficit * 3
+
+            while len(questions) < num_questions and extra_attempt < max_extra_attempts:
+                extra_attempt += 1
+                doc_name = doc_names[extra_attempt % len(doc_names)]
+                q_type = all_types[extra_attempt % len(all_types)]
+                doc_data = document_contents[doc_name]
+                doc_content = doc_data["content"]
+                source_path = doc_data["source_path"]
+
+                logger.info(
+                    f"Supplemental question {len(questions) + 1}/{num_questions} "
+                    f"(type={q_type}, doc={doc_name})..."
+                )
+
+                qa = self._generate_single_document_question(
+                    doc_content, q_type, generator
+                )
+
+                if qa is not None:
+                    qa["id"] = f"q{question_id:03d}"
+                    qa["source_document"] = doc_name
+                    qa["category"] = "document"
+
+                    if q_type == "irrelevant":
+                        qa["source_files"] = []
+                        qa["source_chunks"] = []
+                        qa["expect_retrieval"] = False
+                    elif q_type == "missing":
+                        qa["source_files"] = [source_path]
+                        qa["source_chunks"] = []
+                        qa["expect_no_answer"] = True
+                        qa["expect_retrieval"] = False
+                    else:
+                        qa["source_files"] = [source_path]
+                        answer_text = qa.get("answer", "")
+                        qa["source_chunks"] = self._locate_answer_chunks(
+                            answer_text, source_path
+                        )
+
+                    questions.append(qa)
+                    question_id += 1
+                else:
+                    failed_count += 1
+                    logger.warning(
+                        f"Supplemental question failed, total failures: "
+                        f"{failed_count}"
+                    )
+
         if not questions:
             raise ValueError("No questions could be generated")
 
         quality_metrics = self._calculate_quality_metrics(questions)
 
-        test_set = {
-            "name": f"document_level_n{num_questions}",
-            "meal_data_id": meal_config.data_id,
-            "meal_name": meal_name,
-            "strategy": "document",
-            "created_at": datetime.now().isoformat(),
-            "generation_config": {
+        metadata = TestSetMetadata(
+            name=name,
+            meal_id=meal_config.data_id,
+            created_at=datetime.now().isoformat(),
+            updated_at=datetime.now().isoformat(),
+            generation={
+                "strategy": "document",
                 "num_questions": num_questions,
                 "type_distribution": type_distribution,
                 "llm_preset": llm_preset,
             },
+            user_defined=False,
+        )
+
+        test_set = {
+            "metadata": metadata.to_dict(),
             "quality_metrics": quality_metrics,
             "questions": questions,
         }
 
-        filename = f"document_level_n{num_questions}"
-        self._save_test_set(meal_name, test_set, filename)
+        self._save_test_set(meal_name, test_set, name)
+
+        if len(questions) < num_questions:
+            logger.warning(
+                f"Could only generate {len(questions)}/{num_questions} questions "
+                f"after supplemental attempts"
+            )
 
         logger.success(
             f"Generated {len(questions)}/{num_questions} questions "
             f"for meal '{meal_name}' (strategy: document)"
         )
         return test_set
+
+    def supplement_document_based_questions(
+        self,
+        meal_name: str,
+        existing_test_set: Dict[str, Any],
+        target_count: int,
+        llm_preset: str = "default",
+        token_tracker: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """Supplement an existing test set with additional questions.
+
+        Generates only the deficit number of questions and appends them to
+        the existing test set, avoiding wasteful full regeneration.
+
+        Args:
+            meal_name: Name of the meal to generate questions for.
+            existing_test_set: Existing test set dictionary to supplement.
+            target_count: Target total number of questions.
+            llm_preset: LLM preset name from the configuration.
+            token_tracker: Optional token usage tracker.
+
+        Returns:
+            Updated test set dictionary with supplemented questions.
+
+        Raises:
+            ValueError: If no documents are found for the meal.
+        """
+        existing_questions = existing_test_set.get("questions", [])
+        deficit = target_count - len(existing_questions)
+
+        if deficit <= 0:
+            logger.info(
+                f"Existing test set already has {len(existing_questions)} "
+                f"questions, no supplementation needed"
+            )
+            return existing_test_set
+
+        logger.info(
+            f"Supplementing test set for meal '{meal_name}': "
+            f"existing={len(existing_questions)}, target={target_count}, "
+            f"deficit={deficit}"
+        )
+
+        meal_manager = MealManager(self.config)
+        meal_config = meal_manager.load_meal(meal_name)
+
+        document_contents = self._load_full_documents(meal_config)
+        if not document_contents:
+            raise ValueError(f"No documents found for meal '{meal_name}'")
+
+        llm_config = get_llm_config(self.config, llm_preset)
+        generator = Generator(
+            model_name=llm_config["model_name"],
+            api_key=llm_config["api_key"],
+            base_url=llm_config["base_url"],
+            temperature=0.7,
+            max_tokens=1024,
+            token_tracker=token_tracker,
+        )
+
+        doc_names = list(document_contents.keys())
+        all_types = list(self.TYPE_DISTRIBUTION.keys())
+        question_id = len(existing_questions) + 1
+        new_questions = []
+        failed_count = 0
+        max_attempts = deficit * 3
+        attempt = 0
+
+        while len(new_questions) < deficit and attempt < max_attempts:
+            attempt += 1
+            doc_name = doc_names[attempt % len(doc_names)]
+            q_type = all_types[attempt % len(all_types)]
+            doc_data = document_contents[doc_name]
+            doc_content = doc_data["content"]
+            source_path = doc_data["source_path"]
+
+            logger.info(
+                f"Supplementing question {len(new_questions) + 1}/{deficit} "
+                f"(type={q_type}, doc={doc_name})..."
+            )
+
+            qa = self._generate_single_document_question(
+                doc_content, q_type, generator
+            )
+
+            if qa is not None:
+                qa["id"] = f"q{question_id:03d}"
+                qa["source_document"] = doc_name
+                qa["category"] = "document"
+
+                if q_type == "irrelevant":
+                    qa["source_files"] = []
+                    qa["source_chunks"] = []
+                    qa["expect_retrieval"] = False
+                elif q_type == "missing":
+                    qa["source_files"] = [source_path]
+                    qa["source_chunks"] = []
+                    qa["expect_no_answer"] = True
+                    qa["expect_retrieval"] = False
+                else:
+                    qa["source_files"] = [source_path]
+                    answer_text = qa.get("answer", "")
+                    qa["source_chunks"] = self._locate_answer_chunks(
+                        answer_text, source_path
+                    )
+
+                new_questions.append(qa)
+                question_id += 1
+            else:
+                failed_count += 1
+                logger.warning(
+                    f"Supplemental question failed, total failures: "
+                    f"{failed_count}/{attempt}"
+                )
+
+        if not new_questions:
+            logger.warning("Could not generate any supplemental questions")
+            return existing_test_set
+
+        all_questions = existing_questions + new_questions
+        quality_metrics = self._calculate_quality_metrics(all_questions)
+
+        existing_test_set["questions"] = all_questions
+        existing_test_set["quality_metrics"] = quality_metrics
+
+        if "metadata" in existing_test_set:
+            existing_test_set["metadata"]["updated_at"] = datetime.now().isoformat()
+            if "generation" in existing_test_set["metadata"]:
+                existing_test_set["metadata"]["generation"]["num_questions"] = target_count
+            audit_entry = {
+                "event": "supplemented",
+                "added_count": len(new_questions),
+                "timestamp": datetime.now().isoformat(),
+            }
+            existing_test_set["metadata"].setdefault("audit_log", []).append(audit_entry)
+            test_set_name = existing_test_set["metadata"]["name"]
+        else:
+            if "generation_config" not in existing_test_set:
+                existing_test_set["generation_config"] = {}
+            existing_test_set["generation_config"]["num_questions"] = target_count
+            test_set_name = existing_test_set.get("name", f"document_level_n{target_count}")
+
+        self._save_test_set(meal_name, existing_test_set, test_set_name)
+
+        logger.success(
+            f"Supplemented test set: {len(existing_questions)} + "
+            f"{len(new_questions)} = {len(all_questions)}/{target_count} "
+            f"questions for meal '{meal_name}'"
+        )
+
+        if len(all_questions) < target_count:
+            logger.warning(
+                f"Could only reach {len(all_questions)}/{target_count} "
+                f"questions after supplementation"
+            )
+
+        return existing_test_set
 
     def _load_full_documents(
         self, meal_config: MealConfig
@@ -1197,3 +1437,227 @@ class TestSetGenerator:
             "authenticity_pass_rate": authenticity_passed / total,
             "type_distribution": type_counts,
         }
+
+    def _locate_answer_chunks(
+        self,
+        answer: str,
+        source_path: str,
+        chunks_dir: str = "data/chunks",
+        adjacent_tolerance: int = 1,
+    ) -> List[str]:
+        """Locate chunk IDs that contain information relevant to the answer.
+
+        Scans JSONL files in chunks_dir to find chunks belonging to the
+        source document, then matches chunks against the answer text using
+        keyword and substring overlap heuristics.
+
+        Args:
+            answer: The answer text to locate in chunks.
+            source_path: Relative path of the source document (e.g.
+                'research_reports/doc.md'), using forward slashes.
+            chunks_dir: Directory containing JSONL chunk files. Defaults to
+                the configured chunker output directory.
+            adjacent_tolerance: Number of adjacent chunks (by chunk_index)
+                to include around each matched chunk. Defaults to 1.
+
+        Returns:
+            List of chunk_id strings for matched and adjacent chunks.
+            Returns an empty list if no chunks match or the directory is
+            not found.
+        """
+        if not answer or not source_path:
+            return []
+
+        resolved_chunks_dir = self.config.get("chunker", {}).get(
+            "output_dir", chunks_dir
+        )
+        chunks_path = Path(resolved_chunks_dir)
+        if not chunks_path.exists():
+            logger.warning(f"Chunks directory not found: {chunks_path}")
+            return []
+
+        normalized_source = source_path.replace("\\", "/")
+
+        doc_chunks: List[Dict[str, Any]] = []
+        jsonl_files = list(chunks_path.rglob("*.jsonl"))
+
+        for jsonl_file in jsonl_files:
+            try:
+                with open(jsonl_file, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        chunk = json.loads(line)
+                        chunk_source = (
+                            chunk.get("metadata", {})
+                            .get("source", "")
+                            .replace("\\", "/")
+                        )
+                        if chunk_source == normalized_source:
+                            doc_chunks.append(chunk)
+            except Exception as e:
+                logger.warning(f"Failed to read {jsonl_file}: {str(e)}")
+                continue
+
+        if not doc_chunks:
+            logger.debug(
+                f"No chunks found for source_path: {source_path}"
+            )
+            return []
+
+        doc_chunks.sort(
+            key=lambda c: c.get("metadata", {}).get("chunk_index", 0)
+        )
+
+        key_sentences = self._extract_key_sentences(answer)
+        key_terms = self._extract_key_terms(answer)
+
+        matched_indices: set = set()
+        for i, chunk in enumerate(doc_chunks):
+            chunk_text = chunk.get("text", "")
+            if self._chunk_matches_answer(
+                chunk_text, key_sentences, key_terms
+            ):
+                matched_indices.add(i)
+
+        if not matched_indices:
+            logger.debug(
+                f"No chunks matched for answer in source: {source_path}"
+            )
+            return []
+
+        expanded_indices: set = set()
+        for idx in matched_indices:
+            for offset in range(-adjacent_tolerance, adjacent_tolerance + 1):
+                adj = idx + offset
+                if 0 <= adj < len(doc_chunks):
+                    expanded_indices.add(adj)
+
+        expanded_indices.discard(-1)
+
+        result = [doc_chunks[i].get("chunk_id", "") for i in sorted(expanded_indices)]
+        result = [cid for cid in result if cid]
+
+        return result
+
+    def _extract_key_sentences(self, answer: str) -> List[str]:
+        """Extract key sentences from an answer text.
+
+        Splits the answer by sentence delimiters and filters for sentences
+        that contain specific data such as numbers, proper nouns, or
+        domain-specific terms.
+
+        Args:
+            answer: The answer text to extract sentences from.
+
+        Returns:
+            List of key sentences that likely contain answer-specific
+            information.
+        """
+        sentences = re.split(r'[。！？\n]', answer)
+        sentences = [s.strip() for s in sentences if len(s.strip()) > 4]
+
+        key_sentences = []
+        for sent in sentences:
+            has_number = bool(re.search(r'\d', sent))
+            has_percentage = '%' in sent
+            has_domain_terms = any(
+                kw in sent
+                for kw in ['增长', '下降', '上升', '减少', '增加',
+                           '收入', '利润', '营收', '市值', '占比',
+                           '规模', '产量', '销量', '价格', '成本']
+            )
+            if has_number or has_percentage or has_domain_terms:
+                key_sentences.append(sent)
+
+        if not key_sentences:
+            key_sentences = [s for s in sentences if len(s) >= 6][:5]
+
+        return key_sentences
+
+    def _extract_key_terms(self, answer: str) -> List[str]:
+        """Extract key terms from an answer text for chunk matching.
+
+        Identifies meaningful terms including numbers with units, proper
+        nouns, and domain-specific keywords.
+
+        Args:
+            answer: The answer text to extract terms from.
+
+        Returns:
+            List of key term strings.
+        """
+        terms: List[str] = []
+
+        number_patterns = re.findall(
+            r'\d+\.?\d*[万亿千百%％]?', answer
+        )
+        terms.extend(number_patterns)
+
+        proper_nouns = re.findall(r'[\u4e00-\u9fff]{2,8}(?:股份|集团|公司|行业|市场|技术|产品|业务|报告|年度)', answer)
+        terms.extend(proper_nouns)
+
+        domain_keywords = [
+            '增长', '下降', '上升', '减少', '增加', '收入', '利润',
+            '营收', '市值', '占比', '规模', '产量', '销量', '价格',
+            '成本', '投资', '融资', '估值', '盈利', '亏损', '负债',
+            '资产', '现金流', '毛利率', '净利率', 'ROE', 'ROA',
+        ]
+        for kw in domain_keywords:
+            if kw in answer:
+                terms.append(kw)
+
+        return list(set(terms))
+
+    def _chunk_matches_answer(
+        self,
+        chunk_text: str,
+        key_sentences: List[str],
+        key_terms: List[str],
+        term_threshold: int = 2,
+        overlap_threshold: float = 0.5,
+    ) -> bool:
+        """Check if a chunk text contains information relevant to the answer.
+
+        A chunk is considered relevant if either:
+        - It contains at least ``term_threshold`` key terms from the answer, OR
+        - A key sentence from the answer has > ``overlap_threshold`` character
+          overlap with the chunk text.
+
+        Args:
+            chunk_text: The text content of the chunk.
+            key_sentences: Key sentences extracted from the answer.
+            key_terms: Key terms extracted from the answer.
+            term_threshold: Minimum number of key terms that must appear in
+                the chunk for a match. Defaults to 2.
+            overlap_threshold: Minimum character overlap ratio for a key
+                sentence to be considered matching. Defaults to 0.5.
+
+        Returns:
+            True if the chunk is considered relevant to the answer.
+        """
+        if not key_terms and not key_sentences:
+            return False
+
+        matched_terms = sum(1 for term in key_terms if term in chunk_text)
+        if matched_terms >= term_threshold:
+            return True
+
+        for sentence in key_sentences:
+            if len(sentence) == 0:
+                continue
+            overlap_chars = 0
+            window_size = min(len(sentence), len(chunk_text))
+            for start in range(0, len(chunk_text) - window_size + 1):
+                substring = chunk_text[start:start + len(sentence)]
+                common = sum(
+                    1 for a, b in zip(sentence, substring) if a == b
+                )
+                ratio = common / len(sentence)
+                if ratio > overlap_chars:
+                    overlap_chars = ratio
+            if overlap_chars > overlap_threshold:
+                return True
+
+        return False

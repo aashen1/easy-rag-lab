@@ -171,9 +171,19 @@ data:
     seed: 42
 
 test_sets:
-  - strategy: "factual"       # 事实性问题
-    num_questions: 10         # 问题数量
-    seed: 100
+  - name: "factual_test"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 10
+      seed: 100
+      type_distribution:
+        single_fact: 0.80
+        multi_fact: 0.10
+        reasoning: 0.05
+        comparative: 0.05
+        missing: 0.0
+        irrelevant: 0.0
 
 variants:
   - name: "baseline"
@@ -262,12 +272,32 @@ data:
     seed: 42
 
 test_sets:
-  - strategy: "factual"
-    num_questions: 20
-    seed: 100
-  - strategy: "boundary"
-    num_questions: 15
-    seed: 101
+  - name: "single_fact_test"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 20
+      seed: 100
+      type_distribution:
+        single_fact: 0.80
+        multi_fact: 0.10
+        reasoning: 0.05
+        comparative: 0.05
+        missing: 0.0
+        irrelevant: 0.0
+  - name: "multi_fact_test"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 15
+      seed: 101
+      type_distribution:
+        single_fact: 0.10
+        multi_fact: 0.80
+        reasoning: 0.05
+        comparative: 0.05
+        missing: 0.0
+        irrelevant: 0.0
 
 variants:
   - name: "chunk_512_overlap_0"
@@ -318,15 +348,45 @@ data:
     seed: 42
 
 test_sets:
-  - strategy: "factual"
-    num_questions: 30
-    seed: 200
-  - strategy: "boundary"
-    num_questions: 25
-    seed: 201
-  - strategy: "multi-hop"
-    num_questions: 15
-    seed: 202
+  - name: "single_fact_test"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 30
+      seed: 200
+      type_distribution:
+        single_fact: 0.80
+        multi_fact: 0.10
+        reasoning: 0.05
+        comparative: 0.05
+        missing: 0.0
+        irrelevant: 0.0
+  - name: "boundary_test"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 25
+      seed: 201
+      type_distribution:
+        single_fact: 0.30
+        multi_fact: 0.30
+        reasoning: 0.15
+        comparative: 0.15
+        missing: 0.10
+        irrelevant: 0.0
+  - name: "multi_hop_test"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 15
+      seed: 202
+      type_distribution:
+        single_fact: 0.10
+        multi_fact: 0.10
+        reasoning: 0.60
+        comparative: 0.15
+        missing: 0.05
+        irrelevant: 0.0
 
 variants:
   - name: "chunk_256_overlap_0"
@@ -418,15 +478,45 @@ data:
     seed: 42
 
 test_sets:
-  - strategy: "factual"
-    num_questions: 25
-    seed: 300
-  - strategy: "boundary"
-    num_questions: 20
-    seed: 301
-  - strategy: "multi-hop"
-    num_questions: 10
-    seed: 302
+  - name: "single_fact_test"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 25
+      seed: 300
+      type_distribution:
+        single_fact: 0.80
+        multi_fact: 0.10
+        reasoning: 0.05
+        comparative: 0.05
+        missing: 0.0
+        irrelevant: 0.0
+  - name: "boundary_test"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 20
+      seed: 301
+      type_distribution:
+        single_fact: 0.30
+        multi_fact: 0.30
+        reasoning: 0.15
+        comparative: 0.15
+        missing: 0.10
+        irrelevant: 0.0
+  - name: "multi_hop_test"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 10
+      seed: 302
+      type_distribution:
+        single_fact: 0.10
+        multi_fact: 0.10
+        reasoning: 0.60
+        comparative: 0.15
+        missing: 0.05
+        irrelevant: 0.0
 
 variants:
   - name: "baseline"
@@ -1006,23 +1096,42 @@ data:
 
 ```yaml
 test_sets:
-  - strategy: "factual"           # 问题生成策略
-    num_questions: 20             # 问题数量
-    seed: 100                     # 随机种子
-  - strategy: "boundary"
-    num_questions: 15
-    seed: 101
+  - name: "golden_test"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 20
+      seed: 100
+      type_distribution:
+        single_fact: 0.30
+        multi_fact: 0.25
+        reasoning: 0.15
+        comparative: 0.15
+        missing: 0.10
+        irrelevant: 0.05
+  - name: "golden_test_2"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 15
+      seed: 101
+      type_distribution:
+        single_fact: 0.10
+        multi_fact: 0.80
+        reasoning: 0.05
+        comparative: 0.05
+        missing: 0.0
+        irrelevant: 0.0
 ```
 
-**支持的问题策略**：
-- `factual`: 事实性问题，从单个 chunk 中提取信息
-- `boundary`: 边界问题，测试跨 chunk 信息检索
-- `multi-hop`: 多跳问题，需要综合多个非相邻 chunk 的信息
+**支持的生成策略**：
+- `document`: 基于完整文档生成问题（推荐）
+  - 通过 `type_distribution` 控制问题类型分布
+  - 类型包括：`single_fact`（单知识点）、`multi_fact`（多知识点）、`reasoning`（推理）、`comparative`（对比）、`missing`（缺失）、`irrelevant`（无关）
 
 **命名规范**：
-- 配置文件中使用 **kebab-case**（连字符），如 `multi-hop`
-- 代码内部自动转换为 **snake_case**（下划线），如 `multi_hop`
-- 新增策略时请遵循此规范，确保配置文件中使用 kebab-case
+- 每个 test set 必须有 `name` 字段
+- `on_missing` 控制查找失败时的行为：`auto` / `clean_only` / `strict`
 
 ### 4. 超参数变体 (variants)
 

@@ -553,3 +553,126 @@ class TestGenerateComparisonReport:
         assert "By Category" in report
         assert "factual" in report
         assert "boundary" in report
+
+
+class TestCLITestSetGeneration:
+    def test_cli_with_name_parameter(self):
+        import argparse
+        from main import _handle_generate_test_set
+
+        mock_meal_manager = MagicMock()
+        mock_meal_manager.meal_exists.return_value = True
+
+        args = argparse.Namespace(
+            generate_test_set="test_meal",
+            strategy="document",
+            num_questions=10,
+            name="custom_test_set",
+            llm_preset="default",
+            seed=None,
+        )
+
+        config = {"test_generation": {"max_retries": 3}}
+
+        with patch("src.test_generator.TestSetGenerator") as MockGenerator:
+            mock_generator = MagicMock()
+            mock_generator.generate_document_based_questions.return_value = {
+                "name": "custom_test_set",
+                "questions": [{"question": "test"}],
+            }
+            MockGenerator.return_value = mock_generator
+
+            _handle_generate_test_set(mock_meal_manager, config, args)
+
+            mock_generator.generate_document_based_questions.assert_called_once()
+            call_kwargs = mock_generator.generate_document_based_questions.call_args.kwargs
+            assert call_kwargs["name"] == "custom_test_set"
+            assert call_kwargs["meal_name"] == "test_meal"
+            assert call_kwargs["num_questions"] == 10
+
+    def test_cli_without_name_parameter(self):
+        import argparse
+        from main import _handle_generate_test_set
+
+        mock_meal_manager = MagicMock()
+        mock_meal_manager.meal_exists.return_value = True
+
+        args = argparse.Namespace(
+            generate_test_set="test_meal",
+            strategy="document",
+            num_questions=10,
+            name=None,
+            llm_preset="default",
+            seed=None,
+        )
+
+        config = {"test_generation": {"max_retries": 3}}
+
+        with patch("src.test_generator.TestSetGenerator") as MockGenerator:
+            mock_generator = MagicMock()
+            mock_generator.generate_document_based_questions.return_value = {
+                "name": "document_level_n10",
+                "questions": [{"question": "test"}],
+            }
+            MockGenerator.return_value = mock_generator
+
+            _handle_generate_test_set(mock_meal_manager, config, args)
+
+            mock_generator.generate_document_based_questions.assert_called_once()
+            call_kwargs = mock_generator.generate_document_based_questions.call_args.kwargs
+            assert call_kwargs["name"] is None
+
+    def test_cli_legacy_strategy(self):
+        import argparse
+        from main import _handle_generate_test_set
+
+        mock_meal_manager = MagicMock()
+        mock_meal_manager.meal_exists.return_value = True
+
+        args = argparse.Namespace(
+            generate_test_set="test_meal",
+            strategy="factual",
+            num_questions=10,
+            name="ignored_name",
+            llm_preset="default",
+            seed=42,
+        )
+
+        config = {"test_generation": {"max_retries": 3}}
+
+        with patch("src.test_generator.TestSetGenerator") as MockGenerator:
+            mock_generator = MagicMock()
+            mock_generator.generate_test_set.return_value = {
+                "name": "factual_n10",
+                "questions": [{"question": "test"}],
+            }
+            MockGenerator.return_value = mock_generator
+
+            _handle_generate_test_set(mock_meal_manager, config, args)
+
+            mock_generator.generate_test_set.assert_called_once()
+            call_kwargs = mock_generator.generate_test_set.call_args.kwargs
+            assert call_kwargs["strategy"] == "factual"
+            assert call_kwargs["seed"] == 42
+
+    def test_cli_meal_not_found(self):
+        import argparse
+        import sys
+        from main import _handle_generate_test_set
+
+        mock_meal_manager = MagicMock()
+        mock_meal_manager.meal_exists.return_value = False
+
+        args = argparse.Namespace(
+            generate_test_set="nonexistent_meal",
+            strategy="document",
+            num_questions=10,
+            name="test_set",
+            llm_preset="default",
+            seed=None,
+        )
+
+        config = {}
+
+        with pytest.raises(SystemExit):
+            _handle_generate_test_set(mock_meal_manager, config, args)
