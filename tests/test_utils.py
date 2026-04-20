@@ -1,10 +1,10 @@
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
 
-from src.utils import detect_document_category, ensure_dir, get_env_var, get_llm_config, load_config
+from src.utils import create_llm_client, detect_document_category, ensure_dir, get_env_var, get_llm_config, load_config
 
 
 @pytest.mark.unit
@@ -249,3 +249,149 @@ class TestDetectDocumentCategory:
         result = detect_document_category("data/raw/annual_report/company_a.pdf", custom_mapping)
 
         assert result == "unknown"
+
+
+@pytest.mark.unit
+class TestCreateLlmClient:
+    def _make_llm_config(self, **overrides):
+        base = {
+            "api_key": "test-api-key",
+            "base_url": "https://api.longcat.chat",
+            "model_name": "test-model",
+        }
+        base.update(overrides)
+        return base
+
+    @patch("src.utils.Anthropic", create=True)
+    def test_sdk_mode_creates_anthropic_client(self, mock_anthropic_cls):
+        mock_client = MagicMock()
+        mock_anthropic_cls.return_value = mock_client
+
+        with patch.dict("sys.modules", {"anthropic": MagicMock(Anthropic=mock_anthropic_cls)}):
+            result = create_llm_client(
+                llm_config=self._make_llm_config(),
+                mode="sdk",
+            )
+
+        mock_anthropic_cls.assert_called_once_with(
+            api_key="dummy",
+            base_url="https://api.longcat.chat/anthropic",
+            default_headers={
+                "Authorization": "Bearer test-api-key",
+                "Content-Type": "application/json",
+            },
+        )
+        assert result == mock_client
+
+    @patch("src.utils.Anthropic", create=True)
+    def test_sdk_mode_base_url_already_has_anthropic_suffix(self, mock_anthropic_cls):
+        mock_client = MagicMock()
+        mock_anthropic_cls.return_value = mock_client
+
+        with patch.dict("sys.modules", {"anthropic": MagicMock(Anthropic=mock_anthropic_cls)}):
+            create_llm_client(
+                llm_config=self._make_llm_config(base_url="https://api.longcat.chat/anthropic"),
+                mode="sdk",
+            )
+
+        mock_anthropic_cls.assert_called_once_with(
+            api_key="dummy",
+            base_url="https://api.longcat.chat/anthropic",
+            default_headers={
+                "Authorization": "Bearer test-api-key",
+                "Content-Type": "application/json",
+            },
+        )
+
+    @patch("src.utils.Anthropic", create=True)
+    def test_sdk_mode_base_url_trailing_slash(self, mock_anthropic_cls):
+        mock_client = MagicMock()
+        mock_anthropic_cls.return_value = mock_client
+
+        with patch.dict("sys.modules", {"anthropic": MagicMock(Anthropic=mock_anthropic_cls)}):
+            create_llm_client(
+                llm_config=self._make_llm_config(base_url="https://api.longcat.chat/"),
+                mode="sdk",
+            )
+
+        mock_anthropic_cls.assert_called_once_with(
+            api_key="dummy",
+            base_url="https://api.longcat.chat/anthropic",
+            default_headers={
+                "Authorization": "Bearer test-api-key",
+                "Content-Type": "application/json",
+            },
+        )
+
+    def test_invalid_mode_raises_value_error(self):
+        with pytest.raises(ValueError, match="Unsupported LLM client mode: invalid"):
+            create_llm_client(
+                llm_config=self._make_llm_config(),
+                mode="invalid",
+            )
+
+    def test_langchain_mode_creates_wrapper(self):
+        mock_chat_cls = MagicMock()
+        mock_wrapper_cls = MagicMock()
+        mock_chat_instance = MagicMock()
+        mock_wrapper_instance = MagicMock()
+        mock_chat_cls.return_value = mock_chat_instance
+        mock_wrapper_cls.return_value = mock_wrapper_instance
+
+        mock_lc_module = MagicMock(ChatAnthropic=mock_chat_cls)
+        mock_ragas_llm_module = MagicMock(LangchainLLMWrapper=mock_wrapper_cls)
+
+        with patch.dict("sys.modules", {
+            "langchain_anthropic": mock_lc_module,
+            "ragas": MagicMock(),
+            "ragas.llms": mock_ragas_llm_module,
+        }):
+            result = create_llm_client(
+                llm_config=self._make_llm_config(),
+                mode="langchain",
+            )
+
+        mock_chat_cls.assert_called_once_with(
+            model="test-model",
+            api_key="dummy",
+            base_url="https://api.longcat.chat/anthropic",
+            default_headers={
+                "Authorization": "Bearer test-api-key",
+                "Content-Type": "application/json",
+            },
+            max_tokens=4096,
+            temperature=0.0,
+        )
+        mock_wrapper_cls.assert_called_once_with(mock_chat_instance)
+        assert result == mock_wrapper_instance
+
+    def test_langchain_mode_custom_max_tokens_and_temperature(self):
+        mock_chat_cls = MagicMock()
+        mock_wrapper_cls = MagicMock()
+        mock_chat_cls.return_value = MagicMock()
+        mock_wrapper_cls.return_value = MagicMock()
+
+        mock_lc_module = MagicMock(ChatAnthropic=mock_chat_cls)
+        mock_ragas_llm_module = MagicMock(LangchainLLMWrapper=mock_wrapper_cls)
+
+        with patch.dict("sys.modules", {
+            "langchain_anthropic": mock_lc_module,
+            "ragas": MagicMock(),
+            "ragas.llms": mock_ragas_llm_module,
+        }):
+            create_llm_client(
+                llm_config=self._make_llm_config(max_tokens=8192, temperature=0.5),
+                mode="langchain",
+            )
+
+        mock_chat_cls.assert_called_once_with(
+            model="test-model",
+            api_key="dummy",
+            base_url="https://api.longcat.chat/anthropic",
+            default_headers={
+                "Authorization": "Bearer test-api-key",
+                "Content-Type": "application/json",
+            },
+            max_tokens=8192,
+            temperature=0.5,
+        )
