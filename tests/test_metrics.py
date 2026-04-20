@@ -544,7 +544,7 @@ class TestCalculateAnswerRelevancy:
                 api_key="test-key"
             )
 
-    @patch("eval.metrics.Anthropic")
+    @patch("src.llm_client.Anthropic")
     def test_successful_relevancy_calculation(self, mock_anthropic):
         mock_client = MagicMock()
         mock_anthropic.return_value = mock_client
@@ -563,7 +563,7 @@ class TestCalculateAnswerRelevancy:
         assert score == 1.0
         mock_client.messages.create.assert_called_once()
 
-    @patch("eval.metrics.Anthropic")
+    @patch("src.llm_client.Anthropic")
     def test_low_relevancy_calculation(self, mock_anthropic):
         mock_client = MagicMock()
         mock_anthropic.return_value = mock_client
@@ -581,7 +581,7 @@ class TestCalculateAnswerRelevancy:
 
         assert score == 0.1
 
-    @patch("eval.metrics.Anthropic")
+    @patch("src.llm_client.Anthropic")
     def test_missing_overall_score_calculates_from_dimensions(self, mock_anthropic):
         mock_client = MagicMock()
         mock_anthropic.return_value = mock_client
@@ -600,7 +600,7 @@ class TestCalculateAnswerRelevancy:
         expected_score = (4 + 4 + 3) / 15.0
         assert score == pytest.approx(expected_score)
 
-    @patch("eval.metrics.Anthropic")
+    @patch("src.llm_client.Anthropic")
     def test_score_clamped_to_range(self, mock_anthropic):
         mock_client = MagicMock()
         mock_anthropic.return_value = mock_client
@@ -618,7 +618,7 @@ class TestCalculateAnswerRelevancy:
 
         assert score == 1.0
 
-    @patch("eval.metrics.Anthropic")
+    @patch("src.llm_client.Anthropic")
     def test_negative_score_clamped_to_zero(self, mock_anthropic):
         mock_client = MagicMock()
         mock_anthropic.return_value = mock_client
@@ -636,7 +636,7 @@ class TestCalculateAnswerRelevancy:
 
         assert score == 0.0
 
-    @patch("eval.metrics.Anthropic")
+    @patch("src.llm_client.Anthropic")
     def test_llm_api_error_raises_exception(self, mock_anthropic):
         mock_client = MagicMock()
         mock_anthropic.return_value = mock_client
@@ -649,7 +649,7 @@ class TestCalculateAnswerRelevancy:
                 api_key="test-api-key"
             )
 
-    @patch("eval.metrics.Anthropic")
+    @patch("src.llm_client.Anthropic")
     def test_custom_model_parameters(self, mock_anthropic):
         mock_client = MagicMock()
         mock_anthropic.return_value = mock_client

@@ -13,6 +13,11 @@ load_dotenv()
 def load_config(config_path: str = "config.yaml") -> Dict[str, Any]:
     """Load YAML configuration file and return its contents as a dictionary.
 
+    If the config contains a top-level ``data_dir`` key, all path values
+    that start with ``"data/"`` are rewritten to be relative to that
+    directory.  This allows users to point the entire data tree at a
+    different location (e.g. a separate drive) without using symlinks.
+
     Args:
         config_path: Path to the YAML configuration file. Defaults to "config.yaml".
 
@@ -27,7 +32,34 @@ def load_config(config_path: str = "config.yaml") -> Dict[str, Any]:
         config_path = "config.yaml"
     with open(config_path, "r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
+
+    data_dir = config.get("data_dir", "data")
+    if data_dir != "data":
+        config = _resolve_data_paths(config, data_dir)
+
     logger.info(f"Configuration loaded from {config_path}")
+    return config
+
+
+def _resolve_data_paths(config: Dict[str, Any], data_dir: str) -> Dict[str, Any]:
+    """Rewrite path values starting with ``data/`` to use the given data_dir.
+
+    Walks the config dict recursively.  For every string value that starts
+    with ``"data/"``, the ``"data"`` prefix is replaced with *data_dir*.
+
+    Args:
+        config: Configuration dictionary (modified in-place).
+        data_dir: Replacement for the ``"data"`` prefix.
+
+    Returns:
+        The modified config dictionary (same object as input).
+    """
+    prefix = "data/"
+    for key, value in config.items():
+        if isinstance(value, str) and value.startswith(prefix):
+            config[key] = value.replace(prefix, data_dir + "/", 1)
+        elif isinstance(value, dict):
+            _resolve_data_paths(value, data_dir)
     return config
 
 
