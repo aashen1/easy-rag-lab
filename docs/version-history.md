@@ -2,9 +2,40 @@
 
 <!-- status: active -->
 
-> 最后更新: 2026-04-19
+> 最后更新：2026-04-20
 
 本文档记录项目的版本迭代历程，每个版本的关键决策、交付成果和经验教训。
+
+---
+
+## v0.1.8 (2026-04-20)
+
+### 版本主题
+
+TestSet 独立管理系统
+
+### 关键决策
+
+- 将 TestSet 提升为与 Meal 对等的独立可管理实体
+- 引入 metadata 元数据结构，支持审计追踪
+- 设计 on_missing 三种模式（auto / clean_only / strict）
+- 用户定义集支持三种 invalid_policy（immutable / trim / regenerate）
+- Archive 备份机制防止数据丢失
+
+### 交付成果
+
+- **TestSetManager 类**：CRUD 操作、有效性判定、自动清洗、Archive 备份
+- **metadata 元数据结构**：name、meal_id、generation、user_defined、invalid_policy、audit_log
+- **on_missing 路由逻辑**：三种模式控制查找失败时的兜底行为
+- **自动清洗流程**：机器生成集和用户定义集分别处理
+- **向后兼容**：旧格式测试集 JSON 自动迁移，旧配置触发 deprecation warning
+- **CLI 增强**：--generate-test-set 支持 --name 参数
+- **831 个测试全部通过**：无回归
+
+### 版本验收
+
+- [Spec 文档](../.trae/specs/test-set-independent-management/spec.md)
+- [实现指南](guides/test-set-management.md)
 
 ---
 

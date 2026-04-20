@@ -10,8 +10,9 @@
 
 | 时间 | 原始文件 | 处理结果 | 生成文档 | 添加待办 |
 |------|---------|---------|---------|---------|
-| 2026-04-18 | `notes/chat-AI时代的新Git规范.md` | ✅ 已入库 | `archive/idea-ai-era-git-practice.md` | 无 |
+| 2026-04-18 | `notes/chat-AI 时代的新 Git 规范.md` | ✅ 已入库 | `archive/idea-ai-era-git-practice.md` | 无 |
 | 2026-04-18 | `notes/chat-幽灵文件夹排查指南.md` | ✅ 已入库 | `troubleshooting/ghost-folder-mkdir.md` | 无 |
+| 2026-04-20 | `.trae/documents/test-set-new-design.md` | ✅ 已实现 | `guides/test-set-management.md` | backlog.md 已更新 |
 
 ---
 
