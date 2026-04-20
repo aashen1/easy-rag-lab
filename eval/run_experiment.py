@@ -1205,19 +1205,33 @@ def compute_aggregate_metrics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     metrics["irrelevant_questions_count"] = len(fpr_results)
 
     llm_retrieval_results = [r for r in results if "llm_retrieval" in r and r["llm_retrieval"]]
-    if llm_retrieval_results:
+    llm_retrieval_from_generation = []
+    for r in results:
+        if "generation" in r and r["generation"]:
+            gen = r["generation"]
+            llm_keys = {k: v for k, v in gen.items()
+                        if k in {"context_precision", "context_recall"} and v is not None}
+            if llm_keys:
+                llm_retrieval_from_generation.append(llm_keys)
+
+    all_llm_retrieval = []
+    for r in llm_retrieval_results:
+        all_llm_retrieval.append(r["llm_retrieval"])
+    all_llm_retrieval.extend(llm_retrieval_from_generation)
+
+    if all_llm_retrieval:
         cp_values = [
-            r["llm_retrieval"]["context_precision"]
-            for r in llm_retrieval_results
-            if "context_precision" in r["llm_retrieval"] and r["llm_retrieval"]["context_precision"] is not None
+            lr["context_precision"]
+            for lr in all_llm_retrieval
+            if "context_precision" in lr and lr["context_precision"] is not None
         ]
         if cp_values:
             metrics["avg_context_precision"] = sum(cp_values) / len(cp_values)
 
         cr_values = [
-            r["llm_retrieval"]["context_recall"]
-            for r in llm_retrieval_results
-            if "context_recall" in r["llm_retrieval"] and r["llm_retrieval"]["context_recall"] is not None
+            lr["context_recall"]
+            for lr in all_llm_retrieval
+            if "context_recall" in lr and lr["context_recall"] is not None
         ]
         if cr_values:
             metrics["avg_context_recall"] = sum(cr_values) / len(cr_values)
