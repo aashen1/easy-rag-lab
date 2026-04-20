@@ -973,21 +973,26 @@ def evaluate_test_set(
     """
     Evaluate a single test set against the pipeline.
 
-    When exp_config and system_config are provided, uses the evaluator
-    abstraction layer with backend selection. Otherwise, falls back to
-    legacy direct metric computation for backward compatibility.
+    Requires exp_config and system_config to use the evaluator
+    abstraction layer with backend selection.
 
     Args:
         pipeline: Configured RAG pipeline.
         test_set: Test set dictionary with questions.
-        exp_config: Optional experiment configuration for backend selection.
-        system_config: Optional system configuration for evaluator creation.
+        exp_config: Experiment configuration for backend selection.
+        system_config: System configuration for evaluator creation.
 
     Returns:
         List of evaluation result dictionaries.
+
+    Raises:
+        ValueError: If exp_config or system_config is not provided.
     """
     if exp_config is None or system_config is None:
-        return _evaluate_test_set_legacy(pipeline, test_set)
+        raise ValueError(
+            "exp_config and system_config are required for evaluation. "
+            "Please use run_experiment.py with a valid experiment configuration."
+        )
 
     evaluators = _create_evaluators(exp_config, system_config)
     backends = exp_config.evaluation.get("backends", ["builtin"])
@@ -1041,211 +1046,6 @@ def evaluate_test_set(
                     all_results[qid] = r
 
     return list(all_results.values())
-
-
-def _evaluate_test_set_legacy(
-    pipeline: RAGPipeline,
-    test_set: Dict[str, Any],
-) -> List[Dict[str, Any]]:
-    """
-    Legacy evaluation using direct metric function calls.
-
-    Args:
-        pipeline: Configured RAG pipeline.
-        test_set: Test set dictionary with questions.
-        llm_config: Optional LLM configuration for LLM-based metrics.
-        llm_retrieval_metrics: Optional list of LLM-based retrieval metrics to calculate.
-            Supports "context_precision" and "context_recall".
-        equivalence_groups: Optional dict mapping group keys to lists of file paths
-            for document equivalence matching. When provided, documents in the same
-            group are treated as identical for retrieval evaluation.
-
-    Returns:
-        List of evaluation result dictionaries.
-    """
-    metadata = test_set.get("metadata", {})
-    test_set_name = test_set.get("name") or metadata.get("name") or "unknown"
-    questions = test_set.get("questions", [])
-
-    logger.info(f"Evaluating test set '{test_set_name}' ({len(questions)} questions)...")
-
-    if llm_retrieval_metrics is None:
-        llm_retrieval_metrics = []
-
-    results = []
-    for i, question_data in enumerate(questions, 1):
-        question_id = question_data.get("id", f"q{i}")
-        question_text = question_data.get("question", "")
-        expected_sources = question_data.get("source_files", [])
-        ground_truth = question_data.get("answer", "")
-        expect_retrieval = question_data.get("expect_retrieval", True)
-        expect_no_answer = question_data.get("expect_no_answer", False)
-        question_type = question_data.get("question_type", "")
-
-        if not question_text:
-            logger.warning(f"Question {question_id} has no text, skipping")
-            continue
-
-        logger.info(f"Processing question {i}/{len(questions)}: {question_id}")
-
-        case_start_time = time.time()
-        try:
-            response = pipeline.query(question_text)
-            case_time = time.time() - case_start_time
-
-            retrieved_sources = response.get("sources", [])
-            contexts = response.get("contexts", [])
-
-            if expect_retrieval and expected_sources:
-                if equivalence_groups:
-                    normalized_retrieved = [
-                        normalize_source_with_equivalence(s, equivalence_groups)
-                        for s in retrieved_sources
-                    ]
-                    normalized_expected = [
-                        normalize_source_with_equivalence(s, equivalence_groups)
-                        for s in expected_sources
-                    ]
-                    hit_rate = calculate_hit_rate(normalized_retrieved, normalized_expected)
-                    mrr = calculate_mrr(normalized_retrieved, normalized_expected)
-                    ndcg = calculate_ndcg(normalized_retrieved, normalized_expected, k=5)
-                else:
-                    hit_rate = calculate_hit_rate(retrieved_sources, expected_sources)
-                    mrr = calculate_mrr(retrieved_sources, expected_sources)
-                    ndcg = calculate_ndcg(retrieved_sources, expected_sources, k=5)
-                if equivalence_groups:
-                    dedup_hit_rate = calculate_dedup_hit_rate(normalized_retrieved, normalized_expected)
-                    dedup_mrr = calculate_dedup_mrr(normalized_retrieved, normalized_expected)
-                    dedup_ndcg = calculate_dedup_ndcg(normalized_retrieved, normalized_expected)
-                else:
-                    dedup_hit_rate = calculate_dedup_hit_rate(retrieved_sources, expected_sources)
-                    dedup_mrr = calculate_dedup_mrr(retrieved_sources, expected_sources)
-                    dedup_ndcg = calculate_dedup_ndcg(retrieved_sources, expected_sources)
-            else:
-                hit_rate = None
-                mrr = None
-                ndcg = None
-                dedup_hit_rate = None
-                dedup_mrr = None
-                dedup_ndcg = None
-
-            retrieved_chunk_ids = response.get("chunk_ids", [])
-            expected_chunks = question_data.get("source_chunks", [])
-
-            if expect_retrieval and expected_chunks and retrieved_chunk_ids:
-                chunk_hit_rate = calculate_chunk_hit_rate(retrieved_chunk_ids, expected_chunks)
-                chunk_mrr = calculate_chunk_mrr(retrieved_chunk_ids, expected_chunks)
-                chunk_ndcg = calculate_chunk_ndcg(retrieved_chunk_ids, expected_chunks, k=5)
-            else:
-                chunk_hit_rate = None
-                chunk_mrr = None
-                chunk_ndcg = None
-
-            if not expect_retrieval and not expected_sources:
-                false_positive_rate = calculate_false_positive_rate(retrieved_sources, k=5)
-            else:
-                false_positive_rate = None
-
-            result = {
-                "id": question_id,
-                "question": question_text,
-                "answer": response.get("answer"),
-                "retrieval": {
-                    "hit_rate": hit_rate,
-                    "mrr": mrr,
-                    "ndcg": ndcg,
-                } if hit_rate is not None else None,
-                "chunk_retrieval": {
-                    "hit_rate": chunk_hit_rate,
-                    "mrr": chunk_mrr,
-                    "ndcg": chunk_ndcg,
-                } if chunk_hit_rate is not None else None,
-                "dedup_retrieval": {
-                    "hit_rate": dedup_hit_rate,
-                    "mrr": dedup_mrr,
-                    "ndcg": dedup_ndcg,
-                } if dedup_hit_rate is not None else None,
-                "false_positive_rate": false_positive_rate,
-                "sources": retrieved_sources,
-                "chunk_ids": retrieved_chunk_ids,
-                "expected_sources": expected_sources,
-                "expected_chunks": expected_chunks,
-                "time_seconds": case_time,
-                "test_set": test_set_name,
-                "category": question_data.get("category"),
-                "difficulty": question_data.get("difficulty"),
-                "question_type": question_type,
-                "expect_retrieval": expect_retrieval,
-                "expect_no_answer": expect_no_answer,
-                "token_usage": response.get("token_usage"),
-            }
-
-            llm_retrieval = {}
-            if llm_config and llm_retrieval_metrics and contexts:
-                if "context_precision" in llm_retrieval_metrics:
-                    try:
-                        cp_score = calculate_context_precision(
-                            question=question_text,
-                            expected_output=ground_truth,
-                            retrieval_context=contexts,
-                            api_key=llm_config["api_key"],
-                            base_url=llm_config["base_url"],
-                            model_name=llm_config["model_name"],
-                        )
-                        llm_retrieval["context_precision"] = cp_score
-                    except Exception as e:
-                        logger.warning(f"Failed to calculate context precision: {str(e)}")
-                        llm_retrieval["context_precision"] = None
-
-                if "context_recall" in llm_retrieval_metrics:
-                    try:
-                        cr_score = calculate_context_recall(
-                            question=question_text,
-                            ground_truth=ground_truth,
-                            retrieval_context=contexts,
-                            api_key=llm_config["api_key"],
-                            base_url=llm_config["base_url"],
-                            model_name=llm_config["model_name"],
-                        )
-                        llm_retrieval["context_recall"] = cr_score
-                    except Exception as e:
-                        logger.warning(f"Failed to calculate context recall: {str(e)}")
-                        llm_retrieval["context_recall"] = None
-
-            if llm_retrieval:
-                result["llm_retrieval"] = llm_retrieval
-
-            if hit_rate is not None:
-                metric_parts = [f"HR={hit_rate:.4f}", f"MRR={mrr:.4f}", f"NDCG={ndcg:.4f}"]
-            else:
-                metric_parts = ["HR=N/A", "MRR=N/A", "NDCG=N/A"]
-            if llm_retrieval:
-                if "context_precision" in llm_retrieval and llm_retrieval["context_precision"] is not None:
-                    metric_parts.append(f"CP={llm_retrieval['context_precision']:.4f}")
-                if "context_recall" in llm_retrieval and llm_retrieval["context_recall"] is not None:
-                    metric_parts.append(f"CR={llm_retrieval['context_recall']:.4f}")
-            logger.success(f"Question {question_id}: {', '.join(metric_parts)} ({case_time:.2f}s)")
-
-        except Exception as e:
-            case_time = time.time() - case_start_time
-            logger.error(f"Question {question_id} failed: {str(e)}")
-            result = {
-                "id": question_id,
-                "question": question_text,
-                "answer": None,
-                "error": str(e),
-                "expected_sources": expected_sources,
-                "time_seconds": case_time,
-                "test_set": test_set_name,
-                "category": question_data.get("category"),
-                "question_type": question_type,
-                "expect_retrieval": expect_retrieval,
-                "expect_no_answer": expect_no_answer,
-            }
-
-        results.append(result)
-
-    return results
 
 
 def compute_aggregate_metrics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
