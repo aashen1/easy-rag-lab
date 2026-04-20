@@ -60,7 +60,7 @@ class TestRAGPipeline:
         pipeline = RAGPipeline(config_path="dummy.yaml")
 
         mock_embedder.assert_called_once_with(
-            model_name="test-model", device="cpu"
+            model_name="test-model", device="cpu", query_instruction=None
         )
         mock_indexer.assert_called_once_with(
             persist_dir="/tmp/vs",

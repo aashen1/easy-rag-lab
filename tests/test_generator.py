@@ -64,6 +64,54 @@ class TestGenerator:
         assert call_kwargs.kwargs["system"] == custom_prompt
 
     @patch("src.llm_client.Anthropic")
+    def test_constructor_system_prompt_used_as_default(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        constructor_prompt = "You are a financial analyst."
+        generator = Generator(api_key="test-key", system_prompt=constructor_prompt)
+        generator.generate(
+            query="What is the revenue?",
+            contexts=["Revenue was 100 billion."],
+        )
+        call_kwargs = mock_anthropic_client.messages.create.call_args
+        assert call_kwargs.kwargs["system"] == constructor_prompt
+
+    @patch("src.llm_client.Anthropic")
+    def test_null_system_prompt_falls_back_to_hardcoded(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key", system_prompt=None)
+        generator.generate(
+            query="What is the revenue?",
+            contexts=["Revenue was 100 billion."],
+        )
+        call_kwargs = mock_anthropic_client.messages.create.call_args
+        assert call_kwargs.kwargs["system"] == Generator.DEFAULT_SYSTEM_PROMPT
+
+    @patch("src.llm_client.Anthropic")
+    def test_no_system_prompt_falls_back_to_hardcoded(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key")
+        generator.generate(
+            query="What is the revenue?",
+            contexts=["Revenue was 100 billion."],
+        )
+        call_kwargs = mock_anthropic_client.messages.create.call_args
+        assert call_kwargs.kwargs["system"] == Generator.DEFAULT_SYSTEM_PROMPT
+
+    @patch("src.llm_client.Anthropic")
+    def test_generate_param_overrides_constructor_default(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        constructor_prompt = "You are a financial analyst."
+        override_prompt = "You are a helpful assistant."
+        generator = Generator(api_key="test-key", system_prompt=constructor_prompt)
+        generator.generate(
+            query="What is the revenue?",
+            contexts=["Revenue was 100 billion."],
+            system_prompt=override_prompt,
+        )
+        call_kwargs = mock_anthropic_client.messages.create.call_args
+        assert call_kwargs.kwargs["system"] == override_prompt
+
+    @patch("src.llm_client.Anthropic")
     def test_generate_token_tracker_records(self, mock_anthropic_cls, mock_anthropic_client):
         mock_anthropic_cls.return_value = mock_anthropic_client
         tracker = TokenTracker()
