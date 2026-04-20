@@ -879,6 +879,65 @@ class TestMetricNamespacePrefix:
         assert "avg_answer_relevancy" in gen
         assert gen["avg_faithfulness"] == pytest.approx(0.8)
 
+    def test_compute_aggregate_llm_retrieval_from_ragas_generation(self):
+        results = [
+            {
+                "id": "q1",
+                "generation": {"faithfulness": 0.9, "context_precision": 0.8, "context_recall": 0.7},
+            },
+            {
+                "id": "q2",
+                "generation": {"faithfulness": 0.7, "context_precision": 0.6, "context_recall": 0.5},
+            },
+        ]
+
+        metrics = compute_aggregate_metrics(results)
+
+        assert "avg_context_precision" in metrics
+        assert "avg_context_recall" in metrics
+        assert metrics["avg_context_precision"] == pytest.approx(0.7)
+        assert metrics["avg_context_recall"] == pytest.approx(0.6)
+
+    def test_compute_aggregate_llm_retrieval_from_both_sources(self):
+        results = [
+            {
+                "id": "q1",
+                "llm_retrieval": {"context_precision": 0.9, "context_recall": 0.8},
+            },
+            {
+                "id": "q2",
+                "generation": {"context_precision": 0.7, "context_recall": 0.6},
+            },
+        ]
+
+        metrics = compute_aggregate_metrics(results)
+
+        assert "avg_context_precision" in metrics
+        assert "avg_context_recall" in metrics
+        assert metrics["avg_context_precision"] == pytest.approx(0.8)
+        assert metrics["avg_context_recall"] == pytest.approx(0.7)
+
+    def test_compute_aggregate_llm_retrieval_from_ragas_llm_retrieval_key(self):
+        results = [
+            {
+                "id": "q1",
+                "llm_retrieval": {"context_precision": 0.85, "context_recall": 0.75},
+                "generation": {"faithfulness": 0.9},
+            },
+            {
+                "id": "q2",
+                "llm_retrieval": {"context_precision": 0.65, "context_recall": 0.55},
+                "generation": {"faithfulness": 0.7},
+            },
+        ]
+
+        metrics = compute_aggregate_metrics(results)
+
+        assert "avg_context_precision" in metrics
+        assert "avg_context_recall" in metrics
+        assert metrics["avg_context_precision"] == pytest.approx(0.75)
+        assert metrics["avg_context_recall"] == pytest.approx(0.65)
+
     @patch("eval.run_experiment._evaluate_with_builtin")
     @patch("eval.run_experiment._collect_rag_samples")
     @patch("eval.run_experiment._create_evaluators")
