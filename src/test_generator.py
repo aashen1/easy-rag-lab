@@ -10,6 +10,7 @@ from loguru import logger
 
 from src.generator import Generator
 from src.meal import ArtifactCache, MealConfig, MealManager
+from src.test_set_manager import TestSetManager, TestSetMetadata
 from src.utils import ensure_dir, get_llm_config
 
 
@@ -716,34 +717,28 @@ class TestSetGenerator:
             return None
 
     def _save_test_set(
-        self, meal_name: str, test_set: Dict[str, Any], filename: str
+        self, meal_name: str, test_set: Dict[str, Any], name: str
     ) -> Path:
         """Save a test set to a JSON file in the meal's test_sets directory.
 
         Args:
             meal_name: Name of the meal the test set belongs to.
             test_set: Test set dictionary to serialize.
-            filename: Base filename without extension.
+            name: Name for the test set file (without extension).
 
         Returns:
             Path to the saved JSON file.
         """
-        meal_manager = MealManager(self.config)
-        meal_dir = meal_manager.get_meal_dir(meal_name)
-        test_sets_dir = meal_dir / "test_sets"
-        ensure_dir(str(test_sets_dir))
-
-        output_path = test_sets_dir / f"{filename}.json"
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(test_set, f, ensure_ascii=False, indent=2)
-
-        logger.info(f"Test set saved to {output_path}")
-        return output_path
+        if "metadata" in test_set:
+            test_set["metadata"]["name"] = name
+        test_set_manager = TestSetManager(self.config)
+        return test_set_manager.save_test_set(meal_name, test_set)
 
     def generate_document_based_questions(
         self,
         meal_name: str,
         num_questions: int = None,
+        name: str = None,
         type_distribution: Optional[Dict[str, float]] = None,
         llm_preset: str = "default",
         token_tracker: Optional[Any] = None,
@@ -757,6 +752,8 @@ class TestSetGenerator:
             meal_name: Name of the meal to generate questions for.
             num_questions: Total number of questions to generate. Defaults to
                 the configured default_num_questions.
+            name: Name for the test set. Defaults to
+                f"document_level_n{num_questions}".
             type_distribution: Custom distribution of question types. Keys are
                 type names ('single_fact', 'multi_fact', etc.) and values are
                 proportions (0.0-1.0). Defaults to TYPE_DISTRIBUTION.
@@ -774,6 +771,7 @@ class TestSetGenerator:
                 could be generated.
         """
         num_questions = num_questions or self.default_num_questions
+        name = name or f"document_level_n{num_questions}"
         type_distribution = type_distribution or self.TYPE_DISTRIBUTION
 
         meal_manager = MealManager(self.config)
@@ -932,23 +930,27 @@ class TestSetGenerator:
 
         quality_metrics = self._calculate_quality_metrics(questions)
 
-        test_set = {
-            "name": f"document_level_n{num_questions}",
-            "meal_data_id": meal_config.data_id,
-            "meal_name": meal_name,
-            "strategy": "document",
-            "created_at": datetime.now().isoformat(),
-            "generation_config": {
+        metadata = TestSetMetadata(
+            name=name,
+            meal_id=meal_config.data_id,
+            created_at=datetime.now().isoformat(),
+            updated_at=datetime.now().isoformat(),
+            generation={
+                "strategy": "document",
                 "num_questions": num_questions,
                 "type_distribution": type_distribution,
                 "llm_preset": llm_preset,
             },
+            user_defined=False,
+        )
+
+        test_set = {
+            "metadata": metadata.to_dict(),
             "quality_metrics": quality_metrics,
             "questions": questions,
         }
 
-        filename = f"document_level_n{num_questions}"
-        self._save_test_set(meal_name, test_set, filename)
+        self._save_test_set(meal_name, test_set, name)
 
         if len(questions) < num_questions:
             logger.warning(
@@ -1085,11 +1087,25 @@ class TestSetGenerator:
 
         existing_test_set["questions"] = all_questions
         existing_test_set["quality_metrics"] = quality_metrics
-        existing_test_set["generation_config"]["num_questions"] = target_count
 
-        num_questions = target_count
-        filename = f"document_level_n{num_questions}"
-        self._save_test_set(meal_name, existing_test_set, filename)
+        if "metadata" in existing_test_set:
+            existing_test_set["metadata"]["updated_at"] = datetime.now().isoformat()
+            if "generation" in existing_test_set["metadata"]:
+                existing_test_set["metadata"]["generation"]["num_questions"] = target_count
+            audit_entry = {
+                "event": "supplemented",
+                "added_count": len(new_questions),
+                "timestamp": datetime.now().isoformat(),
+            }
+            existing_test_set["metadata"].setdefault("audit_log", []).append(audit_entry)
+            test_set_name = existing_test_set["metadata"]["name"]
+        else:
+            if "generation_config" not in existing_test_set:
+                existing_test_set["generation_config"] = {}
+            existing_test_set["generation_config"]["num_questions"] = target_count
+            test_set_name = existing_test_set.get("name", f"document_level_n{target_count}")
+
+        self._save_test_set(meal_name, existing_test_set, test_set_name)
 
         logger.success(
             f"Supplemented test set: {len(existing_questions)} + "

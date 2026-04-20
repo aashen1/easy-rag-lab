@@ -965,11 +965,20 @@ class TestSupplementDocumentBasedQuestions:
 
     def test_no_supplement_needed_when_count_matches(self):
         existing = {
+            "metadata": {
+                "name": "test_set",
+                "meal_id": "test_id",
+                "created_at": "2026-01-01T00:00:00",
+                "updated_at": "2026-01-01T00:00:00",
+                "generation": {"num_questions": 2},
+                "user_defined": False,
+                "audit_log": [],
+            },
             "questions": [
                 {"id": "q001", "question": "问题1？", "answer": "答案1", "question_type": "single_fact"},
                 {"id": "q002", "question": "问题2？", "answer": "答案2", "question_type": "single_fact"},
             ],
-            "generation_config": {"num_questions": 2},
+            "quality_metrics": {},
         }
         result = self.generator.supplement_document_based_questions(
             meal_name="test_meal",
@@ -980,12 +989,21 @@ class TestSupplementDocumentBasedQuestions:
 
     def test_no_supplement_needed_when_count_exceeds(self):
         existing = {
+            "metadata": {
+                "name": "test_set",
+                "meal_id": "test_id",
+                "created_at": "2026-01-01T00:00:00",
+                "updated_at": "2026-01-01T00:00:00",
+                "generation": {"num_questions": 3},
+                "user_defined": False,
+                "audit_log": [],
+            },
             "questions": [
                 {"id": "q001", "question": "问题1？", "answer": "答案1", "question_type": "single_fact"},
                 {"id": "q002", "question": "问题2？", "answer": "答案2", "question_type": "single_fact"},
                 {"id": "q003", "question": "问题3？", "answer": "答案3", "question_type": "single_fact"},
             ],
-            "generation_config": {"num_questions": 3},
+            "quality_metrics": {},
         }
         result = self.generator.supplement_document_based_questions(
             meal_name="test_meal",
@@ -1022,10 +1040,20 @@ class TestSupplementDocumentBasedQuestions:
         })
 
         existing = {
-            "name": "document_level_n5",
-            "meal_data_id": "test_data_id",
-            "meal_name": "test_meal",
-            "strategy": "document",
+            "metadata": {
+                "name": "document_level_n5",
+                "meal_id": "test_data_id",
+                "created_at": "2026-01-01T00:00:00",
+                "updated_at": "2026-01-01T00:00:00",
+                "generation": {
+                    "strategy": "document",
+                    "num_questions": 3,
+                    "type_distribution": {},
+                    "llm_preset": "default",
+                },
+                "user_defined": False,
+                "audit_log": [],
+            },
             "questions": [
                 {"id": "q001", "question": "问题1？", "answer": "答案1", "question_type": "single_fact",
                  "source_document": "doc_a", "category": "document", "source_files": [], "source_chunks": []},
@@ -1034,7 +1062,6 @@ class TestSupplementDocumentBasedQuestions:
                 {"id": "q003", "question": "问题3？", "answer": "答案3", "question_type": "reasoning",
                  "source_document": "doc_a", "category": "document", "source_files": [], "source_chunks": []},
             ],
-            "generation_config": {"num_questions": 3, "type_distribution": {}, "llm_preset": "default"},
             "quality_metrics": {},
         }
 
@@ -1062,7 +1089,7 @@ class TestSupplementDocumentBasedQuestions:
         assert result["questions"][0]["id"] == "q001"
         assert result["questions"][3]["id"] == "q004"
         assert result["questions"][4]["id"] == "q005"
-        assert result["generation_config"]["num_questions"] == 5
+        assert result["metadata"]["generation"]["num_questions"] == 5
 
     def test_supplement_returns_unchanged_on_all_failures(self, tmp_path):
         parsed_dir = tmp_path / "parsed"
@@ -1084,10 +1111,19 @@ class TestSupplementDocumentBasedQuestions:
         mock_llm_generator.generate.return_value = "invalid json"
 
         existing = {
+            "metadata": {
+                "name": "test_set",
+                "meal_id": "test_id",
+                "created_at": "2026-01-01T00:00:00",
+                "updated_at": "2026-01-01T00:00:00",
+                "generation": {"num_questions": 1},
+                "user_defined": False,
+                "audit_log": [],
+            },
             "questions": [
                 {"id": "q001", "question": "问题1？", "answer": "答案1", "question_type": "single_fact"},
             ],
-            "generation_config": {"num_questions": 1},
+            "quality_metrics": {},
         }
 
         with patch.object(

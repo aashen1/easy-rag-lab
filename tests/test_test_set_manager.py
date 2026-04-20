@@ -442,3 +442,112 @@ class TestValidateTestSet:
         updated = manager._update_meal_id(test_set_data, "new_id")
         assert updated["metadata"]["meal_id"] == "new_id"
         assert updated["metadata"]["updated_at"] != "2026-04-20T10:00:00"
+
+
+class TestMigrateTestSet:
+    @pytest.fixture
+    def env(self, tmp_path):
+        config = _make_config(tmp_path)
+        manager = TestSetManager(config)
+        return manager, config
+
+    def test_new_format_unchanged(self, env):
+        manager, config = env
+        new_format = {
+            "metadata": {
+                "name": "test_set",
+                "meal_id": "abc123",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+                "generation": {"strategy": "document"},
+                "user_defined": True,
+                "invalid_policy": "trim",
+                "audit_log": [{"event": "created"}],
+                "suppress_warnings": True,
+            },
+            "quality_metrics": {"authenticity_pass_rate": 0.9},
+            "questions": [{"id": "q001", "question": "What?"}],
+        }
+        result = manager._migrate_test_set(new_format)
+        assert result is new_format
+
+    def test_old_format_migrated(self, env):
+        manager, config = env
+        old_format = {
+            "name": "old_test_set",
+            "meal_data_id": "xyz789",
+            "meal_name": "test_meal",
+            "strategy": "document",
+            "created_at": "2026-04-20T10:00:00",
+            "generation_config": {
+                "num_questions": 20,
+                "llm_preset": "default",
+            },
+            "quality_metrics": {"authenticity_pass_rate": 0.8},
+            "questions": [{"id": "q001", "question": "What?"}],
+        }
+        result = manager._migrate_test_set(old_format)
+        assert "metadata" in result
+        assert result["metadata"]["name"] == "old_test_set"
+        assert result["metadata"]["meal_id"] == "xyz789"
+        assert result["metadata"]["created_at"] == "2026-04-20T10:00:00"
+        assert result["metadata"]["updated_at"] == "2026-04-20T10:00:00"
+        assert result["metadata"]["generation"]["num_questions"] == 20
+        assert result["metadata"]["user_defined"] is False
+        assert result["metadata"]["invalid_policy"] is None
+        assert result["metadata"]["audit_log"] == []
+        assert result["metadata"]["suppress_warnings"] is False
+        assert result["quality_metrics"]["authenticity_pass_rate"] == 0.8
+        assert len(result["questions"]) == 1
+
+    def test_old_format_minimal_fields(self, env):
+        manager, config = env
+        old_format = {
+            "questions": [{"id": "q001"}],
+        }
+        result = manager._migrate_test_set(old_format)
+        assert result["metadata"]["name"] == "unknown"
+        assert result["metadata"]["meal_id"] == ""
+        assert result["metadata"]["created_at"] == ""
+        assert result["metadata"]["updated_at"] == ""
+        assert result["metadata"]["generation"] == {}
+        assert result["quality_metrics"] == {}
+        assert len(result["questions"]) == 1
+
+    def test_load_test_set_auto_migrates(self, env):
+        manager, config = env
+        _create_meal_dir(config, "my_meal")
+        test_sets_dir = Path(config["meals"]["dir"]) / "my_meal" / "test_sets"
+        old_format = {
+            "name": "old_set",
+            "meal_data_id": "legacy123",
+            "created_at": "2026-04-20T10:00:00",
+            "generation_config": {"num_questions": 10},
+            "questions": [{"id": "q001", "question": "What?"}],
+        }
+        old_file = test_sets_dir / "old_set.json"
+        with open(old_file, "w", encoding="utf-8") as f:
+            json.dump(old_format, f)
+        loaded = manager.load_test_set("my_meal", "old_set")
+        assert "metadata" in loaded
+        assert loaded["metadata"]["name"] == "old_set"
+        assert loaded["metadata"]["meal_id"] == "legacy123"
+
+    def test_find_by_name_auto_migrates(self, env):
+        manager, config = env
+        _create_meal_dir(config, "my_meal")
+        test_sets_dir = Path(config["meals"]["dir"]) / "my_meal" / "test_sets"
+        old_format = {
+            "name": "legacy_set",
+            "meal_data_id": "legacy456",
+            "created_at": "2026-04-20T10:00:00",
+            "questions": [],
+        }
+        old_file = test_sets_dir / "legacy_set.json"
+        with open(old_file, "w", encoding="utf-8") as f:
+            json.dump(old_format, f)
+        result = manager.find_by_name("my_meal", "legacy_set")
+        assert result is not None
+        assert "metadata" in result
+        assert result["metadata"]["name"] == "legacy_set"
+        assert result["metadata"]["meal_id"] == "legacy456"
