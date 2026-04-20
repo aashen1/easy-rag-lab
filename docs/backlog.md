@@ -12,11 +12,11 @@
 
 | 类型 | 待处理 | 进行中 | 已完成 | 已延期 |
 |------|--------|--------|--------|--------|
-| Bug | 0 | 0 | 11 | 2 |
-| Feature | 4 | 0 | 11 | 0 |
-| Refactor | 4 | 0 | 5 | 0 |
+| Bug | 0 | 0 | 15 | 2 |
+| Feature | 0 | 0 | 16 | 0 |
+| Refactor | 4 | 0 | 8 | 0 |
 | Optimization | 2 | 0 | 0 | 0 |
-| Investigation | 3 | 0 | 1 | 0 |
+| Investigation | 3 | 0 | 2 | 0 |
 
 ---
 
@@ -35,10 +35,10 @@
 
 | ID | 描述 | 来源 | 状态 | 规模 | 备注 |
 |----|------|------|------|------|------|
-| FEAT-002 | 混合检索（BM25 + 向量） | [CLAUDE.md](../CLAUDE.md) | 📋 待处理 | 中 | RAG 优化 |
-| FEAT-003 | Reranker 重排 | [CLAUDE.md](../CLAUDE.md) | 📋 待处理 | 中 | RAG 优化 |
-| FEAT-004 | 查询改写 | [CLAUDE.md](../CLAUDE.md) | 📋 待处理 | 中 | RAG 优化 |
-| FEAT-005 | 语义分块 | [CLAUDE.md](../CLAUDE.md) | 📋 待处理 | 中 | RAG 优化 |
+| FEAT-002 | 混合检索（BM25 + 向量） | [CLAUDE.md](../CLAUDE.md) | ✅ 已完成 | 中 | v0.1.8 已实现 |
+| FEAT-003 | Reranker 重排 | [CLAUDE.md](../CLAUDE.md) | ✅ 已完成 | 中 | v0.1.8 已实现 |
+| FEAT-004 | 查询改写 | [CLAUDE.md](../CLAUDE.md) | ✅ 已完成 | 中 | v0.1.8 已实现 |
+| FEAT-005 | 语义分块 | [CLAUDE.md](../CLAUDE.md) | ✅ 已完成 | 中 | v0.1.8 已实现 |
 
 ---
 
@@ -90,6 +90,9 @@
 | BUG-011 | experiment_reporter.py generate_markdown_report 公共方法缺 docstring | v0.1.7 合并验收 | 2026-04-19 |
 | BUG-012 | TestSetManager 类被 pytest 误识别为测试类 | 测试警告 | 2026-04-20 |
 | BUG-013 | TestSetGenerator 旧格式兼容性未测试 | v0.1.8 实现发现 | 2026-04-20 |
+| BUG-014 | NDCG 值超出 [0,1] 范围 | v0.1.8 合并发现 | 2026-04-20 |
+| BUG-015 | irrelevant/missing 问题类型 source_files 错误 | v0.1.8 合并发现 | 2026-04-20 |
+| BUG-016 | chunker config hash 缺少 strategy/semantic 参数 | v0.1.8 合并发现 | 2026-04-20 |
 
 ### Feature
 

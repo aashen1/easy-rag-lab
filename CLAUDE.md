@@ -81,16 +81,18 @@
 
 ## 当前状态
 
-**版本**：v0.1.7（评测系统增强）
+**版本**：v0.1.8（评估系统可靠性增强与 TestSetManager 架构）
 
 **新功能**：
-- 文档级问题生成：基于完整文档生成真实场景问题
-- 生成质量指标：Faithfulness、Answer Relevancy
-- 6 种问题类型：单知识点、多知识点、推理、对比、缺失、无关
+- Context Precision、Context Recall、Chunk-level、Dedup、FPR 五项新指标
+- TestSetManager 系统：结构化测试集生命周期管理
+- 等价组支持：meal 推断与指标归一化
+- 实验配置重组：templates + 分类目录结构
+- 问题有效性检查与增量生成
 
 **待做事项**：参见 [docs/backlog.md](docs/backlog.md)
 
-**下版本方向**：参见 [docs/reviews/v0.1.6/next-direction.md](docs/reviews/v0.1.6/next-direction.md)
+**下版本方向**：参见 [docs/reviews/v0.1.8/release-summary.md](docs/reviews/v0.1.8/release-summary.md)
 
 ---
 
