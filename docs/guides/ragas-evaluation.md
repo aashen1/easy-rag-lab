@@ -17,7 +17,7 @@ RAGAS（Retrieval Augmented Generation Assessment）是一个主流的开源 RAG
 | 特性 | 自研（builtin） | RAGAS |
 |------|----------------|-------|
 | **检索指标** | hit_rate, mrr, ndcg | 无 |
-| **生成指标** | faithfulness, answer_relevancy | faithfulness, answer_relevancy, context_precision, context_recall, factual_correctness, semantic_similarity |
+| **生成指标** | faithfulness, answer_relevancy | faithfulness, answer_relevancy, context_precision, context_recall, answer_correctness, semantic_similarity |
 | **LLM 调用方式** | Anthropic SDK 直连 | LangChain Anthropic 接口 |
 | **评测模式** | 逐条串行 | 批量并行（推荐） |
 | **额外依赖** | 无 | ragas, langchain-anthropic, langchain-community |
@@ -28,10 +28,10 @@ RAGAS（Retrieval Augmented Generation Assessment）是一个主流的开源 RAG
 |------|---------|------|
 | **context_precision** | question, contexts, reference | 检索结果中相关文档是否排在前面 |
 | **context_recall** | question, contexts, reference | 检索结果是否覆盖了回答所需的信息 |
-| **factual_correctness** | response, reference | 回答与参考答案的事实一致性 |
+| **answer_correctness** | response, reference | 答案正确性（事实重叠 + 语义相似度加权） |
 | **semantic_similarity** | response, reference | 回答与参考答案的语义相似度 |
 
-> **注意**：`context_precision`、`context_recall`、`factual_correctness`、`semantic_similarity` 需要 `reference`（参考答案）才能计算。测试数据中的 `expected_answer` 字段将自动映射为 `reference`。
+> **注意**：`context_precision`、`context_recall`、`answer_correctness`、`semantic_similarity` 需要 `reference`（参考答案）才能计算。测试数据中的 `expected_answer` 字段将自动映射为 `reference`。
 
 ---
 
@@ -173,7 +173,7 @@ evaluation:
       - "answer_relevancy"
       - "context_precision"
       - "context_recall"
-      - "factual_correctness"
+      - "answer_correctness"
       - "semantic_similarity"
 ```
 
@@ -259,9 +259,13 @@ evaluation:
 - 调整 `chunk_size` 和 `chunk_overlap`
 - 考虑混合检索（BM25 + 向量）
 
-### Factual Correctness（事实正确性）
+### Answer Correctness（答案正确性）
 
-回答与参考答案的事实一致性，使用 NLG 评估中的 claim-level 对比。
+答案正确性综合评估生成答案与参考答案的匹配程度，包含两个关键方面：
+- **事实相似性**：使用 claim-level 对比，计算 TP/FP/FN，得出 F1 分数
+- **语义相似度**：基于 Embedding 向量的余弦相似度
+
+最终分数是两者的加权平均（默认权重各 0.5）。
 
 - **所需输入**：response, **reference**
 - **取值范围**：0.0 - 1.0
@@ -415,7 +419,7 @@ pixi add langchain-anthropic langchain-community
 
 ### Q: RAGAS 指标需要参考答案（reference），但测试数据没有怎么办？
 
-A: `context_precision`、`context_recall`、`factual_correctness`、`semantic_similarity` 需要 `reference` 才能计算。如果测试数据中没有 `expected_answer` 字段，这些指标将被跳过或返回空值。建议：
+A: `context_precision`、`context_recall`、`answer_correctness`、`semantic_similarity` 需要 `reference` 才能计算。如果测试数据中没有 `expected_answer` 字段，这些指标将被跳过或返回空值。建议：
 - 使用 `document` 策略生成测试集，会自动包含 `expected_answer`
 - 手动标注关键测试数据的参考答案
 

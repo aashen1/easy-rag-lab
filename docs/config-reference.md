@@ -268,7 +268,7 @@ evaluation:
 | `answer_relevancy` | 回答相关性（RAGAS 实现） | 需要额外 LLM 调用 |
 | `context_precision` | 上下文精确度，相关文档排名质量 | 需要 reference |
 | `context_recall` | 上下文召回率，检索覆盖度 | 需要 reference |
-| `factual_correctness` | 事实正确性 | 需要 reference |
+| `answer_correctness` | 答案正确性（事实重叠 + 语义相似度） | 需要 reference |
 | `semantic_similarity` | 语义相似度 | 需要 reference |
 
 > 详细指标说明请参阅 [评测指标详解](guides/evaluation-metrics.md)，RAGAS 使用方法请参阅 [RAGAS 评测系统指南](guides/ragas-evaluation.md)。

@@ -6,7 +6,7 @@ This evaluator provides access to RAGAS metrics including:
 - Answer Relevancy
 - Context Precision
 - Context Recall
-- Factual Correctness
+- Answer Correctness
 - Semantic Similarity
 
 Uses LangchainLLMWrapper with ChatAnthropic for LongCat API compatibility,
@@ -54,7 +54,7 @@ class RagasEvaluator(BaseEvaluator):
             "answer_relevancy",
             "context_precision",
             "context_recall",
-            "factual_correctness",
+            "answer_correctness",
             "semantic_similarity",
         ]
 
@@ -203,7 +203,7 @@ class RagasEvaluator(BaseEvaluator):
                 _AnswerRelevancy as AnswerRelevancy,
                 _ContextPrecision as ContextPrecision,
                 _ContextRecall as ContextRecall,
-                _FactualCorrectness as FactualCorrectness,
+                _AnswerCorrectness as AnswerCorrectness,
                 _SemanticSimilarity as SemanticSimilarity,
             )
 
@@ -212,7 +212,7 @@ class RagasEvaluator(BaseEvaluator):
                 "answer_relevancy": AnswerRelevancy,
                 "context_precision": ContextPrecision,
                 "context_recall": ContextRecall,
-                "factual_correctness": FactualCorrectness,
+                "answer_correctness": AnswerCorrectness,
                 "semantic_similarity": SemanticSimilarity,
             }
 
@@ -222,7 +222,7 @@ class RagasEvaluator(BaseEvaluator):
                     metric_cls = metric_map[name]
                     if name == "semantic_similarity":
                         metric = metric_cls(embeddings=embeddings) if embeddings else metric_cls()
-                    elif name == "answer_relevancy":
+                    elif name in ("answer_relevancy", "answer_correctness"):
                         metric = metric_cls(llm=llm, embeddings=embeddings) if llm else metric_cls()
                     else:
                         metric = metric_cls(llm=llm) if llm else metric_cls()

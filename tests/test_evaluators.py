@@ -174,7 +174,7 @@ class TestRagasEvaluator:
         assert "answer_relevancy" in metrics
         assert "context_precision" in metrics
         assert "context_recall" in metrics
-        assert "factual_correctness" in metrics
+        assert "answer_correctness" in metrics
         assert "semantic_similarity" in metrics
 
     def test_evaluate_single_without_llm_config(self):

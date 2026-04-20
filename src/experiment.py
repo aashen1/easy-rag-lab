@@ -15,7 +15,7 @@ VALID_RAGAS_METRICS = {
     "answer_relevancy",
     "context_precision",
     "context_recall",
-    "factual_correctness",
+    "answer_correctness",
     "semantic_similarity",
 }
 RAGAS_EXCLUSIVE_METRICS = VALID_RAGAS_METRICS - VALID_GENERATION_METRICS

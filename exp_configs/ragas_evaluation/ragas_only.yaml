@@ -25,6 +25,8 @@ evaluation:
       - "faithfulness"
       - "answer_relevancy"
       - "context_precision"
+      - "context_recall"
+      - "answer_correctness"
 
 llm:
   question_generation: "default"
