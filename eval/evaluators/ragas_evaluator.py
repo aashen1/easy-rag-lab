@@ -66,18 +66,7 @@ class RagasEvaluator(BaseEvaluator):
         )
 
     def _create_llm(self, llm_config: Dict[str, str]) -> Any:
-        """
-        Create RAGAS-compatible LLM using LangchainLLMWrapper.
-
-        Uses ChatAnthropic with api_key='dummy' and the real key passed
-        via the Authorization: Bearer header, matching the pattern used
-        by the project's Generator class. This is required because the
-        LongCat API proxy expects the key in the Authorization header
-        rather than the x-api-key header that the Anthropic SDK uses.
-
-        The LangchainLLMWrapper preserves these custom headers through
-        to the actual HTTP calls, unlike llm_factory + instructor which
-        strips them during client patching.
+        """Create RAGAS-compatible LLM using LangchainLLMWrapper.
 
         Args:
             llm_config: Dictionary containing api_key, base_url, model_name.
@@ -86,29 +75,11 @@ class RagasEvaluator(BaseEvaluator):
             RAGAS-compatible LangchainLLMWrapper instance.
         """
         try:
-            from langchain_anthropic import ChatAnthropic
-            from ragas.llms import LangchainLLMWrapper
+            from src.utils import create_llm_client
 
-            base_url = llm_config["base_url"].rstrip("/")
-            if not base_url.endswith("/anthropic"):
-                base_url = f"{base_url}/anthropic"
-
-            chat_model = ChatAnthropic(
-                model=llm_config["model_name"],
-                api_key="dummy",
-                base_url=base_url,
-                default_headers={
-                    "Authorization": f"Bearer {llm_config['api_key']}",
-                    "Content-Type": "application/json",
-                },
-                max_tokens=llm_config.get("max_tokens", 4096),
-                temperature=llm_config.get("temperature", 0.0),
-            )
-
-            return LangchainLLMWrapper(chat_model)
-
+            return create_llm_client(llm_config=llm_config, mode="langchain")
         except ImportError as e:
-            error_msg = f"Failed to import RAGAS dependencies: {str(e)}"
+            error_msg = f"Failed to create LLM client: {str(e)}"
             logger.error(error_msg)
             raise ImportError(
                 f"{error_msg}. Please install with: pixi add langchain-anthropic ragas"
