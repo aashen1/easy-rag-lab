@@ -41,6 +41,8 @@ class TestSetMetadata:
 
 
 class TestSetManager:
+    __test__ = False
+
     def __init__(self, config: Dict[str, Any]):
         """Initialize the TestSetManager with application configuration.
 
