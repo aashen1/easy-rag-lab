@@ -19,6 +19,8 @@ from loguru import logger
 
 from eval.evaluators.base import BaseEvaluator, EvaluationResult
 
+REFERENCE_REQUIRED_METRICS = {"context_precision", "context_recall", "answer_correctness", "semantic_similarity"}
+
 
 class RagasEvaluator(BaseEvaluator):
     """
@@ -317,6 +319,25 @@ class RagasEvaluator(BaseEvaluator):
         if generation_metrics is None:
             generation_metrics = self._generation_metrics
 
+        if expected_answer is None:
+            ref_required = [m for m in generation_metrics if m in REFERENCE_REQUIRED_METRICS]
+            if ref_required:
+                logger.warning(
+                    f"Metrics {ref_required} require reference (expected_answer) "
+                    f"but none provided for {question_id}. Skipping these metrics."
+                )
+                generation_metrics = [m for m in generation_metrics if m not in REFERENCE_REQUIRED_METRICS]
+
+        if not generation_metrics:
+            return EvaluationResult(
+                question_id=question_id,
+                question=question,
+                answer=answer,
+                contexts=contexts,
+                retrieval_metrics={},
+                generation_metrics={},
+            )
+
         generation_results = {}
         error = None
 
@@ -403,6 +424,19 @@ class RagasEvaluator(BaseEvaluator):
         """
         if generation_metrics is None:
             generation_metrics = self._generation_metrics
+
+        samples_without_ref = [
+            s for s in samples
+            if s.get("expected_answer") is None
+        ]
+        if samples_without_ref:
+            ref_required = [m for m in generation_metrics if m in REFERENCE_REQUIRED_METRICS]
+            if ref_required:
+                logger.warning(
+                    f"Metrics {ref_required} require reference (expected_answer) "
+                    f"but {len(samples_without_ref)}/{len(samples)} samples lack it. "
+                    f"These metrics may return NaN for those samples."
+                )
 
         results = []
 
