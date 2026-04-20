@@ -99,18 +99,56 @@ TODO.md 中有 **2 条未归档 issue**（无 📋 标记）：
 
 ## 执行计划
 
+### Phase 1: 打扫卫生
+
 1. **调用 todo-archiver skill** 归档 2 条未归档 issue
 2. **清理 .trae 目录**：将已完成的文档归档到 `docs/archive/specs/` 等位置
-3. **实施高优先级小 issue**（按用户确认的范围）：
 
-   * INV-008：更新 LLM 报告提示词中的问题类型分类
+### Phase 2: 实施小 issue（含教学注释）
 
-   * RF-010：添加 ruff 配置
+> **核心原则**：RF-010（ruff/lint）和 FEAT-018（pre-commit）的提出目的是**学习**，
+> 因此实施时必须附带详细的教学注释，帮助理解这些工具是什么、为什么用、怎么用。
 
-   * RF-005：统一 Anthropic 客户端创建
+#### 2.1 INV-008：LLM 报告提示词更新（极小）
 
-   * FEAT-018：添加 pre-commit 钩子
+- 修改 `experiment_reporter.py` 中多变体对比 LLM 报告模板的问题类型分类
+- `factual/boundary/multi-hop` → `single_fact/multi_fact/reasoning/comparative/missing/irrelevant`
 
-   * FEAT-016：添加 DATA\_DIR 配置项
-4. 每完成一项立即提交（原子提交）
+#### 2.2 RF-010 + FEAT-018：ruff/lint + pre-commit（教学重点）
+
+这两个 issue 高度关联，合并实施。**教学策略**：
+
+1. **创建 `docs/guides/lint-and-precommit.md` 教学文档**，内容包括：
+   - **Linter 是什么**：代码静态分析工具的概念，类比"语法检查器"
+   - **Ruff 是什么**：为什么选 Ruff（替代 flake8/pylint/black/isort 的全能工具）
+   - **Ruff 能做什么**：错误检测、代码格式化、import 排序，每项配本项目实际代码示例
+   - **pre-commit 是什么**：Git 钩子管理器，在 commit 前自动运行检查
+   - **两者配合的效果**：提交代码时自动检查和格式化，防止低质量代码入库
+   - **日常使用**：`pixi run ruff check`、`pixi run ruff format`、自动触发场景
+
+2. **配置文件加教学注释**：
+   - `pyproject.toml`（ruff 配置）：每个配置段加中文注释说明作用
+   - `.pre-commit-config.yaml`：每个钩子加注释说明检查什么
+
+3. **具体实施步骤**：
+   - 添加 ruff 依赖到 pixi.toml
+   - 创建 `pyproject.toml`，配置 ruff 规则（适配本项目现状，初期宽松）
+   - 创建 `.pre-commit-config.yaml`，配置 ruff + trailing-whitespace + yaml 检查
+   - 添加 pixi task：`ruff-check`、`ruff-format`
+   - 运行 `ruff check` 做首次扫描，记录现有问题数量但不强制修复
+   - 在 CLAUDE.md 中添加 lint 检查命令提示
+
+#### 2.3 RF-005：Anthropic 客户端统一抽象（小）
+
+- 提取公共函数到 `src/llm_client.py`（或类似模块）
+- 4 处重复代码改为调用公共函数
+
+#### 2.4 FEAT-016：DATA_DIR 配置项支持（小）
+
+- config.yaml 添加 `data_dir` 顶级配置
+- 各子配置的路径改为基于 `data_dir` 的相对路径
+
+### 提交策略
+
+每完成一个逻辑单元立即提交（原子提交），commit message 遵循 Conventional Commits。
 
