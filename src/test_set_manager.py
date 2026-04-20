@@ -664,3 +664,97 @@ class TestSetManager:
                     )
 
         return (False, "")
+
+    def _clean_machine_test_set(
+        self,
+        test_set_data: Dict[str, Any],
+        meal_config: "MealConfig",
+        invalid_questions: List[Dict[str, Any]],
+        generation_config: Optional[Dict[str, Any]] = None,
+        generator: Optional["TestSetGenerator"] = None,
+        llm_preset: str = "default",
+        token_tracker: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """Clean a machine-generated test set by removing invalid questions
+        and supplementing new ones.
+
+        Args:
+            test_set_data: Test set dictionary to clean.
+            meal_config: MealConfig for the current meal.
+            invalid_questions: List of questions to remove.
+            generation_config: Optional generation config from experiment.
+                If provided, overrides the test set's generation config.
+            generator: TestSetGenerator for supplementing questions.
+            llm_preset: LLM preset for generation.
+            token_tracker: Optional token tracker.
+
+        Returns:
+            Cleaned test set dictionary.
+        """
+        original_count = len(test_set_data.get("questions", []))
+
+        invalid_ids = {q.get("id") for q in invalid_questions}
+        test_set_data["questions"] = [
+            q for q in test_set_data.get("questions", [])
+            if q.get("id") not in invalid_ids
+        ]
+
+        stored_generation_config = test_set_data["metadata"].get("generation")
+        effective_generation_config = generation_config or stored_generation_config
+
+        if generation_config is not None and stored_generation_config != generation_config:
+            logger.warning(
+                f"Generation config mismatch for test set '{test_set_data['metadata']['name']}'. "
+                f"Using experiment config instead of stored config."
+            )
+            config_change_entry = {
+                "event": "generation_config_changed",
+                "old_config": stored_generation_config,
+                "new_config": generation_config,
+                "timestamp": datetime.now().isoformat(),
+            }
+            test_set_data["metadata"]["audit_log"].append(config_change_entry)
+
+        added_count = 0
+        if generator is not None and invalid_questions:
+            deficit = len(invalid_questions)
+            try:
+                test_set_data = generator.supplement_document_based_questions(
+                    meal_name=meal_config.name,
+                    existing_test_set=test_set_data,
+                    target_count=original_count,
+                    llm_preset=llm_preset,
+                    token_tracker=token_tracker,
+                )
+                added_count = len(test_set_data.get("questions", [])) - (original_count - len(invalid_questions))
+                if added_count < 0:
+                    added_count = 0
+                logger.info(
+                    f"Supplemented {added_count} questions for test set "
+                    f"'{test_set_data['metadata']['name']}'"
+                )
+            except Exception as e:
+                logger.error(f"Failed to supplement questions: {str(e)}")
+
+        from_meal_id = test_set_data["metadata"].get("meal_id", "")
+        test_set_data["metadata"]["meal_id"] = meal_config.data_id
+        test_set_data["metadata"]["updated_at"] = datetime.now().isoformat()
+
+        audit_entry = {
+            "event": "cleaned",
+            "from_meal": from_meal_id,
+            "to_meal": meal_config.data_id,
+            "removed_count": len(invalid_questions),
+            "added_count": added_count,
+            "timestamp": datetime.now().isoformat(),
+        }
+        test_set_data["metadata"]["audit_log"].append(audit_entry)
+
+        self.save_test_set(meal_config.name, test_set_data)
+
+        logger.info(
+            f"Cleaned machine test set '{test_set_data['metadata']['name']}': "
+            f"removed {len(invalid_questions)}, added {added_count}"
+        )
+
+        return test_set_data

@@ -1226,3 +1226,272 @@ class TestCleaningWarnings:
         should_warn, message = manager._should_warn_about_cleaning(test_set_data)
         assert should_warn is False
         assert message == ""
+
+
+class TestCleanMachineTestSet:
+    @pytest.fixture
+    def env(self, tmp_path):
+        config = _make_config(tmp_path)
+        manager = TestSetManager(config)
+        return manager, config
+
+    def test_basic_cleaning_removes_invalid_questions(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(
+            data_id="current_meal",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+        _create_meal_dir(config, meal_config.name)
+        test_set_data = {
+            "metadata": {
+                "name": "machine_set",
+                "meal_id": "old_meal_id",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+                "generation": {"strategy": "document", "num_questions": 5},
+                "audit_log": [],
+            },
+            "questions": [
+                {"id": 1, "question": "Q1", "source_files": ["reports/report_0.pdf"]},
+                {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]},
+                {"id": 3, "question": "Q3", "source_files": ["reports/report_0.pdf"]},
+            ],
+        }
+        invalid_questions = [{"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}]
+        result = manager._clean_machine_test_set(
+            test_set_data, meal_config, invalid_questions
+        )
+        assert len(result["questions"]) == 2
+        question_ids = {q["id"] for q in result["questions"]}
+        assert question_ids == {1, 3}
+
+    def test_cleaning_supplements_questions_to_restore_count(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(
+            data_id="current_meal",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+        _create_meal_dir(config, meal_config.name)
+
+        class MockGenerator:
+            def supplement_document_based_questions(
+                self, meal_name, existing_test_set, target_count, llm_preset, token_tracker
+            ):
+                current_count = len(existing_test_set.get("questions", []))
+                deficit = target_count - current_count
+                for i in range(deficit):
+                    existing_test_set["questions"].append(
+                        {"id": 100 + i, "question": f"New Q{i}"}
+                    )
+                return existing_test_set
+
+        test_set_data = {
+            "metadata": {
+                "name": "machine_set",
+                "meal_id": "old_meal_id",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+                "generation": {"strategy": "document", "num_questions": 5},
+                "audit_log": [],
+            },
+            "questions": [
+                {"id": 1, "question": "Q1", "source_files": ["reports/report_0.pdf"]},
+                {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]},
+                {"id": 3, "question": "Q3", "source_files": ["reports/report_0.pdf"]},
+            ],
+        }
+        invalid_questions = [{"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}]
+        result = manager._clean_machine_test_set(
+            test_set_data, meal_config, invalid_questions,
+            generator=MockGenerator()
+        )
+        assert len(result["questions"]) == 3
+        question_ids = {q["id"] for q in result["questions"]}
+        assert 1 in question_ids
+        assert 3 in question_ids
+        assert 100 in question_ids
+
+    def test_cleaning_updates_meal_id(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(
+            data_id="new_meal_id",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+        _create_meal_dir(config, meal_config.name)
+        test_set_data = {
+            "metadata": {
+                "name": "machine_set",
+                "meal_id": "old_meal_id",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+                "generation": {"strategy": "document", "num_questions": 5},
+                "audit_log": [],
+            },
+            "questions": [
+                {"id": 1, "question": "Q1", "source_files": ["reports/report_0.pdf"]},
+            ],
+        }
+        result = manager._clean_machine_test_set(
+            test_set_data, meal_config, []
+        )
+        assert result["metadata"]["meal_id"] == "new_meal_id"
+        assert result["metadata"]["updated_at"] != "2026-04-20T10:00:00"
+
+    def test_cleaning_adds_audit_log_entry(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(
+            data_id="new_meal_id",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+        _create_meal_dir(config, meal_config.name)
+        test_set_data = {
+            "metadata": {
+                "name": "machine_set",
+                "meal_id": "old_meal_id",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+                "generation": {"strategy": "document", "num_questions": 5},
+                "audit_log": [],
+            },
+            "questions": [
+                {"id": 1, "question": "Q1", "source_files": ["reports/report_0.pdf"]},
+                {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]},
+            ],
+        }
+        invalid_questions = [{"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}]
+        result = manager._clean_machine_test_set(
+            test_set_data, meal_config, invalid_questions
+        )
+        assert len(result["metadata"]["audit_log"]) == 1
+        entry = result["metadata"]["audit_log"][0]
+        assert entry["event"] == "cleaned"
+        assert entry["from_meal"] == "old_meal_id"
+        assert entry["to_meal"] == "new_meal_id"
+        assert entry["removed_count"] == 1
+        assert entry["added_count"] == 0
+        assert "timestamp" in entry
+
+    def test_generation_config_conflict_is_logged(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(
+            data_id="current_meal",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+        _create_meal_dir(config, meal_config.name)
+        test_set_data = {
+            "metadata": {
+                "name": "machine_set",
+                "meal_id": "old_meal_id",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+                "generation": {"strategy": "document", "num_questions": 5},
+                "audit_log": [],
+            },
+            "questions": [
+                {"id": 1, "question": "Q1", "source_files": ["reports/report_0.pdf"]},
+            ],
+        }
+        new_generation_config = {"strategy": "random", "num_questions": 10, "seed": 42}
+        result = manager._clean_machine_test_set(
+            test_set_data, meal_config, [],
+            generation_config=new_generation_config
+        )
+        assert len(result["metadata"]["audit_log"]) == 2
+        config_change_entry = result["metadata"]["audit_log"][0]
+        assert config_change_entry["event"] == "generation_config_changed"
+        assert config_change_entry["old_config"] == {"strategy": "document", "num_questions": 5}
+        assert config_change_entry["new_config"] == new_generation_config
+        cleaned_entry = result["metadata"]["audit_log"][1]
+        assert cleaned_entry["event"] == "cleaned"
+
+    def test_cleaning_without_generator_just_removes_questions(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(
+            data_id="current_meal",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+        _create_meal_dir(config, meal_config.name)
+        test_set_data = {
+            "metadata": {
+                "name": "machine_set",
+                "meal_id": "old_meal_id",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+                "generation": {"strategy": "document", "num_questions": 5},
+                "audit_log": [],
+            },
+            "questions": [
+                {"id": 1, "question": "Q1", "source_files": ["reports/report_0.pdf"]},
+                {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]},
+                {"id": 3, "question": "Q3", "source_files": ["missing2.pdf"]},
+            ],
+        }
+        invalid_questions = [
+            {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]},
+            {"id": 3, "question": "Q3", "source_files": ["missing2.pdf"]},
+        ]
+        result = manager._clean_machine_test_set(
+            test_set_data, meal_config, invalid_questions
+        )
+        assert len(result["questions"]) == 1
+        assert result["questions"][0]["id"] == 1
+        assert result["metadata"]["audit_log"][0]["removed_count"] == 2
+        assert result["metadata"]["audit_log"][0]["added_count"] == 0
+
+    def test_cleaning_saves_test_set(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(
+            data_id="current_meal",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+        _create_meal_dir(config, meal_config.name)
+        test_set_data = {
+            "metadata": {
+                "name": "machine_set",
+                "meal_id": "old_meal_id",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+                "generation": {"strategy": "document", "num_questions": 5},
+                "audit_log": [],
+            },
+            "questions": [
+                {"id": 1, "question": "Q1", "source_files": ["reports/report_0.pdf"]},
+                {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]},
+            ],
+        }
+        invalid_questions = [{"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}]
+        manager._clean_machine_test_set(
+            test_set_data, meal_config, invalid_questions
+        )
+        loaded = manager.load_test_set(meal_config.name, "machine_set")
+        assert len(loaded["questions"]) == 1
+        assert loaded["questions"][0]["id"] == 1
+        assert loaded["metadata"]["meal_id"] == "current_meal"
+
+    def test_cleaning_with_no_invalid_questions(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(
+            data_id="new_meal_id",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+        _create_meal_dir(config, meal_config.name)
+        test_set_data = {
+            "metadata": {
+                "name": "machine_set",
+                "meal_id": "old_meal_id",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+                "generation": {"strategy": "document", "num_questions": 5},
+                "audit_log": [],
+            },
+            "questions": [
+                {"id": 1, "question": "Q1", "source_files": ["reports/report_0.pdf"]},
+            ],
+        }
+        result = manager._clean_machine_test_set(
+            test_set_data, meal_config, []
+        )
+        assert len(result["questions"]) == 1
+        assert result["metadata"]["meal_id"] == "new_meal_id"
+        assert result["metadata"]["audit_log"][0]["removed_count"] == 0
+        assert result["metadata"]["audit_log"][0]["added_count"] == 0
