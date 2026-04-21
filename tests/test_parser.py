@@ -3,7 +3,33 @@ from unittest.mock import patch
 
 import pytest
 
-from src.parser import parse_all_pdfs, parse_pdf
+from src.parser import _inject_page_markers, parse_all_pdfs, parse_pdf
+
+
+class TestInjectPageMarkers:
+    def test_no_separators(self):
+        text = "# Title\n\nContent without separators."
+        result = _inject_page_markers(text)
+        assert result == text
+
+    def test_single_separator(self):
+        text = "Page 1 content\n-----\nPage 2 content"
+        result = _inject_page_markers(text)
+        assert "<!-- page: 2 -->" in result
+        assert "-----" not in result
+
+    def test_multiple_separators(self):
+        text = "Page 1\n-----\nPage 2\n-----\nPage 3"
+        result = _inject_page_markers(text)
+        assert "<!-- page: 2 -->" in result
+        assert "<!-- page: 3 -->" in result
+        assert result.count("<!-- page:") == 2
+
+    def test_preserves_content(self):
+        text = "Before\n-----\nAfter"
+        result = _inject_page_markers(text)
+        assert "Before" in result
+        assert "After" in result
 
 
 class TestParsePdf:
