@@ -173,40 +173,46 @@ def run_evaluation(
 
             llm_retrieval = {}
             if llm_retrieval_metrics_config and llm_config and contexts:
-                question = test_case.get("question", "")
-                ground_truth = test_case.get("answer", "")
+                if not expect_retrieval:
+                    logger.info(
+                        f"Skipping LLM retrieval metrics for test case {test_case['id']} "
+                        f"(expect_retrieval=False)"
+                    )
+                else:
+                    question = test_case.get("question", "")
+                    ground_truth = test_case.get("answer", "")
 
-                if "context_precision" in llm_retrieval_metrics_config:
-                    try:
-                        logger.info(f"Calculating context precision for test case {test_case['id']}")
-                        cp_score = calculate_context_precision(
-                            question=question,
-                            expected_output=ground_truth,
-                            retrieval_context=contexts,
-                            api_key=llm_config["api_key"],
-                            base_url=llm_config["base_url"],
-                            model_name=llm_config["model_name"],
-                        )
-                        llm_retrieval["context_precision"] = cp_score
-                    except Exception as e:
-                        logger.error(f"Failed to calculate context precision: {str(e)}")
-                        llm_retrieval["context_precision"] = None
+                    if "context_precision" in llm_retrieval_metrics_config:
+                        try:
+                            logger.info(f"Calculating context precision for test case {test_case['id']}")
+                            cp_score = calculate_context_precision(
+                                question=question,
+                                expected_output=ground_truth,
+                                retrieval_context=contexts,
+                                api_key=llm_config["api_key"],
+                                base_url=llm_config["base_url"],
+                                model_name=llm_config["model_name"],
+                            )
+                            llm_retrieval["context_precision"] = cp_score
+                        except Exception as e:
+                            logger.error(f"Failed to calculate context precision: {str(e)}")
+                            llm_retrieval["context_precision"] = None
 
-                if "context_recall" in llm_retrieval_metrics_config:
-                    try:
-                        logger.info(f"Calculating context recall for test case {test_case['id']}")
-                        cr_score = calculate_context_recall(
-                            question=question,
-                            ground_truth=ground_truth,
-                            retrieval_context=contexts,
-                            api_key=llm_config["api_key"],
-                            base_url=llm_config["base_url"],
-                            model_name=llm_config["model_name"],
-                        )
-                        llm_retrieval["context_recall"] = cr_score
-                    except Exception as e:
-                        logger.error(f"Failed to calculate context recall: {str(e)}")
-                        llm_retrieval["context_recall"] = None
+                    if "context_recall" in llm_retrieval_metrics_config:
+                        try:
+                            logger.info(f"Calculating context recall for test case {test_case['id']}")
+                            cr_score = calculate_context_recall(
+                                question=question,
+                                ground_truth=ground_truth,
+                                retrieval_context=contexts,
+                                api_key=llm_config["api_key"],
+                                base_url=llm_config["base_url"],
+                                model_name=llm_config["model_name"],
+                            )
+                            llm_retrieval["context_recall"] = cr_score
+                        except Exception as e:
+                            logger.error(f"Failed to calculate context recall: {str(e)}")
+                            llm_retrieval["context_recall"] = None
 
             result = {
                 "id": test_case["id"],

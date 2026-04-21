@@ -1458,7 +1458,7 @@ class TestSetGenerator:
         answer: str,
         source_path: str,
         chunks_dir: str = "data/chunks",
-        adjacent_tolerance: int = 1,
+        adjacent_tolerance: int = 0,
     ) -> list[str]:
         """Locate chunk IDs that contain information relevant to the answer.
 
@@ -1630,8 +1630,8 @@ class TestSetGenerator:
         chunk_text: str,
         key_sentences: list[str],
         key_terms: list[str],
-        term_threshold: int = 2,
-        overlap_threshold: float = 0.5,
+        term_threshold: int = 3,
+        overlap_threshold: float = 0.7,
     ) -> bool:
         """Check if a chunk text contains information relevant to the answer.
 
@@ -1645,9 +1645,9 @@ class TestSetGenerator:
             key_sentences: Key sentences extracted from the answer.
             key_terms: Key terms extracted from the answer.
             term_threshold: Minimum number of key terms that must appear in
-                the chunk for a match. Defaults to 2.
+                the chunk for a match. Defaults to 3.
             overlap_threshold: Minimum character overlap ratio for a key
-                sentence to be considered matching. Defaults to 0.5.
+                sentence to be considered matching. Defaults to 0.7.
 
         Returns:
             True if the chunk is considered relevant to the answer.

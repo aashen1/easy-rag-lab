@@ -775,6 +775,7 @@ def _collect_rag_samples(
                 "category": question_data.get("category"),
                 "difficulty": question_data.get("difficulty"),
                 "token_usage": response.get("token_usage"),
+                "expect_retrieval": question_data.get("expect_retrieval", True),
             }
 
             logger.success(
@@ -948,9 +949,12 @@ def _evaluate_with_ragas(
 
         generation_part = {}
         llm_retrieval_part = {}
+        expect_retrieval = sample.get("expect_retrieval", True)
+        
         for k, v in eval_result.generation_metrics.items():
             if k in retrieval_metric_names:
-                llm_retrieval_part[k] = v
+                if expect_retrieval:
+                    llm_retrieval_part[k] = v
             else:
                 generation_part[k] = v
 
@@ -976,9 +980,14 @@ def _evaluate_with_ragas(
         metric_parts = []
         for k, v in eval_result.generation_metrics.items():
             if v is not None:
+                if k in retrieval_metric_names and not expect_retrieval:
+                    continue
                 metric_parts.append(f"{k}={v:.4f}")
         metric_str = ", ".join(metric_parts) if metric_parts else "no metrics"
-        logger.success(f"Question {sample['question_id']} (RAGAS): {metric_str}")
+        if not expect_retrieval:
+            logger.success(f"Question {sample['question_id']} (RAGAS): {metric_str} (expect_retrieval=False, skipped LLM retrieval)")
+        else:
+            logger.success(f"Question {sample['question_id']} (RAGAS): {metric_str}")
 
         results.append(result)
 
