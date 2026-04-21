@@ -1,0 +1,21 @@
+- [x] pipeline.py 的 `build_index()` 正确传递 `parser_options=parser_config.get("pymupdf4llm")` 给 `parse_all_pdfs()`
+- [x] config.yaml 中 `ignore_images` 已移除，`write_images: false` 保留
+- [x] `compute_parser_config_hash()` 包含 options 字段，不同 options 产生不同 hash
+- [x] `_build_config_snapshot_and_hashes()` 的 parser 快照包含 options
+- [x] `parse_pdf(page_chunks=True)` 返回 `list[dict]`，每个 dict 包含 `text` 和 `metadata`（含 `page_number`）
+- [x] `parse_pdf(page_chunks=False)` 返回 `str`（向后兼容）
+- [x] `parse_all_pdfs()` 在 `page_chunks=True` 时输出 `.pages.json` 文件
+- [x] `.pages.json` 的 JSON 结构包含 `text`、`metadata`、`toc_items`、`tables` 字段
+- [x] `parse_all_pdfs()` 在 `page_chunks=True` 时跳过逻辑检查 `.pages.json` 是否存在
+- [x] `chunk_text_page_aware()` 每页独立分块，不产生跨页 chunk
+- [x] `chunk_text_page_aware()` 每个 chunk 的 metadata 包含 `page_number`
+- [x] `chunk_text_page_aware()` chunk_id 格式为 `{source_name}_p{page_number}_{chunk_index:03d}`
+- [x] `chunk_text_page_aware()` 空页跳过不产生 chunk
+- [x] `process_parsed_files_page_aware()` 读取 `.pages.json` 文件并输出 JSONL
+- [x] `process_parsed_files_page_aware()` 输出的 chunk metadata 包含 `page_number` 和 `strategy: "page_aware_fixed"`
+- [x] `build_chunks_if_needed()` 存在 `.pages.json` 时调用页感知分块，仅存在 `.md` 时调用原有分块
+- [x] `pipeline.build_index()` 支持页感知分块路径，source_filter 适配 `.pages.json`
+- [x] config.yaml 包含 `page_chunks: true`、`ignore_code: true`、`force_text: true`、`ocr_language: "chi_sim+eng"`、`show_progress: true`、`page_separators: false`
+- [x] 所有新增/修改函数有完整的类型标注和 docstring
+- [x] 所有新增/修改函数有对应的 pytest 测试
+- [x] `pixi run lint` 通过（无新增 lint 错误，既有错误均为历史遗留）
