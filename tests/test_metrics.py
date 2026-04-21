@@ -6,6 +6,7 @@ import pytest
 from eval.metrics import (
     _create_llm_client,
     _extract_statements,
+    _parse_chunk_id,
     _parse_relevancy_response,
     _verify_statements,
     calculate_answer_relevancy,
@@ -48,6 +49,21 @@ class TestNormalizeSource:
         md_result = normalize_source("annual_report/贵州茅台2023年年度报告.md")
         pdf_result = normalize_source("贵州茅台2023年年度报告.pdf")
         assert md_result == pdf_result
+
+    def test_path_with_parent_include_parent(self):
+        assert normalize_source("annual_reports/2025/贵州茅台.md", include_parent=True) == "2025/贵州茅台"
+
+    def test_path_with_parent_exclude_parent(self):
+        assert normalize_source("annual_reports/2025/贵州茅台.md", include_parent=False) == "贵州茅台"
+
+    def test_no_parent_include_parent(self):
+        assert normalize_source("贵州茅台.md", include_parent=True) == "贵州茅台"
+
+    def test_current_dir_parent(self):
+        assert normalize_source("./贵州茅台.md", include_parent=True) == "贵州茅台"
+
+    def test_deeply_nested_path(self):
+        assert normalize_source("a/b/c/report.md", include_parent=True) == "c/report"
 
 
 @pytest.mark.unit
@@ -97,12 +113,17 @@ class TestCalculateHitRateStandard:
 
     def test_cross_format_hit(self):
         retrieved = ["annual_report/贵州茅台2023年年度报告.md"]
-        expected = ["贵州茅台2023年年度报告.pdf"]
+        expected = ["annual_report/贵州茅台2023年年度报告.pdf"]
         assert calculate_hit_rate(retrieved, expected, k=5, mode="standard") == 1.0
 
     def test_cross_format_no_hit(self):
         retrieved = ["annual_report/其他报告.md"]
         expected = ["贵州茅台2023年年度报告.pdf"]
+        assert calculate_hit_rate(retrieved, expected, k=5, mode="standard") == 0.0
+
+    def test_different_dir_same_stem_no_hit(self):
+        retrieved = ["annual_report/贵州茅台2023年年度报告.md"]
+        expected = ["research/贵州茅台2023年年度报告.pdf"]
         assert calculate_hit_rate(retrieved, expected, k=5, mode="standard") == 0.0
 
     def test_default_mode_is_standard(self):
@@ -152,7 +173,7 @@ class TestCalculateHitRateRecall:
 
     def test_cross_format_hit(self):
         retrieved = ["annual_report/贵州茅台2023年年度报告.md"]
-        expected = ["贵州茅台2023年年度报告.pdf"]
+        expected = ["annual_report/贵州茅台2023年年度报告.pdf"]
         assert calculate_hit_rate(retrieved, expected, mode="recall") == 1.0
 
     def test_cross_format_no_hit(self):
@@ -202,7 +223,7 @@ class TestCalculateMRR:
 
     def test_cross_format_mrr(self):
         retrieved = ["other.md", "annual_report/贵州茅台2023年年度报告.md"]
-        expected = ["贵州茅台2023年年度报告.pdf"]
+        expected = ["annual_report/贵州茅台2023年年度报告.pdf"]
         assert calculate_mrr(retrieved, expected) == pytest.approx(1 / 2)
 
     def test_duplicate_in_retrieved(self):
@@ -243,12 +264,12 @@ class TestCalculateMRR:
 
     def test_special_characters_in_filename(self):
         retrieved = ["path/to/report_(2023)_final.md"]
-        expected = ["report_(2023)_final.pdf"]
+        expected = ["path/to/report_(2023)_final.pdf"]
         assert calculate_mrr(retrieved, expected) == 1.0
 
     def test_unicode_filename(self):
         retrieved = ["reports/贵州茅台_2023年报.md"]
-        expected = ["贵州茅台_2023年报.pdf"]
+        expected = ["reports/贵州茅台_2023年报.pdf"]
         assert calculate_mrr(retrieved, expected) == 1.0
 
     def test_both_empty(self):
@@ -303,7 +324,7 @@ class TestCalculateNDCG:
 
     def test_cross_format_ndcg(self):
         retrieved = ["annual_report/贵州茅台2023年年度报告.md", "other.md"]
-        expected = ["贵州茅台2023年年度报告.pdf"]
+        expected = ["annual_report/贵州茅台2023年年度报告.pdf"]
         score = calculate_ndcg(retrieved, expected)
         assert score == 1.0
 
@@ -438,8 +459,8 @@ class TestCalculateNDCGMultilevel:
 
     def test_multilevel_cross_format(self):
         retrieved = ["annual_report/doc1.md", "other.md"]
-        expected = ["doc1.pdf"]
-        rel_scores = {"doc1": 3}
+        expected = ["annual_report/doc1.pdf"]
+        rel_scores = {"annual_report/doc1": 3}
         score = calculate_ndcg(retrieved, expected, relevance_scores=rel_scores)
         assert score == 1.0
 
@@ -1389,48 +1410,48 @@ class TestCalculateContextRecall:
 class TestChunkHitRate:
 
     def test_exact_match(self):
-        retrieved = ["doc1_000", "doc1_001"]
-        expected = ["doc1_000"]
+        retrieved = ["doc1::chunk::000", "doc1::chunk::001"]
+        expected = ["doc1::chunk::000"]
         assert calculate_chunk_hit_rate(retrieved, expected) == 1.0
 
     def test_adjacent_match(self):
-        retrieved = ["doc1_001"]
-        expected = ["doc1_000"]
+        retrieved = ["doc1::chunk::001"]
+        expected = ["doc1::chunk::000"]
         assert calculate_chunk_hit_rate(retrieved, expected, adjacent_tolerance=1) == 1.0
 
     def test_no_match(self):
-        retrieved = ["doc1_005"]
-        expected = ["doc1_000"]
+        retrieved = ["doc1::chunk::005"]
+        expected = ["doc1::chunk::000"]
         assert calculate_chunk_hit_rate(retrieved, expected, adjacent_tolerance=1) == 0.0
 
     def test_different_document(self):
-        retrieved = ["doc2_000"]
-        expected = ["doc1_000"]
+        retrieved = ["doc2::chunk::000"]
+        expected = ["doc1::chunk::000"]
         assert calculate_chunk_hit_rate(retrieved, expected) == 0.0
 
     def test_empty_expected(self):
-        retrieved = ["doc1_000"]
+        retrieved = ["doc1::chunk::000"]
         expected = []
         assert calculate_chunk_hit_rate(retrieved, expected) == 0.0
 
     def test_empty_retrieved(self):
         retrieved = []
-        expected = ["doc1_000"]
+        expected = ["doc1::chunk::000"]
         assert calculate_chunk_hit_rate(retrieved, expected) == 0.0
 
     def test_multiple_expected_one_adjacent_match(self):
-        retrieved = ["doc1_001"]
-        expected = ["doc1_000", "doc1_005"]
+        retrieved = ["doc1::chunk::001"]
+        expected = ["doc1::chunk::000", "doc1::chunk::005"]
         assert calculate_chunk_hit_rate(retrieved, expected, adjacent_tolerance=1) == 1.0
 
     def test_k_parameter(self):
-        retrieved = ["doc1_010", "doc1_000"]
-        expected = ["doc1_000"]
+        retrieved = ["doc1::chunk::010", "doc1::chunk::000"]
+        expected = ["doc1::chunk::000"]
         assert calculate_chunk_hit_rate(retrieved, expected, k=1) == 0.0
 
     def test_zero_tolerance(self):
-        retrieved = ["doc1_001"]
-        expected = ["doc1_000"]
+        retrieved = ["doc1::chunk::001"]
+        expected = ["doc1::chunk::000"]
         assert calculate_chunk_hit_rate(retrieved, expected, adjacent_tolerance=0) == 0.0
 
 
@@ -1438,22 +1459,22 @@ class TestChunkHitRate:
 class TestChunkMRR:
 
     def test_exact_match_at_position_1(self):
-        retrieved = ["doc1_000", "doc2_000"]
-        expected = ["doc1_000"]
+        retrieved = ["doc1::chunk::000", "doc2::chunk::000"]
+        expected = ["doc1::chunk::000"]
         assert calculate_chunk_mrr(retrieved, expected) == 1.0
 
     def test_adjacent_match_at_position_2(self):
-        retrieved = ["doc2_000", "doc1_001"]
-        expected = ["doc1_000"]
+        retrieved = ["doc2::chunk::000", "doc1::chunk::001"]
+        expected = ["doc1::chunk::000"]
         assert calculate_chunk_mrr(retrieved, expected) == pytest.approx(0.5)
 
     def test_no_match(self):
-        retrieved = ["doc2_000", "doc2_001"]
-        expected = ["doc1_000"]
+        retrieved = ["doc2::chunk::000", "doc2::chunk::001"]
+        expected = ["doc1::chunk::000"]
         assert calculate_chunk_mrr(retrieved, expected) == 0.0
 
     def test_empty_expected(self):
-        retrieved = ["doc1_000"]
+        retrieved = ["doc1::chunk::000"]
         expected = []
         assert calculate_chunk_mrr(retrieved, expected) == 0.0
 
@@ -1462,27 +1483,27 @@ class TestChunkMRR:
 class TestChunkNDCG:
 
     def test_exact_match_relevance_2(self):
-        retrieved = ["doc1_000", "doc2_000"]
-        expected = ["doc1_000"]
+        retrieved = ["doc1::chunk::000", "doc2::chunk::000"]
+        expected = ["doc1::chunk::000"]
         dcg = (2**2 - 1) / math.log2(2)
         ideal_dcg = (2**2 - 1) / math.log2(2)
         assert calculate_chunk_ndcg(retrieved, expected) == pytest.approx(dcg / ideal_dcg)
 
     def test_adjacent_match_relevance_1(self):
-        retrieved = ["doc1_001"]
-        expected = ["doc1_000"]
+        retrieved = ["doc1::chunk::001"]
+        expected = ["doc1::chunk::000"]
         dcg = (2**1 - 1) / math.log2(2)
         ideal_dcg = (2**2 - 1) / math.log2(2)
         assert calculate_chunk_ndcg(retrieved, expected) == pytest.approx(dcg / ideal_dcg)
 
     def test_no_match(self):
-        retrieved = ["doc2_000", "doc2_001"]
-        expected = ["doc1_000"]
+        retrieved = ["doc2::chunk::000", "doc2::chunk::001"]
+        expected = ["doc1::chunk::000"]
         assert calculate_chunk_ndcg(retrieved, expected) == 0.0
 
     def test_mixed_exact_and_adjacent(self):
-        retrieved = ["doc1_000", "doc1_001", "doc2_000"]
-        expected = ["doc1_000"]
+        retrieved = ["doc1::chunk::000", "doc1::chunk::001", "doc2::chunk::000"]
+        expected = ["doc1::chunk::000"]
         dcg = (2**2 - 1) / math.log2(2) + (2**1 - 1) / math.log2(3)
         ideal_dcg = (2**2 - 1) / math.log2(2)
         assert calculate_chunk_ndcg(retrieved, expected) == pytest.approx(min(1.0, dcg / ideal_dcg))
@@ -1686,6 +1707,40 @@ class TestNormalizeSourceWithEquivalence:
         )
         assert result == "独立报告"
 
+    def test_include_parent_with_equivalence_groups(self):
+        groups = {
+            "2025/贵州茅台": [
+                "annual_reports/2025/贵州茅台.md",
+                "annual_reports/2025/贵州茅台_摘要.md",
+            ]
+        }
+        result = normalize_source_with_equivalence(
+            "annual_reports/2025/贵州茅台_摘要.md",
+            equivalence_groups=groups,
+            include_parent=True,
+        )
+        assert result == "2025/贵州茅台"
+
+    def test_include_parent_no_equivalence_groups(self):
+        result = normalize_source_with_equivalence(
+            "annual_reports/2025/贵州茅台.md",
+            include_parent=True,
+        )
+        assert result == "2025/贵州茅台"
+
+    def test_include_parent_non_member_returns_parent_stem(self):
+        groups = {
+            "2025/贵州茅台": [
+                "annual_reports/2025/贵州茅台.md",
+            ]
+        }
+        result = normalize_source_with_equivalence(
+            "annual_reports/2024/其他报告.md",
+            equivalence_groups=groups,
+            include_parent=True,
+        )
+        assert result == "2024/其他报告"
+
 
 @pytest.mark.unit
 class TestEquivalenceGroupDocumentMatching:
@@ -1781,6 +1836,28 @@ class TestEquivalenceGroupDocumentMatching:
             for s in ["中国建筑2023年年度报告.pdf"]
         ]
         assert calculate_hit_rate(retrieved, expected) == 0.0
+
+
+@pytest.mark.unit
+class TestParseChunkId:
+
+    def test_new_format_parsing(self):
+        assert _parse_chunk_id("doc1::chunk::003") == ("doc1", 3)
+
+    def test_new_format_with_underscores_in_name(self):
+        assert _parse_chunk_id("贵州茅台_英文版_::chunk::005") == ("贵州茅台_英文版_", 5)
+
+    def test_old_format_backward_compat(self):
+        assert _parse_chunk_id("doc1_003") == ("doc1", 3)
+
+    def test_old_format_with_underscores(self):
+        assert _parse_chunk_id("贵州茅台_英文版__003") == ("贵州茅台_英文版_", 3)
+
+    def test_no_separator(self):
+        assert _parse_chunk_id("nodata") == ("nodata", -1)
+
+    def test_non_numeric_suffix(self):
+        assert _parse_chunk_id("doc1_abc") == ("doc1_abc", -1)
 
 
 @pytest.mark.unit

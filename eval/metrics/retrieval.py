@@ -42,12 +42,12 @@ def calculate_hit_rate(
 
     if mode == "standard":
         top_k = retrieved_sources[:k]
-        top_k_set = set(normalize_source(s) for s in top_k)
-        expected_set = set(normalize_source(s) for s in expected_sources)
+        top_k_set = set(normalize_source(s, include_parent=True) for s in top_k)
+        expected_set = set(normalize_source(s, include_parent=True) for s in expected_sources)
         return 1.0 if top_k_set & expected_set else 0.0
 
-    retrieved_set = set(normalize_source(s) for s in retrieved_sources)
-    expected_set = set(normalize_source(s) for s in expected_sources)
+    retrieved_set = set(normalize_source(s, include_parent=True) for s in retrieved_sources)
+    expected_set = set(normalize_source(s, include_parent=True) for s in expected_sources)
     hits = len(retrieved_set & expected_set)
     return hits / len(expected_set)
 
@@ -87,10 +87,10 @@ def calculate_mrr(
     if not expected_sources:
         return 0.0
 
-    expected_set = set(normalize_source(s) for s in expected_sources)
+    expected_set = set(normalize_source(s, include_parent=True) for s in expected_sources)
 
     for i, source in enumerate(retrieved_sources):
-        if normalize_source(source) in expected_set:
+        if normalize_source(source, include_parent=True) in expected_set:
             return 1.0 / (i + 1)
 
     return 0.0
@@ -141,13 +141,13 @@ def calculate_ndcg(
     if not expected_sources:
         return 0.0
 
-    expected_normalized = [normalize_source(s) for s in expected_sources]
+    expected_normalized = [normalize_source(s, include_parent=True) for s in expected_sources]
     expected_set = set(expected_normalized)
 
     if relevance_scores is None:
-        relevance_scores = {normalize_source(s): 1 for s in expected_sources}
+        relevance_scores = {normalize_source(s, include_parent=True): 1 for s in expected_sources}
 
-    retrieved_normalized = [normalize_source(s) for s in retrieved_sources[:k]]
+    retrieved_normalized = [normalize_source(s, include_parent=True) for s in retrieved_sources[:k]]
 
     seen: set = set()
     unique_retrieved: list[str] = []
