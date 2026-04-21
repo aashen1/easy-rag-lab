@@ -12,7 +12,7 @@
 
 | 类型 | 待处理 | 进行中 | 已完成 | 已延期 |
 |------|--------|--------|--------|--------|
-| Bug | 4 | 0 | 15 | 2 |
+| Bug | 3 | 0 | 16 | 1 |
 | Feature | 15 | 0 | 19 | 0 |
 | Refactor | 9 | 0 | 11 | 0 |
 | Optimization | 7 | 0 | 0 | 0 |
@@ -32,7 +32,7 @@
 |----|------|------|------|------|
 | BUG-001 | 测试数据占位符未填充 | [v0.1.5 code-review](reviews/v0.1.5/code-review.md) | ⏳ 已延期 | 需人工从 PDF 查阅填入 |
 | BUG-003 | NDCG 分级相关性 | [v0.1.5 code-review](reviews/v0.1.5/code-review.md) | ⏳ 已延期 | 当前阶段无明确收益 |
-| BUG-017 | pytest tmp 目录配置导致 FileExistsError | [TODO.md](../TODO.md) | 📋 待处理 | 从 %TEMP% 改为项目目录后引入隐患 |
+| BUG-017 | pytest tmp 目录配置导致 FileExistsError | [TODO.md](../TODO.md) | ✅ 已完成 | 添加 tmp_path_retention_count=0 + pytest_configure 预清理；详见 [troubleshooting](troubleshooting/pytest-basetemp-fileexistserror.md) |
 | BUG-018 | RAGAS 框架版本兼容性风险 | [RAGAS 指南](guides/ragas-evaluation.md#4-已知未修复问题) | 📋 待处理 | 导入路径可能随 RAGAS 0.5.x break；当前锁定 >=0.4.3,<0.5 |
 | BUG-019 | context_precision/context_recall 在 generation 下时聚合位置不一致 | [RAGAS 指南](guides/ragas-evaluation.md#4-已知未修复问题) | 📋 待处理 | 旧写法放 generation 下时逐题结果在 generation 字典而非 llm_retrieval；建议统一用 retrieval |
 | BUG-020 | RAGAS evaluate() 的 raise_exceptions 行为差异 | [RAGAS 指南](guides/ragas-evaluation.md#4-已知未修复问题) | 📋 待处理 | evaluate_single 用 True 会抛异常中断，evaluate_batch 用 False 静默返回 NaN |
@@ -143,6 +143,7 @@
 | BUG-014 | NDCG 值超出 [0,1] 范围 | v0.1.8 合并发现 | 2026-04-20 |
 | BUG-015 | irrelevant/missing 问题类型 source_files 错误 | v0.1.8 合并发现 | 2026-04-20 |
 | BUG-016 | chunker config hash 缺少 strategy/semantic 参数 | v0.1.8 合并发现 | 2026-04-20 |
+| BUG-017 | pytest tmp 目录配置导致 FileExistsError | [TODO.md](../TODO.md) | 2026-04-22 |
 
 ### Feature
 

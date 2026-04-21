@@ -38,9 +38,9 @@ def deduplicate_by_document(
             if doc_stem != retrieved_chunk_ids[i]:
                 key = doc_stem
             else:
-                key = normalize_source(source)
+                key = normalize_source(source, include_parent=True)
         else:
-            key = normalize_source(source)
+            key = normalize_source(source, include_parent=True)
 
         if key not in seen:
             seen.add(key)

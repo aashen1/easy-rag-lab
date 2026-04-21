@@ -8,6 +8,7 @@ from src.token_tracker import (
     DetailedTokenUsage,
     TokenTracker,
     compute_detailed_usage,
+    estimate_tokens_tiktoken,
 )
 
 
@@ -23,6 +24,9 @@ class Generator:
         token_tracker: Optional TokenTracker for recording usage.
         system_prompt: Optional default system prompt. When None, the
             hardcoded default is used as the final fallback in generate().
+        max_context_tokens: Maximum total input tokens (system_prompt +
+            contexts + query). When set, contexts are truncated from the
+            tail to fit within this limit. None means no limit.
 
     Returns:
         Generator instance.
@@ -49,12 +53,14 @@ class Generator:
         max_tokens: int = 1024,
         token_tracker: TokenTracker | None = None,
         system_prompt: str | None = None,
+        max_context_tokens: int | None = None,
     ):
         self.model_name = model_name
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.token_tracker = token_tracker
         self.default_system_prompt = system_prompt
+        self.max_context_tokens = max_context_tokens
         self.last_token_usage: DetailedTokenUsage | None = None
 
         try:
@@ -71,6 +77,72 @@ class Generator:
             error_msg = f"Failed to initialize Anthropic client: {str(e)}"
             logger.error(error_msg)
             raise Exception(error_msg)
+
+    def _truncate_contexts(
+        self,
+        contexts: list[str],
+        system_prompt: str,
+        query: str,
+    ) -> list[str]:
+        """Truncate contexts from the tail to fit within max_context_tokens.
+
+        Estimates the total input tokens (system_prompt + contexts + query)
+        and removes contexts from the tail until the total fits within
+        the configured limit. The safety buffer accounts for output tokens
+        (max_tokens) and message format overhead.
+
+        Args:
+            contexts: List of context strings to potentially truncate.
+            system_prompt: The resolved system prompt text.
+            query: The user query text.
+
+        Returns:
+            Potentially truncated list of context strings. Returns the
+            original list unchanged when max_context_tokens is None or
+            when no truncation is needed.
+        """
+        if not contexts or self.max_context_tokens is None:
+            return contexts
+
+        safety_buffer = 200
+        available = self.max_context_tokens - self.max_tokens - safety_buffer
+
+        if available <= 0:
+            logger.warning(
+                f"max_context_tokens ({self.max_context_tokens}) too small "
+                f"for max_tokens ({self.max_tokens}) + buffer ({safety_buffer}). "
+                f"No contexts will be sent."
+            )
+            return []
+
+        system_tokens = estimate_tokens_tiktoken(system_prompt)
+        query_tokens = estimate_tokens_tiktoken(query)
+        overhead = system_tokens + query_tokens
+
+        if overhead >= available:
+            logger.warning(
+                f"System prompt + query ({overhead} tokens) already exceeds "
+                f"available context ({available} tokens). No contexts will be sent."
+            )
+            return []
+
+        remaining = available - overhead
+        truncated: list[str] = []
+        total = 0
+        for ctx in contexts:
+            ctx_tokens = estimate_tokens_tiktoken(ctx)
+            if total + ctx_tokens > remaining:
+                break
+            truncated.append(ctx)
+            total += ctx_tokens
+
+        if len(truncated) < len(contexts):
+            logger.warning(
+                f"Context truncated: {len(contexts)} -> {len(truncated)} chunks, "
+                f"estimated tokens: {overhead + total}/{self.max_context_tokens}"
+            )
+
+        return truncated
 
     def generate(
         self,
@@ -117,6 +189,8 @@ class Generator:
                 system_prompt = self.default_system_prompt
             if system_prompt is None:
                 system_prompt = self.DEFAULT_SYSTEM_PROMPT
+
+            contexts = self._truncate_contexts(contexts, system_prompt, query)
 
             if sources:
                 context_text = "\n\n".join(

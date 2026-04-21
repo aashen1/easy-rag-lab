@@ -12,17 +12,17 @@ class TestBM25Retriever:
     def _make_test_chunks(self):
         return [
             {
-                "chunk_id": "doc1_000",
+                "chunk_id": "doc1::chunk::000",
                 "text": "贵州茅台2023年营业收入达到1500亿元，同比增长16.5%",
                 "metadata": {"source": "moutai_2023.md", "category": "annual_report"},
             },
             {
-                "chunk_id": "doc2_000",
+                "chunk_id": "doc2::chunk::000",
                 "text": "五粮液2023年实现营业收入832亿元，净利润302亿元",
                 "metadata": {"source": "wuliangye_2023.md", "category": "annual_report"},
             },
             {
-                "chunk_id": "doc3_000",
+                "chunk_id": "doc3::chunk::000",
                 "text": "白酒行业整体增速放缓，高端白酒市场格局稳定",
                 "metadata": {"source": "industry_2023.md", "category": "research_report"},
             },
@@ -78,7 +78,7 @@ class TestBM25Retriever:
         results = retriever.retrieve("茅台营业收入", top_k=3)
 
         assert len(results) >= 1
-        assert results[0]["chunk_id"] == "doc1_000"
+        assert results[0]["chunk_id"] == "doc1::chunk::000"
 
     def test_retrieve_top_k_limits_results(self):
         retriever = BM25Retriever()

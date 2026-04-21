@@ -3,7 +3,35 @@ from pathlib import Path
 
 import pytest
 
-from src.chunker import chunk_text, process_parsed_files
+from src.chunker import (
+    _extract_headings,
+    chunk_text,
+    process_parsed_files,
+)
+
+
+class TestExtractHeadings:
+    def test_no_headings(self):
+        text = "Just plain text.\nNo headings."
+        assert _extract_headings(text) == []
+
+    def test_single_heading(self):
+        text = "# Main Title\n\nSome content."
+        headings = _extract_headings(text)
+        assert headings == ["# Main Title"]
+
+    def test_multiple_headings(self):
+        text = "# Title\n## Subtitle\n### Sub-subtitle\nContent"
+        headings = _extract_headings(text)
+        assert len(headings) == 3
+
+    def test_heading_levels(self):
+        text = "# H1\n## H2\n### H3\n#### H4"
+        headings = _extract_headings(text)
+        assert headings[0] == "# H1"
+        assert headings[1] == "## H2"
+        assert headings[2] == "### H3"
+        assert headings[3] == "#### H4"
 
 
 class TestChunkText:
@@ -175,8 +203,8 @@ class TestProcessParsedFiles:
         with open(output_file, encoding="utf-8") as f:
             first_line = f.readline()
             chunk_data = json.loads(first_line)
-            assert chunk_data["chunk_id"].startswith("test_document_")
-            assert "_000" in chunk_data["chunk_id"]
+            assert chunk_data["chunk_id"].startswith("test_document::chunk::")
+            assert "::chunk::000" in chunk_data["chunk_id"]
 
     def test_process_parsed_files_preserves_directory_structure(self, tmp_path):
         input_dir = tmp_path / "input"

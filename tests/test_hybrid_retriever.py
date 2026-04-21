@@ -12,19 +12,19 @@ class TestHybridRetriever:
     def _make_vector_results(self):
         return [
             {
-                "chunk_id": "doc1_000",
+                "chunk_id": "doc1::chunk::000",
                 "text": "贵州茅台2023年营业收入1500亿元",
                 "metadata": {"source": "moutai.md"},
                 "score": 0.95,
             },
             {
-                "chunk_id": "doc2_000",
+                "chunk_id": "doc2::chunk::000",
                 "text": "五粮液2023年营收832亿元",
                 "metadata": {"source": "wuliangye.md"},
                 "score": 0.80,
             },
             {
-                "chunk_id": "doc3_000",
+                "chunk_id": "doc3::chunk::000",
                 "text": "白酒行业整体增速放缓",
                 "metadata": {"source": "industry.md"},
                 "score": 0.60,
@@ -34,19 +34,19 @@ class TestHybridRetriever:
     def _make_bm25_results(self):
         return [
             {
-                "chunk_id": "doc2_000",
+                "chunk_id": "doc2::chunk::000",
                 "text": "五粮液2023年营收832亿元",
                 "metadata": {"source": "wuliangye.md"},
                 "score": 15.2,
             },
             {
-                "chunk_id": "doc1_000",
+                "chunk_id": "doc1::chunk::000",
                 "text": "贵州茅台2023年营业收入1500亿元",
                 "metadata": {"source": "moutai.md"},
                 "score": 12.5,
             },
             {
-                "chunk_id": "doc4_000",
+                "chunk_id": "doc4::chunk::000",
                 "text": "泸州老窖2023年营收302亿元",
                 "metadata": {"source": "luzhoulaojiao.md"},
                 "score": 8.0,
@@ -126,7 +126,7 @@ class TestHybridRetriever:
         results = hybrid.retrieve("茅台营收")
         result_ids = {r["chunk_id"] for r in results}
 
-        assert "doc4_000" in result_ids
+        assert "doc4::chunk::000" in result_ids
 
     def test_rrf_fusion_boosts_shared_documents(self):
         vector_ret, bm25_ret = self._make_mock_retrievers()
@@ -140,12 +140,12 @@ class TestHybridRetriever:
         results = hybrid.retrieve("茅台营收")
         score_map = {r["chunk_id"]: r["score"] for r in results}
 
-        assert "doc1_000" in score_map
-        assert "doc2_000" in score_map
-        assert "doc4_000" in score_map
+        assert "doc1::chunk::000" in score_map
+        assert "doc2::chunk::000" in score_map
+        assert "doc4::chunk::000" in score_map
 
-        assert score_map["doc1_000"] > score_map["doc4_000"]
-        assert score_map["doc2_000"] > score_map["doc4_000"]
+        assert score_map["doc1::chunk::000"] > score_map["doc4::chunk::000"]
+        assert score_map["doc2::chunk::000"] > score_map["doc4::chunk::000"]
 
     def test_weighted_fusion_normalizes_scores(self):
         vector_ret, bm25_ret = self._make_mock_retrievers()

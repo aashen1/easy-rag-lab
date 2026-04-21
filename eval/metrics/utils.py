@@ -2,32 +2,51 @@ from pathlib import Path
 from typing import Any
 
 
-def normalize_source(source: str) -> str:
+def normalize_source(source: str, include_parent: bool = False) -> str:
     """Normalize source path to a comparable form.
 
-    Extracts the filename stem (without extension and directory),
+    By default, extracts the filename stem (without extension and directory),
     so that paths like "annual_report/贵州茅台2023年年度报告.md"
     and "贵州茅台2023年年度报告.pdf" both become "贵州茅台2023年年度报告".
 
+    When include_parent is True, includes the immediate parent directory
+    name in the result, producing "annual_report/贵州茅台2023年年度报告".
+    This prevents different directories with same-named documents from
+    being conflated.
+
     Args:
         source: Source path string.
+        include_parent: If True, include the parent directory name in the
+            normalized result as "{parent}/{stem}". If the path has no
+            parent (or the parent is "."), only the stem is returned.
+            Defaults to False for backward compatibility.
 
     Returns:
-        Normalized source stem string.
+        Normalized source string — either the stem alone or
+        "{parent}/{stem}" when include_parent is True and a parent
+        directory exists.
     """
-    return Path(source).stem
+    p = Path(source)
+    stem = p.stem
+    if include_parent and p.parent != Path("."):
+        parent_name = p.parent.name
+        if parent_name:
+            return f"{parent_name}/{stem}"
+    return stem
 
 
 def normalize_source_with_equivalence(
     source: str,
     equivalence_groups: dict[str, list[str]] | None = None,
+    include_parent: bool = False,
 ) -> str:
     """Normalize source path with equivalence group matching.
 
-    First normalizes the source to its stem using normalize_source,
-    then checks if the stem belongs to any equivalence group. If it
-    does, returns the group key (the primary member's stem) so that
-    equivalent documents map to the same identifier.
+    First normalizes the source using normalize_source (optionally
+    including the parent directory), then checks if the result belongs
+    to any equivalence group. If it does, returns the group key (the
+    primary member's normalized form) so that equivalent documents map
+    to the same identifier.
 
     This allows documents like "中国建筑2023年年度报告" and
     "中国建筑2023年年度报告摘要" to be treated as the same document
@@ -39,17 +58,20 @@ def normalize_source_with_equivalence(
             file paths. The group key is the primary member's stem, and
             the value contains all equivalent file paths. If None or
             empty, behaves like normalize_source.
+        include_parent: If True, include the parent directory name in
+            the normalized result. Passed through to normalize_source.
+            Defaults to False for backward compatibility.
 
     Returns:
         Group key if the source belongs to an equivalence group,
-        otherwise the normalized stem.
+        otherwise the normalized stem (with optional parent).
     """
-    stem = normalize_source(source)
+    stem = normalize_source(source, include_parent=include_parent)
     if not equivalence_groups:
         return stem
     for group_key, members in equivalence_groups.items():
         for member in members:
-            if normalize_source(member) == stem:
+            if normalize_source(member, include_parent=include_parent) == stem:
                 return group_key
     return stem
 
@@ -57,9 +79,9 @@ def normalize_source_with_equivalence(
 def _parse_chunk_id(chunk_id: str) -> tuple:
     """Parse chunk_id into (doc_stem, chunk_index).
 
-    Chunk IDs are expected to follow the format "{doc_stem}_{index:03d}",
-    where the suffix after the last underscore is a zero-padded integer
-    representing the chunk index within the document.
+    Supports two formats:
+    - New format: "{doc_stem}::chunk::{index}" — splits by "::chunk::".
+    - Old format: "{doc_stem}_{index:03d}" — falls back to rfind("_").
 
     Args:
         chunk_id: Chunk identifier string to parse.
@@ -67,8 +89,17 @@ def _parse_chunk_id(chunk_id: str) -> tuple:
     Returns:
         Tuple of (doc_stem, chunk_index) where doc_stem is the document
         stem string and chunk_index is the integer chunk index.
-        Returns (chunk_id, -1) if the suffix cannot be parsed as an integer.
+        Returns (chunk_id, -1) if parsing fails.
     """
+    separator = "::chunk::"
+    if separator in chunk_id:
+        parts = chunk_id.split(separator)
+        doc_stem = parts[0]
+        try:
+            chunk_index = int(parts[1])
+            return (doc_stem, chunk_index)
+        except (ValueError, IndexError):
+            return (chunk_id, -1)
     last_underscore = chunk_id.rfind("_")
     if last_underscore == -1:
         return (chunk_id, -1)

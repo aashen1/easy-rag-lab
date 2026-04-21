@@ -1049,7 +1049,7 @@ class TestEvaluateWithBuiltinContextsSourcesSeparation:
                 "contexts": ["Revenue was $1M in 2023.", "Profit was $500K."],
                 "expected_sources": ["doc1.pdf"],
                 "retrieved_sources": ["doc1.pdf", "doc2.pdf"],
-                "chunk_ids": ["doc1_001", "doc2_003"],
+                "chunk_ids": ["doc1::chunk::001", "doc2::chunk::003"],
                 "question_type": "factual",
                 "time_seconds": 1.5,
                 "test_set": "test_set_1",
@@ -1090,7 +1090,7 @@ class TestEvaluateWithBuiltinContextsSourcesSeparation:
                 "contexts": ["Revenue was $1M in 2023."],
                 "expected_sources": ["doc1.pdf"],
                 "retrieved_sources": ["doc1.pdf"],
-                "chunk_ids": ["doc1_001", "doc2_003"],
+                "chunk_ids": ["doc1::chunk::001", "doc2::chunk::003"],
                 "question_type": "single_fact",
                 "time_seconds": 1.0,
                 "test_set": "test_set_1",
@@ -1112,7 +1112,7 @@ class TestEvaluateWithBuiltinContextsSourcesSeparation:
             )
 
             call_kwargs = mock_eval.call_args.kwargs
-            assert call_kwargs["chunk_ids"] == ["doc1_001", "doc2_003"]
+            assert call_kwargs["chunk_ids"] == ["doc1::chunk::001", "doc2::chunk::003"]
             assert call_kwargs["question_type"] == "single_fact"
 
     def test_evaluate_with_builtin_handles_error_samples(self):

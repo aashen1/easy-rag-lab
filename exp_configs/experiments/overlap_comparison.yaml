@@ -1,0 +1,66 @@
+name: "overlap_comparison"
+description: "chunk_overlap 对比实验 - 探究不同 overlap 值对检索质量的影响（chunk_size 固定 512）"
+
+data:
+  meal: "meal_overlap_comparison"
+  create_if_missing:
+    sample_ratio: 0.2
+    seed: 42
+
+test_sets:
+  - name: "overlap_eval"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 50
+      type_distribution:
+        single_fact: 0.30
+        multi_fact: 0.25
+        reasoning: 0.15
+        comparative: 0.15
+        missing: 0.10
+        irrelevant: 0.05
+
+variants:
+  - name: "overlap_0"
+    description: "overlap=0 (基线，无重叠)"
+    config_overrides:
+      chunker:
+        chunk_size: 512
+        chunk_overlap: 0
+
+  - name: "overlap_32"
+    description: "overlap=32 (约 6.25% chunk_size)"
+    config_overrides:
+      chunker:
+        chunk_size: 512
+        chunk_overlap: 32
+
+  - name: "overlap_64"
+    description: "overlap=64 (约 12.5% chunk_size)"
+    config_overrides:
+      chunker:
+        chunk_size: 512
+        chunk_overlap: 64
+
+  - name: "overlap_128"
+    description: "overlap=128 (约 25% chunk_size)"
+    config_overrides:
+      chunker:
+        chunk_size: 512
+        chunk_overlap: 128
+
+evaluation:
+  llm_preset: "default"
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+
+llm:
+  question_generation: "default"
+  answering: "default"

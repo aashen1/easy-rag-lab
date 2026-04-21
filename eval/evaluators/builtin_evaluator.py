@@ -189,8 +189,8 @@ class BuiltinEvaluator(BaseEvaluator):
 
             if expected_sources and expect_retrieval:
                 if equivalence_groups:
-                    norm_retrieved = [normalize_source_with_equivalence(s, equivalence_groups) for s in sources_for_retrieval]
-                    norm_expected = [normalize_source_with_equivalence(s, equivalence_groups) for s in expected_sources]
+                    norm_retrieved = [normalize_source_with_equivalence(s, equivalence_groups, include_parent=True) for s in sources_for_retrieval]
+                    norm_expected = [normalize_source_with_equivalence(s, equivalence_groups, include_parent=True) for s in expected_sources]
                 else:
                     norm_retrieved = sources_for_retrieval
                     norm_expected = expected_sources

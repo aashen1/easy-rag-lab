@@ -9,6 +9,23 @@ from loguru import logger
 from src.utils import detect_document_category, ensure_dir
 
 
+def _extract_headings(text: str) -> list[str]:
+    """Extract Markdown headings from text.
+
+    Args:
+        text: Input text with optional Markdown headings.
+
+    Returns:
+        List of heading strings (e.g., ['# Title', '## Subtitle']).
+    """
+    headings = []
+    for line in text.split('\n'):
+        stripped = line.strip()
+        if stripped.startswith('#'):
+            headings.append(stripped)
+    return headings
+
+
 def _split_into_sentences(text: str) -> list[str]:
     """Split text into sentences using Chinese and English punctuation.
 
@@ -406,7 +423,9 @@ def process_parsed_files_semantic(
 
             with open(output_file, "w", encoding="utf-8") as f:
                 for chunk in chunks:
-                    chunk_id = f"{source_name}_{chunk['metadata']['chunk_index']:03d}"
+                    chunk_id = f"{source_name}::chunk::{chunk['metadata']['chunk_index']:03d}"
+
+                    chunk_headings = _extract_headings(chunk["text"])
 
                     chunk_data = {
                         "chunk_id": chunk_id,
@@ -420,6 +439,7 @@ def process_parsed_files_semantic(
                             "start_token": chunk["metadata"]["start_token"],
                             "end_token": chunk["metadata"]["end_token"],
                             "strategy": chunk["metadata"].get("strategy", "semantic"),
+                            "headings": chunk_headings,
                         },
                     }
 

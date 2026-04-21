@@ -121,7 +121,9 @@ class RagasEvaluator(BaseEvaluator):
             RAGAS-compatible HuggingFaceEmbeddings instance with both modern and legacy interfaces.
         """
         try:
-            from ragas.embeddings import HuggingFaceEmbeddings as RagasHuggingFaceEmbeddings
+            from ragas.embeddings import (
+                HuggingFaceEmbeddings as RagasHuggingFaceEmbeddings,
+            )
 
             fallback_config = config.get("embedding", {})
             embedding_config = self._embedding_config or fallback_config
