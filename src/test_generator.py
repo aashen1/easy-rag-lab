@@ -4,15 +4,14 @@ import re
 import warnings
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from loguru import logger
 
 from src.generator import Generator
 from src.meal import ArtifactCache, MealConfig, MealManager
 from src.test_set_manager import TestSetManager, TestSetMetadata
-from src.utils import ensure_dir, get_llm_config
-from src.token_tracker import TokenTracker
+from src.utils import get_llm_config
 
 FACTUAL_PROMPT = """你是一个金融研报问答系统的测试工程师。请根据以下文本片段，生成一个可以用该文本直接回答的事实性问题。
 
@@ -229,7 +228,7 @@ class TestSetGenerator:
 
     DOCUMENT_TRUNCATE_MAX = 8000
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         """Initialize the TestSetGenerator with application configuration.
 
         Args:
@@ -247,7 +246,7 @@ class TestSetGenerator:
         self.test_gen_max_tokens = tg_config.get("max_tokens", 1024)
         self.test_gen_initial_max_tokens = tg_config.get("initial_max_tokens", 512)
         self.test_gen_supplement_max_tokens = tg_config.get("supplement_max_tokens", 1024)
-        self._doc_truncate_cache: Dict[str, str] = {}
+        self._doc_truncate_cache: dict[str, str] = {}
 
     def generate_test_set(
         self,

@@ -950,7 +950,7 @@ def _evaluate_with_ragas(
         generation_part = {}
         llm_retrieval_part = {}
         expect_retrieval = sample.get("expect_retrieval", True)
-        
+
         for k, v in eval_result.generation_metrics.items():
             if k in retrieval_metric_names:
                 if expect_retrieval:
