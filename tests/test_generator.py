@@ -191,3 +191,72 @@ class TestGenerator:
         user_content = call_kwargs.kwargs["messages"][0]["content"]
         assert "参考资料 1（来源：2026年光伏行业分析）:" in user_content
         assert "参考资料 2（来源：未知）:" in user_content
+
+
+@pytest.mark.unit
+class TestTruncateContexts:
+
+    @patch("src.llm_client.Anthropic")
+    def test_truncate_contexts_removes_tail_chunks(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key", max_context_tokens=250, max_tokens=10)
+        contexts = ["short", "word " * 200, "another " * 200]
+        result = generator._truncate_contexts(contexts, "system", "query")
+        assert len(result) < len(contexts)
+        assert result[0] == "short"
+
+    @patch("src.llm_client.Anthropic")
+    def test_truncate_contexts_no_limit_when_null(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key", max_context_tokens=None)
+        contexts = ["a" * 10000, "b" * 10000, "c" * 10000]
+        result = generator._truncate_contexts(contexts, "system", "query")
+        assert result == contexts
+
+    @patch("src.llm_client.Anthropic")
+    def test_truncate_contexts_fits_within_limit(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key", max_context_tokens=100000, max_tokens=1024)
+        contexts = ["short context", "another short context"]
+        result = generator._truncate_contexts(contexts, "system", "query")
+        assert result == contexts
+
+    @patch("src.llm_client.Anthropic")
+    def test_truncate_contexts_overhead_exceeds_returns_empty(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key", max_context_tokens=50, max_tokens=10)
+        long_system = "x" * 500
+        result = generator._truncate_contexts(["some context"], long_system, "query")
+        assert result == []
+
+    @patch("src.llm_client.Anthropic")
+    def test_truncate_contexts_logs_warning(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key", max_context_tokens=250, max_tokens=10)
+        with patch("src.generator.logger") as mock_logger:
+            long_contexts = ["word " * 200, "another " * 200]
+            generator._truncate_contexts(long_contexts, "system", "query")
+            warning_calls = [str(c) for c in mock_logger.warning.call_args_list]
+            assert any("Context truncated" in c for c in warning_calls)
+
+    @patch("src.llm_client.Anthropic")
+    def test_truncate_contexts_available_zero_returns_empty(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key", max_context_tokens=200, max_tokens=1024)
+        result = generator._truncate_contexts(["context"], "system", "query")
+        assert result == []
+
+    @patch("src.llm_client.Anthropic")
+    def test_generate_with_truncation_uses_truncated_contexts(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key", max_context_tokens=100, max_tokens=10)
+        with patch.object(generator, "_truncate_contexts", return_value=["truncated"]) as mock_truncate:
+            generator.generate(
+                query="What is the revenue?",
+                contexts=["Revenue was 100 billion.", "Profit was 50 billion."],
+            )
+            mock_truncate.assert_called_once()
+        call_kwargs = mock_anthropic_client.messages.create.call_args
+        user_content = call_kwargs.kwargs["messages"][0]["content"]
+        assert "truncated" in user_content
+        assert "Profit was 50 billion" not in user_content

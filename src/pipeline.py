@@ -64,6 +64,7 @@ class RAGPipeline:
             max_tokens=llm_config["max_tokens"],
             token_tracker=self.token_tracker,
             system_prompt=self.config.get("generation", {}).get("system_prompt"),
+            max_context_tokens=self.config.get("generation", {}).get("max_context_tokens"),
         )
 
         logger.success("RAG Pipeline initialized successfully")
