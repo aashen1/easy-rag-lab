@@ -10,6 +10,7 @@ from src.meal import (
     MealFile,
     MealManager,
     MealStatus,
+    build_chunks_if_needed,
     compute_chunker_config_hash,
     compute_data_id,
     compute_embedding_config_hash,
@@ -714,3 +715,62 @@ class TestMealManager:
 
         assert "options" in snapshot["parser"]
         assert snapshot["parser"]["options"] == {}
+
+
+class TestBuildChunksIfNeeded:
+    def test_build_chunks_if_needed_pages_json(self, tmp_path):
+        from unittest.mock import patch
+
+        parsed_dir = tmp_path / "parsed"
+        parsed_dir.mkdir()
+        (parsed_dir / "report.pages.json").write_text('{"pages": []}')
+
+        chunks_dir = tmp_path / "chunks"
+        chunker_config = {"chunk_size": 512, "chunk_overlap": 0}
+
+        with patch("src.chunker.process_parsed_files_page_aware") as mock_page_aware:
+            build_chunks_if_needed(parsed_dir, chunks_dir, chunker_config)
+            mock_page_aware.assert_called_once_with(
+                input_dir=str(parsed_dir),
+                output_dir=str(chunks_dir),
+                chunk_size=512,
+                overlap=0,
+                source_filter={"report.pages.json"},
+            )
+
+    def test_build_chunks_if_needed_md(self, tmp_path):
+        from unittest.mock import patch
+
+        parsed_dir = tmp_path / "parsed"
+        parsed_dir.mkdir()
+        (parsed_dir / "report.md").write_text("# Report")
+
+        chunks_dir = tmp_path / "chunks"
+        chunker_config = {"chunk_size": 512, "chunk_overlap": 0}
+
+        with patch("src.chunker.process_parsed_files") as mock_process:
+            build_chunks_if_needed(parsed_dir, chunks_dir, chunker_config)
+            mock_process.assert_called_once_with(
+                input_dir=str(parsed_dir),
+                output_dir=str(chunks_dir),
+                chunk_size=512,
+                overlap=0,
+                source_filter={"report.md"},
+            )
+
+    def test_build_chunks_if_needed_skips_existing(self, tmp_path):
+        from unittest.mock import patch
+
+        parsed_dir = tmp_path / "parsed"
+        parsed_dir.mkdir()
+        (parsed_dir / "report.md").write_text("# Report")
+
+        chunks_dir = tmp_path / "chunks"
+        chunks_dir.mkdir()
+        (chunks_dir / "report.jsonl").write_text("{}")
+
+        chunker_config = {"chunk_size": 512, "chunk_overlap": 0}
+
+        with patch("src.chunker.process_parsed_files") as mock_process:
+            build_chunks_if_needed(parsed_dir, chunks_dir, chunker_config)
+            mock_process.assert_not_called()

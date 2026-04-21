@@ -262,31 +262,53 @@ def build_chunks_if_needed(
     """
     Build chunks from parsed files if no chunk files exist.
 
+    Automatically detects whether parsed results are in .pages.json format
+    (page-level output) or .md format, and selects the appropriate chunking
+    path accordingly.
+
     Args:
-        parsed_dir: Directory containing parsed files (.md).
+        parsed_dir: Directory containing parsed files (.md or .pages.json).
         chunks_dir: Target directory for chunked files (.jsonl).
         chunker_config: Chunker configuration dictionary.
     """
-    from src.chunker import process_parsed_files
-
     if chunks_dir.exists() and any(chunks_dir.rglob("*.jsonl")):
         return
 
     logger.info("Chunking documents...")
 
-    source_filter_md = set()
-    if parsed_dir.exists():
-        for md_file in parsed_dir.rglob("*.md"):
-            rel = str(md_file.relative_to(parsed_dir))
-            source_filter_md.add(rel)
+    has_pages_json = parsed_dir.exists() and any(parsed_dir.rglob("*.pages.json"))
 
-    process_parsed_files(
-        input_dir=str(parsed_dir),
-        output_dir=str(chunks_dir),
-        chunk_size=chunker_config.get("chunk_size", 512),
-        overlap=chunker_config.get("chunk_overlap", 0),
-        source_filter=source_filter_md,
-    )
+    if has_pages_json:
+        from src.chunker import process_parsed_files_page_aware
+
+        source_filter = set()
+        for pages_file in parsed_dir.rglob("*.pages.json"):
+            rel = str(pages_file.relative_to(parsed_dir))
+            source_filter.add(rel)
+
+        process_parsed_files_page_aware(
+            input_dir=str(parsed_dir),
+            output_dir=str(chunks_dir),
+            chunk_size=chunker_config.get("chunk_size", 512),
+            overlap=chunker_config.get("chunk_overlap", 0),
+            source_filter=source_filter,
+        )
+    else:
+        from src.chunker import process_parsed_files
+
+        source_filter_md = set()
+        if parsed_dir.exists():
+            for md_file in parsed_dir.rglob("*.md"):
+                rel = str(md_file.relative_to(parsed_dir))
+                source_filter_md.add(rel)
+
+        process_parsed_files(
+            input_dir=str(parsed_dir),
+            output_dir=str(chunks_dir),
+            chunk_size=chunker_config.get("chunk_size", 512),
+            overlap=chunker_config.get("chunk_overlap", 0),
+            source_filter=source_filter_md,
+        )
 
 
 def build_index_from_chunks(
@@ -609,17 +631,26 @@ class MealManager:
             index_key, self.collection_prefix)
 
         chunker_hash = config_hashes["chunker"]
-        expected_md_names = [
-            Path(f.path).with_suffix(".md").name for f in meal_files
-        ]
-
-        parsed_dir, chunks_dir = self.cache.ensure_dirs(data_id, chunker_hash)
-
-        from src.parser import parse_all_pdfs
 
         parser_config = self.config.get("parser", {})
         chunker_config = self.config.get("chunker", {})
         embedding_config = self.config.get("embedding", {})
+
+        parser_options = parser_config.get("pymupdf4llm", {})
+        use_page_chunks = bool(parser_options.get("page_chunks", False))
+
+        if use_page_chunks:
+            expected_md_names = [
+                Path(f.path).with_suffix(".pages.json").name for f in meal_files
+            ]
+        else:
+            expected_md_names = [
+                Path(f.path).with_suffix(".md").name for f in meal_files
+            ]
+
+        parsed_dir, chunks_dir = self.cache.ensure_dirs(data_id, chunker_hash)
+
+        from src.parser import parse_all_pdfs
 
         cache_hit_parse = False
         cache_hit_chunk = False
@@ -639,9 +670,13 @@ class MealManager:
                 parser_options=parser_config.get("pymupdf4llm"),
             )
 
-        expected_jsonl_names = [
-            Path(md_name).with_suffix(".jsonl").name for md_name in expected_md_names
-        ]
+        expected_jsonl_names = []
+        for md_name in expected_md_names:
+            if md_name.endswith(".pages.json"):
+                base = md_name[: -len(".pages.json")]
+                expected_jsonl_names.append(base + ".jsonl")
+            else:
+                expected_jsonl_names.append(Path(md_name).with_suffix(".jsonl").name)
 
         if self.cache.chunks_exist(data_id, chunker_hash, expected_jsonl_names):
             logger.info(
