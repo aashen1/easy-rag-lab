@@ -1,5 +1,4 @@
 import json
-import re
 from pathlib import Path
 from typing import Any
 
@@ -8,25 +7,6 @@ import tiktoken
 from loguru import logger
 
 from src.utils import detect_document_category, ensure_dir
-
-
-def _extract_page_markers(text: str) -> list[tuple[int, int]]:
-    """Extract page marker positions from text.
-
-    Finds all <!-- page: N --> markers and returns their positions
-    as (page_number, char_offset) tuples.
-
-    Args:
-        text: Input text with optional page markers.
-
-    Returns:
-        List of (page_number, char_offset) tuples, sorted by offset.
-    """
-    markers = []
-    for match in re.finditer(r'<!--\s*page:\s*(\d+)\s*-->', text):
-        page_num = int(match.group(1))
-        markers.append((page_num, match.start()))
-    return markers
 
 
 def _extract_headings(text: str) -> list[str]:
@@ -44,46 +24,6 @@ def _extract_headings(text: str) -> list[str]:
         if stripped.startswith('#'):
             headings.append(stripped)
     return headings
-
-
-def _get_page_range(
-    chunk_text: str,
-    page_markers: list[tuple[int, int]],
-    full_text: str,
-) -> tuple[int | None, int | None]:
-    """Determine page range for a chunk based on page markers.
-
-    Args:
-        chunk_text: The chunk's text content.
-        page_markers: List of (page_number, char_offset) from full text.
-        full_text: The full document text.
-
-    Returns:
-        Tuple of (page_start, page_end) or (None, None) if no markers.
-    """
-    if not page_markers:
-        return (None, None)
-
-    search_prefix = chunk_text[:50] if len(chunk_text) >= 50 else chunk_text
-    chunk_start = full_text.find(search_prefix)
-    if chunk_start == -1:
-        chunk_start = 0
-
-    chunk_end = chunk_start + len(chunk_text)
-
-    page_start = None
-    page_end = None
-
-    for page_num, offset in page_markers:
-        if offset <= chunk_start:
-            page_start = page_num
-        if offset <= chunk_end:
-            page_end = page_num
-
-    if page_start is not None and page_end is None:
-        page_end = page_start
-
-    return (page_start, page_end)
 
 
 def _split_into_sentences(text: str) -> list[str]:
@@ -472,8 +412,6 @@ def process_parsed_files_semantic(
                 encoding_name=encoding_name,
             )
 
-            page_markers = _extract_page_markers(text)
-
             relative_path = md_file.relative_to(input_path)
             source_name = relative_path.stem
 
@@ -487,9 +425,6 @@ def process_parsed_files_semantic(
                 for chunk in chunks:
                     chunk_id = f"{source_name}::chunk::{chunk['metadata']['chunk_index']:03d}"
 
-                    chunk_page_start, chunk_page_end = _get_page_range(
-                        chunk["text"], page_markers, text
-                    )
                     chunk_headings = _extract_headings(chunk["text"])
 
                     chunk_data = {
@@ -504,8 +439,6 @@ def process_parsed_files_semantic(
                             "start_token": chunk["metadata"]["start_token"],
                             "end_token": chunk["metadata"]["end_token"],
                             "strategy": chunk["metadata"].get("strategy", "semantic"),
-                            "page_start": chunk_page_start,
-                            "page_end": chunk_page_end,
                             "headings": chunk_headings,
                         },
                     }

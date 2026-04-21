@@ -5,36 +5,9 @@ import pytest
 
 from src.chunker import (
     _extract_headings,
-    _extract_page_markers,
-    _get_page_range,
     chunk_text,
     process_parsed_files,
 )
-
-
-class TestExtractPageMarkers:
-    def test_no_markers(self):
-        text = "No page markers here."
-        assert _extract_page_markers(text) == []
-
-    def test_single_marker(self):
-        text = "Some text\n<!-- page: 3 -->\nMore text"
-        markers = _extract_page_markers(text)
-        assert len(markers) == 1
-        assert markers[0][0] == 3
-
-    def test_multiple_markers(self):
-        text = "Start\n<!-- page: 1 -->\nMiddle\n<!-- page: 2 -->\nEnd"
-        markers = _extract_page_markers(text)
-        assert len(markers) == 2
-        assert markers[0][0] == 1
-        assert markers[1][0] == 2
-
-    def test_marker_with_whitespace(self):
-        text = "Text\n<!--  page:  5  -->\nMore"
-        markers = _extract_page_markers(text)
-        assert len(markers) == 1
-        assert markers[0][0] == 5
 
 
 class TestExtractHeadings:
@@ -59,73 +32,6 @@ class TestExtractHeadings:
         assert headings[1] == "## H2"
         assert headings[2] == "### H3"
         assert headings[3] == "#### H4"
-
-
-class TestGetPageRange:
-    def test_no_markers(self):
-        result = _get_page_range("chunk text", [], "full text")
-        assert result == (None, None)
-
-    def test_single_page(self):
-        full_text = "Some content\n<!-- page: 1 -->\nMore content here"
-        markers = _extract_page_markers(full_text)
-        result = _get_page_range("More content here", markers, full_text)
-        assert result[0] == 1
-        assert result[1] == 1
-
-    def test_multi_page(self):
-        full_text = "Page1\n<!-- page: 1 -->\nContent A\n<!-- page: 2 -->\nContent B\n<!-- page: 3 -->\nContent C"
-        markers = _extract_page_markers(full_text)
-        result = _get_page_range("Content B", markers, full_text)
-        assert result[0] == 2
-        assert result[1] == 2
-
-
-class TestChunkMetadata:
-    def test_chunk_metadata_with_page_markers(self, tmp_path):
-        input_dir = tmp_path / "input"
-        output_dir = tmp_path / "output"
-        input_dir.mkdir()
-
-        md_content = "# Report\n\n" + "Page 1 content. " * 50 + "\n\n<!-- page: 2 -->\n\n" + "Page 2 content. " * 50
-        md_file = input_dir / "test.md"
-        md_file.write_text(md_content)
-
-        results = process_parsed_files(
-            str(input_dir), str(output_dir), chunk_size=50, overlap=0
-        )
-
-        assert len(results) == 1
-        assert results[0]["status"] == "success"
-
-        output_file = Path(results[0]["output"])
-        with open(output_file, encoding="utf-8") as f:
-            for line in f:
-                chunk_data = json.loads(line)
-                assert "page_start" in chunk_data["metadata"]
-                assert "page_end" in chunk_data["metadata"]
-                assert "headings" in chunk_data["metadata"]
-
-    def test_chunk_metadata_without_page_markers(self, tmp_path):
-        input_dir = tmp_path / "input"
-        output_dir = tmp_path / "output"
-        input_dir.mkdir()
-
-        md_content = "# Report\n\n" + "Content without page markers. " * 100
-        md_file = input_dir / "test.md"
-        md_file.write_text(md_content)
-
-        results = process_parsed_files(
-            str(input_dir), str(output_dir), chunk_size=50, overlap=0
-        )
-
-        output_file = Path(results[0]["output"])
-        with open(output_file, encoding="utf-8") as f:
-            first_line = f.readline()
-            chunk_data = json.loads(first_line)
-            assert chunk_data["metadata"]["page_start"] is None
-            assert chunk_data["metadata"]["page_end"] is None
-            assert isinstance(chunk_data["metadata"]["headings"], list)
 
 
 class TestChunkText:

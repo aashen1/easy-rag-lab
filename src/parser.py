@@ -1,32 +1,9 @@
-import re
 from pathlib import Path
 
 import pymupdf4llm
 from loguru import logger
 
 from src.utils import detect_document_category, ensure_dir
-
-
-def _inject_page_markers(md_text: str) -> str:
-    """Replace pymupdf4llm page separators with structured page markers.
-
-    pymupdf4llm with page_separators=True inserts '-----' between pages.
-    This function replaces each separator with '<!-- page: N -->' markers.
-
-    Args:
-        md_text: Raw markdown text from pymupdf4llm.
-
-    Returns:
-        Markdown text with structured page markers. If no separators are
-        found, the input text is returned unchanged.
-    """
-    parts = re.split(r'^-{5,}$', md_text, flags=re.MULTILINE)
-    result_parts = []
-    for i, part in enumerate(parts):
-        if i > 0:
-            result_parts.append(f'\n\n<!-- page: {i + 1} -->\n\n')
-        result_parts.append(part)
-    return ''.join(result_parts)
 
 
 def parse_pdf(pdf_path: str, **kwargs) -> str:
@@ -62,7 +39,6 @@ def parse_pdf(pdf_path: str, **kwargs) -> str:
     try:
         logger.info(f"Parsing PDF: {pdf_path}")
         md_text = pymupdf4llm.to_markdown(str(pdf_file), **kwargs)
-        md_text = _inject_page_markers(md_text)
         logger.success(f"Successfully parsed PDF: {pdf_path}")
         return md_text
     except Exception as e:
