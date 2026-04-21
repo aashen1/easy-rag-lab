@@ -37,15 +37,16 @@ run_experiment()
 ### 1.2 核心实现
 
 - **文件**: [parser.py](../src/parser.py)
-- **方法**: `parse_pdf()` → `pymupdf4llm.to_markdown(pdf_path)`
-- **输出**: 每个 PDF → 同目录结构的 `.md` 文件，存于 `data/parsed/`
+- **方法**: `parse_pdf(page_chunks=True)` → `pymupdf4llm.to_markdown(pdf_path, page_chunks=True, ...)`
+- **输出**: 每个 PDF → 同目录结构的 `.pages.json` 文件（页级 JSON），存于 `data/parsed/`
 
 ### 1.3 实际行为分析
 
-1. **解析引擎**: 使用 `pymupdf4llm`（PyMuPDF 的 LLM 友好封装），将 PDF 页面转为 Markdown
-2. **输出格式**: 纯 Markdown 文本，保留标题层级、表格（以文本形式）、列表等
-3. **增量机制**: 若 `.md` 文件已存在且 `force=False`，则跳过解析
+1. **解析引擎**: 使用 `pymupdf4llm`（PyMuPDF 的 LLM 友好封装），默认启用 Layout 模式自动处理多栏布局
+2. **输出格式**: 页级 JSON（`page_chunks=True`），每页独立 dict 含 `text`、`metadata`（含 `page_number`）、`toc_items`、`tables`；输出为 `.pages.json` 文件
+3. **增量机制**: 若 `.pages.json` 文件已存在且 `force=False`，则跳过解析
 4. **分类标注**: 通过 `detect_document_category()` 根据路径关键词推断文档类别
+5. **参数传递**: `pipeline.py` 和 `meal.py` 均通过 `parser_options` 将 `config.yaml` 中的 `pymupdf4llm` 参数传递给 `pymupdf4llm.to_markdown()`
 
 ### 1.4 潜在问题
 
@@ -53,8 +54,9 @@ run_experiment()
 |---|------|--------|------|
 | P1-1 | **表格解析质量** | 高 | pymupdf4llm 对复杂表格（合并单元格、多级表头）的 Markdown 转换经常错乱，金融研报中大量财务数据表格可能丢失结构 |
 | P1-2 | **图表信息丢失** | 中 | PDF 中的图表仅能提取文字标签，图形本身的信息（趋势、对比关系）完全丢失 |
-| P1-3 | **页眉页脚污染** | 中 | 页码、公司 logo 文字、水印等会被混入正文，影响后续分块和检索质量 |
-| P1-4 | **无 OCR 兜底** | 低 | 扫描件 PDF 无法处理（当前数据源为电子版研报，暂无影响） |
+| P1-3 | **页眉页脚残留** | 低 | `header: false`/`footer: false` 已在 Layout 模式下生效，大幅减少页眉页脚噪声，但部分残留仍可能存在 |
+| P1-4 | **OCR 兜底** | 低 | `use_ocr: true` 已启用 OCR 兜底，`ocr_language: "chi_sim+eng"` 支持中英文识别，但需安装 Tesseract 中文语言包 |
+| P1-5 | **财务表格代码块误标** | 低 | `ignore_code: true` 已缓解等宽文本被标记为代码块的问题，但复杂表格结构仍可能异常 |
 
 ---
 
@@ -64,15 +66,17 @@ run_experiment()
 
 ```
 build_chunks_if_needed()
-  → process_parsed_files()  # 固定分块
+  → process_parsed_files_page_aware()  # 页感知固定分块（page_chunks=True 时）
+  或 process_parsed_files()  # 固定分块（page_chunks=False 时）
   或 process_parsed_files_semantic()  # 语义分块（基线不使用）
 ```
 
 ### 2.2 核心实现
 
 - **文件**: [chunker.py](../src/chunker.py)
-- **基线策略**: `fixed` — 基于 tiktoken token 计数的固定长度分块
+- **基线策略**: `page_aware_fixed` — 页感知固定长度分块（每页独立分块，chunk 携带页码元数据）
 - **关键参数**: `chunk_size=512`, `chunk_overlap=0`
+- **chunk_id 格式**: `{source_name}_p{page_number}_{chunk_index:03d}`
 
 ### 2.3 分块算法详解
 
