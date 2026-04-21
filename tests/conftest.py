@@ -1,9 +1,24 @@
+import contextlib
+import shutil
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
+
+
+def pytest_configure(config):
+    basetemp = config.getoption("basetemp", default=None)
+    if basetemp is not None:
+        basetemp_path = Path(basetemp)
+        if basetemp_path.is_absolute():
+            target = basetemp_path
+        else:
+            target = Path(config.rootdir) / basetemp_path
+        if target.exists():
+            with contextlib.suppress(OSError):
+                shutil.rmtree(target)
 
 
 @pytest.fixture
