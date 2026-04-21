@@ -1,8 +1,8 @@
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from loguru import logger
 
-from src.token_tracker import DetailedTokenUsage, TokenRecord, TokenTracker
+from src.token_tracker import DetailedTokenUsage, TokenTracker
 
 
 class QueryRewriter:
@@ -15,7 +15,7 @@ class QueryRewriter:
         llm_temperature: float = 0.0,
         llm_max_tokens: int = 512,
         num_queries: int = 3,
-        token_tracker: Optional[TokenTracker] = None,
+        token_tracker: TokenTracker | None = None,
     ) -> None:
         """Initialize the QueryRewriter with a specified strategy.
 
@@ -72,7 +72,7 @@ class QueryRewriter:
             self._client = Anthropic(api_key=self.llm_api_key, base_url=self.llm_base_url)
         return self._client
 
-    def rewrite(self, query: str) -> Dict[str, Any]:
+    def rewrite(self, query: str) -> dict[str, Any]:
         """Rewrite the query using the configured strategy.
 
         Args:
@@ -105,7 +105,7 @@ class QueryRewriter:
             logger.error(error_msg)
             raise Exception(error_msg)
 
-    def _hyde_rewrite(self, query: str) -> Dict[str, Any]:
+    def _hyde_rewrite(self, query: str) -> dict[str, Any]:
         """Generate a hypothetical answer for HyDE retrieval.
 
         The hypothetical answer serves as a proxy document that
@@ -143,7 +143,7 @@ class QueryRewriter:
         logger.success(f"HyDE rewrite completed: {len(response_text)} chars")
         return result
 
-    def _multi_query_rewrite(self, query: str) -> Dict[str, Any]:
+    def _multi_query_rewrite(self, query: str) -> dict[str, Any]:
         """Generate multiple diverse sub-queries for Multi-Query retrieval.
 
         Each sub-query approaches the original question from a different

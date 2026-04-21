@@ -1,12 +1,11 @@
 import math
-from typing import List
 
 from eval.metrics.utils import _parse_chunk_id
 
 
 def calculate_chunk_hit_rate(
-    retrieved_chunk_ids: List[str],
-    expected_chunk_ids: List[str],
+    retrieved_chunk_ids: list[str],
+    expected_chunk_ids: list[str],
     adjacent_tolerance: int = 1,
     k: int = 5,
 ) -> float:
@@ -56,8 +55,8 @@ def calculate_chunk_hit_rate(
 
 
 def calculate_chunk_mrr(
-    retrieved_chunk_ids: List[str],
-    expected_chunk_ids: List[str],
+    retrieved_chunk_ids: list[str],
+    expected_chunk_ids: list[str],
     adjacent_tolerance: int = 1,
 ) -> float:
     """Calculate chunk-level Mean Reciprocal Rank with adjacent tolerance.
@@ -101,8 +100,8 @@ def calculate_chunk_mrr(
 
 
 def calculate_chunk_ndcg(
-    retrieved_chunk_ids: List[str],
-    expected_chunk_ids: List[str],
+    retrieved_chunk_ids: list[str],
+    expected_chunk_ids: list[str],
     k: int = 5,
     adjacent_tolerance: int = 1,
 ) -> float:
@@ -137,7 +136,7 @@ def calculate_chunk_ndcg(
     expected_parsed = [_parse_chunk_id(cid) for cid in expected_chunk_ids]
 
     seen: set = set()
-    unique_retrieved: List[str] = []
+    unique_retrieved: list[str] = []
     for chunk_id in retrieved_chunk_ids[:k]:
         if chunk_id not in seen:
             seen.add(chunk_id)

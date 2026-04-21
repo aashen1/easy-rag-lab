@@ -1,6 +1,5 @@
-import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -201,10 +200,10 @@ class TestParseAllPdfs:
 
         input_dir = tmp_path / "input"
         output_dir = tmp_path / "output"
-        
+
         nested_dir = input_dir / "annual_reports" / "2023" / "五粮液"
         nested_dir.mkdir(parents=True)
-        
+
         pdf_file = nested_dir / "2023年度报告_英文_.pdf"
         pdf_file.write_bytes(b"%PDF-1.4\ntest pdf content")
 
@@ -212,13 +211,13 @@ class TestParseAllPdfs:
 
         assert len(results) == 1
         assert results[0]["status"] == "success"
-        
+
         expected_output = output_dir / "annual_reports" / "2023" / "五粮液" / "2023年度报告_英文_.md"
         actual_output = Path(results[0]["output"])
-        
+
         assert actual_output == expected_output
         assert actual_output.exists()
-        
-        with open(actual_output, "r", encoding="utf-8") as f:
+
+        with open(actual_output, encoding="utf-8") as f:
             content = f.read()
         assert "Test Document" in content

@@ -2,18 +2,17 @@ import json
 import tempfile
 import warnings
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 import yaml
 
 from src.experiment import (
-    ExperimentConfig,
-    ExperimentManager,
-    ExperimentResult,
     VALID_GENERATION_METRICS,
     VALID_ON_MISSING_VALUES,
     VALID_RETRIEVAL_METRICS,
+    ExperimentConfig,
+    ExperimentManager,
+    ExperimentResult,
     deep_merge,
     get_test_set_config,
     get_test_set_name,
@@ -231,14 +230,14 @@ class TestExperimentConfig:
 
     @pytest.mark.unit
     def test_valid_metrics_constants(self):
-        assert VALID_RETRIEVAL_METRICS == {
+        assert {
             "hit_rate", "mrr", "ndcg",
             "chunk_hit_rate", "chunk_mrr", "chunk_ndcg",
             "dedup_hit_rate", "dedup_mrr", "dedup_ndcg",
             "false_positive_rate",
             "context_precision", "context_recall",
-        }
-        assert VALID_GENERATION_METRICS == {"faithfulness", "answer_relevancy"}
+        } == VALID_RETRIEVAL_METRICS
+        assert {"faithfulness", "answer_relevancy"} == VALID_GENERATION_METRICS
 
     @pytest.mark.unit
     def test_context_precision_in_retrieval_with_ragas_backend(self):
@@ -880,11 +879,11 @@ class TestExperimentManager:
             assert (exp_dir / "test_sets" / "factual.json").exists()
             assert (exp_dir / "test_sets" / "boundary.json").exists()
 
-            with open(exp_dir / "meal_snapshot.json", "r", encoding="utf-8") as f:
+            with open(exp_dir / "meal_snapshot.json", encoding="utf-8") as f:
                 loaded_meal = json.load(f)
             assert loaded_meal["meal_id"] == "test_meal"
 
-            with open(exp_dir / "manifest.json", "r", encoding="utf-8") as f:
+            with open(exp_dir / "manifest.json", encoding="utf-8") as f:
                 manifest = json.load(f)
             assert manifest["name"] == "test_experiment"
             assert manifest["status"] == "running"
@@ -1021,7 +1020,7 @@ class TestExperimentManager:
 
             manager.update_manifest_status(exp_dir, "completed")
 
-            with open(exp_dir / "manifest.json", "r", encoding="utf-8") as f:
+            with open(exp_dir / "manifest.json", encoding="utf-8") as f:
                 manifest = json.load(f)
             assert manifest["status"] == "completed"
 
@@ -1060,7 +1059,7 @@ class TestExperimentManager:
             assert result_path.exists()
             assert result_path.name == "variant_a.json"
 
-            with open(result_path, "r", encoding="utf-8") as f:
+            with open(result_path, encoding="utf-8") as f:
                 loaded_result = json.load(f)
             assert loaded_result["variant_name"] == "variant_a"
             assert loaded_result["metrics"]["hit_rate"] == 0.85
@@ -1222,7 +1221,7 @@ class TestNewFormatValidation:
 
     @pytest.mark.unit
     def test_valid_on_missing_values(self):
-        assert VALID_ON_MISSING_VALUES == {"auto", "clean_only", "strict"}
+        assert {"auto", "clean_only", "strict"} == VALID_ON_MISSING_VALUES
 
     @pytest.mark.unit
     def test_new_format_all_valid_on_missing_values(self):

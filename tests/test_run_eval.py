@@ -183,7 +183,7 @@ class TestRunEvalExpConfig:
 
             exp_config = load_experiment_config(str(config_path))
 
-            variant_name = f"test_variant_alt"
+            variant_name = "test_variant_alt"
             found_variant = None
             for v in exp_config.variants:
                 if v.get("name") == variant_name:
@@ -271,7 +271,7 @@ class TestRunEvalExpConfig:
 
             assert expected_path.exists()
 
-            with open(expected_path, "r", encoding="utf-8") as f:
+            with open(expected_path, encoding="utf-8") as f:
                 test_set = json.load(f)
 
             assert test_set["strategy"] == "factual"
@@ -719,7 +719,7 @@ class TestGenerationMetrics:
                 report_path = output_dir / "baseline_report.json"
                 assert report_path.exists()
 
-                with open(report_path, "r", encoding="utf-8") as f:
+                with open(report_path, encoding="utf-8") as f:
                     report = json.load(f)
 
                 assert "generation_metrics" in report

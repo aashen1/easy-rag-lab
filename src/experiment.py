@@ -2,11 +2,10 @@ import copy
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 from loguru import logger
-
 
 VALID_RETRIEVAL_METRICS = {"hit_rate", "mrr", "ndcg", "chunk_hit_rate", "chunk_mrr", "chunk_ndcg", "dedup_hit_rate", "dedup_mrr", "dedup_ndcg", "false_positive_rate", "context_precision", "context_recall"}
 VALID_GENERATION_METRICS = {"faithfulness", "answer_relevancy"}
@@ -23,7 +22,7 @@ VALID_RAGAS_METRICS = {
 RAGAS_EXCLUSIVE_METRICS = VALID_RAGAS_METRICS - VALID_GENERATION_METRICS - VALID_RETRIEVAL_METRICS
 
 
-def is_new_format(test_set_config: Dict[str, Any]) -> bool:
+def is_new_format(test_set_config: dict[str, Any]) -> bool:
     """Check if a test_set config uses the new format (has 'name' field).
 
     Args:
@@ -35,7 +34,7 @@ def is_new_format(test_set_config: Dict[str, Any]) -> bool:
     return "name" in test_set_config
 
 
-def get_test_set_name(test_set_config: Dict[str, Any]) -> str:
+def get_test_set_name(test_set_config: dict[str, Any]) -> str:
     """Get the name for a test_set config. New format uses 'name', old format generates from strategy/num_questions.
 
     Args:
@@ -75,13 +74,13 @@ class ExperimentConfig:
     """
     name: str
     description: str
-    data: Dict[str, Any]
-    test_sets: List[Dict[str, Any]]
-    variants: List[Dict[str, Any]]
-    evaluation: Dict[str, Any]
-    llm: Dict[str, Any] = field(default_factory=dict)
+    data: dict[str, Any]
+    test_sets: list[dict[str, Any]]
+    variants: list[dict[str, Any]]
+    evaluation: dict[str, Any]
+    llm: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert ExperimentConfig to dictionary.
 
@@ -99,7 +98,7 @@ class ExperimentConfig:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ExperimentConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "ExperimentConfig":
         """
         Create ExperimentConfig from dictionary.
 
@@ -131,7 +130,7 @@ class ExperimentConfig:
     def retrieval_granularity(self) -> str:
         return self.evaluation.get("retrieval_granularity", "both")
 
-    def validate(self) -> List[str]:
+    def validate(self) -> list[str]:
         """
         Validate the experiment configuration.
 
@@ -285,7 +284,7 @@ class ExperimentConfig:
         return errors
 
 
-def deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     """
     Deep merge two dictionaries.
 
@@ -311,10 +310,10 @@ def deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]
 
 
 def merge_config(
-    system_config: Dict[str, Any],
+    system_config: dict[str, Any],
     experiment_config: ExperimentConfig,
-    variant: Optional[Dict[str, Any]] = None
-) -> Dict[str, Any]:
+    variant: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """
     Merge system configuration with experiment configuration.
 
@@ -361,7 +360,7 @@ def load_experiment_config(config_path: str) -> ExperimentConfig:
         raise FileNotFoundError(f"Experiment configuration file not found: {config_path}")
 
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
     except yaml.YAMLError as e:
         logger.error(f"Failed to parse YAML file {config_path}: {str(e)}")
@@ -390,10 +389,10 @@ def load_experiment_config(config_path: str) -> ExperimentConfig:
 
 
 def get_variant_config(
-    system_config: Dict[str, Any],
+    system_config: dict[str, Any],
     experiment_config: ExperimentConfig,
     variant_name: str
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get merged configuration for a specific variant.
 
@@ -420,7 +419,7 @@ def get_variant_config(
     return merge_config(system_config, experiment_config, variant)
 
 
-def list_variants(experiment_config: ExperimentConfig) -> List[str]:
+def list_variants(experiment_config: ExperimentConfig) -> list[str]:
     """
     List all variant names in the experiment configuration.
 
@@ -436,7 +435,7 @@ def list_variants(experiment_config: ExperimentConfig) -> List[str]:
 def get_test_set_config(
     experiment_config: ExperimentConfig,
     index: int = 0
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get test set configuration by index.
 
@@ -488,12 +487,12 @@ class ExperimentResult:
     created_at: str
     status: str
     config: ExperimentConfig
-    meal_snapshot: Dict[str, Any] = field(default_factory=dict)
-    test_set_snapshots: List[Dict[str, Any]] = field(default_factory=list)
-    variant_results: List[Dict[str, Any]] = field(default_factory=list)
-    config_snapshot: Dict[str, Any] = field(default_factory=dict)
+    meal_snapshot: dict[str, Any] = field(default_factory=dict)
+    test_set_snapshots: list[dict[str, Any]] = field(default_factory=list)
+    variant_results: list[dict[str, Any]] = field(default_factory=list)
+    config_snapshot: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert ExperimentResult to dictionary.
 
@@ -514,7 +513,7 @@ class ExperimentResult:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ExperimentResult":
+    def from_dict(cls, data: dict[str, Any]) -> "ExperimentResult":
         """
         Create ExperimentResult from dictionary.
 
@@ -565,7 +564,7 @@ class ExperimentManager:
         ValueError: If required configuration fields are missing.
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         """
         Initialize ExperimentManager.
 
@@ -643,9 +642,9 @@ class ExperimentManager:
         self,
         exp_dir: Path,
         config: ExperimentConfig,
-        meal_snapshot: Dict[str, Any],
-        test_set_snapshots: List[Dict[str, Any]],
-        config_snapshot: Dict[str, Any]
+        meal_snapshot: dict[str, Any],
+        test_set_snapshots: list[dict[str, Any]],
+        config_snapshot: dict[str, Any]
     ) -> None:
         """
         Save configuration and test set snapshots to the experiment directory.
@@ -696,8 +695,8 @@ class ExperimentManager:
         self,
         exp_dir: Path,
         config: ExperimentConfig,
-        test_set_snapshots: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        test_set_snapshots: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """
         Create manifest dictionary for the experiment.
 
@@ -746,7 +745,7 @@ class ExperimentManager:
             raise FileNotFoundError(f"Manifest file not found: {manifest_path}")
 
         try:
-            with open(manifest_path, "r", encoding="utf-8") as f:
+            with open(manifest_path, encoding="utf-8") as f:
                 manifest = json.load(f)
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse manifest file: {str(e)}")
@@ -756,7 +755,7 @@ class ExperimentManager:
         config_snapshot = {}
         if config_path.exists():
             try:
-                with open(config_path, "r", encoding="utf-8") as f:
+                with open(config_path, encoding="utf-8") as f:
                     config_snapshot = yaml.safe_load(f) or {}
             except yaml.YAMLError as e:
                 logger.warning(f"Failed to load config snapshot: {str(e)}")
@@ -765,7 +764,7 @@ class ExperimentManager:
         meal_snapshot = {}
         if meal_snapshot_path.exists():
             try:
-                with open(meal_snapshot_path, "r", encoding="utf-8") as f:
+                with open(meal_snapshot_path, encoding="utf-8") as f:
                     meal_snapshot = json.load(f)
             except json.JSONDecodeError as e:
                 logger.warning(f"Failed to load meal snapshot: {str(e)}")
@@ -775,7 +774,7 @@ class ExperimentManager:
         if test_sets_dir.exists():
             for snapshot_file in test_sets_dir.glob("*.json"):
                 try:
-                    with open(snapshot_file, "r", encoding="utf-8") as f:
+                    with open(snapshot_file, encoding="utf-8") as f:
                         test_set_snapshots.append(json.load(f))
                 except json.JSONDecodeError as e:
                     logger.warning(f"Failed to load test set snapshot {snapshot_file}: {str(e)}")
@@ -785,7 +784,7 @@ class ExperimentManager:
         if results_dir.exists():
             for result_file in sorted(results_dir.glob("*.json")):
                 try:
-                    with open(result_file, "r", encoding="utf-8") as f:
+                    with open(result_file, encoding="utf-8") as f:
                         variant_results.append(json.load(f))
                 except json.JSONDecodeError as e:
                     logger.warning(f"Failed to load variant result {result_file}: {str(e)}")
@@ -814,7 +813,7 @@ class ExperimentManager:
             config_snapshot=config_snapshot,
         )
 
-    def list_experiments(self) -> List[Dict[str, Any]]:
+    def list_experiments(self) -> list[dict[str, Any]]:
         """
         List all experiments in the experiment directory.
 
@@ -835,7 +834,7 @@ class ExperimentManager:
             manifest_path = exp_path / "manifest.json"
             if manifest_path.exists():
                 try:
-                    with open(manifest_path, "r", encoding="utf-8") as f:
+                    with open(manifest_path, encoding="utf-8") as f:
                         manifest = json.load(f)
                     experiments.append({
                         "experiment_id": manifest.get("experiment_id", exp_path.name),
@@ -864,7 +863,7 @@ class ExperimentManager:
 
         return experiments
 
-    def get_experiment_info(self, exp_id: str) -> Dict[str, Any]:
+    def get_experiment_info(self, exp_id: str) -> dict[str, Any]:
         """
         Get detailed information about a specific experiment.
 
@@ -903,7 +902,7 @@ class ExperimentManager:
             return
 
         try:
-            with open(manifest_path, "r", encoding="utf-8") as f:
+            with open(manifest_path, encoding="utf-8") as f:
                 manifest = json.load(f)
 
             manifest["status"] = status
@@ -920,7 +919,7 @@ class ExperimentManager:
         self,
         exp_dir: Path,
         variant_name: str,
-        result: Dict[str, Any]
+        result: dict[str, Any]
     ) -> Path:
         """
         Save evaluation result for a specific variant.

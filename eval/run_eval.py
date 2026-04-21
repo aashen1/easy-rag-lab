@@ -1,4 +1,5 @@
 import warnings
+
 warnings.warn(
     "eval/run_eval.py is deprecated and will be removed in a future version. "
     "Use eval/run_experiment.py with ExperimentConfig instead.",
@@ -6,29 +7,36 @@ warnings.warn(
     stacklevel=2,
 )
 
-from typing import Any, Dict, List, Optional
-from datetime import datetime
-import time
-import random
 import json
+import random
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
 from loguru import logger
+
 from eval.metrics import (
-    calculate_hit_rate,
-    calculate_mrr,
-    calculate_ndcg,
-    calculate_faithfulness,
     calculate_answer_relevancy,
     calculate_context_precision,
     calculate_context_recall,
+    calculate_faithfulness,
+    calculate_hit_rate,
+    calculate_mrr,
+    calculate_ndcg,
 )
-from src.experiment import ExperimentConfig, load_experiment_config, merge_config, is_new_format, get_test_set_name
+from src.experiment import (
+    ExperimentConfig,
+    is_new_format,
+    load_experiment_config,
+    merge_config,
+)
 from src.meal import MealManager, MealStatus
-from src.sampler import SamplingConfig
 from src.pipeline import RAGPipeline
+from src.sampler import SamplingConfig
 from src.test_set_manager import TestSetManager
-from src.utils import load_config, setup_logger, get_llm_config
-import sys
-from pathlib import Path
+from src.utils import get_llm_config, load_config, setup_logger
 
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
@@ -45,11 +53,11 @@ def run_evaluation(
     output_dir: str,
     sample_size: int = None,
     meal_data_id: str = None,
-    metrics_config: Optional[List[str]] = None,
-    generation_metrics_config: Optional[List[str]] = None,
-    llm_retrieval_metrics_config: Optional[List[str]] = None,
-    llm_config: Optional[Dict[str, str]] = None,
-) -> Dict[str, Any]:
+    metrics_config: list[str] | None = None,
+    generation_metrics_config: list[str] | None = None,
+    llm_retrieval_metrics_config: list[str] | None = None,
+    llm_config: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Run evaluation on test data using the provided RAG pipeline.
 
     Args:
@@ -80,7 +88,7 @@ def run_evaluation(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    with open(test_data_path, "r", encoding="utf-8") as f:
+    with open(test_data_path, encoding="utf-8") as f:
         test_data = json.load(f)
 
     if isinstance(test_data, list):
@@ -312,7 +320,7 @@ def run_evaluation(
     return summary
 
 
-def print_summary(summary: Dict[str, Any]) -> None:
+def print_summary(summary: dict[str, Any]) -> None:
     """Print evaluation summary to stdout.
 
     Args:
@@ -422,8 +430,8 @@ if __name__ == "__main__":
     meal_data_id = None
     test_data_path = args.test_data
     output_dir = args.output_dir
-    exp_config: Optional[ExperimentConfig] = None
-    variant_config: Optional[Dict[str, Any]] = None
+    exp_config: ExperimentConfig | None = None
+    variant_config: dict[str, Any] | None = None
 
     if args.exp_config:
         logger.info(f"Loading experiment configuration from {args.exp_config}")

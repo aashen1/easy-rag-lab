@@ -1,8 +1,7 @@
-from typing import List
 
 
 def calculate_false_positive_rate(
-    retrieved_sources: List[str],
+    retrieved_sources: list[str],
     k: int = 5,
 ) -> float:
     """Calculate False Positive Rate for irrelevant questions.

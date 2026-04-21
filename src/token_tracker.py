@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import tiktoken
 from loguru import logger
@@ -35,7 +35,7 @@ class TokenUsage:
             output_tokens=self.output_tokens + other.output_tokens,
         )
 
-    def to_dict(self) -> Dict[str, int]:
+    def to_dict(self) -> dict[str, int]:
         """Convert to dictionary.
 
         Returns:
@@ -72,7 +72,7 @@ class DetailedTokenUsage(TokenUsage):
     contexts_tokens: int = 0
     query_tokens: int = 0
 
-    def to_dict(self) -> Dict[str, int]:
+    def to_dict(self) -> dict[str, int]:
         """Convert to dictionary.
 
         Returns:
@@ -104,9 +104,9 @@ class TokenRecord:
     model_name: str
     usage: DetailedTokenUsage
     timestamp: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary.
 
         Returns:
@@ -143,7 +143,7 @@ def compute_detailed_usage(
     api_input_tokens: int,
     api_output_tokens: int,
     system_prompt: str,
-    contexts: List[str],
+    contexts: list[str],
     query: str,
     encoding_name: str = "cl100k_base",
 ) -> DetailedTokenUsage:
@@ -209,7 +209,7 @@ class TokenTracker:
     """
 
     def __init__(self) -> None:
-        self._records: List[TokenRecord] = []
+        self._records: list[TokenRecord] = []
 
     def record(
         self,
@@ -240,26 +240,26 @@ class TokenTracker:
             f"total={usage.total_tokens}"
         )
 
-    def get_summary_by_category(self) -> Dict[str, TokenUsage]:
+    def get_summary_by_category(self) -> dict[str, TokenUsage]:
         """Get aggregated token usage grouped by category.
 
         Returns:
             Dictionary mapping category names to aggregated TokenUsage.
         """
-        summary: Dict[str, TokenUsage] = {}
+        summary: dict[str, TokenUsage] = {}
         for rec in self._records:
             if rec.category not in summary:
                 summary[rec.category] = TokenUsage()
             summary[rec.category] = summary[rec.category] + rec.usage
         return summary
 
-    def get_summary_by_category_detailed(self) -> Dict[str, DetailedTokenUsage]:
+    def get_summary_by_category_detailed(self) -> dict[str, DetailedTokenUsage]:
         """Get aggregated detailed token usage grouped by category.
 
         Returns:
             Dictionary mapping category names to aggregated DetailedTokenUsage.
         """
-        summary: Dict[str, DetailedTokenUsage] = {}
+        summary: dict[str, DetailedTokenUsage] = {}
         for rec in self._records:
             if rec.category not in summary:
                 summary[rec.category] = DetailedTokenUsage()
@@ -284,7 +284,7 @@ class TokenTracker:
             total = total + rec.usage
         return total
 
-    def get_records_by_category(self, category: str) -> List[TokenRecord]:
+    def get_records_by_category(self, category: str) -> list[TokenRecord]:
         """Get all records for a specific category.
 
         Args:
@@ -296,8 +296,8 @@ class TokenTracker:
         return [r for r in self._records if r.category == category]
 
     def estimate_cost(
-        self, cost_config: Dict[str, Any], model_name: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, cost_config: dict[str, Any], model_name: str | None = None
+    ) -> dict[str, Any]:
         """Estimate cost based on token usage and model pricing.
 
         Args:
@@ -399,7 +399,7 @@ class TokenTracker:
         lines.append("=" * 72)
         return "\n".join(lines)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize tracker state to dictionary.
 
         Returns:

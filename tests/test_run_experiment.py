@@ -6,7 +6,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
-from eval.run_experiment import compute_aggregate_metrics, evaluate_test_set, _evaluate_with_builtin
+from eval.run_experiment import (
+    _evaluate_with_builtin,
+    compute_aggregate_metrics,
+    evaluate_test_set,
+)
 
 
 class TestAssetVerificationResult:
@@ -560,6 +564,7 @@ class TestGenerateComparisonReport:
 class TestCLITestSetGeneration:
     def test_cli_with_name_parameter(self):
         import argparse
+
         from main import _handle_generate_test_set
 
         mock_meal_manager = MagicMock()
@@ -594,6 +599,7 @@ class TestCLITestSetGeneration:
 
     def test_cli_without_name_parameter(self):
         import argparse
+
         from main import _handle_generate_test_set
 
         mock_meal_manager = MagicMock()
@@ -626,6 +632,7 @@ class TestCLITestSetGeneration:
 
     def test_cli_legacy_strategy(self):
         import argparse
+
         from main import _handle_generate_test_set
 
         mock_meal_manager = MagicMock()
@@ -659,7 +666,7 @@ class TestCLITestSetGeneration:
 
     def test_cli_meal_not_found(self):
         import argparse
-        import sys
+
         from main import _handle_generate_test_set
 
         mock_meal_manager = MagicMock()

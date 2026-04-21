@@ -1,12 +1,11 @@
 import math
-from typing import Dict, List, Optional
 
 from eval.metrics.utils import normalize_source
 
 
 def calculate_hit_rate(
-    retrieved_sources: List[str],
-    expected_sources: List[str],
+    retrieved_sources: list[str],
+    expected_sources: list[str],
     k: int = 5,
     mode: str = "standard"
 ) -> float:
@@ -54,7 +53,7 @@ def calculate_hit_rate(
 
 
 def calculate_mrr(
-    retrieved_sources: List[str], expected_sources: List[str]
+    retrieved_sources: list[str], expected_sources: list[str]
 ) -> float:
     """Calculate Reciprocal Rank (RR) for a single query.
 
@@ -98,10 +97,10 @@ def calculate_mrr(
 
 
 def calculate_ndcg(
-    retrieved_sources: List[str],
-    expected_sources: List[str],
+    retrieved_sources: list[str],
+    expected_sources: list[str],
     k: int = 5,
-    relevance_scores: Optional[Dict[str, int]] = None,
+    relevance_scores: dict[str, int] | None = None,
 ) -> float:
     """Calculate Normalized Discounted Cumulative Gain for retrieval evaluation.
 
@@ -151,7 +150,7 @@ def calculate_ndcg(
     retrieved_normalized = [normalize_source(s) for s in retrieved_sources[:k]]
 
     seen: set = set()
-    unique_retrieved: List[str] = []
+    unique_retrieved: list[str] = []
     for source in retrieved_normalized:
         if source not in seen:
             seen.add(source)

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from loguru import logger
 
@@ -47,15 +47,15 @@ class Generator:
         base_url: str = "https://api.longcat.chat/anthropic",
         temperature: float = 0.0,
         max_tokens: int = 1024,
-        token_tracker: Optional[TokenTracker] = None,
-        system_prompt: Optional[str] = None,
+        token_tracker: TokenTracker | None = None,
+        system_prompt: str | None = None,
     ):
         self.model_name = model_name
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.token_tracker = token_tracker
         self.default_system_prompt = system_prompt
-        self.last_token_usage: Optional[DetailedTokenUsage] = None
+        self.last_token_usage: DetailedTokenUsage | None = None
 
         try:
             logger.info("Initializing Anthropic client")
@@ -75,10 +75,10 @@ class Generator:
     def generate(
         self,
         query: str,
-        contexts: List[str],
+        contexts: list[str],
         system_prompt: str = None,
         category: str = "rag_qa",
-        sources: Optional[List[str]] = None,
+        sources: list[str] | None = None,
         **metadata: Any,
     ) -> str:
         """Generate an answer using the LLM.

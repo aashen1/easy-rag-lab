@@ -1,8 +1,8 @@
 import json
 import math
-from collections import Counter, defaultdict
+from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import jieba
 from loguru import logger
@@ -37,17 +37,17 @@ class BM25Retriever:
         self.b = b
         self.epsilon = epsilon
 
-        self._corpus_tokens: List[List[str]] = []
+        self._corpus_tokens: list[list[str]] = []
         self._corpus_size: int = 0
         self._avgdl: float = 0.0
-        self._doc_freqs: Dict[str, int] = defaultdict(int)
-        self._doc_lens: List[int] = []
-        self._idf: Dict[str, float] = {}
-        self._doc_data: List[Dict[str, Any]] = []
+        self._doc_freqs: dict[str, int] = defaultdict(int)
+        self._doc_lens: list[int] = []
+        self._idf: dict[str, float] = {}
+        self._doc_data: list[dict[str, Any]] = []
         self._is_indexed: bool = False
 
     @staticmethod
-    def tokenize(text: str) -> List[str]:
+    def tokenize(text: str) -> list[str]:
         """Tokenize Chinese text using jieba segmentation.
 
         Filters out whitespace and single-character tokens to reduce
@@ -65,7 +65,7 @@ class BM25Retriever:
     def build_index_from_chunks(
         self,
         chunks_dir: str,
-        source_filter: Optional[set] = None,
+        source_filter: set | None = None,
     ) -> None:
         """Build BM25 index from JSONL chunk files.
 
@@ -104,10 +104,10 @@ class BM25Retriever:
                 f"Source filter applied: {len(jsonl_files)}/{original_count} files matched"
             )
 
-        all_chunks: List[Dict[str, Any]] = []
+        all_chunks: list[dict[str, Any]] = []
         for jsonl_file in jsonl_files:
             try:
-                with open(jsonl_file, "r", encoding="utf-8") as f:
+                with open(jsonl_file, encoding="utf-8") as f:
                     for line in f:
                         chunk = json.loads(line.strip())
                         all_chunks.append(chunk)
@@ -123,7 +123,7 @@ class BM25Retriever:
         self.build_index(all_chunks)
         logger.success(f"BM25 index built: {self._corpus_size} documents, avgdl={self._avgdl:.1f}")
 
-    def build_index(self, chunks: List[Dict[str, Any]]) -> None:
+    def build_index(self, chunks: list[dict[str, Any]]) -> None:
         """Build BM25 index from a list of chunk dictionaries.
 
         Each chunk must contain a ``text`` key and optionally ``chunk_id``
@@ -175,7 +175,7 @@ class BM25Retriever:
         to prevent very common terms from dominating scores.
         """
         idf_sum = 0.0
-        negative_idfs: List[str] = []
+        negative_idfs: list[str] = []
 
         for term, df in self._doc_freqs.items():
             idf = math.log((self._corpus_size - df + 0.5) / (df + 0.5) + 1)
@@ -191,7 +191,7 @@ class BM25Retriever:
         for term in negative_idfs:
             self._idf[term] = eps
 
-    def retrieve(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+    def retrieve(self, query: str, top_k: int = 5) -> list[dict[str, Any]]:
         """Retrieve the top-k most relevant chunks for the given query.
 
         Scores each document against the query using the Okapi BM25
@@ -253,7 +253,7 @@ class BM25Retriever:
             logger.error(error_msg)
             raise Exception(error_msg)
 
-    def _score(self, query_tokens: List[str]) -> List[float]:
+    def _score(self, query_tokens: list[str]) -> list[float]:
         """Compute BM25 scores for all documents against the query tokens.
 
         Args:

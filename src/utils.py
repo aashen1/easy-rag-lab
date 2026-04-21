@@ -1,7 +1,7 @@
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import yaml
 from dotenv import load_dotenv
@@ -10,7 +10,7 @@ from loguru import logger
 load_dotenv()
 
 
-def load_config(config_path: str = "config.yaml") -> Dict[str, Any]:
+def load_config(config_path: str = "config.yaml") -> dict[str, Any]:
     """Load YAML configuration file and return its contents as a dictionary.
 
     If the config contains a top-level ``data_dir`` key, all path values
@@ -30,7 +30,7 @@ def load_config(config_path: str = "config.yaml") -> Dict[str, Any]:
     """
     if config_path is None:
         config_path = "config.yaml"
-    with open(config_path, "r", encoding="utf-8") as f:
+    with open(config_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
     data_dir = config.get("data_dir", "data")
@@ -41,7 +41,7 @@ def load_config(config_path: str = "config.yaml") -> Dict[str, Any]:
     return config
 
 
-def _resolve_data_paths(config: Dict[str, Any], data_dir: str) -> Dict[str, Any]:
+def _resolve_data_paths(config: dict[str, Any], data_dir: str) -> dict[str, Any]:
     """Rewrite path values starting with ``data/`` to use the given data_dir.
 
     Walks the config dict recursively.  For every string value that starts
@@ -63,7 +63,7 @@ def _resolve_data_paths(config: Dict[str, Any], data_dir: str) -> Dict[str, Any]
     return config
 
 
-def setup_logger(config: Dict[str, Any]) -> None:
+def setup_logger(config: dict[str, Any]) -> None:
     """Configure loguru logger with console and file sinks based on config.
 
     Args:
@@ -107,7 +107,7 @@ def setup_logger(config: Dict[str, Any]) -> None:
     logger.info("Logger initialized")
 
 
-def get_llm_config(config: Dict[str, Any], preset_name: str = None) -> Dict[str, Any]:
+def get_llm_config(config: dict[str, Any], preset_name: str = None) -> dict[str, Any]:
     """Resolve LLM configuration from a named preset, reading secrets from environment variables.
 
     Args:
@@ -156,7 +156,7 @@ def get_llm_config(config: Dict[str, Any], preset_name: str = None) -> Dict[str,
 
 
 def create_llm_client(
-    llm_config: Dict[str, Any],
+    llm_config: dict[str, Any],
     mode: str = "sdk",
 ) -> Any:
     """Create an LLM client with LongCat API adaptation.
@@ -257,7 +257,7 @@ def ensure_dir(path: str) -> Path:
     return dir_path
 
 
-DEFAULT_CATEGORY_MAPPING: Dict[str, str] = {
+DEFAULT_CATEGORY_MAPPING: dict[str, str] = {
     "annual_report": "annual_report",
     "年报": "annual_report",
     "research_report": "research_report",
@@ -267,7 +267,7 @@ DEFAULT_CATEGORY_MAPPING: Dict[str, str] = {
 
 def detect_document_category(
     file_path: str,
-    category_mapping: Optional[Dict[str, str]] = None,
+    category_mapping: dict[str, str] | None = None,
 ) -> str:
     """Detect the document category based on the file path string.
 

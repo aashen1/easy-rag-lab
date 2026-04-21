@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 
 from src.semantic_chunker import (
-    _split_into_sentences,
     _split_into_paragraphs,
+    _split_into_sentences,
     chunk_text_semantic,
 )
 

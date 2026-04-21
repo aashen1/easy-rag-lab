@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from loguru import logger
 
@@ -13,14 +13,14 @@ from src.parser import parse_all_pdfs
 from src.query_rewriter import QueryRewriter
 from src.reranker import Reranker
 from src.retriever import Retriever
-from src.semantic_chunker import process_parsed_files_semantic
 from src.sampler import SamplingConfig, determine_sample
-from src.token_tracker import DetailedTokenUsage, TokenTracker
+from src.semantic_chunker import process_parsed_files_semantic
+from src.token_tracker import TokenTracker
 from src.utils import get_llm_config, load_config, setup_logger
 
 
 class RAGPipeline:
-    def __init__(self, config_path: str = "config.yaml", llm_preset: str = None, meal_name: str = None, token_tracker: Optional[TokenTracker] = None):
+    def __init__(self, config_path: str = "config.yaml", llm_preset: str = None, meal_name: str = None, token_tracker: TokenTracker | None = None):
         self.config = load_config(config_path)
         setup_logger(self.config)
         self.meal_name = meal_name
@@ -86,8 +86,8 @@ class RAGPipeline:
             score_threshold=retrieval_config.get("score_threshold", 0),
         )
 
-        self.bm25_retriever: Optional[BM25Retriever] = None
-        self.hybrid_retriever: Optional[HybridRetriever] = None
+        self.bm25_retriever: BM25Retriever | None = None
+        self.hybrid_retriever: HybridRetriever | None = None
         self.retrieval_method = retrieval_method
 
         if retrieval_method in ("bm25", "hybrid"):
@@ -109,7 +109,7 @@ class RAGPipeline:
                 top_k=top_k,
             )
 
-        self.reranker: Optional[Reranker] = None
+        self.reranker: Reranker | None = None
         reranker_config = retrieval_config.get("reranker", {})
         if reranker_config.get("enabled", False):
             self.reranker = Reranker(
@@ -118,7 +118,7 @@ class RAGPipeline:
             )
             self.reranker_top_n = reranker_config.get("top_n", top_k)
 
-        self.query_rewriter: Optional[QueryRewriter] = None
+        self.query_rewriter: QueryRewriter | None = None
         rewrite_config = retrieval_config.get("query_rewrite", {})
         if rewrite_config.get("enabled", False):
             llm_config = get_llm_config(self.config)
@@ -137,7 +137,7 @@ class RAGPipeline:
         self,
         rebuild: bool = False,
         force_parse: bool = False,
-        sampling_config: Optional[SamplingConfig] = None,
+        sampling_config: SamplingConfig | None = None,
     ) -> None:
         """Build the vector index from raw PDFs through the full pipeline.
 
@@ -328,7 +328,7 @@ class RAGPipeline:
 
     def query(
         self, question: str, return_contexts: bool = True
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Execute a RAG query: retrieve relevant contexts and generate an answer.
 
         Args:
@@ -360,7 +360,7 @@ class RAGPipeline:
 
                 if rewrite_result["strategy"] == "hyde":
                     retrieval_query = rewrite_result["rewritten"]
-                    logger.info(f"HyDE: using hypothetical answer for retrieval")
+                    logger.info("HyDE: using hypothetical answer for retrieval")
                 elif rewrite_result["strategy"] == "multi_query":
                     all_results = []
                     seen_ids = set()
@@ -522,8 +522,8 @@ if __name__ == "__main__":
         print(f"\nQuestion: {result['question']}")
         print(f"\nAnswer: {result['answer']}")
         if "contexts" in result:
-            print(f"\nSources:")
+            print("\nSources:")
             for i, (source, score) in enumerate(
-                zip(result["sources"], result["scores"]), 1
+                zip(result["sources"], result["scores"], strict=False), 1
             ):
                 print(f"{i}. {source} (score: {score:.4f})")

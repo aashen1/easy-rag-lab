@@ -107,7 +107,7 @@ class TestDetermineSample:
     def test_pages_mode_basic(self, mock_count_pages):
         page_counts = [100, 200, 150, 50, 300]
         pdf_files = [Path(f"file_{i}.pdf") for i in range(5)]
-        page_map = {str(f): c for f, c in zip(pdf_files, page_counts)}
+        page_map = {str(f): c for f, c in zip(pdf_files, page_counts, strict=False)}
         mock_count_pages.side_effect = lambda f: page_map[str(f)]
         config = SamplingConfig(mode="pages", value=500)
         result = determine_sample(pdf_files, config)

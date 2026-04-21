@@ -4,7 +4,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
-from src.utils import create_llm_client, detect_document_category, ensure_dir, get_env_var, get_llm_config, load_config
+from src.utils import (
+    create_llm_client,
+    detect_document_category,
+    ensure_dir,
+    get_env_var,
+    get_llm_config,
+    load_config,
+)
 
 
 @pytest.mark.unit

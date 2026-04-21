@@ -1,9 +1,13 @@
 import math
-
-import pytest
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from eval.metrics import (
+    _create_llm_client,
+    _extract_statements,
+    _parse_relevancy_response,
+    _verify_statements,
     calculate_answer_relevancy,
     calculate_chunk_hit_rate,
     calculate_chunk_mrr,
@@ -11,18 +15,14 @@ from eval.metrics import (
     calculate_dedup_hit_rate,
     calculate_dedup_mrr,
     calculate_dedup_ndcg,
-    calculate_false_positive_rate,
     calculate_faithfulness,
+    calculate_false_positive_rate,
     calculate_hit_rate,
     calculate_mrr,
     calculate_ndcg,
     deduplicate_by_document,
     normalize_source,
     normalize_source_with_equivalence,
-    _create_llm_client,
-    _extract_statements,
-    _parse_relevancy_response,
-    _verify_statements,
 )
 
 

@@ -1,7 +1,6 @@
 import random
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Union
 
 import fitz
 from loguru import logger
@@ -25,7 +24,7 @@ class SamplingConfig:
     """
 
     mode: str
-    value: Union[int, float]
+    value: int | float
 
     def __post_init__(self) -> None:
         valid_modes = {"count", "pages", "ratio"}
@@ -71,8 +70,8 @@ def count_pdf_pages(pdf_path: Path) -> int:
 
 
 def determine_sample(
-    pdf_files: List[Path], config: SamplingConfig
-) -> List[Path]:
+    pdf_files: list[Path], config: SamplingConfig
+) -> list[Path]:
     """Determine which PDF files to sample based on the sampling configuration.
 
     Args:
@@ -98,7 +97,7 @@ def determine_sample(
         return sampled
 
     if config.mode == "pages":
-        pdf_page_counts: List[tuple] = []
+        pdf_page_counts: list[tuple] = []
         for pdf_file in pdf_files:
             try:
                 pages = count_pdf_pages(pdf_file)

@@ -1,7 +1,5 @@
 from pathlib import Path
-from typing import Any, Dict, List, Optional
-
-from loguru import logger
+from typing import Any
 
 
 def normalize_source(source: str) -> str:
@@ -22,7 +20,7 @@ def normalize_source(source: str) -> str:
 
 def normalize_source_with_equivalence(
     source: str,
-    equivalence_groups: Optional[Dict[str, List[str]]] = None,
+    equivalence_groups: dict[str, list[str]] | None = None,
 ) -> str:
     """Normalize source path with equivalence group matching.
 

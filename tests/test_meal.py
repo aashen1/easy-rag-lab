@@ -1,10 +1,6 @@
 import hashlib
 import json
-import os
-import shutil
-import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -107,7 +103,7 @@ class TestMealConfig:
         }
         config = MealConfig.from_dict(data)
         assert config.data_id != ""
-        expected = hashlib.sha256("hash_a|hash_b".encode()).hexdigest()
+        expected = hashlib.sha256(b"hash_a|hash_b").hexdigest()
         assert config.data_id == expected
 
     def test_roundtrip(self):

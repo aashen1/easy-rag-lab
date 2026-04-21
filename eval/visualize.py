@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from loguru import logger
 
@@ -13,7 +13,7 @@ except ImportError:
     HAS_MATPLOTLIB = False
 
 
-def load_experiment_results(exp_dir: str) -> Dict[str, Any]:
+def load_experiment_results(exp_dir: str) -> dict[str, Any]:
     """Load all variant results from an experiment directory.
 
     Reads the manifest and each variant's result JSON file.
@@ -37,7 +37,7 @@ def load_experiment_results(exp_dir: str) -> Dict[str, Any]:
     if not manifest_path.exists():
         raise FileNotFoundError(f"Manifest not found: {manifest_path}")
 
-    with open(manifest_path, "r", encoding="utf-8") as f:
+    with open(manifest_path, encoding="utf-8") as f:
         manifest = json.load(f)
 
     results_dir = exp_path / "results"
@@ -46,7 +46,7 @@ def load_experiment_results(exp_dir: str) -> Dict[str, Any]:
     if results_dir.exists():
         for result_file in results_dir.glob("*.json"):
             variant_name = result_file.stem
-            with open(result_file, "r", encoding="utf-8") as f:
+            with open(result_file, encoding="utf-8") as f:
                 variants[variant_name] = json.load(f)
 
     return {
@@ -56,7 +56,7 @@ def load_experiment_results(exp_dir: str) -> Dict[str, Any]:
     }
 
 
-def extract_metrics(variants: Dict[str, Any]) -> Dict[str, Dict[str, List[tuple]]]:
+def extract_metrics(variants: dict[str, Any]) -> dict[str, dict[str, list[tuple]]]:
     """Extract metrics from variant results for visualization.
 
     Parses each variant's aggregated metrics and organizes them by
@@ -70,7 +70,7 @@ def extract_metrics(variants: Dict[str, Any]) -> Dict[str, Dict[str, List[tuple]
         ``"generation"``) to metric names to lists of
         ``(variant_name, value)`` tuples.
     """
-    metrics: Dict[str, Dict[str, List[tuple]]] = {}
+    metrics: dict[str, dict[str, list[tuple]]] = {}
 
     for variant_name, result in variants.items():
         agg = result.get("aggregated_metrics", {})
@@ -89,10 +89,10 @@ def extract_metrics(variants: Dict[str, Any]) -> Dict[str, Dict[str, List[tuple]
 
 
 def plot_metrics_comparison(
-    metrics: Dict[str, Dict[str, List[tuple]]],
+    metrics: dict[str, dict[str, list[tuple]]],
     output_dir: str,
     exp_name: str = "experiment",
-) -> List[str]:
+) -> list[str]:
     """Generate comparison bar charts for each metric across variants.
 
     Creates one chart per metric category, with grouped bars showing
@@ -142,7 +142,7 @@ def plot_metrics_comparison(
             fontweight="bold",
         )
 
-        for ax, metric_name in zip(axes, metric_names):
+        for ax, metric_name in zip(axes, metric_names, strict=False):
             values_dict = dict(cat_metrics[metric_name])
             values = [values_dict.get(v, 0) for v in variant_names]
 
@@ -153,7 +153,7 @@ def plot_metrics_comparison(
             ax.set_xticklabels(variant_names, rotation=45, ha="right", fontsize=8)
             ax.set_ylim(0, max(values) * 1.15 if values else 1.0)
 
-            for bar, val in zip(bars, values):
+            for bar, val in zip(bars, values, strict=False):
                 ax.text(
                     bar.get_x() + bar.get_width() / 2,
                     bar.get_height() + 0.01,
@@ -176,11 +176,11 @@ def plot_metrics_comparison(
 
 
 def plot_metric_trend(
-    metrics: Dict[str, Dict[str, List[tuple]]],
+    metrics: dict[str, dict[str, list[tuple]]],
     output_dir: str,
     exp_name: str = "experiment",
-    variant_order: Optional[List[str]] = None,
-) -> List[str]:
+    variant_order: list[str] | None = None,
+) -> list[str]:
     """Generate trend line charts for metrics across variants.
 
     Useful for showing how a metric changes as a hyperparameter varies
@@ -217,7 +217,7 @@ def plot_metric_trend(
             if variant_order:
                 values_dict = dict(values_list)
                 x_labels = variant_order
-                y_values = [values_dict.get(v, None) for v in variant_order]
+                y_values = [values_dict.get(v) for v in variant_order]
             else:
                 sorted_vals = sorted(values_list, key=lambda x: x[0])
                 x_labels = [v for v, _ in sorted_vals]
@@ -252,8 +252,8 @@ def plot_metric_trend(
 
 def visualize_experiment(
     exp_dir: str,
-    output_dir: Optional[str] = None,
-) -> List[str]:
+    output_dir: str | None = None,
+) -> list[str]:
     """Generate all visualizations for an experiment.
 
     Convenience function that loads experiment results and generates

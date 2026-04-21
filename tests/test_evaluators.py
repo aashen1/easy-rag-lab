@@ -4,11 +4,9 @@ Tests for the evaluator module.
 This module tests the evaluator base classes and implementations.
 """
 
-import pytest
-from typing import Dict, List
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from eval.evaluators.base import BaseEvaluator, EvaluationResult
+from eval.evaluators.base import EvaluationResult
 from eval.evaluators.builtin_evaluator import BuiltinEvaluator
 from eval.evaluators.ragas_evaluator import RagasEvaluator
 

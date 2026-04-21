@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import torch
 from loguru import logger
@@ -61,9 +61,9 @@ class Reranker:
     def rerank(
         self,
         query: str,
-        results: List[Dict[str, Any]],
-        top_n: Optional[int] = None,
-    ) -> List[Dict[str, Any]]:
+        results: list[dict[str, Any]],
+        top_n: int | None = None,
+    ) -> list[dict[str, Any]]:
         """Re-rank retrieval results using the cross-encoder model.
 
         Scores each query-document pair with the cross-encoder, sorts by
@@ -118,7 +118,7 @@ class Reranker:
             logger.error(error_msg)
             raise Exception(error_msg)
 
-    def _score_pairs(self, pairs: List[tuple]) -> List[float]:
+    def _score_pairs(self, pairs: list[tuple]) -> list[float]:
         """Score query-document pairs using the cross-encoder model.
 
         Processes pairs in batches for efficiency.

@@ -7,7 +7,7 @@ supporting multiple evaluation backends (builtin, RAGAS, etc.).
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -30,12 +30,12 @@ class EvaluationResult:
     question_id: str
     question: str
     answer: str
-    contexts: List[str] = field(default_factory=list)
-    retrieval_metrics: Dict[str, float] = field(default_factory=dict)
-    generation_metrics: Dict[str, float] = field(default_factory=dict)
-    error: Optional[str] = None
+    contexts: list[str] = field(default_factory=list)
+    retrieval_metrics: dict[str, float] = field(default_factory=dict)
+    generation_metrics: dict[str, float] = field(default_factory=dict)
+    error: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert EvaluationResult to dictionary.
 
@@ -69,7 +69,7 @@ class BaseEvaluator(ABC):
         BaseEvaluator instance.
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         """
         Initialize the evaluator.
 
@@ -91,7 +91,7 @@ class BaseEvaluator(ABC):
 
     @property
     @abstractmethod
-    def supported_retrieval_metrics(self) -> List[str]:
+    def supported_retrieval_metrics(self) -> list[str]:
         """
         Get list of supported retrieval metrics.
 
@@ -102,7 +102,7 @@ class BaseEvaluator(ABC):
 
     @property
     @abstractmethod
-    def supported_generation_metrics(self) -> List[str]:
+    def supported_generation_metrics(self) -> list[str]:
         """
         Get list of supported generation metrics.
 
@@ -117,10 +117,10 @@ class BaseEvaluator(ABC):
         question_id: str,
         question: str,
         answer: str,
-        contexts: List[str],
-        expected_sources: Optional[List[str]] = None,
-        expected_answer: Optional[str] = None,
-        llm_config: Optional[Dict[str, str]] = None,
+        contexts: list[str],
+        expected_sources: list[str] | None = None,
+        expected_answer: str | None = None,
+        llm_config: dict[str, str] | None = None,
     ) -> EvaluationResult:
         """
         Evaluate a single sample.
@@ -141,11 +141,11 @@ class BaseEvaluator(ABC):
 
     def evaluate_batch(
         self,
-        samples: List[Dict[str, Any]],
-        llm_config: Optional[Dict[str, str]] = None,
-        retrieval_metrics: Optional[List[str]] = None,
-        generation_metrics: Optional[List[str]] = None,
-    ) -> List[EvaluationResult]:
+        samples: list[dict[str, Any]],
+        llm_config: dict[str, str] | None = None,
+        retrieval_metrics: list[str] | None = None,
+        generation_metrics: list[str] | None = None,
+    ) -> list[EvaluationResult]:
         """
         Evaluate a batch of samples.
 
@@ -180,9 +180,9 @@ class BaseEvaluator(ABC):
 
     def validate_metrics(
         self,
-        retrieval_metrics: Optional[List[str]] = None,
-        generation_metrics: Optional[List[str]] = None,
-    ) -> List[str]:
+        retrieval_metrics: list[str] | None = None,
+        generation_metrics: list[str] | None = None,
+    ) -> list[str]:
         """
         Validate requested metrics against supported metrics.
 

@@ -1,15 +1,13 @@
-import tempfile
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from eval.experiment_reporter import (
+    LLM_REPORT_PROMPT_TEMPLATE,
     ExperimentReporter,
     ExperimentResult,
     TestCaseResult,
     VariantResult,
-    LLM_REPORT_PROMPT_TEMPLATE,
 )
 
 
@@ -282,7 +280,7 @@ class TestExperimentReporter:
         output_file = tmp_path / "test_report.md"
         assert output_file.exists()
 
-        with open(output_file, "r", encoding="utf-8") as f:
+        with open(output_file, encoding="utf-8") as f:
             saved_content = f.read()
         assert saved_content == report
 
@@ -519,7 +517,7 @@ class TestMultiVariantComparison:
         output_file = tmp_path / "test_variant_report.md"
         assert output_file.exists()
 
-        with open(output_file, "r", encoding="utf-8") as f:
+        with open(output_file, encoding="utf-8") as f:
             saved_content = f.read()
         assert saved_content == report
 

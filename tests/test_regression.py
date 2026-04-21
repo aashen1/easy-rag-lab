@@ -15,7 +15,7 @@ GOLDEN_MEAL_NAME = "golden_test"
 def _load_golden_qa():
     if not GOLDEN_QA_PATH.exists():
         return []
-    with open(GOLDEN_QA_PATH, "r", encoding="utf-8") as f:
+    with open(GOLDEN_QA_PATH, encoding="utf-8") as f:
         return json.load(f)
 
 

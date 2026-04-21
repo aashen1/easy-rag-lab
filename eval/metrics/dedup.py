@@ -1,13 +1,12 @@
-from typing import Dict, List, Optional
 
 from eval.metrics.retrieval import calculate_hit_rate, calculate_mrr, calculate_ndcg
 from eval.metrics.utils import _parse_chunk_id, normalize_source
 
 
 def deduplicate_by_document(
-    retrieved_sources: List[str],
-    retrieved_chunk_ids: Optional[List[str]] = None,
-) -> List[int]:
+    retrieved_sources: list[str],
+    retrieved_chunk_ids: list[str] | None = None,
+) -> list[int]:
     """Return indices to keep after deduplicating by document.
 
     Identifies the first occurrence of each unique document in the
@@ -31,7 +30,7 @@ def deduplicate_by_document(
         unique document), in ascending order.
     """
     seen: set = set()
-    keep_indices: List[int] = []
+    keep_indices: list[int] = []
 
     for i, source in enumerate(retrieved_sources):
         if retrieved_chunk_ids is not None and i < len(retrieved_chunk_ids):
@@ -51,10 +50,10 @@ def deduplicate_by_document(
 
 
 def calculate_dedup_hit_rate(
-    retrieved_sources: List[str],
-    expected_sources: List[str],
+    retrieved_sources: list[str],
+    expected_sources: list[str],
     k: int = 5,
-    retrieved_chunk_ids: Optional[List[str]] = None,
+    retrieved_chunk_ids: list[str] | None = None,
 ) -> float:
     """Calculate hit rate after deduplicating by document.
 
@@ -78,9 +77,9 @@ def calculate_dedup_hit_rate(
 
 
 def calculate_dedup_mrr(
-    retrieved_sources: List[str],
-    expected_sources: List[str],
-    retrieved_chunk_ids: Optional[List[str]] = None,
+    retrieved_sources: list[str],
+    expected_sources: list[str],
+    retrieved_chunk_ids: list[str] | None = None,
 ) -> float:
     """Calculate MRR after deduplicating by document.
 
@@ -103,11 +102,11 @@ def calculate_dedup_mrr(
 
 
 def calculate_dedup_ndcg(
-    retrieved_sources: List[str],
-    expected_sources: List[str],
+    retrieved_sources: list[str],
+    expected_sources: list[str],
     k: int = 5,
-    relevance_scores: Optional[Dict[str, int]] = None,
-    retrieved_chunk_ids: Optional[List[str]] = None,
+    relevance_scores: dict[str, int] | None = None,
+    retrieved_chunk_ids: list[str] | None = None,
 ) -> float:
     """Calculate NDCG after deduplicating by document.
 

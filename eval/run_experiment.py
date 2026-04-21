@@ -1,5 +1,4 @@
 import argparse
-import hashlib
 import json
 import sys
 import time
@@ -7,29 +6,34 @@ import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from loguru import logger
 
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
+from eval.evaluators.base import BaseEvaluator
+from eval.evaluators.builtin_evaluator import BuiltinEvaluator
+from eval.evaluators.ragas_evaluator import RagasEvaluator
+from eval.experiment_reporter import ExperimentReporter
 from src.experiment import (
     ExperimentConfig,
     ExperimentManager,
     is_new_format,
-    get_test_set_name,
     load_experiment_config,
     merge_config,
 )
 from src.generator import Generator
 from src.hybrid_retriever import HybridRetriever
-from src.meal import MealManager, MealStatus, compute_file_sha256
 from src.meal import (
     ArtifactCache,
+    MealManager,
+    MealStatus,
     build_chunks_if_needed,
     build_index_from_chunks,
     compute_chunker_config_hash,
+    compute_file_sha256,
     compute_index_key,
     generate_collection_name,
 )
@@ -39,26 +43,6 @@ from src.test_generator import TestSetGenerator
 from src.test_set_manager import TestSetManager
 from src.token_tracker import TokenTracker
 from src.utils import get_llm_config, load_config, setup_logger
-from eval.metrics import (
-    calculate_hit_rate,
-    calculate_mrr,
-    calculate_ndcg,
-    calculate_context_precision,
-    calculate_context_recall,
-    calculate_chunk_hit_rate,
-    calculate_chunk_mrr,
-    calculate_chunk_ndcg,
-    calculate_false_positive_rate,
-    calculate_dedup_hit_rate,
-    calculate_dedup_mrr,
-    calculate_dedup_ndcg,
-    normalize_source,
-    normalize_source_with_equivalence,
-)
-from eval.evaluators.base import BaseEvaluator, EvaluationResult
-from eval.evaluators.builtin_evaluator import BuiltinEvaluator
-from eval.evaluators.ragas_evaluator import RagasEvaluator
-from eval.experiment_reporter import ExperimentReporter
 
 
 @dataclass
@@ -77,12 +61,12 @@ class AssetVerificationResult:
         AssetVerificationResult instance.
     """
     valid: bool
-    missing_files: List[str] = field(default_factory=list)
-    invalid_files: List[str] = field(default_factory=list)
-    pdf_issues: Dict[str, str] = field(default_factory=dict)
-    raw_dir: Optional[Path] = None
+    missing_files: list[str] = field(default_factory=list)
+    invalid_files: list[str] = field(default_factory=list)
+    pdf_issues: dict[str, str] = field(default_factory=dict)
+    raw_dir: Path | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """
         Convert to dictionary.
 
@@ -98,7 +82,7 @@ class AssetVerificationResult:
         }
 
 
-def sanitize_config(config: Dict[str, Any]) -> Dict[str, Any]:
+def sanitize_config(config: dict[str, Any]) -> dict[str, Any]:
     """
     Create a sanitized copy of configuration with sensitive fields masked.
 
@@ -122,7 +106,7 @@ def sanitize_config(config: Dict[str, Any]) -> Dict[str, Any]:
 
 def verify_experiment_assets(
     exp_dir: Path,
-    system_config: Dict[str, Any],
+    system_config: dict[str, Any],
     verify_pdf_hashes: bool = True,
 ) -> AssetVerificationResult:
     """
@@ -150,7 +134,7 @@ def verify_experiment_assets(
 
     missing_files = []
     invalid_files = []
-    pdf_issues: Dict[str, str] = {}
+    pdf_issues: dict[str, str] = {}
 
     required_files = [
         "manifest.json",
@@ -166,20 +150,20 @@ def verify_experiment_assets(
         else:
             try:
                 if filename == "manifest.json":
-                    with open(file_path, "r", encoding="utf-8") as f:
+                    with open(file_path, encoding="utf-8") as f:
                         data = json.load(f)
                         if not data.get("name"):
                             invalid_files.append(filename)
                             logger.warning(f"Invalid {filename}: missing 'name' field")
                 elif filename == "config_snapshot.yaml":
                     import yaml
-                    with open(file_path, "r", encoding="utf-8") as f:
+                    with open(file_path, encoding="utf-8") as f:
                         data = yaml.safe_load(f)
                         if not data:
                             invalid_files.append(filename)
                             logger.warning(f"Invalid {filename}: empty or invalid YAML")
                 elif filename == "meal_snapshot.json":
-                    with open(file_path, "r", encoding="utf-8") as f:
+                    with open(file_path, encoding="utf-8") as f:
                         data = json.load(f)
                         if "pdf_files" not in data:
                             invalid_files.append(filename)
@@ -199,7 +183,7 @@ def verify_experiment_assets(
     meal_snapshot_path = exp_dir / "meal_snapshot.json"
     if meal_snapshot_path.exists():
         try:
-            with open(meal_snapshot_path, "r", encoding="utf-8") as f:
+            with open(meal_snapshot_path, encoding="utf-8") as f:
                 meal_snapshot = json.load(f)
 
             pdf_files = meal_snapshot.get("pdf_files", [])
@@ -258,7 +242,7 @@ def verify_experiment_assets(
     return result
 
 
-def collect_environment_info() -> Dict[str, Any]:
+def collect_environment_info() -> dict[str, Any]:
     """Collect environment version information for reproducibility.
 
     Returns:
@@ -295,10 +279,10 @@ def collect_environment_info() -> Dict[str, Any]:
 
 
 def prepare_meal(
-    system_config: Dict[str, Any],
+    system_config: dict[str, Any],
     exp_config: ExperimentConfig,
     skip_preprocessing: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Prepare meal for experiment.
 
@@ -405,15 +389,15 @@ def prepare_meal(
 
 
 def _prepare_legacy_test_set(
-    system_config: Dict[str, Any],
+    system_config: dict[str, Any],
     meal_name: str,
-    test_set_config: Dict[str, Any],
+    test_set_config: dict[str, Any],
     meal_manager: "MealManager",
     generator: "TestSetGenerator",
     llm_preset: str,
     skip_preprocessing: bool,
-    token_tracker: Optional[TokenTracker],
-) -> Dict[str, Any]:
+    token_tracker: TokenTracker | None,
+) -> dict[str, Any]:
     """
     Legacy test set preparation for old format configs.
 
@@ -450,7 +434,7 @@ def _prepare_legacy_test_set(
     if test_set_path.exists():
         logger.info(f"Test set '{filename}' found, loading...")
         try:
-            with open(test_set_path, "r", encoding="utf-8") as f:
+            with open(test_set_path, encoding="utf-8") as f:
                 test_set_data = json.load(f)
 
             existing_count = len(test_set_data.get("questions", []))
@@ -544,12 +528,12 @@ def _prepare_legacy_test_set(
 
 
 def prepare_test_sets(
-    system_config: Dict[str, Any],
+    system_config: dict[str, Any],
     exp_config: ExperimentConfig,
-    meal_info: Dict[str, Any],
+    meal_info: dict[str, Any],
     skip_preprocessing: bool = False,
-    token_tracker: Optional[TokenTracker] = None,
-) -> List[Dict[str, Any]]:
+    token_tracker: TokenTracker | None = None,
+) -> list[dict[str, Any]]:
     """
     Prepare test sets for experiment.
 
@@ -634,7 +618,7 @@ def prepare_test_sets(
 
 
 def prepare_index_for_variant(
-    merged_config: Dict[str, Any],
+    merged_config: dict[str, Any],
     meal_config: "MealConfig",
     variant_name: str,
 ) -> "VectorIndexer":
@@ -714,8 +698,8 @@ def prepare_index_for_variant(
 
 def _create_evaluators(
     exp_config: ExperimentConfig,
-    system_config: Dict[str, Any],
-) -> Dict[str, BaseEvaluator]:
+    system_config: dict[str, Any],
+) -> dict[str, BaseEvaluator]:
     """
     Create evaluator instances based on experiment configuration.
 
@@ -727,7 +711,7 @@ def _create_evaluators(
         Dictionary mapping backend name to evaluator instance.
     """
     backends = exp_config.evaluation.get("backends", ["builtin"])
-    evaluators: Dict[str, BaseEvaluator] = {}
+    evaluators: dict[str, BaseEvaluator] = {}
 
     for backend in backends:
         if backend == "builtin":
@@ -743,8 +727,8 @@ def _create_evaluators(
 
 def _collect_rag_samples(
     pipeline: RAGPipeline,
-    test_set: Dict[str, Any],
-) -> List[Dict[str, Any]]:
+    test_set: dict[str, Any],
+) -> list[dict[str, Any]]:
     """
     Run pipeline queries and collect raw samples for evaluation.
 
@@ -822,12 +806,12 @@ def _collect_rag_samples(
 
 
 def _evaluate_with_builtin(
-    samples: List[Dict[str, Any]],
+    samples: list[dict[str, Any]],
     evaluator: BuiltinEvaluator,
-    llm_config: Optional[Dict[str, str]] = None,
-    retrieval_metrics: Optional[List[str]] = None,
-    generation_metrics: Optional[List[str]] = None,
-) -> List[Dict[str, Any]]:
+    llm_config: dict[str, str] | None = None,
+    retrieval_metrics: list[str] | None = None,
+    generation_metrics: list[str] | None = None,
+) -> list[dict[str, Any]]:
     """
     Evaluate samples using the builtin evaluator.
 
@@ -910,12 +894,12 @@ def _evaluate_with_builtin(
 
 
 def _evaluate_with_ragas(
-    samples: List[Dict[str, Any]],
+    samples: list[dict[str, Any]],
     evaluator: RagasEvaluator,
-    llm_config: Dict[str, str],
-    generation_metrics: Optional[List[str]] = None,
-    retrieval_metrics: Optional[List[str]] = None,
-) -> List[Dict[str, Any]]:
+    llm_config: dict[str, str],
+    generation_metrics: list[str] | None = None,
+    retrieval_metrics: list[str] | None = None,
+) -> list[dict[str, Any]]:
     """
     Evaluate samples using the RAGAS evaluator.
 
@@ -1003,10 +987,10 @@ def _evaluate_with_ragas(
 
 def evaluate_test_set(
     pipeline: RAGPipeline,
-    test_set: Dict[str, Any],
-    exp_config: Optional[ExperimentConfig] = None,
-    system_config: Optional[Dict[str, Any]] = None,
-) -> List[Dict[str, Any]]:
+    test_set: dict[str, Any],
+    exp_config: ExperimentConfig | None = None,
+    system_config: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
     """
     Evaluate a single test set against the pipeline.
 
@@ -1042,7 +1026,7 @@ def evaluate_test_set(
 
     samples = _collect_rag_samples(pipeline, test_set)
 
-    all_results: Dict[str, Dict[str, Any]] = {}
+    all_results: dict[str, dict[str, Any]] = {}
 
     use_namespace = len(backends) > 1
 
@@ -1112,7 +1096,7 @@ def evaluate_test_set(
     return list(all_results.values())
 
 
-def compute_aggregate_metrics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
+def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
     """
     Compute aggregate metrics from evaluation results.
 
@@ -1128,7 +1112,7 @@ def compute_aggregate_metrics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
         Dictionary containing average metrics including hit_rate, mrr, ndcg,
         chunk_level_metrics, dedup_metrics, and generation_metrics.
     """
-    metrics: Dict[str, Any] = {}
+    metrics: dict[str, Any] = {}
 
     # Basic retrieval metrics
     valid_retrieval = [r for r in results if "retrieval" in r and r["retrieval"]]
@@ -1248,14 +1232,14 @@ def compute_aggregate_metrics(results: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def run_variant_evaluation(
-    system_config: Dict[str, Any],
+    system_config: dict[str, Any],
     exp_config: ExperimentConfig,
-    variant: Dict[str, Any],
-    meal_info: Dict[str, Any],
-    test_sets: List[Dict[str, Any]],
+    variant: dict[str, Any],
+    meal_info: dict[str, Any],
+    test_sets: list[dict[str, Any]],
     exp_dir: Path,
-    test_generation_tracker: Optional[TokenTracker] = None,
-) -> Dict[str, Any]:
+    test_generation_tracker: TokenTracker | None = None,
+) -> dict[str, Any]:
     """
     Run evaluation for a single variant.
 
@@ -1428,7 +1412,7 @@ def run_experiment(
     skip_preprocessing: bool = False,
     use_llm_report: bool = False,
     system_config_path: str = "config.yaml",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Execute complete experiment workflow.
 
@@ -1539,7 +1523,7 @@ def run_experiment(
                 if "token_usage" in variant_result:
                     variant_tracker = TokenTracker()
                     for rec_data in variant_result["token_usage"].get("records", []):
-                        from src.token_tracker import DetailedTokenUsage, TokenRecord
+                        from src.token_tracker import DetailedTokenUsage
                         usage = DetailedTokenUsage(
                             input_tokens=rec_data["usage"]["input_tokens"],
                             output_tokens=rec_data["usage"]["output_tokens"],
@@ -1743,12 +1727,12 @@ def show_experiment_info(exp_id: str, system_config_path: str = "config.yaml") -
 
 
 def compare_experiments(
-    exp_ids: List[str],
+    exp_ids: list[str],
     system_config_path: str = "config.yaml",
     output_format: str = "table",
     save_report: bool = False,
-    report_path: Optional[str] = None,
-) -> Dict[str, Any]:
+    report_path: str | None = None,
+) -> dict[str, Any]:
     """
     Compare multiple experiments and generate a comparison report.
 
@@ -1815,7 +1799,7 @@ def compare_experiments(
     }
 
 
-def _build_comparison_data(results: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _build_comparison_data(results: list[dict[str, Any]]) -> dict[str, Any]:
     """
     Build structured comparison data from experiment results.
 
@@ -1928,7 +1912,7 @@ def _build_comparison_data(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
-def _extract_category_metrics(variant_result: Dict[str, Any]) -> Dict[str, Dict[str, float]]:
+def _extract_category_metrics(variant_result: dict[str, Any]) -> dict[str, dict[str, float]]:
     """
     Extract metrics grouped by question category from variant results.
 
@@ -1938,7 +1922,7 @@ def _extract_category_metrics(variant_result: Dict[str, Any]) -> Dict[str, Dict[
     Returns:
         Dictionary mapping category names to their metrics.
     """
-    category_metrics: Dict[str, Dict[str, List[float]]] = {}
+    category_metrics: dict[str, dict[str, list[float]]] = {}
 
     for result in variant_result.get("results", []):
         category = result.get("category", "unknown")
@@ -1968,8 +1952,8 @@ def _extract_category_metrics(variant_result: Dict[str, Any]) -> Dict[str, Dict[
 
 
 def _print_comparison_table(
-    comparison_data: Dict[str, Any],
-    not_found: List[str],
+    comparison_data: dict[str, Any],
+    not_found: list[str],
 ) -> None:
     """
     Print comparison results in table format.
@@ -2037,8 +2021,8 @@ def _print_comparison_table(
 
 
 def _generate_comparison_report(
-    comparison_data: Dict[str, Any],
-    not_found: List[str],
+    comparison_data: dict[str, Any],
+    not_found: list[str],
 ) -> str:
     """
     Generate a Markdown comparison report.
@@ -2137,8 +2121,8 @@ def reproduce_experiment(
     system_config_path: str = "config.yaml",
     skip_verification: bool = False,
     verify_pdf_hashes: bool = True,
-    output_dir: Optional[str] = None,
-) -> Dict[str, Any]:
+    output_dir: str | None = None,
+) -> dict[str, Any]:
     """
     Reproduce an experiment from its saved configuration.
 
@@ -2213,13 +2197,14 @@ def reproduce_experiment(
     logger.info("Note: Results may differ due to LLM randomness.")
 
     import tempfile
+
     import yaml
 
-    with open(config_path, "r", encoding="utf-8") as f:
+    with open(config_path, encoding="utf-8") as f:
         config_snapshot = yaml.safe_load(f)
 
     manifest_path = exp_path / "manifest.json"
-    with open(manifest_path, "r", encoding="utf-8") as f:
+    with open(manifest_path, encoding="utf-8") as f:
         manifest = json.load(f)
 
     original_variants = manifest.get("variants", [])
@@ -2231,7 +2216,7 @@ def reproduce_experiment(
 
             if result_path.exists():
                 try:
-                    with open(result_path, "r", encoding="utf-8") as f:
+                    with open(result_path, encoding="utf-8") as f:
                         result_data = json.load(f)
                     if "config_snapshot" in result_data and "variant" in result_data["config_snapshot"]:
                         variant_config["config_overrides"] = result_data["config_snapshot"]["variant"].get("config_overrides", {})
@@ -2411,7 +2396,7 @@ Examples:
                 skip_verification=args.skip_verification,
                 verify_pdf_hashes=not args.skip_hash_verification,
             )
-            print(f"\nExperiment reproduced successfully!")
+            print("\nExperiment reproduced successfully!")
             print(f"Original: {result['original_exp_dir']}")
             print(f"Reproduced: {result['reproduced_exp_dir']}")
         except ValueError as e:

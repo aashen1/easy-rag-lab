@@ -13,7 +13,7 @@ Uses LangchainLLMWrapper with ChatAnthropic for LongCat API compatibility,
 which preserves the Authorization: Bearer header required by the proxy.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from loguru import logger
 
@@ -40,7 +40,7 @@ class RagasEvaluator(BaseEvaluator):
         RagasEvaluator instance.
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         """
         Initialize the RAGAS evaluator.
 
@@ -59,15 +59,15 @@ class RagasEvaluator(BaseEvaluator):
             "answer_correctness",
             "semantic_similarity",
         ]
-        self._ragas_config: Dict[str, Any] = (
+        self._ragas_config: dict[str, Any] = (
             self.config.get("ragas", {}) if self.config else {}
         )
-        self._run_config: Dict[str, Any] = self._ragas_config.get("run_config", {})
-        self._embedding_config: Dict[str, Any] = self._ragas_config.get(
+        self._run_config: dict[str, Any] = self._ragas_config.get("run_config", {})
+        self._embedding_config: dict[str, Any] = self._ragas_config.get(
             "embedding", {}
         )
 
-    def _create_llm(self, llm_config: Dict[str, str]) -> Any:
+    def _create_llm(self, llm_config: dict[str, str]) -> Any:
         """
         Create RAGAS-compatible LLM using LangchainLLMWrapper.
 
@@ -98,7 +98,7 @@ class RagasEvaluator(BaseEvaluator):
                 f"{error_msg}. Please install with: pixi add langchain-anthropic ragas"
             )
 
-    def _create_embeddings(self, config: Dict[str, Any]) -> Any:
+    def _create_embeddings(self, config: dict[str, Any]) -> Any:
         """
         Create RAGAS-compatible embeddings using LangChain HuggingFaceEmbeddings.
 
@@ -139,7 +139,7 @@ class RagasEvaluator(BaseEvaluator):
                 f"{error_msg}. Please install with: pixi add langchain-community sentence-transformers ragas"
             )
 
-    def _build_run_config(self) -> Optional[Any]:
+    def _build_run_config(self) -> Any | None:
         """
         Build a RAGAS RunConfig from self._run_config.
 
@@ -159,7 +159,7 @@ class RagasEvaluator(BaseEvaluator):
             return None
 
     def _build_ragas_dataset(
-        self, samples: List[Dict[str, Any]]
+        self, samples: list[dict[str, Any]]
     ) -> Any:
         """
         Build RAGAS EvaluationDataset from sample dictionaries.
@@ -176,7 +176,7 @@ class RagasEvaluator(BaseEvaluator):
             RAGAS EvaluationDataset instance.
         """
         try:
-            from ragas import SingleTurnSample, EvaluationDataset
+            from ragas import EvaluationDataset, SingleTurnSample
 
             ragas_samples = []
             for sample in samples:
@@ -197,10 +197,10 @@ class RagasEvaluator(BaseEvaluator):
 
     def _create_metrics(
         self,
-        metric_names: List[str],
+        metric_names: list[str],
         llm: Any,
-        embeddings: Optional[Any] = None,
-    ) -> List[Any]:
+        embeddings: Any | None = None,
+    ) -> list[Any]:
         """
         Create RAGAS metric instances based on configuration.
 
@@ -216,11 +216,11 @@ class RagasEvaluator(BaseEvaluator):
             metric_map = {}
             try:
                 from ragas.metrics._metrics import (
-                    Faithfulness,
+                    AnswerCorrectness,
                     AnswerRelevancy,
                     ContextPrecision,
                     ContextRecall,
-                    AnswerCorrectness,
+                    Faithfulness,
                     SemanticSimilarity,
                 )
                 metric_map = {
@@ -233,11 +233,21 @@ class RagasEvaluator(BaseEvaluator):
                 }
             except ImportError:
                 from ragas.metrics import (
-                    _Faithfulness as Faithfulness,
-                    _AnswerRelevancy as AnswerRelevancy,
-                    _ContextPrecision as ContextPrecision,
-                    _ContextRecall as ContextRecall,
                     _AnswerCorrectness as AnswerCorrectness,
+                )
+                from ragas.metrics import (
+                    _AnswerRelevancy as AnswerRelevancy,
+                )
+                from ragas.metrics import (
+                    _ContextPrecision as ContextPrecision,
+                )
+                from ragas.metrics import (
+                    _ContextRecall as ContextRecall,
+                )
+                from ragas.metrics import (
+                    _Faithfulness as Faithfulness,
+                )
+                from ragas.metrics import (
                     _SemanticSimilarity as SemanticSimilarity,
                 )
                 metric_map = {
@@ -282,7 +292,7 @@ class RagasEvaluator(BaseEvaluator):
         return "ragas"
 
     @property
-    def supported_retrieval_metrics(self) -> List[str]:
+    def supported_retrieval_metrics(self) -> list[str]:
         """
         Get list of supported retrieval metrics.
 
@@ -295,7 +305,7 @@ class RagasEvaluator(BaseEvaluator):
         return self._retrieval_metrics
 
     @property
-    def supported_generation_metrics(self) -> List[str]:
+    def supported_generation_metrics(self) -> list[str]:
         """
         Get list of supported generation metrics.
 
@@ -309,11 +319,11 @@ class RagasEvaluator(BaseEvaluator):
         question_id: str,
         question: str,
         answer: str,
-        contexts: List[str],
-        expected_sources: Optional[List[str]] = None,
-        expected_answer: Optional[str] = None,
-        llm_config: Optional[Dict[str, str]] = None,
-        generation_metrics: Optional[List[str]] = None,
+        contexts: list[str],
+        expected_sources: list[str] | None = None,
+        expected_answer: str | None = None,
+        llm_config: dict[str, str] | None = None,
+        generation_metrics: list[str] | None = None,
     ) -> EvaluationResult:
         """
         Evaluate a single sample using RAGAS metrics.
@@ -421,10 +431,10 @@ class RagasEvaluator(BaseEvaluator):
 
     def evaluate_batch(
         self,
-        samples: List[Dict[str, Any]],
-        llm_config: Optional[Dict[str, str]] = None,
-        generation_metrics: Optional[List[str]] = None,
-    ) -> List[EvaluationResult]:
+        samples: list[dict[str, Any]],
+        llm_config: dict[str, str] | None = None,
+        generation_metrics: list[str] | None = None,
+    ) -> list[EvaluationResult]:
         """
         Evaluate a batch of samples using RAGAS metrics.
 

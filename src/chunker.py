@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import tiktoken
 from loguru import logger
@@ -13,7 +13,7 @@ def chunk_text(
     chunk_size: int = 512,
     overlap: int = 0,
     encoding_name: str = "cl100k_base",
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Split text into fixed-size chunks based on token count.
 
     Uses the specified tiktoken encoding to tokenize the input text, then
@@ -103,8 +103,8 @@ def process_parsed_files(
     chunk_size: int = 512,
     overlap: int = 0,
     encoding_name: str = "cl100k_base",
-    source_filter: Optional[set] = None,
-) -> List[Dict[str, Any]]:
+    source_filter: set | None = None,
+) -> list[dict[str, Any]]:
     """Read parsed Markdown files, chunk them, and save results as JSONL.
 
     Scans the input directory for .md files, applies optional source
@@ -159,7 +159,7 @@ def process_parsed_files(
 
     for md_file in md_files:
         try:
-            with open(md_file, "r", encoding="utf-8") as f:
+            with open(md_file, encoding="utf-8") as f:
                 text = f.read()
 
             chunks = chunk_text(text, chunk_size, overlap, encoding_name)

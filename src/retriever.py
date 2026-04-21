@@ -1,7 +1,6 @@
-from typing import Any, Dict, List
+from typing import Any
 
 from loguru import logger
-from qdrant_client.http.models import PointStruct
 
 from src.embedder import Embedder
 from src.indexer import VectorIndexer
@@ -29,7 +28,7 @@ class Retriever:
         self.top_k = top_k
         self.score_threshold = score_threshold
 
-    def retrieve(self, query: str) -> List[Dict[str, Any]]:
+    def retrieve(self, query: str) -> list[dict[str, Any]]:
         """Retrieve the top-k most relevant chunks for the given query.
 
         Embeds the query and searches the vector store for the closest

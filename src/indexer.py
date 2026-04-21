@@ -1,11 +1,10 @@
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import numpy as np
 from loguru import logger
 from qdrant_client import QdrantClient
-from qdrant_client.http import models
 from qdrant_client.http.models import Distance, PointStruct, VectorParams
 
 from src.embedder import Embedder
@@ -107,7 +106,7 @@ class VectorIndexer:
             raise Exception(error_msg)
 
     def index_chunks(
-        self, chunks: List[Dict[str, Any]], embeddings: np.ndarray, batch_size: int = 100
+        self, chunks: list[dict[str, Any]], embeddings: np.ndarray, batch_size: int = 100
     ) -> None:
         """Insert document chunks and their embeddings into the Qdrant collection.
 
@@ -136,7 +135,7 @@ class VectorIndexer:
             logger.info(f"Indexing {len(chunks)} chunks")
 
             points = []
-            for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
+            for i, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=False)):
                 point = PointStruct(
                     id=i,
                     vector=embedding.tolist(),
@@ -170,7 +169,7 @@ class VectorIndexer:
         embedder: Embedder,
         batch_size: int = 32,
         rebuild: bool = False,
-        source_filter: Optional[set] = None,
+        source_filter: set | None = None,
     ) -> None:
         """Load JSONL chunk files, embed their texts, and index them into Qdrant.
 
@@ -218,7 +217,7 @@ class VectorIndexer:
         all_chunks = []
         for jsonl_file in jsonl_files:
             try:
-                with open(jsonl_file, "r", encoding="utf-8") as f:
+                with open(jsonl_file, encoding="utf-8") as f:
                     for line in f:
                         chunk = json.loads(line.strip())
                         all_chunks.append(chunk)
@@ -244,7 +243,7 @@ class VectorIndexer:
 
         self.index_chunks(all_chunks, embeddings, batch_size=100)
 
-    def get_collection_info(self) -> Optional[Dict[str, Any]]:
+    def get_collection_info(self) -> dict[str, Any] | None:
         """Retrieve metadata about the current Qdrant collection.
 
         Returns:

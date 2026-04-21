@@ -207,7 +207,7 @@ class TestTestSetManager:
         path = manager.save_test_set("my_meal", data)
         assert path.exists()
         assert path.name == "set_a.json"
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             loaded = json.load(f)
         assert loaded["metadata"]["name"] == "set_a"
 
@@ -576,7 +576,7 @@ class TestArchiveBackup:
         assert archive_path.exists()
         assert "golden_test.archive." in archive_path.name
         assert archive_path.name.endswith(".json")
-        with open(archive_path, "r", encoding="utf-8") as f:
+        with open(archive_path, encoding="utf-8") as f:
             loaded = json.load(f)
         assert loaded["metadata"]["name"] == "golden_test"
 

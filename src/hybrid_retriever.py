@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from loguru import logger
 
@@ -63,7 +63,7 @@ class HybridRetriever:
         self.bm25_weight = bm25_weight
         self.top_k = top_k
 
-    def retrieve(self, query: str) -> List[Dict[str, Any]]:
+    def retrieve(self, query: str) -> list[dict[str, Any]]:
         """Retrieve the top-k results using hybrid fusion of vector and BM25.
 
         Executes both retrieval strategies, fuses their results using the
@@ -111,9 +111,9 @@ class HybridRetriever:
 
     def _rrf_fusion(
         self,
-        vector_results: List[Dict[str, Any]],
-        bm25_results: List[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
+        vector_results: list[dict[str, Any]],
+        bm25_results: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
         """Fuse results using Reciprocal Rank Fusion (RRF).
 
         Each document's RRF score is the sum of ``1 / (k + rank)`` across
@@ -127,8 +127,8 @@ class HybridRetriever:
         Returns:
             Top-k fused results sorted by descending RRF score.
         """
-        rrf_scores: Dict[str, float] = {}
-        doc_data: Dict[str, Dict[str, Any]] = {}
+        rrf_scores: dict[str, float] = {}
+        doc_data: dict[str, dict[str, Any]] = {}
 
         for rank, result in enumerate(vector_results, 1):
             chunk_id = result["chunk_id"]
@@ -162,9 +162,9 @@ class HybridRetriever:
 
     def _weighted_fusion(
         self,
-        vector_results: List[Dict[str, Any]],
-        bm25_results: List[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
+        vector_results: list[dict[str, Any]],
+        bm25_results: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
         """Fuse results using weighted score combination.
 
         Normalizes each retriever's scores to [0, 1] using min-max
@@ -177,8 +177,8 @@ class HybridRetriever:
         Returns:
             Top-k fused results sorted by descending weighted score.
         """
-        combined_scores: Dict[str, float] = {}
-        doc_data: Dict[str, Dict[str, Any]] = {}
+        combined_scores: dict[str, float] = {}
+        doc_data: dict[str, dict[str, Any]] = {}
 
         vector_scores = {r["chunk_id"]: r["score"] for r in vector_results}
         bm25_scores = {r["chunk_id"]: r["score"] for r in bm25_results}
@@ -223,7 +223,7 @@ class HybridRetriever:
         return results
 
     @staticmethod
-    def _normalize_scores(scores: Dict[str, float]) -> Dict[str, float]:
+    def _normalize_scores(scores: dict[str, float]) -> dict[str, float]:
         """Normalize scores to [0, 1] using min-max scaling.
 
         If all scores are equal, returns 1.0 for each to avoid

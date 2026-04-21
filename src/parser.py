@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import pymupdf4llm
 from loguru import logger
@@ -47,10 +46,10 @@ def parse_pdf(pdf_path: str) -> str:
 def parse_all_pdfs(
     input_dir: str,
     output_dir: str,
-    category_mapping: Optional[Dict[str, str]] = None,
+    category_mapping: dict[str, str] | None = None,
     force: bool = False,
-    pdf_files: Optional[List[Path]] = None,
-) -> List[Dict[str, str]]:
+    pdf_files: list[Path] | None = None,
+) -> list[dict[str, str]]:
     """Parse all PDF files in a directory and save their Markdown output.
 
     Skips files that have already been parsed unless force is True. Each

@@ -2,11 +2,11 @@ import json
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from loguru import logger
 
-from src.meal import MealConfig, MealFile, MealManager
+from src.meal import MealConfig, MealManager
 from src.utils import ensure_dir
 
 
@@ -16,17 +16,17 @@ class TestSetMetadata:
     meal_id: str
     created_at: str
     updated_at: str
-    generation: Optional[Dict[str, Any]] = None
+    generation: dict[str, Any] | None = None
     user_defined: bool = False
-    invalid_policy: Optional[str] = None
-    audit_log: List[Dict[str, Any]] = field(default_factory=list)
+    invalid_policy: str | None = None
+    audit_log: list[dict[str, Any]] = field(default_factory=list)
     suppress_warnings: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "TestSetMetadata":
+    def from_dict(cls, data: dict[str, Any]) -> "TestSetMetadata":
         return cls(
             name=data["name"],
             meal_id=data["meal_id"],
@@ -43,7 +43,7 @@ class TestSetMetadata:
 class TestSetManager:
     __test__ = False
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         """Initialize the TestSetManager with application configuration.
 
         Args:
@@ -64,7 +64,7 @@ class TestSetManager:
         """
         return self.meal_manager.get_meal_dir(meal_name) / "test_sets"
 
-    def find_by_name(self, meal_name: str, test_set_name: str) -> Optional[Dict[str, Any]]:
+    def find_by_name(self, meal_name: str, test_set_name: str) -> dict[str, Any] | None:
         """Find a test set by name in a meal's test_sets directory.
 
         Archive files (containing '.archive.') are excluded from results.
@@ -86,14 +86,14 @@ class TestSetManager:
             return None
 
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 data = json.load(f)
             return self._migrate_test_set(data)
         except Exception as e:
             logger.error(f"Failed to load test set '{test_set_name}' from meal '{meal_name}': {str(e)}")
             return None
 
-    def save_test_set(self, meal_name: str, test_set_data: Dict[str, Any]) -> Path:
+    def save_test_set(self, meal_name: str, test_set_data: dict[str, Any]) -> Path:
         """Save a test set JSON file to a meal's test_sets directory.
 
         The filename is derived from test_set_data["metadata"]["name"].
@@ -126,7 +126,7 @@ class TestSetManager:
             logger.error(f"Failed to save test set '{test_set_name}' to meal '{meal_name}': {str(e)}")
             raise
 
-    def load_test_set(self, meal_name: str, test_set_name: str) -> Dict[str, Any]:
+    def load_test_set(self, meal_name: str, test_set_name: str) -> dict[str, Any]:
         """Load a test set by name from a meal's test_sets directory.
 
         Args:
@@ -148,14 +148,14 @@ class TestSetManager:
             )
 
         try:
-            with open(file_path, "r", encoding="utf-8") as f:
+            with open(file_path, encoding="utf-8") as f:
                 data = json.load(f)
             return self._migrate_test_set(data)
         except Exception as e:
             logger.error(f"Failed to load test set '{test_set_name}' from meal '{meal_name}': {str(e)}")
             raise
 
-    def _migrate_test_set(self, test_set_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _migrate_test_set(self, test_set_data: dict[str, Any]) -> dict[str, Any]:
         """Migrate old format test set to new format.
 
         Args:
@@ -183,7 +183,7 @@ class TestSetManager:
             "questions": test_set_data.get("questions", []),
         }
 
-    def list_test_sets(self, meal_name: str) -> List[Dict[str, Any]]:
+    def list_test_sets(self, meal_name: str) -> list[dict[str, Any]]:
         """List all test sets in a meal's test_sets directory.
 
         Archive files (containing '.archive.') are excluded from results.
@@ -206,7 +206,7 @@ class TestSetManager:
                 continue
 
             try:
-                with open(json_file, "r", encoding="utf-8") as f:
+                with open(json_file, encoding="utf-8") as f:
                     data = json.load(f)
                 results.append({
                     "name": data.get("metadata", {}).get("name", json_file.stem),
@@ -258,9 +258,9 @@ class TestSetManager:
 
     def validate_test_set(
         self,
-        test_set_data: Dict[str, Any],
+        test_set_data: dict[str, Any],
         meal_config: "MealConfig",
-    ) -> tuple[bool, List[Dict[str, Any]]]:
+    ) -> tuple[bool, list[dict[str, Any]]]:
         """
         Validate a test set against a meal configuration.
 
@@ -287,9 +287,9 @@ class TestSetManager:
 
     def _check_questions_validity(
         self,
-        questions: List[Dict[str, Any]],
+        questions: list[dict[str, Any]],
         meal_config: "MealConfig",
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Check each question's data sources against the meal's PDF files.
 
@@ -301,7 +301,7 @@ class TestSetManager:
             List of questions that have missing data sources.
         """
         meal_pdf_paths = {mf.path for mf in meal_config.pdf_files}
-        invalid_questions: List[Dict[str, Any]] = []
+        invalid_questions: list[dict[str, Any]] = []
 
         for question in questions:
             question_type = question.get("question_type", "")
@@ -319,9 +319,9 @@ class TestSetManager:
 
     def _update_meal_id(
         self,
-        test_set_data: Dict[str, Any],
+        test_set_data: dict[str, Any],
         new_meal_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Update the meal_id in test set metadata.
 
@@ -341,7 +341,7 @@ class TestSetManager:
         meal_name: str,
         test_set_name: str,
         new_meal_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Update the meal_id in a test set's metadata and save.
 
         Args:
@@ -360,7 +360,7 @@ class TestSetManager:
 
     def _create_archive_backup(
         self,
-        test_set_data: Dict[str, Any],
+        test_set_data: dict[str, Any],
         meal_name: str,
     ) -> Path:
         """Create an archive backup of a test set before modification.
@@ -388,13 +388,13 @@ class TestSetManager:
 
     def _clean_user_test_set(
         self,
-        test_set_data: Dict[str, Any],
+        test_set_data: dict[str, Any],
         meal_config: "MealConfig",
-        invalid_questions: List[Dict[str, Any]],
-        generator: Optional[Any] = None,
+        invalid_questions: list[dict[str, Any]],
+        generator: Any | None = None,
         llm_preset: str = "default",
-        token_tracker: Optional[Any] = None,
-    ) -> Dict[str, Any]:
+        token_tracker: Any | None = None,
+    ) -> dict[str, Any]:
         """Clean a user-defined test set according to its invalid_policy.
 
         Args:
@@ -435,10 +435,10 @@ class TestSetManager:
 
     def _clean_immutable_policy(
         self,
-        test_set_data: Dict[str, Any],
+        test_set_data: dict[str, Any],
         meal_config: "MealConfig",
-        invalid_questions: List[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        invalid_questions: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         """Clean a test set with immutable policy.
 
         For invalid_policy: "immutable":
@@ -469,10 +469,10 @@ class TestSetManager:
 
     def _clean_trim_policy(
         self,
-        test_set_data: Dict[str, Any],
+        test_set_data: dict[str, Any],
         meal_config: "MealConfig",
-        invalid_questions: List[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        invalid_questions: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         """Clean a test set with trim policy.
 
         For invalid_policy: "trim":
@@ -532,13 +532,13 @@ class TestSetManager:
 
     def _clean_regenerate_policy(
         self,
-        test_set_data: Dict[str, Any],
+        test_set_data: dict[str, Any],
         meal_config: "MealConfig",
-        invalid_questions: List[Dict[str, Any]],
-        generator: Optional[Any],
+        invalid_questions: list[dict[str, Any]],
+        generator: Any | None,
         llm_preset: str,
-        token_tracker: Optional[Any],
-    ) -> Dict[str, Any]:
+        token_tracker: Any | None,
+    ) -> dict[str, Any]:
         """Clean a test set with regenerate policy.
 
         For invalid_policy: "regenerate":
@@ -620,7 +620,7 @@ class TestSetManager:
 
     def _should_warn_about_cleaning(
         self,
-        test_set_data: Dict[str, Any],
+        test_set_data: dict[str, Any],
     ) -> tuple[bool, str]:
         """Check if a warning should be emitted about previous cleaning.
 
@@ -667,7 +667,7 @@ class TestSetManager:
 
     def _derive_test_set_name(
         self,
-        generation_config: Optional[Dict[str, Any]],
+        generation_config: dict[str, Any] | None,
     ) -> str:
         """Derive a test set name from generation config when name is not specified.
 
@@ -695,12 +695,12 @@ class TestSetManager:
     def resolve_test_set(
         self,
         meal_name: str,
-        test_set_config: Dict[str, Any],
+        test_set_config: dict[str, Any],
         meal_config: "MealConfig",
         generator: Optional["TestSetGenerator"] = None,
         llm_preset: str = "default",
-        token_tracker: Optional[Any] = None,
-    ) -> Dict[str, Any]:
+        token_tracker: Any | None = None,
+    ) -> dict[str, Any]:
         """
         Resolve a test set according to the experiment configuration.
 
@@ -818,14 +818,14 @@ class TestSetManager:
 
     def _clean_machine_test_set(
         self,
-        test_set_data: Dict[str, Any],
+        test_set_data: dict[str, Any],
         meal_config: "MealConfig",
-        invalid_questions: List[Dict[str, Any]],
-        generation_config: Optional[Dict[str, Any]] = None,
+        invalid_questions: list[dict[str, Any]],
+        generation_config: dict[str, Any] | None = None,
         generator: Optional["TestSetGenerator"] = None,
         llm_preset: str = "default",
-        token_tracker: Optional[Any] = None,
-    ) -> Dict[str, Any]:
+        token_tracker: Any | None = None,
+    ) -> dict[str, Any]:
         """Clean a machine-generated test set by removing invalid questions
         and supplementing new ones.
 

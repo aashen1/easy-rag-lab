@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -261,7 +260,10 @@ class TestEndToEndExperiment:
         test_system_config,
         test_experiment_config,
     ):
-        from eval.run_experiment import _build_comparison_data, _generate_comparison_report
+        from eval.run_experiment import (
+            _build_comparison_data,
+            _generate_comparison_report,
+        )
         from src.experiment import ExperimentConfig, ExperimentManager
 
         exp_config = ExperimentConfig.from_dict(test_experiment_config)
@@ -406,7 +408,10 @@ class TestExperimentComparisonExtended:
         temp_project_dir,
         test_system_config,
     ):
-        from eval.run_experiment import _build_comparison_data, _generate_comparison_report
+        from eval.run_experiment import (
+            _build_comparison_data,
+            _generate_comparison_report,
+        )
 
         comparison_data = _build_comparison_data([])
 

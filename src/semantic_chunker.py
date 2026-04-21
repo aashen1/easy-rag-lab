@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import numpy as np
 import tiktoken
@@ -9,7 +9,7 @@ from loguru import logger
 from src.utils import detect_document_category, ensure_dir
 
 
-def _split_into_sentences(text: str) -> List[str]:
+def _split_into_sentences(text: str) -> list[str]:
     """Split text into sentences using Chinese and English punctuation.
 
     Handles Chinese punctuation (。！？；) and English punctuation (.!?;).
@@ -47,7 +47,7 @@ def _split_into_sentences(text: str) -> List[str]:
     return sentences
 
 
-def _split_into_paragraphs(text: str) -> List[str]:
+def _split_into_paragraphs(text: str) -> list[str]:
     """Split text into paragraphs based on double newlines or headers.
 
     Preserves Markdown header structure for document-aware chunking.
@@ -72,7 +72,7 @@ def _split_into_paragraphs(text: str) -> List[str]:
 
 
 def _compute_sentence_similarities(
-    sentences: List[str],
+    sentences: list[str],
     embedder: Any,
 ) -> np.ndarray:
     """Compute cosine similarity between consecutive sentence embeddings.
@@ -105,10 +105,10 @@ def chunk_text_semantic(
     embedder: Any,
     chunk_size: int = 512,
     similarity_threshold: float = 0.5,
-    breakpoint_percentile: Optional[float] = None,
+    breakpoint_percentile: float | None = None,
     min_chunk_size: int = 100,
     encoding_name: str = "cl100k_base",
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Split text into chunks based on semantic similarity boundaries.
 
     Detects semantic breakpoints where the similarity between consecutive
@@ -293,7 +293,7 @@ def _fixed_split_tokens(
     tokens: list,
     encoding: Any,
     chunk_size: int,
-) -> List[Tuple[str, int]]:
+) -> list[tuple[str, int]]:
     """Split a token list into fixed-size sub-chunks.
 
     Args:
@@ -321,11 +321,11 @@ def process_parsed_files_semantic(
     embedder: Any,
     chunk_size: int = 512,
     similarity_threshold: float = 0.5,
-    breakpoint_percentile: Optional[float] = None,
+    breakpoint_percentile: float | None = None,
     min_chunk_size: int = 100,
     encoding_name: str = "cl100k_base",
-    source_filter: Optional[set] = None,
-) -> List[Dict[str, Any]]:
+    source_filter: set | None = None,
+) -> list[dict[str, Any]]:
     """Read parsed Markdown files and chunk them using semantic boundaries.
 
     This is the semantic equivalent of ``process_parsed_files()``. It
@@ -382,7 +382,7 @@ def process_parsed_files_semantic(
 
     for md_file in md_files:
         try:
-            with open(md_file, "r", encoding="utf-8") as f:
+            with open(md_file, encoding="utf-8") as f:
                 text = f.read()
 
             chunks = chunk_text_semantic(

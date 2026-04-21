@@ -1,4 +1,3 @@
-from typing import List, Optional
 
 import numpy as np
 import torch
@@ -13,7 +12,7 @@ class Embedder:
         model_name: str = "BAAI/bge-large-zh-v1.5",
         device: str = "cuda",
         use_fp16: bool = True,
-        query_instruction: Optional[str] = None,
+        query_instruction: str | None = None,
     ):
         """Initialize the Embedder by loading a transformer model and tokenizer.
 
@@ -72,7 +71,7 @@ class Embedder:
             raise Exception(error_msg)
 
     def _encode_batch(
-        self, texts: List[str], batch_size: int, max_length: int = 512, show_progress: bool = False
+        self, texts: list[str], batch_size: int, max_length: int = 512, show_progress: bool = False
     ) -> np.ndarray:
         """Encode a list of texts into normalized CLS embeddings in batches.
 
@@ -123,7 +122,7 @@ class Embedder:
         return np.vstack(all_embeddings)
 
     def embed_texts(
-        self, texts: List[str], batch_size: int = 32, show_progress: bool = False
+        self, texts: list[str], batch_size: int = 32, show_progress: bool = False
     ) -> np.ndarray:
         """Generate embeddings for a list of document texts.
 

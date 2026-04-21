@@ -7,7 +7,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from loguru import logger
 
@@ -34,20 +34,20 @@ class MealConfig:
     data_id: str
     name: str
     created_at: str
-    sampling_config: Optional[Dict[str, Any]]
+    sampling_config: dict[str, Any] | None
     collection_name: str
-    pdf_files: List[MealFile]
-    config_snapshot: Optional[Dict[str, Any]] = None
-    config_hashes: Optional[Dict[str, str]] = None
-    stats: Dict[str, Any] = field(default_factory=dict)
-    equivalence_groups: Dict[str, List[str]] = field(default_factory=dict)
+    pdf_files: list[MealFile]
+    config_snapshot: dict[str, Any] | None = None
+    config_hashes: dict[str, str] | None = None
+    stats: dict[str, Any] = field(default_factory=dict)
+    equivalence_groups: dict[str, list[str]] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         return d
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "MealConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "MealConfig":
         pdf_files = [MealFile(**f) for f in data.get("pdf_files", [])]
 
         if "uuid" in data and "data_id" not in data:
@@ -100,7 +100,7 @@ def compute_file_sha256(file_path: Path, chunk_size: int = 8192) -> str:
         return ""
 
 
-def compute_data_id(pdf_files: List[MealFile]) -> str:
+def compute_data_id(pdf_files: list[MealFile]) -> str:
     """Compute a deterministic data ID from a list of meal files.
 
     Args:
@@ -114,7 +114,7 @@ def compute_data_id(pdf_files: List[MealFile]) -> str:
     return hashlib.sha256(combined.encode()).hexdigest()
 
 
-def compute_parser_config_hash(parser_config: Dict) -> str:
+def compute_parser_config_hash(parser_config: dict) -> str:
     """Compute a short hash of the parser configuration.
 
     Args:
@@ -127,7 +127,7 @@ def compute_parser_config_hash(parser_config: Dict) -> str:
     return hashlib.sha256(json.dumps(relevant, sort_keys=True).encode()).hexdigest()[:8]
 
 
-def compute_chunker_config_hash(chunker_config: Dict) -> str:
+def compute_chunker_config_hash(chunker_config: dict) -> str:
     """Compute a short hash of the chunker configuration.
 
     The hash includes all parameters that affect chunking results:
@@ -163,7 +163,7 @@ def compute_chunker_config_hash(chunker_config: Dict) -> str:
     return hashlib.sha256(json.dumps(relevant, sort_keys=True).encode()).hexdigest()[:8]
 
 
-def compute_embedding_config_hash(embedding_config: Dict) -> str:
+def compute_embedding_config_hash(embedding_config: dict) -> str:
     """Compute a short hash of the embedding configuration.
 
     Args:
@@ -176,7 +176,7 @@ def compute_embedding_config_hash(embedding_config: Dict) -> str:
     return hashlib.sha256(json.dumps(relevant, sort_keys=True).encode()).hexdigest()[:8]
 
 
-def compute_index_key(data_id: str, config_hashes: Dict[str, str]) -> str:
+def compute_index_key(data_id: str, config_hashes: dict[str, str]) -> str:
     parts = [
         ("d", data_id),
         ("p", config_hashes.get("parser", "")),
@@ -200,7 +200,7 @@ def generate_collection_name(index_key: str, prefix: str = "m_") -> str:
     return f"{prefix}{index_key[:12]}"
 
 
-def _infer_equivalence_groups(pdf_files: List[str]) -> Dict[str, List[str]]:
+def _infer_equivalence_groups(pdf_files: list[str]) -> dict[str, list[str]]:
     """Infer equivalence groups from PDF file paths by stripping common suffixes.
 
     For each file path, extracts the filename stem (without extension) and
@@ -216,7 +216,7 @@ def _infer_equivalence_groups(pdf_files: List[str]) -> Dict[str, List[str]]:
     suffix_pattern = re.compile(
         r"(摘要|_摘要|_英文版_|_修订版_)$"
     )
-    groups: Dict[str, List[str]] = {}
+    groups: dict[str, list[str]] = {}
     for file_path in pdf_files:
         stem = Path(file_path).stem
         group_key = suffix_pattern.sub("", stem)
@@ -252,7 +252,7 @@ def generate_timestamp_name() -> str:
 def build_chunks_if_needed(
     parsed_dir: Path,
     chunks_dir: Path,
-    chunker_config: Dict[str, Any],
+    chunker_config: dict[str, Any],
 ) -> None:
     """
     Build chunks from parsed files if no chunk files exist.
@@ -286,8 +286,8 @@ def build_chunks_if_needed(
 
 def build_index_from_chunks(
     chunks_dir: Path,
-    embedding_config: Dict[str, Any],
-    vector_store_config: Dict[str, Any],
+    embedding_config: dict[str, Any],
+    vector_store_config: dict[str, Any],
     collection_name: str,
 ) -> "VectorIndexer":
     """
@@ -380,7 +380,7 @@ class ArtifactCache:
         group_dir = self.get_artifact_group_dir(data_id)
         return group_dir / f"chunks_{chunker_hash}"
 
-    def parsed_exists(self, data_id: str, expected_files: List[str]) -> bool:
+    def parsed_exists(self, data_id: str, expected_files: list[str]) -> bool:
         """Check whether parsed artifacts exist and contain all expected files.
 
         Args:
@@ -396,7 +396,7 @@ class ArtifactCache:
         existing = set(p.name for p in parsed_dir.rglob("*.md"))
         return set(expected_files).issubset(existing)
 
-    def chunks_exist(self, data_id: str, chunker_hash: str, expected_files: List[str]) -> bool:
+    def chunks_exist(self, data_id: str, chunker_hash: str, expected_files: list[str]) -> bool:
         """Check whether chunked artifacts exist and contain all expected files.
 
         Args:
@@ -413,7 +413,7 @@ class ArtifactCache:
         existing = set(p.name for p in chunks_dir.rglob("*.jsonl"))
         return set(expected_files).issubset(existing)
 
-    def ensure_dirs(self, data_id: str, chunker_hash: str) -> Tuple[Path, Path]:
+    def ensure_dirs(self, data_id: str, chunker_hash: str) -> tuple[Path, Path]:
         """Ensure that artifact directories exist, creating them if necessary.
 
         Args:
@@ -431,7 +431,7 @@ class ArtifactCache:
         ensure_dir(str(chunks_dir))
         return parsed_dir, chunks_dir
 
-    def save_manifest(self, data_id: str, manifest: Dict[str, Any]) -> None:
+    def save_manifest(self, data_id: str, manifest: dict[str, Any]) -> None:
         """Save an artifact manifest JSON file for a given data ID.
 
         Args:
@@ -449,7 +449,7 @@ class ArtifactCache:
             logger.error(f"Failed to save manifest for data_id {data_id}: {str(e)}")
             return False
 
-    def load_manifest(self, data_id: str) -> Optional[Dict[str, Any]]:
+    def load_manifest(self, data_id: str) -> dict[str, Any] | None:
         """Load an artifact manifest JSON file for a given data ID.
 
         Args:
@@ -463,7 +463,7 @@ class ArtifactCache:
         if not manifest_path.exists():
             return None
         try:
-            with open(manifest_path, "r", encoding="utf-8") as f:
+            with open(manifest_path, encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
             logger.error(f"Failed to load manifest for data_id {data_id}: {str(e)}")
@@ -471,7 +471,7 @@ class ArtifactCache:
 
 
 class MealManager:
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         """Initialize the MealManager with application configuration.
 
         Args:
@@ -492,7 +492,7 @@ class MealManager:
         self.artifacts_dir = Path(artifacts_base)
         self.cache = ArtifactCache(self.artifacts_dir)
 
-    def _build_config_snapshot_and_hashes(self) -> Tuple[Dict[str, Any], Dict[str, str]]:
+    def _build_config_snapshot_and_hashes(self) -> tuple[dict[str, Any], dict[str, str]]:
         parser_config = self.config.get("parser", {})
         chunker_config = self.config.get("chunker", {})
         embedding_config = self.config.get("embedding", {})
@@ -531,9 +531,9 @@ class MealManager:
 
     def create_meal(
         self,
-        name: Optional[str],
+        name: str | None,
         sampling_config: SamplingConfig,
-        seed: Optional[int] = None,
+        seed: int | None = None,
         force_parse: bool = False,
     ) -> MealConfig:
         """Create a new meal by sampling PDFs, parsing, chunking, and indexing.
@@ -664,7 +664,7 @@ class MealManager:
         for jsonl_rel in source_filter_jsonl:
             jsonl_path = chunks_dir / jsonl_rel
             try:
-                with open(jsonl_path, "r", encoding="utf-8") as f:
+                with open(jsonl_path, encoding="utf-8") as f:
                     total_chunks += sum(1 for _ in f)
             except Exception:
                 pass
@@ -752,13 +752,13 @@ class MealManager:
                 f"Meal '{name}' not found (manifest missing)")
 
         try:
-            with open(manifest_path, "r", encoding="utf-8") as f:
+            with open(manifest_path, encoding="utf-8") as f:
                 data = json.load(f)
             return MealConfig.from_dict(data)
         except Exception as e:
             raise ValueError(f"Failed to load meal '{name}': {str(e)}")
 
-    def find_equivalent_meals(self, data_id: str) -> List[MealConfig]:
+    def find_equivalent_meals(self, data_id: str) -> list[MealConfig]:
         """Find all meals that share the same data ID.
 
         Args:
@@ -773,7 +773,7 @@ class MealManager:
                 equivalents.append(meal)
         return equivalents
 
-    def list_meals(self) -> List[MealConfig]:
+    def list_meals(self) -> list[MealConfig]:
         """List all available meals by scanning the meals directory.
 
         Returns:
@@ -788,7 +788,7 @@ class MealManager:
                 manifest_path = item / "manifest.json"
                 if manifest_path.exists():
                     try:
-                        with open(manifest_path, "r", encoding="utf-8") as f:
+                        with open(manifest_path, encoding="utf-8") as f:
                             data = json.load(f)
                         meals.append(MealConfig.from_dict(data))
                     except Exception as e:
@@ -933,7 +933,7 @@ class MealManager:
         )
         return new_config
 
-    def check_meal_status(self, name: str) -> Tuple[MealStatus, List[str]]:
+    def check_meal_status(self, name: str) -> tuple[MealStatus, list[str]]:
         """Check the integrity of a meal's source PDF files.
 
         Args:
@@ -976,9 +976,9 @@ class MealManager:
     def repair_meal(
         self,
         name: str,
-        replacements: Optional[Dict[str, str]] = None,
+        replacements: dict[str, str] | None = None,
         create_new: bool = False,
-        new_name: Optional[str] = None,
+        new_name: str | None = None,
     ) -> MealConfig:
         """Repair a meal by replacing or removing corrupted/missing PDF files.
 
@@ -1100,7 +1100,7 @@ class MealManager:
         for jsonl_rel in source_filter_jsonl:
             jsonl_path = chunks_dir / jsonl_rel
             try:
-                with open(jsonl_path, "r", encoding="utf-8") as f:
+                with open(jsonl_path, encoding="utf-8") as f:
                     total_chunks += sum(1 for _ in f)
             except Exception:
                 pass
@@ -1194,7 +1194,7 @@ class MealManager:
         """
         return self.meals_dir / name
 
-    def _is_collection_shared(self, collection_name: str, exclude_name: Optional[str] = None) -> bool:
+    def _is_collection_shared(self, collection_name: str, exclude_name: str | None = None) -> bool:
         for meal in self.list_meals():
             if meal.name == exclude_name:
                 continue

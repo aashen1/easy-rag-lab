@@ -5,28 +5,27 @@ This evaluator provides a unified interface for the project's
 existing evaluation metrics (hit_rate, mrr, ndcg, faithfulness, answer_relevancy).
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from loguru import logger
 
 from eval.evaluators.base import BaseEvaluator, EvaluationResult
 from eval.metrics import (
-    calculate_hit_rate,
-    calculate_mrr,
-    calculate_ndcg,
+    calculate_answer_relevancy,
     calculate_chunk_hit_rate,
     calculate_chunk_mrr,
     calculate_chunk_ndcg,
+    calculate_context_precision,
+    calculate_context_recall,
     calculate_dedup_hit_rate,
     calculate_dedup_mrr,
     calculate_dedup_ndcg,
-    calculate_false_positive_rate,
     calculate_faithfulness,
-    calculate_answer_relevancy,
-    calculate_context_precision,
-    calculate_context_recall,
+    calculate_false_positive_rate,
+    calculate_hit_rate,
+    calculate_mrr,
+    calculate_ndcg,
     normalize_source_with_equivalence,
-    deduplicate_by_document,
 )
 
 
@@ -44,7 +43,7 @@ class BuiltinEvaluator(BaseEvaluator):
         BuiltinEvaluator instance.
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, config: dict[str, Any] | None = None):
         """
         Initialize the builtin evaluator.
 
@@ -72,7 +71,7 @@ class BuiltinEvaluator(BaseEvaluator):
         return "builtin"
 
     @property
-    def supported_retrieval_metrics(self) -> List[str]:
+    def supported_retrieval_metrics(self) -> list[str]:
         """
         Get list of supported retrieval metrics.
 
@@ -82,7 +81,7 @@ class BuiltinEvaluator(BaseEvaluator):
         return self._retrieval_metrics
 
     @property
-    def supported_generation_metrics(self) -> List[str]:
+    def supported_generation_metrics(self) -> list[str]:
         """
         Get list of supported generation metrics.
 
@@ -96,18 +95,18 @@ class BuiltinEvaluator(BaseEvaluator):
         question_id: str,
         question: str,
         answer: str,
-        contexts: List[str],
-        expected_sources: Optional[List[str]] = None,
-        expected_answer: Optional[str] = None,
-        llm_config: Optional[Dict[str, str]] = None,
-        retrieval_metrics: Optional[List[str]] = None,
-        generation_metrics: Optional[List[str]] = None,
-        chunk_ids: Optional[List[str]] = None,
-        expected_chunks: Optional[List[str]] = None,
-        equivalence_groups: Optional[Dict[str, List[str]]] = None,
+        contexts: list[str],
+        expected_sources: list[str] | None = None,
+        expected_answer: str | None = None,
+        llm_config: dict[str, str] | None = None,
+        retrieval_metrics: list[str] | None = None,
+        generation_metrics: list[str] | None = None,
+        chunk_ids: list[str] | None = None,
+        expected_chunks: list[str] | None = None,
+        equivalence_groups: dict[str, list[str]] | None = None,
         expect_retrieval: bool = True,
-        retrieved_sources: Optional[List[str]] = None,
-        question_type: Optional[str] = None,
+        retrieved_sources: list[str] | None = None,
+        question_type: str | None = None,
     ) -> EvaluationResult:
         """
         Evaluate a single sample using builtin metrics.
@@ -295,11 +294,11 @@ class BuiltinEvaluator(BaseEvaluator):
 
     def evaluate_batch(
         self,
-        samples: List[Dict[str, Any]],
-        llm_config: Optional[Dict[str, str]] = None,
-        retrieval_metrics: Optional[List[str]] = None,
-        generation_metrics: Optional[List[str]] = None,
-    ) -> List[EvaluationResult]:
+        samples: list[dict[str, Any]],
+        llm_config: dict[str, str] | None = None,
+        retrieval_metrics: list[str] | None = None,
+        generation_metrics: list[str] | None = None,
+    ) -> list[EvaluationResult]:
         """
         Evaluate a batch of samples using builtin metrics.
 
