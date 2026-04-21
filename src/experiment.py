@@ -23,7 +23,7 @@ RAGAS_EXCLUSIVE_METRICS = VALID_RAGAS_METRICS - VALID_GENERATION_METRICS - VALID
 
 
 def is_new_format(test_set_config: dict[str, Any]) -> bool:
-    """Check if a test_set config uses the new format (has 'name' field).
+    """Check if a test_set config uses the new format (has 'name' field or 'generation' field).
 
     Args:
         test_set_config: Test set configuration dictionary.
@@ -31,7 +31,7 @@ def is_new_format(test_set_config: dict[str, Any]) -> bool:
     Returns:
         True if the config uses the new format, False otherwise.
     """
-    return "name" in test_set_config
+    return "name" in test_set_config or "generation" in test_set_config
 
 
 def get_test_set_name(test_set_config: dict[str, Any]) -> str:
@@ -44,9 +44,15 @@ def get_test_set_name(test_set_config: dict[str, Any]) -> str:
         The name string for the test set.
     """
     if is_new_format(test_set_config):
-        return test_set_config["name"]
-    strategy = test_set_config.get("strategy", "factual")
-    num_questions = test_set_config.get("num_questions", 20)
+        name = test_set_config.get("name")
+        if name and isinstance(name, str) and name.strip():
+            return name.strip()
+        generation = test_set_config.get("generation", {})
+        strategy = generation.get("strategy", "factual")
+        num_questions = generation.get("num_questions", 20)
+    else:
+        strategy = test_set_config.get("strategy", "factual")
+        num_questions = test_set_config.get("num_questions", 20)
     if strategy == "document":
         return f"document_level_n{num_questions}"
     return f"auto_{strategy}_n{num_questions}"
@@ -155,8 +161,8 @@ class ExperimentConfig:
             for i, test_set in enumerate(self.test_sets):
                 if is_new_format(test_set):
                     name = test_set.get("name")
-                    if not name or not isinstance(name, str) or not name.strip():
-                        errors.append(f"Test set {i} 'name' must be a non-empty string")
+                    if name is not None and not isinstance(name, str):
+                        errors.append(f"Test set {i} 'name' must be a string if provided")
                     if "generation" in test_set:
                         generation = test_set["generation"]
                         if not isinstance(generation, dict):

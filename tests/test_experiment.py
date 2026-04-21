@@ -1134,6 +1134,26 @@ class TestGetTestSetName:
         config = {"num_questions": 15}
         assert get_test_set_name(config) == "auto_factual_n15"
 
+    @pytest.mark.unit
+    def test_new_format_name_empty_string_auto_generates(self):
+        config = {"name": "", "generation": {"strategy": "document", "num_questions": 10}}
+        assert get_test_set_name(config) == "document_level_n10"
+
+    @pytest.mark.unit
+    def test_new_format_name_none_auto_generates(self):
+        config = {"name": None, "generation": {"strategy": "document", "num_questions": 10}}
+        assert get_test_set_name(config) == "document_level_n10"
+
+    @pytest.mark.unit
+    def test_new_format_name_whitespace_only_auto_generates(self):
+        config = {"name": "   ", "generation": {"strategy": "document", "num_questions": 10}}
+        assert get_test_set_name(config) == "document_level_n10"
+
+    @pytest.mark.unit
+    def test_new_format_name_provided_with_whitespace_trimmed(self):
+        config = {"name": "  custom_name  ", "generation": {"strategy": "document", "num_questions": 10}}
+        assert get_test_set_name(config) == "custom_name"
+
 
 class TestNewFormatValidation:
     def _make_config_dict(self, **overrides) -> dict:
@@ -1177,7 +1197,8 @@ class TestNewFormatValidation:
         data["test_sets"] = [{"name": "", "generation": {"strategy": "document", "num_questions": 10}}]
         config = ExperimentConfig.from_dict(data)
         errors = config.validate()
-        assert any("'name' must be a non-empty string" in e for e in errors)
+        test_set_errors = [e for e in errors if "Test set" in e]
+        assert test_set_errors == []
 
     @pytest.mark.unit
     def test_new_format_whitespace_name(self):
@@ -1185,7 +1206,17 @@ class TestNewFormatValidation:
         data["test_sets"] = [{"name": "   ", "generation": {"strategy": "document", "num_questions": 10}}]
         config = ExperimentConfig.from_dict(data)
         errors = config.validate()
-        assert any("'name' must be a non-empty string" in e for e in errors)
+        test_set_errors = [e for e in errors if "Test set" in e]
+        assert test_set_errors == []
+
+    @pytest.mark.unit
+    def test_new_format_none_name(self):
+        data = self._make_config_dict()
+        data["test_sets"] = [{"name": None, "generation": {"strategy": "document", "num_questions": 10}}]
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        test_set_errors = [e for e in errors if "Test set" in e]
+        assert test_set_errors == []
 
     @pytest.mark.unit
     def test_new_format_invalid_on_missing(self):
