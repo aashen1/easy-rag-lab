@@ -90,7 +90,14 @@ class RagasEvaluator(BaseEvaluator):
         try:
             from src.utils import create_llm_client
 
-            return create_llm_client(llm_config=llm_config, mode="langchain")
+            max_tokens = self._ragas_config.get("max_tokens", 4096)
+
+            llm_config_with_tokens = {
+                **llm_config,
+                "max_tokens": max_tokens,
+            }
+
+            return create_llm_client(llm_config=llm_config_with_tokens, mode="langchain")
         except ImportError as e:
             error_msg = f"Failed to create LLM client: {str(e)}"
             logger.error(error_msg)
@@ -100,21 +107,21 @@ class RagasEvaluator(BaseEvaluator):
 
     def _create_embeddings(self, config: dict[str, Any]) -> Any:
         """
-        Create RAGAS-compatible embeddings using LangChain HuggingFaceEmbeddings.
+        Create RAGAS-compatible embeddings using native RAGAS HuggingFaceEmbeddings
+        with legacy interface wrapper for compatibility.
 
-        Uses langchain_community HuggingFaceEmbeddings which provides the
-        embed_query() method required by RAGAS AnswerRelevancy metric.
-        The ragas.embeddings.HuggingFaceEmbeddings only provides embed_text()
-        which is incompatible.
+        Uses ragas.embeddings.HuggingFaceEmbeddings (modern interface, embed_text)
+        wrapped to also provide legacy interface methods (embed_query, embed_documents)
+        for full compatibility with all RAGAS metrics in concurrent execution.
 
         Args:
             config: Configuration dictionary containing embedding settings.
 
         Returns:
-            LangChain HuggingFaceEmbeddings instance compatible with RAGAS.
+            RAGAS-compatible HuggingFaceEmbeddings instance with both modern and legacy interfaces.
         """
         try:
-            from langchain_community.embeddings import HuggingFaceEmbeddings
+            from ragas.embeddings import HuggingFaceEmbeddings as RagasHuggingFaceEmbeddings
 
             fallback_config = config.get("embedding", {})
             embedding_config = self._embedding_config or fallback_config
@@ -127,16 +134,57 @@ class RagasEvaluator(BaseEvaluator):
                 or embedding_config.get("device", "cuda")
             )
 
-            return HuggingFaceEmbeddings(
-                model_name=model_name,
-                model_kwargs={"device": device},
+            embeddings = RagasHuggingFaceEmbeddings(
+                model=model_name,
+                device=device,
             )
 
+            class HybridHuggingFaceEmbeddings:
+                """
+                Wrapper providing both modern (embed_text) and legacy (embed_query, embed_documents)
+                interfaces for RAGAS HuggingFaceEmbeddings.
+
+                This ensures compatibility with all RAGAS metrics, including those that may
+                still use legacy interface in concurrent execution contexts.
+                """
+
+                def __init__(self, inner):
+                    self._inner = inner
+
+                def embed_text(self, text: str, **kwargs):
+                    return self._inner.embed_text(text, **kwargs)
+
+                def embed_texts(self, texts: list, **kwargs):
+                    return self._inner.embed_texts(texts, **kwargs)
+
+                async def aembed_text(self, text: str, **kwargs):
+                    return await self._inner.aembed_text(text, **kwargs)
+
+                async def aembed_texts(self, texts: list, **kwargs):
+                    return await self._inner.aembed_texts(texts, **kwargs)
+
+                def embed_query(self, text: str, **kwargs):
+                    return self._inner.embed_text(text, **kwargs)
+
+                def embed_documents(self, texts: list, **kwargs):
+                    return self._inner.embed_texts(texts, **kwargs)
+
+                async def aembed_query(self, text: str, **kwargs):
+                    return await self._inner.aembed_text(text, **kwargs)
+
+                async def aembed_documents(self, texts: list, **kwargs):
+                    return await self._inner.aembed_texts(texts, **kwargs)
+
+                def __getattr__(self, name):
+                    return getattr(self._inner, name)
+
+            return HybridHuggingFaceEmbeddings(embeddings)
+
         except ImportError as e:
-            error_msg = f"Failed to import embeddings dependencies: {str(e)}"
+            error_msg = f"Failed to import RAGAS embeddings: {str(e)}"
             logger.error(error_msg)
             raise ImportError(
-                f"{error_msg}. Please install with: pixi add langchain-community sentence-transformers ragas"
+                f"{error_msg}. Please install ragas properly."
             )
 
     def _build_run_config(self) -> Any | None:
