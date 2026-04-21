@@ -292,6 +292,100 @@ parser:
 
 ---
 
+## Fallback 到旧版傻瓜式解析
+
+重构后的系统**完全兼容**旧版解析行为。只需修改 `config.yaml` 中的参数，整条链路（parser → chunker → meal/pipeline）会自动适配，无需改动任何代码。
+
+### 旧版配置（v0.1.8 之前的默认行为）
+
+```yaml
+parser:
+  algorithm: "pymupdf4llm"
+  pymupdf4llm:
+    header: true            # 保留页眉（旧版默认）
+    footer: true            # 保留页脚（旧版默认）
+    page_separators: true   # 插入页分隔符
+    write_images: false
+    page_chunks: false      # 关闭页级输出 → 输出 .md 文件
+    force_text: true
+    ignore_code: false      # 允许代码块格式化（旧版默认）
+    use_ocr: true
+    ocr_language: "eng"     # 仅英文 OCR（旧版默认）
+    show_progress: true
+```
+
+### 新版配置（当前推荐）
+
+```yaml
+parser:
+  algorithm: "pymupdf4llm"
+  pymupdf4llm:
+    header: false
+    footer: false
+    page_separators: false
+    write_images: false
+    page_chunks: true       # 启用页级输出 → 输出 .pages.json
+    force_text: true
+    ignore_code: true
+    use_ocr: true
+    ocr_language: "chi_sim+eng"
+    show_progress: true
+```
+
+### 关键差异对照
+
+| 参数 | 旧版 | 新版 | 影响 |
+|------|------|------|------|
+| `page_chunks` | `false` | `true` | **最核心差异**。`false` → 输出 `.md`（全文合并），`true` → 输出 `.pages.json`（每页独立 dict） |
+| `header` | `true` | `false` | 页眉噪声是否混入正文 |
+| `footer` | `true` | `false` | 页脚/页码噪声是否混入正文 |
+| `ignore_code` | `false` | `true` | 财务表格是否被误标为代码块 |
+| `ocr_language` | `"eng"` | `"chi_sim+eng"` | 中文扫描件 OCR 是否可用 |
+| `page_separators` | `true` | `false` | 页分隔符（`page_chunks=true` 时冗余） |
+
+### 自动适配机制
+
+切换 `page_chunks` 参数后，下游链路会自动适配：
+
+| 环节 | `page_chunks: false` | `page_chunks: true` |
+|------|----------------------|---------------------|
+| **parser 输出** | `.md` 文件 | `.pages.json` 文件 |
+| **chunker 路径** | `process_parsed_files()` | `process_parsed_files_page_aware()` |
+| **chunk 策略** | `fixed` | `page_aware_fixed` |
+| **chunk 元数据** | 无 `page_number` | 含 `page_number` |
+| **pipeline 路径** | `process_parsed_files()` | `process_parsed_files_page_aware()` |
+| **meal 检测** | 扫描 `.md` 文件 | 扫描 `.pages.json` 文件 |
+
+### 对比实验操作步骤
+
+1. **创建旧版 Meal**：使用旧版 config.yaml 参数运行 `main.py --build-index`，Meal 系统会根据 parser hash 生成独立的缓存目录
+2. **创建新版 Meal**：使用新版 config.yaml 参数运行 `main.py --build-index`，Meal 系统会生成另一个独立的缓存目录
+3. **对比评估**：使用相同的 test set 分别对两个 Meal 运行评估，对比指标差异
+
+> ⚠️ **重要**：由于 `compute_parser_config_hash()` 已将 options 纳入 hash 计算，切换参数后 Meal 系统会自动触发重新解析，不会复用旧版缓存。两个版本的解析产物和向量索引完全隔离，可安全对比。
+
+### 最小化对比实验
+
+如果只想验证单一参数的影响（如 `ignore_code`），只需修改该参数，其他保持不变：
+
+```yaml
+# 实验 A：ignore_code=false（旧版行为）
+parser:
+  pymupdf4llm:
+    page_chunks: true
+    ignore_code: false      # 仅此参数不同
+
+# 实验 B：ignore_code=true（新版行为）
+parser:
+  pymupdf4llm:
+    page_chunks: true
+    ignore_code: true       # 仅此参数不同
+```
+
+Meal 系统会为两个配置生成不同的 hash，确保实验隔离。
+
+---
+
 ## 相关文档
 
 - [配置文件参考手册](../config-reference.md) — 完整的 `parser` 配置项说明
