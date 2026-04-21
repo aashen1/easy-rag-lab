@@ -5,6 +5,8 @@ description: "Enforces atomic git commits during development. Invoke when AI is 
 
 # Auto Commit Enforcer
 
+This skill is the authoritative detailed reference for commit conventions. It is loaded on demand when the `auto-commit-enforcer` skill is invoked, complementing the compact `.trae/rules/commit-rule.md` that is always loaded.
+
 This skill ensures that all code changes are committed promptly using git best practices. It applies across ALL working modes.
 
 ## Core Rules
@@ -121,11 +123,11 @@ If any answer is YES -> COMMIT IMMEDIATELY.
 ### Good Behavior
 ```
 1. Implement function A
-2. git add -A && git commit -m "feat: implement function A"
+2. git add src/module_a.py && git commit -m "feat: implement function A"
 3. Implement function B
-4. git add -A && git commit -m "feat: implement function B"
+4. git add src/module_b.py && git commit -m "feat: implement function B"
 5. Add tests for A
-6. git add -A && git commit -m "test: add tests for function A"
+6. git add tests/test_module_a.py && git commit -m "test: add tests for function A"
 ```
 
 ### Bad Behavior
@@ -134,7 +136,7 @@ If any answer is YES -> COMMIT IMMEDIATELY.
 2. Implement function B
 3. Add tests for A and B
 4. Update docs
-5. git add -A && git commit -m "feat: add everything"  <- WRONG
+5. git add -A && git commit -m "feat: add everything"  <- WRONG: batched + uses git add -A
 ```
 
 ## Enforcement
