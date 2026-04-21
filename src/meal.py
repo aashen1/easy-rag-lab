@@ -123,7 +123,9 @@ def compute_parser_config_hash(parser_config: dict) -> str:
     Returns:
         First 8 characters of the SHA-256 hex digest.
     """
-    relevant = {"algorithm": parser_config.get("algorithm", "pymupdf4llm")}
+    algorithm = parser_config.get("algorithm", "pymupdf4llm")
+    options = parser_config.get(algorithm, {})
+    relevant = {"algorithm": algorithm, "options": options}
     return hashlib.sha256(json.dumps(relevant, sort_keys=True).encode()).hexdigest()[:8]
 
 
@@ -355,16 +357,20 @@ class ArtifactCache:
         short_id = data_id[:12]
         return self.artifacts_dir / short_id
 
-    def get_parsed_dir(self, data_id: str) -> Path:
+    def get_parsed_dir(self, data_id: str, parser_hash: str | None = None) -> Path:
         """Get the directory for parsed artifacts of a given data ID.
 
         Args:
             data_id: Data identifier string.
+            parser_hash: Short hash of the parser configuration. If provided,
+                the directory name includes the hash suffix.
 
         Returns:
-            Path to the 'parsed' subdirectory within the artifact group.
+            Path to the 'parsed' or 'parsed_{parser_hash}' subdirectory.
         """
         group_dir = self.get_artifact_group_dir(data_id)
+        if parser_hash:
+            return group_dir / f"parsed_{parser_hash}"
         return group_dir / "parsed"
 
     def get_chunks_dir(self, data_id: str, chunker_hash: str) -> Path:
@@ -380,17 +386,18 @@ class ArtifactCache:
         group_dir = self.get_artifact_group_dir(data_id)
         return group_dir / f"chunks_{chunker_hash}"
 
-    def parsed_exists(self, data_id: str, expected_files: list[str]) -> bool:
+    def parsed_exists(self, data_id: str, expected_files: list[str], parser_hash: str | None = None) -> bool:
         """Check whether parsed artifacts exist and contain all expected files.
 
         Args:
             data_id: Data identifier string.
             expected_files: List of expected markdown file names.
+            parser_hash: Short hash of the parser configuration.
 
         Returns:
             True if the parsed directory exists and contains all expected .md files.
         """
-        parsed_dir = self.get_parsed_dir(data_id)
+        parsed_dir = self.get_parsed_dir(data_id, parser_hash)
         if not parsed_dir.exists():
             return False
         existing = set(p.name for p in parsed_dir.rglob("*.md"))
@@ -413,19 +420,20 @@ class ArtifactCache:
         existing = set(p.name for p in chunks_dir.rglob("*.jsonl"))
         return set(expected_files).issubset(existing)
 
-    def ensure_dirs(self, data_id: str, chunker_hash: str) -> tuple[Path, Path]:
+    def ensure_dirs(self, data_id: str, chunker_hash: str, parser_hash: str | None = None) -> tuple[Path, Path]:
         """Ensure that artifact directories exist, creating them if necessary.
 
         Args:
             data_id: Data identifier string.
             chunker_hash: Short hash of the chunker configuration.
+            parser_hash: Short hash of the parser configuration.
 
         Returns:
             Tuple of (parsed_dir, chunks_dir) paths that are guaranteed to exist.
         """
         group_dir = self.get_artifact_group_dir(data_id)
         ensure_dir(str(group_dir))
-        parsed_dir = self.get_parsed_dir(data_id)
+        parsed_dir = self.get_parsed_dir(data_id, parser_hash)
         ensure_dir(str(parsed_dir))
         chunks_dir = self.get_chunks_dir(data_id, chunker_hash)
         ensure_dir(str(chunks_dir))
@@ -502,6 +510,7 @@ class MealManager:
             "parser": {
                 "algorithm": parser_config.get("algorithm", "pymupdf4llm"),
                 "input_dir": parser_config.get("input_dir", "data/raw"),
+                "options": parser_config.get(parser_config.get("algorithm", "pymupdf4llm"), {}),
             },
             "chunker": {
                 "chunk_size": chunker_config.get("chunk_size", 512),
@@ -603,13 +612,12 @@ class MealManager:
             index_key, self.collection_prefix)
 
         chunker_hash = config_hashes["chunker"]
+        parser_hash = config_hashes["parser"]
         expected_md_names = [
             Path(f.path).with_suffix(".md").name for f in meal_files
         ]
 
-        parsed_dir, chunks_dir = self.cache.ensure_dirs(data_id, chunker_hash)
-
-        from src.parser import parse_all_pdfs
+        parsed_dir, chunks_dir = self.cache.ensure_dirs(data_id, chunker_hash, parser_hash)
 
         parser_config = self.config.get("parser", {})
         chunker_config = self.config.get("chunker", {})
@@ -618,19 +626,15 @@ class MealManager:
         cache_hit_parse = False
         cache_hit_chunk = False
 
-        if not force_parse and self.cache.parsed_exists(data_id, expected_md_names):
+        if not force_parse and self.cache.parsed_exists(data_id, expected_md_names, parser_hash):
             logger.info(
                 f"Cache HIT: Parsed artifacts exist for data_id={data_id[:12]}")
             cache_hit_parse = True
         else:
             logger.info(
                 f"Step 1: Parsing {len(sampled_pdfs)} PDFs for meal '{name}'...")
-            parse_all_pdfs(
-                input_dir=parser_config["input_dir"],
-                output_dir=str(parsed_dir),
-                force=True,
-                pdf_files=sampled_pdfs,
-                parser_options=parser_config.get("pymupdf4llm"),
+            self._parse_pdfs_with_registry(
+                parser_config, sampled_pdfs, parsed_dir,
             )
 
         expected_jsonl_names = [
@@ -1056,25 +1060,20 @@ class MealManager:
                 f"from {meal_config.data_id[:12]} to {new_data_id[:12]}"
             )
 
-        from src.parser import parse_all_pdfs
-
         parser_config = self.config.get("parser", {})
         chunker_config = self.config.get("chunker", {})
         embedding_config = self.config.get("embedding", {})
 
         chunker_hash = config_hashes["chunker"]
+        parser_hash = config_hashes["parser"]
         parsed_dir, chunks_dir = self.cache.ensure_dirs(
-            new_data_id, chunker_hash)
+            new_data_id, chunker_hash, parser_hash)
 
         sampled_pdfs = [self.raw_dir / f.path for f in new_pdf_files]
 
         logger.info(f"Rebuilding index for repaired meal '{target_name}'...")
-        parse_all_pdfs(
-            input_dir=parser_config["input_dir"],
-            output_dir=str(parsed_dir),
-            force=True,
-            pdf_files=sampled_pdfs,
-            parser_options=parser_config.get("pymupdf4llm"),
+        self._parse_pdfs_with_registry(
+            parser_config, sampled_pdfs, parsed_dir,
         )
 
         build_chunks_if_needed(parsed_dir, chunks_dir, chunker_config)
@@ -1203,3 +1202,44 @@ class MealManager:
             if meal.collection_name == collection_name:
                 return True
         return False
+
+    def _parse_pdfs_with_registry(
+        self,
+        parser_config: dict[str, Any],
+        pdf_files: list[Path],
+        output_dir: Path,
+    ) -> None:
+        """Parse PDFs using the ParserRegistry.
+
+        Args:
+            parser_config: Parser configuration dictionary.
+            pdf_files: List of PDF file paths to parse.
+            output_dir: Directory for parsed output files.
+        """
+        from src.parsers.registry import ParserRegistry
+
+        algorithm = parser_config.get("algorithm", "pymupdf4llm")
+        parser_options = parser_config.get(algorithm, {})
+        parser = ParserRegistry.get(algorithm, parser_options)
+
+        for pdf_file in pdf_files:
+            try:
+                relative_path = pdf_file.relative_to(self.raw_dir)
+                output_file = output_dir / relative_path.with_suffix(".md")
+
+                if output_file.exists():
+                    logger.info(f"Skipping (already parsed): {pdf_file.name}")
+                    continue
+
+                result = parser.parse(str(pdf_file))
+
+                output_file.parent.mkdir(parents=True, exist_ok=True)
+
+                with open(output_file, "w", encoding="utf-8") as f:
+                    for page in result.pages:
+                        f.write(page.text)
+                        f.write("\n\n")
+
+                logger.success(f"Parsed: {pdf_file.name} -> {output_file.name}")
+            except Exception as e:
+                logger.error(f"Failed to parse {pdf_file}: {str(e)}")

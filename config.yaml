@@ -74,6 +74,25 @@ parser:
     page_separators: true
     ignore_images: true
     write_images: false
+  fitz_pdfplumber:
+    header_filter: true
+    footer_filter: true
+    header_zone_ratio: 0.10
+    footer_zone_ratio: 0.10
+    table_strategy: "lines"
+    table_settings:
+      snap_tolerance: 5
+      join_tolerance: 5
+      edge_min_length: 10
+      intersection_x_tolerance: 5
+      intersection_y_tolerance: 5
+    column_detection: true
+    noise_patterns:
+      - "请务必阅读.{0,20}声明"
+      - "^\\s*\\d+\\s*$"
+      - "^\\s*\\d+\\s*/\\s*\\d+\\s*$"
+      - "(?:内部资料|机密|仅供参考).{0,30}$"
+      - "^(?:www\\.|http).+$"
 
 # 分块配置
 chunker:
