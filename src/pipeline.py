@@ -181,6 +181,7 @@ class RAGPipeline:
             output_dir=parser_config["output_dir"],
             force=force_parse,
             pdf_files=sampled_pdf_files,
+            parser_options=parser_config.get("pymupdf4llm"),
         )
 
         source_filter_md = None
@@ -195,10 +196,33 @@ class RAGPipeline:
             logger.info(
                 f"Source filter for chunker: {len(source_filter_md)} files")
 
+        parser_options = parser_config.get("pymupdf4llm", {})
+        use_page_chunks = bool(parser_options.get("page_chunks", False))
+
         logger.info("Step 2: Chunking documents...")
         chunker_strategy = chunker_config.get("strategy", "fixed")
 
-        if chunker_strategy == "semantic":
+        if use_page_chunks and chunker_strategy != "semantic":
+            from src.chunker import process_parsed_files_page_aware
+
+            source_filter_pages = None
+            if sampling_config is not None:
+                source_filter_pages = set()
+                for r in parse_results:
+                    if r.get("output"):
+                        output_path = Path(r["output"])
+                        parsed_dir = Path(parser_config["output_dir"])
+                        source_filter_pages.add(
+                            str(output_path.relative_to(parsed_dir)))
+
+            chunk_results = process_parsed_files_page_aware(
+                input_dir=chunker_config["input_dir"],
+                output_dir=chunker_config["output_dir"],
+                chunk_size=chunker_config["chunk_size"],
+                overlap=chunker_config["chunk_overlap"],
+                source_filter=source_filter_pages,
+            )
+        elif chunker_strategy == "semantic":
             semantic_config = chunker_config.get("semantic", {})
             chunk_results = process_parsed_files_semantic(
                 input_dir=chunker_config["input_dir"],

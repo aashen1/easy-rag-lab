@@ -71,9 +71,14 @@ parser:
   pymupdf4llm:
     header: false
     footer: false
-    page_separators: true
-    ignore_images: true
-    write_images: false
+    page_separators: false     # Redundant when page_chunks=True; Layout mode auto-handles page breaks
+    write_images: false        # Layout mode auto-classifies images; this controls not writing image files
+    page_chunks: true          # Enable page-level output for page-aware chunking
+    force_text: true           # Preserve text overlaid on charts (financial reports)
+    ignore_code: true          # Avoid financial data tables being marked as code blocks
+    use_ocr: true              # Keep OCR fallback for scanned pages
+    ocr_language: "chi_sim+eng"  # Chinese + English OCR support
+    show_progress: true        # Show parsing progress
   fitz_pdfplumber:
     header_filter: true
     footer_filter: true

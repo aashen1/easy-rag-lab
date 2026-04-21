@@ -350,3 +350,224 @@ class TestRAGPipeline:
             pipeline.use_meal("new_meal")
 
         old_indexer.close.assert_called_once()
+
+    @patch("src.pipeline.Generator")
+    @patch("src.pipeline.Retriever")
+    @patch("src.pipeline.VectorIndexer")
+    @patch("src.pipeline.Embedder")
+    @patch("src.pipeline.get_llm_config")
+    @patch("src.pipeline.setup_logger")
+    @patch("src.pipeline.load_config")
+    def test_build_index_passes_parser_options(
+        self,
+        mock_load_config,
+        mock_setup_logger,
+        mock_get_llm_config,
+        mock_embedder,
+        mock_indexer,
+        mock_retriever,
+        mock_generator,
+    ):
+        config = _make_config()
+        config["parser"] = {
+            "input_dir": "/tmp/parser_in",
+            "output_dir": "/tmp/parser_out",
+            "pymupdf4llm": {"page_chunks": True, "table_strategy": "text"},
+        }
+        config["chunker"] = {
+            "strategy": "fixed",
+            "input_dir": "/tmp/chunker_in",
+            "output_dir": "/tmp/chunker_out",
+            "chunk_size": 500,
+            "chunk_overlap": 50,
+        }
+        config["embedding"]["batch_size"] = 32
+        mock_load_config.return_value = config
+        mock_get_llm_config.return_value = _make_llm_config()
+
+        pipeline = RAGPipeline(config_path="dummy.yaml")
+
+        with patch("src.pipeline.parse_all_pdfs") as mock_parse, patch(
+            "src.chunker.process_parsed_files_page_aware"
+        ) as mock_page_aware:
+            mock_parse.return_value = []
+            mock_page_aware.return_value = []
+            pipeline.build_index()
+
+        mock_parse.assert_called_once_with(
+            input_dir="/tmp/parser_in",
+            output_dir="/tmp/parser_out",
+            force=False,
+            pdf_files=None,
+            parser_options={"page_chunks": True, "table_strategy": "text"},
+        )
+        mock_page_aware.assert_called_once_with(
+            input_dir="/tmp/chunker_in",
+            output_dir="/tmp/chunker_out",
+            chunk_size=500,
+            overlap=50,
+            source_filter=None,
+        )
+
+    @patch("src.pipeline.Generator")
+    @patch("src.pipeline.Retriever")
+    @patch("src.pipeline.VectorIndexer")
+    @patch("src.pipeline.Embedder")
+    @patch("src.pipeline.get_llm_config")
+    @patch("src.pipeline.setup_logger")
+    @patch("src.pipeline.load_config")
+    def test_build_index_parser_options_none_when_missing(
+        self,
+        mock_load_config,
+        mock_setup_logger,
+        mock_get_llm_config,
+        mock_embedder,
+        mock_indexer,
+        mock_retriever,
+        mock_generator,
+    ):
+        config = _make_config()
+        config["parser"] = {
+            "input_dir": "/tmp/parser_in",
+            "output_dir": "/tmp/parser_out",
+        }
+        config["chunker"] = {
+            "strategy": "fixed",
+            "input_dir": "/tmp/chunker_in",
+            "output_dir": "/tmp/chunker_out",
+            "chunk_size": 500,
+            "chunk_overlap": 50,
+        }
+        config["embedding"]["batch_size"] = 32
+        mock_load_config.return_value = config
+        mock_get_llm_config.return_value = _make_llm_config()
+
+        pipeline = RAGPipeline(config_path="dummy.yaml")
+
+        with patch("src.pipeline.parse_all_pdfs") as mock_parse, patch(
+            "src.pipeline.process_parsed_files"
+        ) as mock_chunk:
+            mock_parse.return_value = []
+            mock_chunk.return_value = []
+            pipeline.build_index()
+
+        mock_parse.assert_called_once_with(
+            input_dir="/tmp/parser_in",
+            output_dir="/tmp/parser_out",
+            force=False,
+            pdf_files=None,
+            parser_options=None,
+        )
+
+    @patch("src.pipeline.Generator")
+    @patch("src.pipeline.Retriever")
+    @patch("src.pipeline.VectorIndexer")
+    @patch("src.pipeline.Embedder")
+    @patch("src.pipeline.get_llm_config")
+    @patch("src.pipeline.setup_logger")
+    @patch("src.pipeline.load_config")
+    def test_build_index_page_aware_chunking(
+        self,
+        mock_load_config,
+        mock_setup_logger,
+        mock_get_llm_config,
+        mock_embedder,
+        mock_indexer,
+        mock_retriever,
+        mock_generator,
+    ):
+        config = _make_config()
+        config["parser"] = {
+            "input_dir": "/tmp/parser_in",
+            "output_dir": "/tmp/parser_out",
+            "pymupdf4llm": {"page_chunks": True},
+        }
+        config["chunker"] = {
+            "strategy": "fixed",
+            "input_dir": "/tmp/chunker_in",
+            "output_dir": "/tmp/chunker_out",
+            "chunk_size": 500,
+            "chunk_overlap": 50,
+        }
+        config["embedding"]["batch_size"] = 32
+        mock_load_config.return_value = config
+        mock_get_llm_config.return_value = _make_llm_config()
+
+        pipeline = RAGPipeline(config_path="dummy.yaml")
+
+        parse_results = [
+            {"output": "/tmp/parser_out/report_2023.pages.json", "status": "ok"},
+            {"output": "/tmp/parser_out/report_2024.pages.json", "status": "ok"},
+        ]
+
+        with patch("src.pipeline.parse_all_pdfs") as mock_parse, patch(
+            "src.chunker.process_parsed_files_page_aware"
+        ) as mock_page_aware, patch(
+            "src.pipeline.process_parsed_files"
+        ) as mock_chunk:
+            mock_parse.return_value = parse_results
+            mock_page_aware.return_value = [
+                {"output": "/tmp/chunker_out/report_2023.jsonl", "status": "ok"},
+            ]
+            mock_chunk.return_value = []
+            pipeline.build_index()
+
+        mock_page_aware.assert_called_once_with(
+            input_dir="/tmp/chunker_in",
+            output_dir="/tmp/chunker_out",
+            chunk_size=500,
+            overlap=50,
+            source_filter=None,
+        )
+        mock_chunk.assert_not_called()
+
+    @patch("src.pipeline.Generator")
+    @patch("src.pipeline.Retriever")
+    @patch("src.pipeline.VectorIndexer")
+    @patch("src.pipeline.Embedder")
+    @patch("src.pipeline.get_llm_config")
+    @patch("src.pipeline.setup_logger")
+    @patch("src.pipeline.load_config")
+    def test_build_index_regular_chunking_when_no_page_chunks(
+        self,
+        mock_load_config,
+        mock_setup_logger,
+        mock_get_llm_config,
+        mock_embedder,
+        mock_indexer,
+        mock_retriever,
+        mock_generator,
+    ):
+        config = _make_config()
+        config["parser"] = {
+            "input_dir": "/tmp/parser_in",
+            "output_dir": "/tmp/parser_out",
+            "pymupdf4llm": {"page_chunks": False},
+        }
+        config["chunker"] = {
+            "strategy": "fixed",
+            "input_dir": "/tmp/chunker_in",
+            "output_dir": "/tmp/chunker_out",
+            "chunk_size": 500,
+            "chunk_overlap": 50,
+        }
+        config["embedding"]["batch_size"] = 32
+        mock_load_config.return_value = config
+        mock_get_llm_config.return_value = _make_llm_config()
+
+        pipeline = RAGPipeline(config_path="dummy.yaml")
+
+        with patch("src.pipeline.parse_all_pdfs") as mock_parse, patch(
+            "src.pipeline.process_parsed_files"
+        ) as mock_chunk:
+            mock_parse.return_value = []
+            mock_chunk.return_value = []
+            pipeline.build_index()
+
+        mock_chunk.assert_called_once_with(
+            input_dir="/tmp/chunker_in",
+            output_dir="/tmp/chunker_out",
+            chunk_size=500,
+            overlap=50,
+            source_filter=None,
+        )

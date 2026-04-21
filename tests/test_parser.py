@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -124,7 +125,7 @@ class TestParseAllPdfs:
     def test_parse_all_pdfs_with_failures(self, mock_to_markdown, tmp_path):
         call_count = [0]
 
-        def side_effect_func(path):
+        def side_effect_func(path, **kwargs):
             call_count[0] += 1
             if call_count[0] == 1:
                 return "# Valid Document\n\nThis is valid content."
@@ -221,3 +222,121 @@ class TestParseAllPdfs:
         with open(actual_output, encoding="utf-8") as f:
             content = f.read()
         assert "Test Document" in content
+
+    @patch("src.parser.pymupdf4llm.to_markdown")
+    def test_parse_pdf_page_chunks_true(self, mock_to_markdown, tmp_path):
+        mock_to_markdown.return_value = [
+            {"page": 1, "text": "Page 1 content"},
+            {"page": 2, "text": "Page 2 content"},
+        ]
+
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4\ntest pdf content")
+
+        result = parse_pdf(str(pdf_file), page_chunks=True)
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert result[0]["text"] == "Page 1 content"
+        mock_to_markdown.assert_called_once_with(
+            str(pdf_file), page_chunks=True
+        )
+
+    @patch("src.parser.pymupdf4llm.to_markdown")
+    def test_parse_pdf_page_chunks_false(self, mock_to_markdown, tmp_path):
+        mock_to_markdown.return_value = "# Test Document\n\nThis is test content."
+
+        pdf_file = tmp_path / "test.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4\ntest pdf content")
+
+        result = parse_pdf(str(pdf_file), page_chunks=False)
+        assert isinstance(result, str)
+        assert "Test Document" in result
+        mock_to_markdown.assert_called_once_with(
+            str(pdf_file), page_chunks=False
+        )
+
+    @patch("src.parser.pymupdf4llm.to_markdown")
+    def test_parse_all_pdfs_page_chunks_output(self, mock_to_markdown, tmp_path):
+        mock_to_markdown.return_value = [
+            {"page": 1, "text": "Page 1 content"},
+            {"page": 2, "text": "Page 2 content"},
+        ]
+
+        input_dir = tmp_path / "input"
+        output_dir = tmp_path / "output"
+        input_dir.mkdir()
+
+        pdf_file = input_dir / "test.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4\ntest pdf content")
+
+        results = parse_all_pdfs(
+            str(input_dir), str(output_dir), parser_options={"page_chunks": True}
+        )
+
+        assert len(results) == 1
+        assert results[0]["status"] == "success"
+        assert results[0]["format"] == "pages_json"
+
+        output_file = Path(results[0]["output"])
+        assert output_file.name.endswith(".pages.json")
+        assert output_file.exists()
+
+        with open(output_file, encoding="utf-8") as f:
+            data = json.load(f)
+        assert isinstance(data, list)
+        assert len(data) == 2
+        assert data[0]["text"] == "Page 1 content"
+
+    @patch("src.parser.pymupdf4llm.to_markdown")
+    def test_parse_all_pdfs_page_chunks_skip_existing(self, mock_to_markdown, tmp_path):
+        mock_to_markdown.return_value = [
+            {"page": 1, "text": "Page 1 content"},
+        ]
+
+        input_dir = tmp_path / "input"
+        output_dir = tmp_path / "output"
+        input_dir.mkdir()
+
+        pdf_file = input_dir / "test.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4\ntest pdf content")
+
+        output_file = output_dir / "test.pages.json"
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        output_file.write_text('[{"page": 1, "text": "existing"}]')
+
+        results = parse_all_pdfs(
+            str(input_dir), str(output_dir), force=False, parser_options={"page_chunks": True}
+        )
+
+        assert len(results) == 1
+        assert results[0]["status"] == "skipped"
+        assert mock_to_markdown.call_count == 0
+
+    @patch("src.parser.pymupdf4llm.to_markdown")
+    def test_parse_all_pdfs_page_chunks_force_reparse(self, mock_to_markdown, tmp_path):
+        mock_to_markdown.return_value = [
+            {"page": 1, "text": "New page 1 content"},
+        ]
+
+        input_dir = tmp_path / "input"
+        output_dir = tmp_path / "output"
+        input_dir.mkdir()
+
+        pdf_file = input_dir / "test.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4\ntest pdf content")
+
+        output_file = output_dir / "test.pages.json"
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        output_file.write_text('[{"page": 1, "text": "existing"}]')
+
+        results = parse_all_pdfs(
+            str(input_dir), str(output_dir), force=True, parser_options={"page_chunks": True}
+        )
+
+        assert len(results) == 1
+        assert results[0]["status"] == "success"
+        assert mock_to_markdown.call_count == 1
+
+        with open(output_file, encoding="utf-8") as f:
+            data = json.load(f)
+        assert data[0]["text"] == "New page 1 content"

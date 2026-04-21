@@ -10,6 +10,7 @@ from src.meal import (
     MealFile,
     MealManager,
     MealStatus,
+    build_chunks_if_needed,
     compute_chunker_config_hash,
     compute_data_id,
     compute_embedding_config_hash,
@@ -156,6 +157,32 @@ class TestConfigHashes:
         h2 = compute_parser_config_hash(config)
         assert h1 == h2
         assert len(h1) == 8
+
+    def test_parser_config_hash_different_options(self):
+        config_a = {"algorithm": "pymupdf4llm", "pymupdf4llm": {"page_chunks": True}}
+        config_b = {"algorithm": "pymupdf4llm", "pymupdf4llm": {"page_chunks": False}}
+        h_a = compute_parser_config_hash(config_a)
+        h_b = compute_parser_config_hash(config_b)
+        assert h_a != h_b
+
+    def test_parser_config_hash_same_options(self):
+        config_a = {"algorithm": "pymupdf4llm", "pymupdf4llm": {"page_chunks": True}}
+        config_b = {"algorithm": "pymupdf4llm", "pymupdf4llm": {"page_chunks": True}}
+        h_a = compute_parser_config_hash(config_a)
+        h_b = compute_parser_config_hash(config_b)
+        assert h_a == h_b
+
+    def test_parser_config_hash_empty_options_backward_compat(self):
+        config = {"algorithm": "pymupdf4llm"}
+        h = compute_parser_config_hash(config)
+        assert len(h) == 8
+
+    def test_parser_config_hash_options_from_pymupdf4llm_key(self):
+        config = {"algorithm": "pymupdf4llm", "pymupdf4llm": {"page_chunks": True}}
+        h1 = compute_parser_config_hash(config)
+        config_minimal = {"algorithm": "pymupdf4llm"}
+        h2 = compute_parser_config_hash(config_minimal)
+        assert h1 != h2
 
     def test_chunker_config_hash_changes_with_params(self):
         config_a = {"chunk_size": 512, "chunk_overlap": 0, "encoding": "cl100k_base"}
@@ -672,3 +699,78 @@ class TestMealManager:
         assert len(hashes["parser"]) == 8
         assert len(hashes["chunker"]) == 8
         assert len(hashes["embedding"]) == 8
+
+    def test_config_snapshot_includes_parser_options(self, temp_dirs):
+        temp_dirs["parser"]["pymupdf4llm"] = {"page_chunks": True}
+        manager = MealManager(temp_dirs)
+        snapshot, hashes = manager._build_config_snapshot_and_hashes()
+
+        assert "options" in snapshot["parser"]
+        assert snapshot["parser"]["options"] == {"page_chunks": True}
+        assert len(hashes["parser"]) == 8
+
+    def test_config_snapshot_parser_options_default_empty(self, temp_dirs):
+        manager = MealManager(temp_dirs)
+        snapshot, _ = manager._build_config_snapshot_and_hashes()
+
+        assert "options" in snapshot["parser"]
+        assert snapshot["parser"]["options"] == {}
+
+
+class TestBuildChunksIfNeeded:
+    def test_build_chunks_if_needed_pages_json(self, tmp_path):
+        from unittest.mock import patch
+
+        parsed_dir = tmp_path / "parsed"
+        parsed_dir.mkdir()
+        (parsed_dir / "report.pages.json").write_text('{"pages": []}')
+
+        chunks_dir = tmp_path / "chunks"
+        chunker_config = {"chunk_size": 512, "chunk_overlap": 0}
+
+        with patch("src.chunker.process_parsed_files_page_aware") as mock_page_aware:
+            build_chunks_if_needed(parsed_dir, chunks_dir, chunker_config)
+            mock_page_aware.assert_called_once_with(
+                input_dir=str(parsed_dir),
+                output_dir=str(chunks_dir),
+                chunk_size=512,
+                overlap=0,
+                source_filter={"report.pages.json"},
+            )
+
+    def test_build_chunks_if_needed_md(self, tmp_path):
+        from unittest.mock import patch
+
+        parsed_dir = tmp_path / "parsed"
+        parsed_dir.mkdir()
+        (parsed_dir / "report.md").write_text("# Report")
+
+        chunks_dir = tmp_path / "chunks"
+        chunker_config = {"chunk_size": 512, "chunk_overlap": 0}
+
+        with patch("src.chunker.process_parsed_files") as mock_process:
+            build_chunks_if_needed(parsed_dir, chunks_dir, chunker_config)
+            mock_process.assert_called_once_with(
+                input_dir=str(parsed_dir),
+                output_dir=str(chunks_dir),
+                chunk_size=512,
+                overlap=0,
+                source_filter={"report.md"},
+            )
+
+    def test_build_chunks_if_needed_skips_existing(self, tmp_path):
+        from unittest.mock import patch
+
+        parsed_dir = tmp_path / "parsed"
+        parsed_dir.mkdir()
+        (parsed_dir / "report.md").write_text("# Report")
+
+        chunks_dir = tmp_path / "chunks"
+        chunks_dir.mkdir()
+        (chunks_dir / "report.jsonl").write_text("{}")
+
+        chunker_config = {"chunk_size": 512, "chunk_overlap": 0}
+
+        with patch("src.chunker.process_parsed_files") as mock_process:
+            build_chunks_if_needed(parsed_dir, chunks_dir, chunker_config)
+            mock_process.assert_not_called()

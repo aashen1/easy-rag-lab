@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pymupdf4llm
@@ -6,18 +7,23 @@ from loguru import logger
 from src.utils import detect_document_category, ensure_dir
 
 
-def parse_pdf(pdf_path: str, **kwargs) -> str:
+def parse_pdf(pdf_path: str, page_chunks: bool = False, **kwargs) -> str | list[dict]:
     """Parse a single PDF file and convert its content to Markdown text.
 
     Args:
         pdf_path: Path to the PDF file.
+        page_chunks: If True, return a list of page-level dicts instead of
+            a single Markdown string. Each dict contains the page content
+            and metadata (page number, etc.).
         **kwargs: Additional keyword arguments passed to
             ``pymupdf4llm.to_markdown``. Common options include
             ``header``, ``footer``, ``page_separators``,
             ``ignore_images``, and ``write_images``.
 
     Returns:
-        Markdown-formatted string extracted from the PDF.
+        Markdown-formatted string extracted from the PDF when
+        ``page_chunks=False``, or a list of page-level dicts when
+        ``page_chunks=True``.
 
     Raises:
         FileNotFoundError: If the PDF file does not exist.
@@ -38,9 +44,12 @@ def parse_pdf(pdf_path: str, **kwargs) -> str:
 
     try:
         logger.info(f"Parsing PDF: {pdf_path}")
-        md_text = pymupdf4llm.to_markdown(str(pdf_file), **kwargs)
-        logger.success(f"Successfully parsed PDF: {pdf_path}")
-        return md_text
+        result = pymupdf4llm.to_markdown(str(pdf_file), page_chunks=page_chunks, **kwargs)
+        if page_chunks:
+            logger.success(f"Parsed PDF (page_chunks): {pdf_path} -> {len(result)} pages")
+        else:
+            logger.success(f"Successfully parsed PDF: {pdf_path}")
+        return result
     except Exception as e:
         error_msg = f"Failed to parse PDF {pdf_path}: {str(e)}"
         logger.error(error_msg)
@@ -61,6 +70,10 @@ def parse_all_pdfs(
     parsed result is categorized based on the file path or the provided
     category_mapping.
 
+    When ``parser_options`` contains ``"page_chunks": True``, each PDF is
+    parsed into a list of page-level dicts and saved as a ``.pages.json``
+    file instead of a ``.md`` file.
+
     Args:
         input_dir: Directory containing PDF files to parse.
         output_dir: Directory where parsed Markdown files will be saved.
@@ -71,11 +84,13 @@ def parse_all_pdfs(
             all PDFs under input_dir are discovered automatically.
         parser_options: Optional dict of keyword arguments passed to
             ``pymupdf4llm.to_markdown`` (e.g. header, footer,
-            page_separators, ignore_images).
+            page_separators, ignore_images, page_chunks).
 
     Returns:
         List of result dictionaries, each containing source, output,
-        category, and status keys (plus error on failure).
+        category, and status keys (plus error on failure). When
+        ``page_chunks=True``, the result dict also includes
+        ``"format": "pages_json"``.
 
     Raises:
         FileNotFoundError: If input_dir does not exist.
@@ -100,12 +115,18 @@ def parse_all_pdfs(
 
     logger.info(f"Found {len(pdf_files)} PDF files to parse")
 
+    use_page_chunks = bool(parser_options and parser_options.get("page_chunks", False))
+
     results = []
 
     for pdf_file in pdf_files:
         try:
             relative_path = pdf_file.relative_to(input_path)
-            output_file = output_path / relative_path.with_suffix(".md")
+
+            if use_page_chunks:
+                output_file = output_path / relative_path.with_suffix(".pages.json")
+            else:
+                output_file = output_path / relative_path.with_suffix(".md")
 
             if not force and output_file.exists():
                 logger.info(f"Skipping (already parsed): {pdf_file.name}")
@@ -121,23 +142,44 @@ def parse_all_pdfs(
                 )
                 continue
 
-            md_text = parse_pdf(str(pdf_file), **(parser_options or {}))
+            if use_page_chunks:
+                filtered_options = {k: v for k, v in (parser_options or {}).items() if k != "page_chunks"}
+                md_text = parse_pdf(str(pdf_file), page_chunks=True, **filtered_options)
 
-            output_file.parent.mkdir(parents=True, exist_ok=True)
+                output_file.parent.mkdir(parents=True, exist_ok=True)
 
-            with open(output_file, "w", encoding="utf-8") as f:
-                f.write(md_text)
+                with open(output_file, "w", encoding="utf-8") as f:
+                    json.dump(md_text, f, ensure_ascii=False, indent=2)
 
-            category = detect_document_category(str(pdf_file), category_mapping)
+                category = detect_document_category(str(pdf_file), category_mapping)
 
-            results.append(
-                {
-                    "source": str(pdf_file),
-                    "output": str(output_file),
-                    "category": category,
-                    "status": "success",
-                }
-            )
+                results.append(
+                    {
+                        "source": str(pdf_file),
+                        "output": str(output_file),
+                        "category": category,
+                        "status": "success",
+                        "format": "pages_json",
+                    }
+                )
+            else:
+                md_text = parse_pdf(str(pdf_file), **(parser_options or {}))
+
+                output_file.parent.mkdir(parents=True, exist_ok=True)
+
+                with open(output_file, "w", encoding="utf-8") as f:
+                    f.write(md_text)
+
+                category = detect_document_category(str(pdf_file), category_mapping)
+
+                results.append(
+                    {
+                        "source": str(pdf_file),
+                        "output": str(output_file),
+                        "category": category,
+                        "status": "success",
+                    }
+                )
 
             logger.success(f"Parsed and saved: {pdf_file.name} -> {output_file.name}")
 

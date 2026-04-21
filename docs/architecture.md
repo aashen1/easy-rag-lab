@@ -34,8 +34,8 @@ PDF 解析 → 分块 → Embedding → 向量索引 → 检索 → [重排序] 
 
 | 模块 | 功能 | 输入 | 输出 |
 |------|------|------|------|
-| `parser.py` | PDF 解析 | PDF 文件 | Markdown 文件 |
-| `chunker.py` | 固定文本分块 | Markdown 文件 | JSONL 分块文件 |
+| `parser.py` | PDF 解析 | PDF 文件 | 页级 JSON (`.pages.json`) 或 Markdown (`.md`) |
+| `chunker.py` | 固定文本分块 | Markdown / 页级 JSON | JSONL 分块文件（含页码元数据） |
 | `semantic_chunker.py` | 语义文本分块 | Markdown 文件 | JSONL 分块文件 |
 | `embedder.py` | 向量化 | 文本块 | 向量 |
 | `indexer.py` | 向量索引 | 向量 | Qdrant 集合 |
@@ -76,10 +76,10 @@ PDF 解析 → 分块 → Embedding → 向量索引 → 检索 → [重排序] 
 
 ```
 data/raw/           # 原始 PDF
-    ↓ parser
-data/parsed/        # 解析后的 Markdown
-    ↓ chunker
-data/chunks/        # 分块后的 JSONL
+    ↓ parser (page_chunks=True)
+data/parsed/        # 解析后的页级 JSON (.pages.json) 或 Markdown (.md)
+    ↓ chunker (page_aware_fixed)
+data/chunks/        # 分块后的 JSONL（含页码元数据）
     ↓ embedder + indexer
 data/vector_store/  # Qdrant 向量索引
     ↓ retriever + generator

@@ -90,8 +90,49 @@ llm_presets:
 ```yaml
 parser:
   input_dir: "data/raw"      # PDF 输入目录
-  output_dir: "data/parsed"  # Markdown 输出目录
+  output_dir: "data/parsed"  # 解析输出目录
+  algorithm: "pymupdf4llm"   # 解析算法
+  pymupdf4llm:               # pymupdf4llm 专用参数
+    header: false            # 不提取页眉
+    footer: false            # 不提取页脚
+    page_separators: false   # 不插入页分隔符（page_chunks=True 时冗余）
+    write_images: false      # 不写出图片文件
+    page_chunks: true        # 启用页级输出（每页独立 dict，含页码元数据）
+    force_text: true         # 保留叠加在图表上的文本
+    ignore_code: true        # 避免财务数据被标记为代码块
+    use_ocr: true            # 启用 OCR 兜底
+    ocr_language: "chi_sim+eng"  # 中英文 OCR
+    show_progress: true      # 显示解析进度
 ```
+
+### 基础参数
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `input_dir` | `"data/raw"` | PDF 文件输入目录 |
+| `output_dir` | `"data/parsed"` | 解析结果输出目录 |
+| `algorithm` | `"pymupdf4llm"` | PDF 解析算法，目前仅支持 `pymupdf4llm` |
+
+### pymupdf4llm 参数
+
+以下参数对应 `pymupdf4llm.to_markdown()` 的关键字参数。系统默认使用 Layout 模式（`use_layout(True)`），该模式自动处理多栏布局检测和图片分类。
+
+| 参数 | 默认值 | Layout 模式生效 | 说明 |
+|------|--------|----------------|------|
+| `header` | `false` | ✅ | 是否提取页眉。金融研报建议关闭，避免页眉噪声 |
+| `footer` | `false` | ✅ | 是否提取页脚。金融研报建议关闭，避免页码噪声 |
+| `page_separators` | `false` | ✅ | 是否在每页末尾插入分隔符。`page_chunks=True` 时建议关闭（冗余） |
+| `write_images` | `false` | ✅ | 是否写出图片文件。Layout 模式自动分类图片，此参数控制是否将图片保存到磁盘 |
+| `page_chunks` | `true` | ✅ | 是否启用页级输出。`true` 时每个 PDF 页面返回独立 dict（含 `text`、`metadata`、`toc_items`、`tables`），输出为 `.pages.json` 格式；`false` 时输出为单一 `.md` 文件 |
+| `force_text` | `true` | ✅ | 是否强制提取文本（即使与图片/图形重叠）。金融研报中图表上的数据标注建议保留 |
+| `ignore_code` | `true` | ✅ | 是否忽略等宽文本的代码块格式化。金融研报中财务数据表格常被误识别为代码块，建议开启 |
+| `use_ocr` | `true` | ✅ | 是否启用 OCR 兜底。扫描件 PDF 自动触发 OCR 识别 |
+| `ocr_language` | `"chi_sim+eng"` | ✅ | OCR 语言包。`chi_sim` 为简体中文，`eng` 为英文。需安装 Tesseract 中文语言包 |
+| `show_progress` | `true` | ✅ | 是否显示解析进度条 |
+
+> ⚠️ `ignore_images` 参数在 Layout 模式下**不生效**，已从配置中移除。Layout 模式由模块自行分类处理图片，`write_images: false` 已足够控制不写出图片文件。
+>
+> 详细参数说明和最佳实践请参阅 [PDF 解析指南](guides/pdf-parsing.md)。
 
 ---
 
