@@ -231,6 +231,209 @@ def process_parsed_files(
     return all_results
 
 
+def chunk_text_page_aware(
+    page_chunks: list[dict],
+    source_name: str,
+    chunk_size: int = 512,
+    overlap: int = 0,
+    encoding_name: str = "cl100k_base",
+) -> list[dict[str, Any]]:
+    """Split page-level parsed results into chunks with page metadata.
+
+    Each page is chunked independently (no cross-page chunks). Every chunk
+    carries a page_number in its metadata.
+
+    Args:
+        page_chunks: List of page dictionaries from parse_pdf(page_chunks=True).
+            Each dict must contain "text" and "metadata" keys.
+        source_name: Base name for chunk_id generation (e.g. filename stem).
+        chunk_size: Maximum number of tokens per chunk. Defaults to 512.
+        overlap: Number of tokens to overlap between consecutive chunks within
+            the same page. Must be less than chunk_size. Defaults to 0.
+        encoding_name: Name of the tiktoken encoding to use. Defaults to
+            "cl100k_base".
+
+    Returns:
+        List of dictionaries, each with "text" and "metadata" keys. Metadata
+        includes "page_number", "chunk_index", "char_count", "token_count",
+        "start_token", and "end_token".
+
+    Raises:
+        ValueError: If overlap is greater than or equal to chunk_size.
+    """
+    if overlap >= chunk_size:
+        error_msg = f"Overlap ({overlap}) must be less than chunk_size ({chunk_size})"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+
+    all_chunks = []
+
+    for page in page_chunks:
+        text = page.get("text", "")
+        page_number = page.get("metadata", {}).get("page_number", 0)
+
+        if not text or not text.strip():
+            logger.debug(f"Skipping empty page {page_number}")
+            continue
+
+        page_chunks_result = chunk_text(text, chunk_size, overlap, encoding_name)
+
+        for chunk in page_chunks_result:
+            chunk["metadata"]["page_number"] = page_number
+            chunk_index = chunk["metadata"]["chunk_index"]
+            chunk["metadata"]["chunk_index"] = f"p{page_number}_{chunk_index:03d}"
+            all_chunks.append(chunk)
+
+    logger.info(
+        f"Created {len(all_chunks)} page-aware chunks from {len(page_chunks)} pages"
+    )
+    return all_chunks
+
+
+def process_parsed_files_page_aware(
+    input_dir: str,
+    output_dir: str,
+    chunk_size: int = 512,
+    overlap: int = 0,
+    encoding_name: str = "cl100k_base",
+    source_filter: set | None = None,
+) -> list[dict[str, Any]]:
+    """Read .pages.json files, apply page-aware chunking, save as JSONL.
+
+    Scans the input directory for .pages.json files (produced by
+    parse_all_pdfs with page_chunks=True), applies page-aware chunking
+    to each file, and writes the chunked output to JSONL files.
+
+    Args:
+        input_dir: Directory containing .pages.json files.
+        output_dir: Directory where chunked JSONL files will be saved.
+        chunk_size: Maximum number of tokens per chunk. Defaults to 512.
+        overlap: Number of overlapping tokens between consecutive chunks.
+            Defaults to 0.
+        encoding_name: Name of the tiktoken encoding to use. Defaults to
+            "cl100k_base".
+        source_filter: Optional set of relative path strings; only files
+            whose relative path is in this set will be processed.
+
+    Returns:
+        List of result dictionaries, each containing source, output,
+        category, chunk_count, and status keys (plus error on failure).
+
+    Raises:
+        FileNotFoundError: If input_dir does not exist.
+    """
+    input_path = Path(input_dir)
+
+    if not input_path.exists():
+        error_msg = f"Input directory not found: {input_dir}"
+        logger.error(error_msg)
+        raise FileNotFoundError(error_msg)
+
+    output_path = ensure_dir(output_dir)
+
+    pages_files = list(input_path.rglob("*.pages.json"))
+
+    if not pages_files:
+        logger.warning(f"No .pages.json files found in {input_dir}")
+        return []
+
+    if source_filter is not None:
+        original_count = len(pages_files)
+        pages_files = [
+            f for f in pages_files if str(f.relative_to(input_path)) in source_filter
+        ]
+        logger.info(
+            f"Source filter applied: {len(pages_files)}/{original_count} files matched"
+        )
+
+    logger.info(f"Found {len(pages_files)} .pages.json files to process")
+
+    all_results = []
+
+    for pages_file in pages_files:
+        try:
+            with open(pages_file, encoding="utf-8") as f:
+                page_chunks_data = json.load(f)
+
+            relative_path = pages_file.relative_to(input_path)
+            source_name = relative_path.with_suffix("").stem
+
+            category = detect_document_category(str(pages_file))
+
+            chunks = chunk_text_page_aware(
+                page_chunks_data,
+                source_name=source_name,
+                chunk_size=chunk_size,
+                overlap=overlap,
+                encoding_name=encoding_name,
+            )
+
+            output_file = output_path / relative_path.with_suffix(".jsonl")
+
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+
+            with open(output_file, "w", encoding="utf-8") as f:
+                for chunk in chunks:
+                    page_number = chunk["metadata"].get("page_number", 0)
+                    chunk_index_str = chunk["metadata"].get("chunk_index", "000")
+                    chunk_id = f"{source_name}_{chunk_index_str}"
+
+                    chunk_data = {
+                        "chunk_id": chunk_id,
+                        "text": chunk["text"],
+                        "metadata": {
+                            "source": str(relative_path.with_suffix(".pages.json")),
+                            "page_number": page_number,
+                            "category": category,
+                            "strategy": "page_aware_fixed",
+                            "chunk_index": chunk["metadata"]["chunk_index"],
+                            "char_count": chunk["metadata"]["char_count"],
+                            "token_count": chunk["metadata"]["token_count"],
+                            "start_token": chunk["metadata"]["start_token"],
+                            "end_token": chunk["metadata"]["end_token"],
+                        },
+                    }
+
+                    f.write(json.dumps(chunk_data, ensure_ascii=False) + "\n")
+
+            all_results.append(
+                {
+                    "source": str(pages_file),
+                    "output": str(output_file),
+                    "category": category,
+                    "chunk_count": len(chunks),
+                    "status": "success",
+                }
+            )
+
+            logger.success(
+                f"Processed {pages_file.name}: {len(chunks)} chunks -> {output_file.name}"
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to process {pages_file}: {str(e)}")
+            all_results.append(
+                {
+                    "source": str(pages_file),
+                    "output": None,
+                    "category": None,
+                    "chunk_count": 0,
+                    "status": "failed",
+                    "error": str(e),
+                }
+            )
+
+    success_count = sum(1 for r in all_results if r["status"] == "success")
+    failed_count = sum(1 for r in all_results if r["status"] == "failed")
+    total_chunks = sum(r.get("chunk_count", 0) for r in all_results)
+
+    logger.info(
+        f"Page-aware chunking completed: {success_count} succeeded, {failed_count} failed, {total_chunks} total chunks"
+    )
+
+    return all_results
+
+
 if __name__ == "__main__":
     from src.utils import load_config, setup_logger
 

@@ -3,7 +3,12 @@ from pathlib import Path
 
 import pytest
 
-from src.chunker import chunk_text, process_parsed_files
+from src.chunker import (
+    chunk_text,
+    chunk_text_page_aware,
+    process_parsed_files,
+    process_parsed_files_page_aware,
+)
 
 
 class TestChunkText:
@@ -279,3 +284,214 @@ class TestProcessParsedFiles:
         results = process_parsed_files(str(input_dir), str(output_dir))
 
         assert len(results) == 2
+
+
+class TestChunkTextPageAware:
+    def test_empty_page_chunks(self):
+        result = chunk_text_page_aware([], source_name="test")
+        assert result == []
+
+    def test_single_page_short_text(self):
+        page_chunks = [
+            {
+                "text": "Short text on page one.",
+                "metadata": {"page_number": 1, "page_count": 1, "file_path": "test.pdf"},
+                "toc_items": [],
+                "tables": [],
+            }
+        ]
+        result = chunk_text_page_aware(page_chunks, source_name="test", chunk_size=512)
+        assert len(result) == 1
+        assert result[0]["metadata"]["page_number"] == 1
+
+    def test_single_page_long_text(self):
+        page_chunks = [
+            {
+                "text": "This is a test sentence. " * 200,
+                "metadata": {"page_number": 3, "page_count": 1, "file_path": "test.pdf"},
+                "toc_items": [],
+                "tables": [],
+            }
+        ]
+        result = chunk_text_page_aware(
+            page_chunks, source_name="test", chunk_size=50
+        )
+        assert len(result) > 1
+        for chunk in result:
+            assert chunk["metadata"]["page_number"] == 3
+
+    def test_multiple_pages(self):
+        page_chunks = [
+            {
+                "text": "Content for page one. " * 20,
+                "metadata": {"page_number": 1, "page_count": 3, "file_path": "test.pdf"},
+                "toc_items": [],
+                "tables": [],
+            },
+            {
+                "text": "Content for page two. " * 20,
+                "metadata": {"page_number": 2, "page_count": 3, "file_path": "test.pdf"},
+                "toc_items": [],
+                "tables": [],
+            },
+            {
+                "text": "Content for page three. " * 20,
+                "metadata": {"page_number": 3, "page_count": 3, "file_path": "test.pdf"},
+                "toc_items": [],
+                "tables": [],
+            },
+        ]
+        result = chunk_text_page_aware(page_chunks, source_name="test", chunk_size=50)
+        page_numbers = {chunk["metadata"]["page_number"] for chunk in result}
+        assert 1 in page_numbers
+        assert 2 in page_numbers
+        assert 3 in page_numbers
+
+    def test_empty_page_skipped(self):
+        page_chunks = [
+            {
+                "text": "",
+                "metadata": {"page_number": 1, "page_count": 3, "file_path": "test.pdf"},
+                "toc_items": [],
+                "tables": [],
+            },
+            {
+                "text": "   ",
+                "metadata": {"page_number": 2, "page_count": 3, "file_path": "test.pdf"},
+                "toc_items": [],
+                "tables": [],
+            },
+            {
+                "text": "Non-empty page content. " * 10,
+                "metadata": {"page_number": 3, "page_count": 3, "file_path": "test.pdf"},
+                "toc_items": [],
+                "tables": [],
+            },
+        ]
+        result = chunk_text_page_aware(page_chunks, source_name="test", chunk_size=512)
+        assert len(result) >= 1
+        for chunk in result:
+            assert chunk["metadata"]["page_number"] == 3
+
+    def test_chunk_id_format(self):
+        page_chunks = [
+            {
+                "text": "Some text for chunking. " * 10,
+                "metadata": {"page_number": 5, "page_count": 1, "file_path": "test.pdf"},
+                "toc_items": [],
+                "tables": [],
+            }
+        ]
+        result = chunk_text_page_aware(page_chunks, source_name="test", chunk_size=512)
+        assert len(result) >= 1
+        chunk_index = result[0]["metadata"]["chunk_index"]
+        assert chunk_index.startswith("p5_")
+        assert result[0]["metadata"]["page_number"] == 5
+
+    def test_overlap_validation(self):
+        page_chunks = [
+            {
+                "text": "Some text.",
+                "metadata": {"page_number": 1, "page_count": 1, "file_path": "test.pdf"},
+                "toc_items": [],
+                "tables": [],
+            }
+        ]
+        with pytest.raises(ValueError, match="Overlap"):
+            chunk_text_page_aware(
+                page_chunks, source_name="test", chunk_size=50, overlap=50
+            )
+
+
+class TestProcessParsedFilesPageAware:
+    def _make_pages_data(self):
+        return [
+            {
+                "text": "Page 1 content with enough text to chunk. " * 20,
+                "metadata": {"page_number": 1, "page_count": 2, "file_path": "test.pdf"},
+                "toc_items": [],
+                "tables": [],
+            },
+            {
+                "text": "Page 2 content with enough text to chunk. " * 20,
+                "metadata": {"page_number": 2, "page_count": 2, "file_path": "test.pdf"},
+                "toc_items": [],
+                "tables": [],
+            },
+        ]
+
+    def test_input_dir_not_found(self):
+        with pytest.raises(FileNotFoundError) as exc_info:
+            process_parsed_files_page_aware("nonexistent_dir", "output_dir")
+        assert "Input directory not found" in str(exc_info.value)
+
+    def test_no_pages_json_files(self, tmp_path):
+        results = process_parsed_files_page_aware(str(tmp_path), str(tmp_path / "output"))
+        assert results == []
+
+    def test_process_pages_json(self, tmp_path):
+        input_dir = tmp_path / "input"
+        output_dir = tmp_path / "output"
+        input_dir.mkdir()
+
+        pages_file = input_dir / "test.pages.json"
+        pages_file.write_text(json.dumps(self._make_pages_data()), encoding="utf-8")
+
+        results = process_parsed_files_page_aware(
+            str(input_dir), str(output_dir), chunk_size=50
+        )
+
+        assert len(results) == 1
+        assert results[0]["status"] == "success"
+        assert results[0]["chunk_count"] > 0
+
+        output_file = Path(results[0]["output"])
+        assert output_file.exists()
+
+        with open(output_file, encoding="utf-8") as f:
+            lines = f.readlines()
+            for line in lines:
+                chunk_data = json.loads(line)
+                assert "page_number" in chunk_data["metadata"]
+                assert chunk_data["metadata"]["strategy"] == "page_aware_fixed"
+
+    def test_source_filter(self, tmp_path):
+        input_dir = tmp_path / "input"
+        output_dir = tmp_path / "output"
+        input_dir.mkdir()
+
+        pages_file1 = input_dir / "keep.pages.json"
+        pages_file1.write_text(json.dumps(self._make_pages_data()), encoding="utf-8")
+
+        pages_file2 = input_dir / "skip.pages.json"
+        pages_file2.write_text(json.dumps(self._make_pages_data()), encoding="utf-8")
+
+        source_filter = {"keep.pages.json"}
+        results = process_parsed_files_page_aware(
+            str(input_dir), str(output_dir), source_filter=source_filter
+        )
+
+        assert len(results) == 1
+        assert results[0]["status"] == "success"
+        assert "keep" in results[0]["source"]
+
+    def test_output_chunk_id_format(self, tmp_path):
+        input_dir = tmp_path / "input"
+        output_dir = tmp_path / "output"
+        input_dir.mkdir()
+
+        pages_file = input_dir / "mydoc.pages.json"
+        pages_file.write_text(json.dumps(self._make_pages_data()), encoding="utf-8")
+
+        results = process_parsed_files_page_aware(
+            str(input_dir), str(output_dir), chunk_size=50
+        )
+
+        output_file = Path(results[0]["output"])
+        with open(output_file, encoding="utf-8") as f:
+            first_line = f.readline()
+            chunk_data = json.loads(first_line)
+            chunk_id = chunk_data["chunk_id"]
+            page_number = chunk_data["metadata"]["page_number"]
+            assert chunk_id.startswith("mydoc_")
+            assert f"_p{page_number}_" in chunk_id
