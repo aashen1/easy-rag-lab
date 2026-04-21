@@ -1,10 +1,34 @@
 import json
 import re
-from typing import List
+from typing import Any
 
 from loguru import logger
 
 from eval.metrics.utils import _create_llm_client
+
+DEFAULT_EVAL_CONFIG = {
+    "model_name": "LongCat-Flash-Lite",
+    "base_url": "https://api.longcat.chat/anthropic",
+    "context_precision": {"temperature": 0.0, "max_tokens": 256},
+    "context_recall": {"temperature": 0.0, "max_tokens": 256},
+    "context_relevance": {"temperature": 0.0, "max_tokens": 256},
+    "infer_check": {"temperature": 0.0, "max_tokens": 64},
+}
+
+
+def _get_eval_config(config: dict[str, Any] = None) -> dict[str, Any]:
+    """Get LLM evaluator config, merging with defaults.
+
+    Args:
+        config: Optional config dict with 'llm_evaluator' section.
+
+    Returns:
+        Merged config dict.
+    """
+    merged = dict(DEFAULT_EVAL_CONFIG)
+    if config and "llm_evaluator" in config:
+        merged.update(config["llm_evaluator"])
+    return merged
 
 
 CONTEXT_PRECISION_PROMPT = """你是一个专业的信息检索评估专家。请判断以下检索到的上下文是否与问题相关。
@@ -100,10 +124,11 @@ def _judge_context_relevance(
 def calculate_context_precision(
     question: str,
     expected_output: str,
-    retrieval_context: List[str],
+    retrieval_context: list[str],
     api_key: str,
-    base_url: str = "https://api.longcat.chat/anthropic",
-    model_name: str = "LongCat-Flash-Lite",
+    base_url: str = None,
+    model_name: str = None,
+    config: dict[str, Any] = None,
 ) -> float:
     """Calculate Context Precision using LLM-as-a-judge.
 
@@ -123,8 +148,11 @@ def calculate_context_precision(
         expected_output: The expected answer (ground truth).
         retrieval_context: List of retrieved context strings, ordered by relevance.
         api_key: API key for LLM.
-        base_url: Base URL for LLM API. Defaults to "https://api.longcat.chat/anthropic".
-        model_name: LLM model name. Defaults to "LongCat-Flash-Lite".
+        base_url: Base URL for LLM API.
+            Defaults to config value or "https://api.longcat.chat/anthropic".
+        model_name: LLM model name.
+            Defaults to config value or "LongCat-Flash-Lite".
+        config: Optional config dict with 'llm_evaluator' section.
 
     Returns:
         Context precision score in [0, 1]. Higher is better.
@@ -144,6 +172,10 @@ def calculate_context_precision(
     if not retrieval_context:
         logger.warning("Empty retrieval context for context precision calculation")
         return 0.0
+
+    eval_cfg = _get_eval_config(config)
+    base_url = base_url or eval_cfg.get("base_url", DEFAULT_EVAL_CONFIG["base_url"])
+    model_name = model_name or eval_cfg.get("model_name", DEFAULT_EVAL_CONFIG["model_name"])
 
     relevance_verdicts = []
     for ctx in retrieval_context:
@@ -175,7 +207,7 @@ def calculate_context_precision(
     return score
 
 
-def _split_into_sentences(text: str) -> List[str]:
+def _split_into_sentences(text: str) -> list[str]:
     """Split text into sentences.
 
     Args:
@@ -244,10 +276,11 @@ def _can_infer_from_context(
 def calculate_context_recall(
     question: str,
     ground_truth: str,
-    retrieval_context: List[str],
+    retrieval_context: list[str],
     api_key: str,
-    base_url: str = "https://api.longcat.chat/anthropic",
-    model_name: str = "LongCat-Flash-Lite",
+    base_url: str = None,
+    model_name: str = None,
+    config: dict[str, Any] = None,
 ) -> float:
     """Calculate Context Recall.
 
@@ -263,8 +296,11 @@ def calculate_context_recall(
         ground_truth: The expected answer (ground truth).
         retrieval_context: List of retrieved context strings.
         api_key: API key for LLM.
-        base_url: Base URL for LLM API. Defaults to "https://api.longcat.chat/anthropic".
-        model_name: LLM model name. Defaults to "LongCat-Flash-Lite".
+        base_url: Base URL for LLM API.
+            Defaults to config value or "https://api.longcat.chat/anthropic".
+        model_name: LLM model name.
+            Defaults to config value or "LongCat-Flash-Lite".
+        config: Optional config dict with 'llm_evaluator' section.
 
     Returns:
         Context recall score in [0, 1]. Higher is better.
@@ -288,6 +324,10 @@ def calculate_context_recall(
     if not retrieval_context:
         logger.warning("Empty retrieval context for context recall calculation")
         return 0.0
+
+    eval_cfg = _get_eval_config(config)
+    base_url = base_url or eval_cfg.get("base_url", DEFAULT_EVAL_CONFIG["base_url"])
+    model_name = model_name or eval_cfg.get("model_name", DEFAULT_EVAL_CONFIG["model_name"])
 
     sentences = _split_into_sentences(ground_truth)
     if not sentences:

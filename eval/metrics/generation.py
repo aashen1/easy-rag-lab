@@ -1,11 +1,35 @@
 import json
 import re
-from typing import Any, Dict, List
+from typing import Any
 
 from anthropic import Anthropic
 from loguru import logger
 
 from eval.metrics.utils import _create_llm_client
+
+DEFAULT_EVAL_CONFIG = {
+    "model_name": "LongCat-Flash-Lite",
+    "base_url": "https://api.longcat.chat/anthropic",
+    "extract_statements": {"temperature": 0.0, "max_tokens": 1024},
+    "verify_statements": {"temperature": 0.0, "max_tokens": 1024},
+    "faithfulness": {"temperature": 0.0, "max_tokens": 512},
+    "answer_relevancy": {"temperature": 0.0, "max_tokens": 512},
+}
+
+
+def _get_eval_config(config: dict[str, Any] = None) -> dict[str, Any]:
+    """Get LLM evaluator config, merging with defaults.
+
+    Args:
+        config: Optional config dict with 'llm_evaluator' section.
+
+    Returns:
+        Merged config dict.
+    """
+    merged = dict(DEFAULT_EVAL_CONFIG)
+    if config and "llm_evaluator" in config:
+        merged.update(config["llm_evaluator"])
+    return merged
 
 
 FAITHFULNESS_STATEMENT_PROMPT = """请分析以下回答，提取其中的所有事实陈述（statements）。
@@ -93,13 +117,17 @@ def _extract_statements(
     client: Anthropic,
     answer: str,
     model_name: str = "LongCat-Flash-Lite",
-) -> List[str]:
+    max_tokens: int = 1024,
+    temperature: float = 0.0,
+) -> list[str]:
     """Extract factual statements from an answer using LLM.
 
     Args:
         client: Anthropic client instance.
         answer: The answer text to extract statements from.
         model_name: Name of the LLM model to use.
+        max_tokens: Maximum tokens in the LLM response.
+        temperature: Sampling temperature for LLM generation.
 
     Returns:
         List of extracted statement strings.
@@ -112,8 +140,8 @@ def _extract_statements(
     try:
         message = client.messages.create(
             model=model_name,
-            max_tokens=1024,
-            temperature=0.0,
+            max_tokens=max_tokens,
+            temperature=temperature,
             messages=[{"role": "user", "content": prompt}],
         )
 
@@ -138,10 +166,12 @@ def _extract_statements(
 
 def _verify_statements(
     client: Anthropic,
-    statements: List[str],
-    contexts: List[str],
+    statements: list[str],
+    contexts: list[str],
     model_name: str = "LongCat-Flash-Lite",
-) -> List[Dict[str, Any]]:
+    max_tokens: int = 1024,
+    temperature: float = 0.0,
+) -> list[dict[str, Any]]:
     """Verify if statements can be derived from contexts using LLM.
 
     Args:
@@ -149,6 +179,8 @@ def _verify_statements(
         statements: List of statement strings to verify.
         contexts: List of context strings to verify against.
         model_name: Name of the LLM model to use.
+        max_tokens: Maximum tokens in the LLM response.
+        temperature: Sampling temperature for LLM generation.
 
     Returns:
         List of dicts with statement and verdict (1 for derivable, 0 for not).
@@ -167,8 +199,8 @@ def _verify_statements(
     try:
         message = client.messages.create(
             model=model_name,
-            max_tokens=1024,
-            temperature=0.0,
+            max_tokens=max_tokens,
+            temperature=temperature,
             messages=[{"role": "user", "content": prompt}],
         )
 
@@ -193,10 +225,11 @@ def _verify_statements(
 
 def calculate_faithfulness(
     answer: str,
-    contexts: List[str],
+    contexts: list[str],
     api_key: str,
-    base_url: str = "https://api.longcat.chat/anthropic",
-    model_name: str = "LongCat-Flash-Lite",
+    base_url: str = None,
+    model_name: str = None,
+    config: dict[str, Any] = None,
 ) -> float:
     """Calculate faithfulness score for an answer given contexts.
 
@@ -215,9 +248,10 @@ def calculate_faithfulness(
         contexts: List of context strings retrieved for the query.
         api_key: API key for LLM authentication.
         base_url: Base URL for the LLM API endpoint.
-            Defaults to "https://api.longcat.chat/anthropic".
+            Defaults to config value or "https://api.longcat.chat/anthropic".
         model_name: Name of the LLM model to use for evaluation.
-            Defaults to "LongCat-Flash-Lite".
+            Defaults to config value or "LongCat-Flash-Lite".
+        config: Optional config dict with 'llm_evaluator' section.
 
     Returns:
         Faithfulness score as a float between 0.0 and 1.0:
@@ -250,18 +284,33 @@ def calculate_faithfulness(
         logger.warning("Answer is empty after stripping whitespace")
         return 0.0
 
+    eval_cfg = _get_eval_config(config)
+    base_url = base_url or eval_cfg.get("base_url", DEFAULT_EVAL_CONFIG["base_url"])
+    model_name = model_name or eval_cfg.get("model_name", DEFAULT_EVAL_CONFIG["model_name"])
+
+    extract_cfg = eval_cfg.get("extract_statements", DEFAULT_EVAL_CONFIG["extract_statements"])
+    verify_cfg = eval_cfg.get("verify_statements", DEFAULT_EVAL_CONFIG["verify_statements"])
+
     try:
         client = _create_llm_client(api_key=api_key, base_url=base_url)
 
         logger.info("Extracting statements from answer")
-        statements = _extract_statements(client, answer, model_name)
+        statements = _extract_statements(
+            client, answer, model_name,
+            max_tokens=extract_cfg.get("max_tokens", 1024),
+            temperature=extract_cfg.get("temperature", 0.0),
+        )
 
         if not statements:
             logger.warning("No statements extracted from answer")
             return 0.0
 
         logger.info(f"Extracted {len(statements)} statements, verifying against contexts")
-        verdicts = _verify_statements(client, statements, contexts, model_name)
+        verdicts = _verify_statements(
+            client, statements, contexts, model_name,
+            max_tokens=verify_cfg.get("max_tokens", 1024),
+            temperature=verify_cfg.get("temperature", 0.0),
+        )
 
         if not verdicts:
             logger.warning("No verdicts returned from verification")
@@ -287,7 +336,7 @@ def calculate_faithfulness(
         raise Exception(error_msg)
 
 
-def _parse_relevancy_response(response_text: str) -> Dict[str, Any]:
+def _parse_relevancy_response(response_text: str) -> dict[str, Any]:
     """Parse LLM response for answer relevancy evaluation.
 
     Args:
@@ -316,10 +365,11 @@ def calculate_answer_relevancy(
     question: str,
     answer: str,
     api_key: str,
-    base_url: str = "https://api.longcat.chat/anthropic",
-    model_name: str = "LongCat-Flash-Lite",
-    max_tokens: int = 512,
-    temperature: float = 0.0,
+    base_url: str = None,
+    model_name: str = None,
+    max_tokens: int = None,
+    temperature: float = None,
+    config: dict[str, Any] = None,
 ) -> float:
     """Calculate answer relevancy score using LLM evaluation.
 
@@ -334,9 +384,14 @@ def calculate_answer_relevancy(
         answer: The generated answer to evaluate.
         api_key: API key for LLM authentication.
         base_url: Base URL for the LLM API endpoint.
+            Defaults to config value or "https://api.longcat.chat/anthropic".
         model_name: Name of the LLM model to use.
+            Defaults to config value or "LongCat-Flash-Lite".
         max_tokens: Maximum tokens in the LLM response.
+            Defaults to config value or 512.
         temperature: Sampling temperature for LLM generation.
+            Defaults to config value or 0.0.
+        config: Optional config dict with 'llm_evaluator' section.
 
     Returns:
         Relevancy score as a float between 0.0 and 1.0:
@@ -360,6 +415,13 @@ def calculate_answer_relevancy(
         raise ValueError("Question must be a non-empty string")
     if not answer or not isinstance(answer, str):
         raise ValueError("Answer must be a non-empty string")
+
+    eval_cfg = _get_eval_config(config)
+    base_url = base_url or eval_cfg.get("base_url", DEFAULT_EVAL_CONFIG["base_url"])
+    model_name = model_name or eval_cfg.get("model_name", DEFAULT_EVAL_CONFIG["model_name"])
+    relevancy_cfg = eval_cfg.get("answer_relevancy", DEFAULT_EVAL_CONFIG["answer_relevancy"])
+    max_tokens = max_tokens if max_tokens is not None else relevancy_cfg.get("max_tokens", 512)
+    temperature = temperature if temperature is not None else relevancy_cfg.get("temperature", 0.0)
 
     try:
         client = _create_llm_client(api_key=api_key, base_url=base_url)

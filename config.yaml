@@ -143,6 +143,39 @@ meals:
 artifacts:
   dir: "data/artifacts"
 
+# LLM 评测器配置（用于 metrics 计算）
+llm_evaluator:
+  model_name: "LongCat-Flash-Lite"
+  base_url: "https://api.longcat.chat/anthropic"
+  extract_statements:
+    temperature: 0.0
+    max_tokens: 1024
+  verify_statements:
+    temperature: 0.0
+    max_tokens: 1024
+  faithfulness:
+    temperature: 0.0
+    max_tokens: 512
+  answer_relevancy:
+    temperature: 0.0
+    max_tokens: 512
+  context_precision:
+    temperature: 0.0
+    max_tokens: 256
+  context_recall:
+    temperature: 0.0
+    max_tokens: 256
+  context_relevance:
+    temperature: 0.0
+    max_tokens: 256
+  infer_check:
+    temperature: 0.0
+    max_tokens: 64
+  report_generation:
+    model_name: "LongCat-Flash-Lite"
+    temperature: 0.3
+    max_tokens: 4096
+
 # ============================================================
 # 评测系统配置
 # ============================================================
@@ -171,6 +204,11 @@ test_generation:
   default_strategy: "document"
   default_num_questions: 20
   max_retries: 3
+  model_name: "LongCat-Flash-Lite"
+  temperature: 0.7
+  max_tokens: 1024
+  supplement_max_tokens: 1024
+  initial_max_tokens: 512
   document_level:
     enabled: true
     default_num_questions: 20

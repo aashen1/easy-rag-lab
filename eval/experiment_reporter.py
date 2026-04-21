@@ -1,9 +1,16 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from loguru import logger
+
+DEFAULT_REPORT_CONFIG = {
+    "model_name": "LongCat-Flash-Lite",
+    "base_url": "https://api.longcat.chat/anthropic",
+    "temperature": 0.3,
+    "max_tokens": 4096,
+}
 
 
 @dataclass
@@ -11,30 +18,30 @@ class TestCaseResult:
     __test__ = False
     id: str
     question: str
-    answer: Optional[str]
-    retrieval: Optional[Dict[str, float]] = None
-    generation: Optional[Dict[str, float]] = None
-    llm_retrieval: Optional[Dict[str, float]] = None
-    sources: Optional[List[str]] = None
-    error: Optional[str] = None
+    answer: str | None
+    retrieval: dict[str, float] | None = None
+    generation: dict[str, float] | None = None
+    llm_retrieval: dict[str, float] | None = None
+    sources: list[str] | None = None
+    error: str | None = None
     time_seconds: float = 0.0
-    category: Optional[str] = None
+    category: str | None = None
 
 
 @dataclass
 class VariantResult:
     variant_name: str
-    variant_description: Optional[str] = None
-    retrieval_metrics: Optional[Dict[str, float]] = None
-    generation_metrics: Optional[Dict[str, float]] = None
-    llm_retrieval_metrics: Optional[Dict[str, float]] = None
-    config_snapshot: Optional[Dict[str, Any]] = None
+    variant_description: str | None = None
+    retrieval_metrics: dict[str, float] | None = None
+    generation_metrics: dict[str, float] | None = None
+    llm_retrieval_metrics: dict[str, float] | None = None
+    config_snapshot: dict[str, Any] | None = None
     total_questions: int = 0
     total_time_seconds: float = 0.0
-    error: Optional[str] = None
+    error: str | None = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "VariantResult":
+    def from_dict(cls, data: dict[str, Any]) -> "VariantResult":
         return cls(
             variant_name=data.get("variant_name", "unnamed"),
             variant_description=data.get("variant_description"),
@@ -54,20 +61,20 @@ class ExperimentResult:
     total_test_cases: int
     total_time_seconds: float
     avg_time_per_case: float
-    retrieval_metrics: Dict[str, float]
-    results: List[TestCaseResult]
-    generation_metrics: Optional[Dict[str, float]] = None
-    llm_retrieval_metrics: Optional[Dict[str, float]] = None
-    meal_data_id: Optional[str] = None
-    meal_name: Optional[str] = None
-    config_snapshot: Optional[Dict[str, Any]] = None
-    config_hashes: Optional[Dict[str, str]] = None
-    pdf_files: Optional[List[Dict[str, Any]]] = None
-    stats: Optional[Dict[str, Any]] = None
-    variant_results: Optional[List[VariantResult]] = None
+    retrieval_metrics: dict[str, float]
+    results: list[TestCaseResult]
+    generation_metrics: dict[str, float] | None = None
+    llm_retrieval_metrics: dict[str, float] | None = None
+    meal_data_id: str | None = None
+    meal_name: str | None = None
+    config_snapshot: dict[str, Any] | None = None
+    config_hashes: dict[str, str] | None = None
+    pdf_files: list[dict[str, Any]] | None = None
+    stats: dict[str, Any] | None = None
+    variant_results: list[VariantResult] | None = None
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ExperimentResult":
+    def from_dict(cls, data: dict[str, Any]) -> "ExperimentResult":
         results = []
         for r in data.get("results", []):
             results.append(TestCaseResult(
@@ -166,7 +173,7 @@ class ExperimentReporter:
     """Experiment report generator supporting template and LLM modes."""
 
     @staticmethod
-    def _dict_to_yaml_lines(data: Any, indent: int = 0) -> List[str]:
+    def _dict_to_yaml_lines(data: Any, indent: int = 0) -> list[str]:
         """Convert a dict to YAML-like lines with arbitrary nesting depth.
 
         Args:
@@ -207,7 +214,7 @@ class ExperimentReporter:
         return lines
 
     @staticmethod
-    def _generate_tech_summary(merged_config: Dict[str, Any]) -> List[str]:
+    def _generate_tech_summary(merged_config: dict[str, Any]) -> list[str]:
         """Generate a concise technology summary from merged config.
 
         Args:
@@ -255,10 +262,10 @@ class ExperimentReporter:
 
     def __init__(
         self,
-        llm_api_key: Optional[str] = None,
-        llm_base_url: Optional[str] = None,
-        llm_model_name: Optional[str] = None,
-        token_tracker: Optional[Any] = None,
+        llm_api_key: str | None = None,
+        llm_base_url: str | None = None,
+        llm_model_name: str | None = None,
+        token_tracker: Any | None = None,
     ):
         self.llm_api_key = llm_api_key
         self.llm_base_url = llm_base_url
@@ -293,9 +300,9 @@ class ExperimentReporter:
     def generate_variant_comparison_report(
         self,
         exp_dir: Path,
-        variant_results: List[Dict[str, Any]],
-        meal_info: Optional[Dict[str, Any]] = None,
-        config_snapshot: Optional[Dict[str, Any]] = None,
+        variant_results: list[dict[str, Any]],
+        meal_info: dict[str, Any] | None = None,
+        config_snapshot: dict[str, Any] | None = None,
         output_filename: str = "experiment_report.md",
         use_llm: bool = False,
     ) -> str:
@@ -336,9 +343,9 @@ class ExperimentReporter:
 
     def _generate_variant_comparison_template(
         self,
-        variant_results: List[Dict[str, Any]],
-        meal_info: Optional[Dict[str, Any]] = None,
-        config_snapshot: Optional[Dict[str, Any]] = None,
+        variant_results: list[dict[str, Any]],
+        meal_info: dict[str, Any] | None = None,
+        config_snapshot: dict[str, Any] | None = None,
     ) -> str:
         sections = [
             self._generate_variant_header(meal_info),
@@ -353,9 +360,9 @@ class ExperimentReporter:
 
     def _generate_variant_comparison_llm(
         self,
-        variant_results: List[Dict[str, Any]],
-        meal_info: Optional[Dict[str, Any]] = None,
-        config_snapshot: Optional[Dict[str, Any]] = None,
+        variant_results: list[dict[str, Any]],
+        meal_info: dict[str, Any] | None = None,
+        config_snapshot: dict[str, Any] | None = None,
     ) -> str:
         try:
             prompt = self._build_variant_comparison_llm_prompt(
@@ -372,7 +379,7 @@ class ExperimentReporter:
             )
 
     def _generate_variant_header(
-        self, meal_info: Optional[Dict[str, Any]] = None
+        self, meal_info: dict[str, Any] | None = None
     ) -> str:
         title = "# RAG Multi-Variant Experiment Report"
         if meal_info and meal_info.get("name"):
@@ -381,8 +388,8 @@ class ExperimentReporter:
 
     def _generate_variant_overview_section(
         self,
-        variant_results: List[Dict[str, Any]],
-        meal_info: Optional[Dict[str, Any]] = None,
+        variant_results: list[dict[str, Any]],
+        meal_info: dict[str, Any] | None = None,
     ) -> str:
         lines = ["## 1. Experiment Overview", ""]
 
@@ -407,7 +414,7 @@ class ExperimentReporter:
         return "\n".join(lines)
 
     def _generate_variant_comparison_table_section(
-        self, variant_results: List[Dict[str, Any]]
+        self, variant_results: list[dict[str, Any]]
     ) -> str:
         lines = ["## 2. Variant Comparison Table", ""]
 
@@ -507,8 +514,8 @@ class ExperimentReporter:
         return "\n".join(lines)
 
     def _find_best_variant(
-        self, variant_results: List[Dict[str, Any]]
-    ) -> Optional[Dict[str, Any]]:
+        self, variant_results: list[dict[str, Any]]
+    ) -> dict[str, Any] | None:
         best = None
         best_hr = -1
 
@@ -522,7 +529,7 @@ class ExperimentReporter:
         return best
 
     def _generate_best_variant_section(
-        self, variant_results: List[Dict[str, Any]]
+        self, variant_results: list[dict[str, Any]]
     ) -> str:
         best = self._find_best_variant(variant_results)
 
@@ -608,7 +615,7 @@ class ExperimentReporter:
         return "\n".join(lines)
 
     def _generate_variant_details_section(
-        self, variant_results: List[Dict[str, Any]]
+        self, variant_results: list[dict[str, Any]]
     ) -> str:
         lines = ["## 4. Variant Details", ""]
 
@@ -660,8 +667,8 @@ class ExperimentReporter:
 
     def _generate_variant_config_section(
         self,
-        variant_results: List[Dict[str, Any]],
-        config_snapshot: Optional[Dict[str, Any]] = None,
+        variant_results: list[dict[str, Any]],
+        config_snapshot: dict[str, Any] | None = None,
     ) -> str:
         lines = ["## 5. Common Configuration", ""]
 
@@ -683,7 +690,7 @@ class ExperimentReporter:
         return "\n".join(lines)
 
     def _generate_variant_recommendations_section(
-        self, variant_results: List[Dict[str, Any]]
+        self, variant_results: list[dict[str, Any]]
     ) -> str:
         lines = ["## 6. Recommendations", ""]
 
@@ -910,7 +917,7 @@ class ExperimentReporter:
             return self._generate_template_report(result)
 
     def _generate_header(self, result: ExperimentResult) -> str:
-        title = f"# RAG Experiment Report"
+        title = "# RAG Experiment Report"
         if result.meal_name:
             title += f" - {result.meal_name}"
         return title
@@ -1295,11 +1302,12 @@ class ExperimentReporter:
         if self._llm_client is None:
             self._init_llm_client()
 
+        report_cfg = DEFAULT_REPORT_CONFIG
         try:
             message = self._llm_client.messages.create(
-                model=self.llm_model_name or "LongCat-Flash-Lite",
-                max_tokens=4096,
-                temperature=0.3,
+                model=self.llm_model_name or report_cfg["model_name"],
+                max_tokens=report_cfg["max_tokens"],
+                temperature=report_cfg["temperature"],
                 messages=[{"role": "user", "content": prompt}],
             )
 
@@ -1316,7 +1324,7 @@ class ExperimentReporter:
                 )
                 self.token_tracker.record(
                     category="report_generation",
-                    model_name=self.llm_model_name or "LongCat-Flash-Lite",
+                    model_name=self.llm_model_name or report_cfg["model_name"],
                     usage=usage,
                 )
 
@@ -1335,7 +1343,7 @@ class ExperimentReporter:
             self._llm_client = create_llm_client(
                 llm_config={
                     "api_key": self.llm_api_key,
-                    "base_url": self.llm_base_url or "https://api.longcat.chat/anthropic",
+                    "base_url": self.llm_base_url or DEFAULT_REPORT_CONFIG["base_url"],
                 },
                 mode="sdk",
             )
@@ -1355,9 +1363,9 @@ class ExperimentReporter:
 
     def _build_variant_comparison_llm_prompt(
         self,
-        variant_results: List[Dict[str, Any]],
-        meal_info: Optional[Dict[str, Any]] = None,
-        config_snapshot: Optional[Dict[str, Any]] = None,
+        variant_results: list[dict[str, Any]],
+        meal_info: dict[str, Any] | None = None,
+        config_snapshot: dict[str, Any] | None = None,
     ) -> str:
         template_report = self._generate_variant_comparison_template(
             variant_results, meal_info, config_snapshot
@@ -1418,9 +1426,9 @@ class ExperimentReporter:
 
     def _format_variant_comparison_llm_report(
         self,
-        variant_results: List[Dict[str, Any]],
+        variant_results: list[dict[str, Any]],
         llm_response: str,
-        meal_info: Optional[Dict[str, Any]] = None,
+        meal_info: dict[str, Any] | None = None,
     ) -> str:
         header = self._generate_variant_header(meal_info)
         meta_info = [

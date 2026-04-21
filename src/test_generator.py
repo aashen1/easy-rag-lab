@@ -4,15 +4,14 @@ import re
 import warnings
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from loguru import logger
 
 from src.generator import Generator
 from src.meal import ArtifactCache, MealConfig, MealManager
 from src.test_set_manager import TestSetManager, TestSetMetadata
-from src.utils import ensure_dir, get_llm_config
-
+from src.utils import get_llm_config
 
 FACTUAL_PROMPT = """你是一个金融研报问答系统的测试工程师。请根据以下文本片段，生成一个可以用该文本直接回答的事实性问题。
 
@@ -227,7 +226,7 @@ class TestSetGenerator:
         "irrelevant": 0.05,
     }
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         """Initialize the TestSetGenerator with application configuration.
 
         Args:
@@ -240,6 +239,11 @@ class TestSetGenerator:
         self.max_retries = tg_config.get("max_retries", 3)
         self.default_strategy = tg_config.get("default_strategy", "factual")
         self.default_num_questions = tg_config.get("default_num_questions", 20)
+        self.test_gen_model_name = tg_config.get("model_name", "LongCat-Flash-Lite")
+        self.test_gen_temperature = tg_config.get("temperature", 0.7)
+        self.test_gen_max_tokens = tg_config.get("max_tokens", 1024)
+        self.test_gen_initial_max_tokens = tg_config.get("initial_max_tokens", 512)
+        self.test_gen_supplement_max_tokens = tg_config.get("supplement_max_tokens", 1024)
 
     def generate_test_set(
         self,
@@ -247,9 +251,9 @@ class TestSetGenerator:
         strategy: str = None,
         num_questions: int = None,
         llm_preset: str = "default",
-        seed: Optional[int] = None,
-        token_tracker: Optional[Any] = None,
-    ) -> Dict[str, Any]:
+        seed: int | None = None,
+        token_tracker: Any | None = None,
+    ) -> dict[str, Any]:
         """Generate a test set of Q&A pairs for a given meal.
 
         Args:
@@ -316,8 +320,8 @@ class TestSetGenerator:
             model_name=llm_config["model_name"],
             api_key=llm_config["api_key"],
             base_url=llm_config["base_url"],
-            temperature=0.7,
-            max_tokens=512,
+            temperature=self.test_gen_temperature,
+            max_tokens=self.test_gen_initial_max_tokens,
             token_tracker=token_tracker,
         )
 
@@ -368,7 +372,7 @@ class TestSetGenerator:
         )
         return test_set
 
-    def _resolve_parsed_dir(self, meal_config: MealConfig) -> Optional[Path]:
+    def _resolve_parsed_dir(self, meal_config: MealConfig) -> Path | None:
         """Resolve the parsed artifacts directory for a meal.
 
         Tries the ArtifactCache first (based on meal data_id), then falls
@@ -396,7 +400,7 @@ class TestSetGenerator:
 
         return None
 
-    def _resolve_chunks_dir(self, meal_config: MealConfig) -> Optional[Path]:
+    def _resolve_chunks_dir(self, meal_config: MealConfig) -> Path | None:
         """Resolve the chunks artifacts directory for a meal.
 
         Tries the ArtifactCache first (based on meal data_id and chunker
@@ -427,7 +431,7 @@ class TestSetGenerator:
 
         return None
 
-    def _load_meal_chunks(self, meal_config) -> List[Dict[str, Any]]:
+    def _load_meal_chunks(self, meal_config) -> list[dict[str, Any]]:
         """Load chunk data from JSONL files associated with a meal's PDF files.
 
         Resolves the chunks directory via the ArtifactCache first, falling
@@ -461,7 +465,7 @@ class TestSetGenerator:
                 if source_filter and jsonl_md_path not in source_filter:
                     continue
 
-                with open(jsonl_file, "r", encoding="utf-8") as f:
+                with open(jsonl_file, encoding="utf-8") as f:
                     for line in f:
                         line = line.strip()
                         if line:
@@ -474,8 +478,8 @@ class TestSetGenerator:
         return all_chunks
 
     def _group_chunks_by_source(
-        self, chunks: List[Dict]
-    ) -> Dict[str, List[Dict]]:
+        self, chunks: list[dict]
+    ) -> dict[str, list[dict]]:
         """Group chunks by their source file metadata.
 
         Chunks within each group are sorted by chunk_index in ascending order.
@@ -503,10 +507,10 @@ class TestSetGenerator:
 
     def _select_chunks(
         self,
-        grouped_chunks: Dict[str, List[Dict]],
+        grouped_chunks: dict[str, list[dict]],
         strategy: str,
         num_questions: int,
-    ) -> List[List[Dict]]:
+    ) -> list[list[dict]]:
         """Select chunk groups for question generation based on the strategy.
 
         Args:
@@ -534,8 +538,8 @@ class TestSetGenerator:
             raise ValueError(f"Unknown strategy: {strategy}")
 
     def _select_chunks_for_factual(
-        self, grouped_chunks: Dict[str, List[Dict]], num_questions: int
-    ) -> List[List[Dict]]:
+        self, grouped_chunks: dict[str, list[dict]], num_questions: int
+    ) -> list[list[dict]]:
         """Select individual chunks randomly for factual question generation.
 
         Args:
@@ -558,8 +562,8 @@ class TestSetGenerator:
         return [[c] for c in selected]
 
     def _select_chunks_for_boundary(
-        self, grouped_chunks: Dict[str, List[Dict]], num_questions: int
-    ) -> List[List[Dict]]:
+        self, grouped_chunks: dict[str, list[dict]], num_questions: int
+    ) -> list[list[dict]]:
         """Select adjacent chunk pairs for boundary question generation.
 
         Args:
@@ -586,8 +590,8 @@ class TestSetGenerator:
         return random.sample(pairs, min(num_questions, len(pairs)))
 
     def _select_chunks_for_multi_hop(
-        self, grouped_chunks: Dict[str, List[Dict]], num_questions: int
-    ) -> List[List[Dict]]:
+        self, grouped_chunks: dict[str, list[dict]], num_questions: int
+    ) -> list[list[dict]]:
         """Select non-adjacent chunk pairs for multi-hop question generation.
 
         Args:
@@ -614,10 +618,10 @@ class TestSetGenerator:
 
     def _generate_question_with_llm(
         self,
-        chunks: List[Dict],
+        chunks: list[dict],
         strategy: str,
         generator,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Generate a single Q&A pair from chunks using an LLM.
 
         Retries up to max_retries times on failure or unparseable responses.
@@ -675,7 +679,7 @@ class TestSetGenerator:
 
         return None
 
-    def _parse_llm_response(self, response: str) -> Optional[Dict[str, Any]]:
+    def _parse_llm_response(self, response: str) -> dict[str, Any] | None:
         """Parse an LLM response string into a Q&A dictionary.
 
         Handles responses wrapped in markdown code blocks and extracts the
@@ -717,7 +721,7 @@ class TestSetGenerator:
             return None
 
     def _save_test_set(
-        self, meal_name: str, test_set: Dict[str, Any], name: str
+        self, meal_name: str, test_set: dict[str, Any], name: str
     ) -> Path:
         """Save a test set to a JSON file in the meal's test_sets directory.
 
@@ -739,10 +743,10 @@ class TestSetGenerator:
         meal_name: str,
         num_questions: int = None,
         name: str = None,
-        type_distribution: Optional[Dict[str, float]] = None,
+        type_distribution: dict[str, float] | None = None,
         llm_preset: str = "default",
-        token_tracker: Optional[Any] = None,
-    ) -> Dict[str, Any]:
+        token_tracker: Any | None = None,
+    ) -> dict[str, Any]:
         """Generate questions based on full MD documents.
 
         This method generates questions from complete documents rather than
@@ -808,8 +812,8 @@ class TestSetGenerator:
             model_name=llm_config["model_name"],
             api_key=llm_config["api_key"],
             base_url=llm_config["base_url"],
-            temperature=0.7,
-            max_tokens=1024,
+            temperature=self.test_gen_temperature,
+            max_tokens=self.test_gen_max_tokens,
             token_tracker=token_tracker,
         )
 
@@ -967,11 +971,11 @@ class TestSetGenerator:
     def supplement_document_based_questions(
         self,
         meal_name: str,
-        existing_test_set: Dict[str, Any],
+        existing_test_set: dict[str, Any],
         target_count: int,
         llm_preset: str = "default",
-        token_tracker: Optional[Any] = None,
-    ) -> Dict[str, Any]:
+        token_tracker: Any | None = None,
+    ) -> dict[str, Any]:
         """Supplement an existing test set with additional questions.
 
         Generates only the deficit number of questions and appends them to
@@ -1018,8 +1022,8 @@ class TestSetGenerator:
             model_name=llm_config["model_name"],
             api_key=llm_config["api_key"],
             base_url=llm_config["base_url"],
-            temperature=0.7,
-            max_tokens=1024,
+            temperature=self.test_gen_temperature,
+            max_tokens=self.test_gen_supplement_max_tokens,
             token_tracker=token_tracker,
         )
 
@@ -1123,7 +1127,7 @@ class TestSetGenerator:
 
     def _load_full_documents(
         self, meal_config: MealConfig
-    ) -> Dict[str, Dict[str, str]]:
+    ) -> dict[str, dict[str, str]]:
         """Load full MD documents associated with a meal's PDF files.
 
         Resolves the parsed directory via the ArtifactCache first, falling
@@ -1157,7 +1161,7 @@ class TestSetGenerator:
                 if source_filter and rel_path not in source_filter:
                     continue
 
-                with open(md_file, "r", encoding="utf-8") as f:
+                with open(md_file, encoding="utf-8") as f:
                     content = f.read()
 
                 doc_name = md_file.stem
@@ -1174,8 +1178,8 @@ class TestSetGenerator:
     def _calculate_question_distribution(
         self,
         num_questions: int,
-        type_distribution: Dict[str, float],
-    ) -> Dict[str, int]:
+        type_distribution: dict[str, float],
+    ) -> dict[str, int]:
         """Calculate the number of questions for each type.
 
         Args:
@@ -1206,9 +1210,9 @@ class TestSetGenerator:
 
     def _distribute_questions_across_docs(
         self,
-        type_counts: Dict[str, int],
-        doc_names: List[str],
-    ) -> Dict[str, List[str]]:
+        type_counts: dict[str, int],
+        doc_names: list[str],
+    ) -> dict[str, list[str]]:
         """Distribute question types across documents using round-robin.
 
         Creates a flat list of question types from type_counts, then assigns
@@ -1228,7 +1232,7 @@ class TestSetGenerator:
             question_plan.extend([q_type] * count)
 
         num_docs = len(doc_names)
-        doc_question_plans: Dict[str, List[str]] = {
+        doc_question_plans: dict[str, list[str]] = {
             name: [] for name in doc_names
         }
         for i, q_type in enumerate(question_plan):
@@ -1242,7 +1246,7 @@ class TestSetGenerator:
         document_content: str,
         question_type: str,
         generator,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Generate a single question from a document using an LLM.
 
         Args:
@@ -1290,7 +1294,7 @@ class TestSetGenerator:
 
     def _parse_document_question_response(
         self, response: str
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Parse an LLM response for document-based question generation.
 
         Args:
@@ -1331,7 +1335,7 @@ class TestSetGenerator:
             logger.debug(f"Failed to parse LLM response as JSON: {str(e)}")
             return None
 
-    def _validate_question_quality(self, question_data: Dict) -> bool:
+    def _validate_question_quality(self, question_data: dict) -> bool:
         """Validate the quality of a generated question.
 
         Args:
@@ -1360,7 +1364,7 @@ class TestSetGenerator:
 
         return True
 
-    def _check_authenticity_rules(self, question: str) -> Dict[str, Any]:
+    def _check_authenticity_rules(self, question: str) -> dict[str, Any]:
         """Check if a question follows authenticity rules.
 
         Args:
@@ -1404,8 +1408,8 @@ class TestSetGenerator:
         }
 
     def _calculate_quality_metrics(
-        self, questions: List[Dict]
-    ) -> Dict[str, Any]:
+        self, questions: list[dict]
+    ) -> dict[str, Any]:
         """Calculate quality metrics for generated questions.
 
         Args:
@@ -1444,7 +1448,7 @@ class TestSetGenerator:
         source_path: str,
         chunks_dir: str = "data/chunks",
         adjacent_tolerance: int = 1,
-    ) -> List[str]:
+    ) -> list[str]:
         """Locate chunk IDs that contain information relevant to the answer.
 
         Scans JSONL files in chunks_dir to find chunks belonging to the
@@ -1478,12 +1482,12 @@ class TestSetGenerator:
 
         normalized_source = source_path.replace("\\", "/")
 
-        doc_chunks: List[Dict[str, Any]] = []
+        doc_chunks: list[dict[str, Any]] = []
         jsonl_files = list(chunks_path.rglob("*.jsonl"))
 
         for jsonl_file in jsonl_files:
             try:
-                with open(jsonl_file, "r", encoding="utf-8") as f:
+                with open(jsonl_file, encoding="utf-8") as f:
                     for line in f:
                         line = line.strip()
                         if not line:
@@ -1541,7 +1545,7 @@ class TestSetGenerator:
 
         return result
 
-    def _extract_key_sentences(self, answer: str) -> List[str]:
+    def _extract_key_sentences(self, answer: str) -> list[str]:
         """Extract key sentences from an answer text.
 
         Splits the answer by sentence delimiters and filters for sentences
@@ -1576,7 +1580,7 @@ class TestSetGenerator:
 
         return key_sentences
 
-    def _extract_key_terms(self, answer: str) -> List[str]:
+    def _extract_key_terms(self, answer: str) -> list[str]:
         """Extract key terms from an answer text for chunk matching.
 
         Identifies meaningful terms including numbers with units, proper
@@ -1588,7 +1592,7 @@ class TestSetGenerator:
         Returns:
             List of key term strings.
         """
-        terms: List[str] = []
+        terms: list[str] = []
 
         number_patterns = re.findall(
             r'\d+\.?\d*[万亿千百%％]?', answer
@@ -1613,8 +1617,8 @@ class TestSetGenerator:
     def _chunk_matches_answer(
         self,
         chunk_text: str,
-        key_sentences: List[str],
-        key_terms: List[str],
+        key_sentences: list[str],
+        key_terms: list[str],
         term_threshold: int = 2,
         overlap_threshold: float = 0.5,
     ) -> bool:
@@ -1652,7 +1656,7 @@ class TestSetGenerator:
             for start in range(0, len(chunk_text) - window_size + 1):
                 substring = chunk_text[start:start + len(sentence)]
                 common = sum(
-                    1 for a, b in zip(sentence, substring) if a == b
+                    1 for a, b in zip(sentence, substring, strict=False) if a == b
                 )
                 ratio = common / len(sentence)
                 if ratio > overlap_chars:
