@@ -81,7 +81,7 @@ chunker:
   output_dir: "data/chunks"
   strategy: "fixed"          # Chunking strategy: "fixed" or "semantic"
   chunk_size: 512            # Max tokens per chunk
-  chunk_overlap: 0           # Overlap tokens between chunks (fixed strategy)
+  chunk_overlap: 64           # Overlap tokens between chunks (fixed strategy)
   semantic:
     similarity_threshold: 0.5    # Cosine similarity threshold for breakpoints
     breakpoint_percentile: null  # Use percentile-based threshold (null = disabled)
