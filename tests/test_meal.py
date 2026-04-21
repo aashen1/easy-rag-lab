@@ -157,6 +157,32 @@ class TestConfigHashes:
         assert h1 == h2
         assert len(h1) == 8
 
+    def test_parser_config_hash_different_options(self):
+        config_a = {"algorithm": "pymupdf4llm", "options": {"page_chunks": True}}
+        config_b = {"algorithm": "pymupdf4llm", "options": {"page_chunks": False}}
+        h_a = compute_parser_config_hash(config_a)
+        h_b = compute_parser_config_hash(config_b)
+        assert h_a != h_b
+
+    def test_parser_config_hash_same_options(self):
+        config_a = {"algorithm": "pymupdf4llm", "options": {"page_chunks": True}}
+        config_b = {"algorithm": "pymupdf4llm", "options": {"page_chunks": True}}
+        h_a = compute_parser_config_hash(config_a)
+        h_b = compute_parser_config_hash(config_b)
+        assert h_a == h_b
+
+    def test_parser_config_hash_empty_options_backward_compat(self):
+        config = {"algorithm": "pymupdf4llm"}
+        h = compute_parser_config_hash(config)
+        assert len(h) == 8
+
+    def test_parser_config_hash_options_from_pymupdf4llm_key(self):
+        config = {"algorithm": "pymupdf4llm", "pymupdf4llm": {"page_chunks": True}}
+        h1 = compute_parser_config_hash(config)
+        config_explicit = {"algorithm": "pymupdf4llm", "options": {"page_chunks": True}}
+        h2 = compute_parser_config_hash(config_explicit)
+        assert h1 == h2
+
     def test_chunker_config_hash_changes_with_params(self):
         config_a = {"chunk_size": 512, "chunk_overlap": 0, "encoding": "cl100k_base"}
         config_b = {"chunk_size": 512, "chunk_overlap": 50, "encoding": "cl100k_base"}
@@ -672,3 +698,19 @@ class TestMealManager:
         assert len(hashes["parser"]) == 8
         assert len(hashes["chunker"]) == 8
         assert len(hashes["embedding"]) == 8
+
+    def test_config_snapshot_includes_parser_options(self, temp_dirs):
+        temp_dirs["parser"]["pymupdf4llm"] = {"page_chunks": True}
+        manager = MealManager(temp_dirs)
+        snapshot, hashes = manager._build_config_snapshot_and_hashes()
+
+        assert "options" in snapshot["parser"]
+        assert snapshot["parser"]["options"] == {"page_chunks": True}
+        assert len(hashes["parser"]) == 8
+
+    def test_config_snapshot_parser_options_default_empty(self, temp_dirs):
+        manager = MealManager(temp_dirs)
+        snapshot, _ = manager._build_config_snapshot_and_hashes()
+
+        assert "options" in snapshot["parser"]
+        assert snapshot["parser"]["options"] == {}

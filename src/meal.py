@@ -118,12 +118,17 @@ def compute_parser_config_hash(parser_config: dict) -> str:
     """Compute a short hash of the parser configuration.
 
     Args:
-        parser_config: Parser configuration dictionary.
+        parser_config: Parser configuration dictionary. May contain
+            ``algorithm``, ``options``, or a nested key like ``pymupdf4llm``
+            that holds algorithm-specific options.
 
     Returns:
         First 8 characters of the SHA-256 hex digest.
     """
-    relevant = {"algorithm": parser_config.get("algorithm", "pymupdf4llm")}
+    relevant = {
+        "algorithm": parser_config.get("algorithm", "pymupdf4llm"),
+        "options": parser_config.get("options", parser_config.get("pymupdf4llm", {})),
+    }
     return hashlib.sha256(json.dumps(relevant, sort_keys=True).encode()).hexdigest()[:8]
 
 
@@ -502,6 +507,7 @@ class MealManager:
             "parser": {
                 "algorithm": parser_config.get("algorithm", "pymupdf4llm"),
                 "input_dir": parser_config.get("input_dir", "data/raw"),
+                "options": parser_config.get("pymupdf4llm", {}),
             },
             "chunker": {
                 "chunk_size": chunker_config.get("chunk_size", 512),
