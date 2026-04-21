@@ -167,8 +167,8 @@ class TestBuiltinEvaluator:
             answer="Revenue is $1M.",
             contexts=["doc1.pdf", "doc2.pdf"],
             expected_sources=["doc1.pdf"],
-            chunk_ids=["doc1_001", "doc2_003"],
-            expected_chunks=["doc1_001", "doc1_002"],
+            chunk_ids=["doc1::chunk::001", "doc2::chunk::003"],
+            expected_chunks=["doc1::chunk::001", "doc1::chunk::002"],
             retrieval_metrics=["chunk_hit_rate", "chunk_mrr", "chunk_ndcg"],
         )
 
@@ -353,8 +353,8 @@ class TestBuiltinEvaluator:
                 "answer": "Revenue is $1M.",
                 "contexts": ["doc1.pdf", "doc2.pdf"],
                 "expected_sources": ["doc1.pdf"],
-                "chunk_ids": ["doc1_001", "doc2_003"],
-                "expected_chunks": ["doc1_001"],
+                "chunk_ids": ["doc1::chunk::001", "doc2::chunk::003"],
+                "expected_chunks": ["doc1::chunk::001"],
                 "expect_retrieval": True,
             },
             {

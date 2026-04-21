@@ -215,8 +215,8 @@ class TestLoadMealChunks:
         reports_dir.mkdir()
 
         chunk_data = [
-            {"chunk_id": "report_0_000", "text": "chunk text 0", "metadata": {"source": "reports/report_0.md", "chunk_index": 0}},
-            {"chunk_id": "report_0_001", "text": "chunk text 1", "metadata": {"source": "reports/report_0.md", "chunk_index": 1}},
+            {"chunk_id": "report_0::chunk::000", "text": "chunk text 0", "metadata": {"source": "reports/report_0.md", "chunk_index": 0}},
+            {"chunk_id": "report_0::chunk::001", "text": "chunk text 1", "metadata": {"source": "reports/report_0.md", "chunk_index": 1}},
         ]
         jsonl_file = reports_dir / "report_0.jsonl"
         with open(jsonl_file, "w", encoding="utf-8") as f:
@@ -224,7 +224,7 @@ class TestLoadMealChunks:
                 f.write(json.dumps(chunk, ensure_ascii=False) + "\n")
 
         other_data = [
-            {"chunk_id": "other_000", "text": "other chunk", "metadata": {"source": "reports/other.md", "chunk_index": 0}},
+            {"chunk_id": "other::chunk::000", "text": "other chunk", "metadata": {"source": "reports/other.md", "chunk_index": 0}},
         ]
         other_file = reports_dir / "other.jsonl"
         with open(other_file, "w", encoding="utf-8") as f:
