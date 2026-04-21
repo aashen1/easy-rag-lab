@@ -6,11 +6,15 @@ from loguru import logger
 from src.utils import detect_document_category, ensure_dir
 
 
-def parse_pdf(pdf_path: str) -> str:
+def parse_pdf(pdf_path: str, **kwargs) -> str:
     """Parse a single PDF file and convert its content to Markdown text.
 
     Args:
         pdf_path: Path to the PDF file.
+        **kwargs: Additional keyword arguments passed to
+            ``pymupdf4llm.to_markdown``. Common options include
+            ``header``, ``footer``, ``page_separators``,
+            ``ignore_images``, and ``write_images``.
 
     Returns:
         Markdown-formatted string extracted from the PDF.
@@ -34,7 +38,7 @@ def parse_pdf(pdf_path: str) -> str:
 
     try:
         logger.info(f"Parsing PDF: {pdf_path}")
-        md_text = pymupdf4llm.to_markdown(str(pdf_file))
+        md_text = pymupdf4llm.to_markdown(str(pdf_file), **kwargs)
         logger.success(f"Successfully parsed PDF: {pdf_path}")
         return md_text
     except Exception as e:
@@ -49,6 +53,7 @@ def parse_all_pdfs(
     category_mapping: dict[str, str] | None = None,
     force: bool = False,
     pdf_files: list[Path] | None = None,
+    parser_options: dict[str, any] | None = None,
 ) -> list[dict[str, str]]:
     """Parse all PDF files in a directory and save their Markdown output.
 
@@ -64,6 +69,9 @@ def parse_all_pdfs(
         force: If True, re-parse files even if output already exists.
         pdf_files: Optional explicit list of PDF paths to parse. If None,
             all PDFs under input_dir are discovered automatically.
+        parser_options: Optional dict of keyword arguments passed to
+            ``pymupdf4llm.to_markdown`` (e.g. header, footer,
+            page_separators, ignore_images).
 
     Returns:
         List of result dictionaries, each containing source, output,
@@ -113,7 +121,7 @@ def parse_all_pdfs(
                 )
                 continue
 
-            md_text = parse_pdf(str(pdf_file))
+            md_text = parse_pdf(str(pdf_file), **(parser_options or {}))
 
             output_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -166,6 +174,7 @@ if __name__ == "__main__":
     results = parse_all_pdfs(
         input_dir=parser_config["input_dir"],
         output_dir=parser_config["output_dir"],
+        parser_options=parser_config.get("pymupdf4llm"),
     )
 
     for result in results:

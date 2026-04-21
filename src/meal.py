@@ -630,6 +630,7 @@ class MealManager:
                 output_dir=str(parsed_dir),
                 force=True,
                 pdf_files=sampled_pdfs,
+                parser_options=parser_config.get("pymupdf4llm"),
             )
 
         expected_jsonl_names = [
@@ -1073,6 +1074,7 @@ class MealManager:
             output_dir=str(parsed_dir),
             force=True,
             pdf_files=sampled_pdfs,
+            parser_options=parser_config.get("pymupdf4llm"),
         )
 
         build_chunks_if_needed(parsed_dir, chunks_dir, chunker_config)
