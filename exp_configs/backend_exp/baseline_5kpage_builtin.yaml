@@ -1,0 +1,45 @@
+name: "baseline_5kpage_builtin"
+description: "5k页PDF基线 - 仅builtin后端，传统检索指标+自研生成指标"
+
+data:
+  meal: "5kpage"
+  create_if_missing:
+    sample_pages: 5000
+    seed: 3388
+
+test_sets:
+  - name: "baseline_test_5kpage"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 100
+
+variants:
+  - name: "baseline"
+    description: "基线配置 - 纯向量检索(chunk_size: 512, chunk_overlap: 0)"
+    config_overrides: {}
+
+evaluation:
+  backends: ["builtin"]
+  llm_preset: "default"
+  llm_report: true
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+      - "chunk_hit_rate"
+      - "chunk_mrr"
+      - "chunk_ndcg"
+      - "dedup_hit_rate"
+      - "dedup_mrr"
+      - "dedup_ndcg"
+      - "context_precision"
+      - "context_recall"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+
+llm:
+  question_generation: "default"
+  answering: "default"

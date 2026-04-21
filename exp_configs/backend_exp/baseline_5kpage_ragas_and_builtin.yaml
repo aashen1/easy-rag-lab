@@ -1,0 +1,40 @@
+name: "baseline_5kpage_ragas_and_builtin"
+description: "5k页PDF基线 - 双后端(builtin+ragas)，完整指标交叉验证"
+
+data:
+  meal: "5kpage"
+  create_if_missing:
+    sample_pages: 5000
+    seed: 3388
+
+test_sets:
+  - name: "baseline_test_5kpage"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 100
+
+variants:
+  - name: "baseline"
+    description: "基线配置 - 纯向量检索(chunk_size: 512, chunk_overlap: 0)"
+    config_overrides: {}
+
+evaluation:
+  backends: ["builtin", "ragas"]
+  llm_preset: "default"
+  llm_report: true
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+      - "context_precision"
+      - "context_recall"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+      - "answer_correctness"
+
+llm:
+  question_generation: "default"
+  answering: "default"
