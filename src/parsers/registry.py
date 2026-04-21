@@ -51,11 +51,11 @@ class ParserRegistry:
             An instance of the requested parser.
 
         Raises:
-            KeyError: If *name* is not registered.
+            ValueError: If *name* is not registered.
             ImportError: If the parser module cannot be imported.
         """
         if name not in cls._parsers:
-            raise KeyError(
+            raise ValueError(
                 f"Parser '{name}' is not registered. Available: {cls.list_names()}"
             )
 
