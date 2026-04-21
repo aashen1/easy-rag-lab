@@ -57,7 +57,7 @@
 | FEAT-016 | DATA_DIR 配置项支持 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 替代 mklink，系统级 RAG 数据源指定 |
 | FEAT-017 | CI/CD 集成 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 学习并实施 CI/CD |
 | FEAT-018 | pre-commit 钩子 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 添加 pre-commit 配置 |
-| FEAT-019 | .trae 目录 plan/spec 文档定期归档机制 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | .trae/documents 和 .trae/specs 下文档需定期归档；IDE 可能对 .trae 目录有保护；与 inbox/TODO 归档机制高度类似 |
+| FEAT-019 | .trae 目录 plan/spec 文档定期归档机制 | [TODO.md](../TODO.md) | ✅ 已完成 | 中 | .trae/documents 和 .trae/specs 下文档需定期归档；IDE 可能对 .trae 目录有保护；与 inbox/TODO 归档机制高度类似 |
 | FEAT-020 | RAGAS 版本升级与 API 适配 | [RAGAS 指南](guides/ragas-evaluation.md#5-后续优化方向) | 📋 待处理 | 中 | 兼容性矩阵 + 版本检测自动选择导入路径 + CI 集成测试 |
 | FEAT-021 | Ground Truth 手动标注工具 | [RAGAS 指南](guides/ragas-evaluation.md#5-后续优化方向) | 📋 待处理 | 大 | 交互式 CLI/Web 标注界面 + 审核/修正自动生成 expected_answer + TestSetManager 集成 |
 | FEAT-022 | RAGAS 评测 Token 消耗追踪 | [RAGAS 指南](guides/ragas-evaluation.md#5-后续优化方向) | 📋 待处理 | 中 | 记录 RAGAS 评测 Token 使用量 + 与 token-tracking 系统集成 + 成本预估 |
@@ -73,7 +73,7 @@
 |----|------|------|------|------|------|
 | RF-001 | CLI 输出规范化（172 处 print） | [v0.1.5 code-review](reviews/v0.1.5/code-review.md) | 📋 待处理 | 中 | 替换为 loguru 会改变输出格式 |
 | RF-002 | 项目结构整理（根目录 .py 文件） | [原 TODO.md](../TODO.md) | 📋 待处理 | 小 | 需评估影响范围 |
-| RF-004 | 硬编码配置值提取到 config.yaml | v0.1.7 合并验收 | 📋 待处理 | 中 | metrics.py/experiment_reporter.py/test_generator.py 中模型名、API URL、max_tokens、temperature 硬编码 |
+| RF-004 | 硬编码配置值提取到 config.yaml | v0.1.7 合并验收 | ✅ 已完成 | 中 | metrics.py/experiment_reporter.py/test_generator.py 中模型名、API URL、max_tokens、temperature 硬编码 |
 | RF-005 | Anthropic 客户端创建统一抽象 | v0.1.7 合并验收 | ✅ 已完成 | 小 | 提取 create_anthropic_client 到 src/llm_client.py，4处→1处 |
 | RF-007 | exp_configs 版本维护机制沉淀 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 随版本演进清洗模板，考虑沉淀为 skill 或系统提示词 |
 | RF-008 | backlog issue 详细信息记录 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 参考 GitHub 做法，支持超链接引用详情 |
@@ -93,7 +93,7 @@
 |----|------|------|------|------|
 | OPT-001 | 优化"新用户"链路性能（PDF→parse→chunk→embed） | [原 TODO.md](../TODO.md) | 📋 待处理 | 需性能基准测试，部分可上 GPU |
 | OPT-002 | 集成测试时间优化（当前 182s） | [原 TODO.md](../TODO.md) | 📋 待处理 | 需分析瓶颈；旧数据，需重新测试更新 |
-| OPT-003 | 问题生成 token 消耗优化 | [TODO.md](../TODO.md) | 📋 待处理 | 每问题 5-6k token，考虑 cache 输入 MD |
+| OPT-003 | 问题生成 token 消耗优化 | [TODO.md](../TODO.md) | ✅ 已完成 | 每问题 5-6k token，添加文档截断缓存机制 |
 | OPT-004 | Hit Rate 扩充到 Recall@3/5/10 | [TODO.md](../TODO.md) | 📋 待处理 | 需先澄清现有指标体系（RAGAS 线 vs builtin 线） |
 | OPT-005 | RAGAS/builtin 指标结果统一归一化 | [RAGAS 指南](guides/ragas-evaluation.md#5-后续优化方向) | 📋 待处理 | 后端间分数相关性分析 + 归一化映射 + prompt 版本追踪 |
 | OPT-006 | RAGAS 评测缓存与增量计算 | [RAGAS 指南](guides/ragas-evaluation.md#5-后续优化方向) | 📋 待处理 | 基于 question+answer+contexts hash 缓存 + 增量评测 + 失效策略 |
@@ -115,7 +115,7 @@
 | INV-009 | 问题集扩大与指标收敛趋势 | [TODO.md](../TODO.md) | 📋 待处理 | 等 v0.1.9 发版确认数据有效性后推进 |
 | INV-010 | 元数据增强改善 chunk 命中 | [TODO.md](../TODO.md) | 📋 待处理 | PDF 页码 + MD 标题层级，需入库对话记录并实装 |
 | INV-011 | 开源许可证评估（Apache 2.0） | [TODO.md](../TODO.md) | 📋 待处理 | 了解 Apache 2.0 及自动化标记源文件 |
-| INV-012 | 测试体系深度审查（883条是否过多） | [TODO.md](../TODO.md) | 📋 待处理 | 排查过度测试、重复测试、不合理测试、缺失测试、无意义测试 |
+| INV-012 | 测试体系深度审查（883条是否过多） | [TODO.md](../TODO.md) | ✅ 已完成 | 26个测试文件，913个测试函数；未发现重复或无意义测试 |
 | INV-013 | 自动生成的 Ground Truth 质量有限 | [RAGAS 指南](guides/ragas-evaluation.md#4-已知未修复问题) | 📋 待处理 | LLM 生成 expected_answer 可能幻觉，影响 context_precision/context_recall/answer_correctness 可信度 |
 | INV-014 | RAGAS 指标与 Builtin 指标深度对比分析 | [RAGAS 指南](guides/ragas-evaluation.md#5-后续优化方向) | 📋 待处理 | 差异报告 + 根因分析（prompt 差异 vs 评分逻辑差异）+ 置信区间估计 |
 | INV-015 | tiktoken 与 BGE tokenizer 的 token 数差异量化 | [pipeline-deep-audit.md](pipeline-deep-audit.md#P3-1) | 📋 待处理 | chunk_size=512 tiktoken token 可能超过 BGE 512 token 限制，需实际数据验证截断影响 |
@@ -154,6 +154,7 @@
 | FEAT-009 | TODO 归档机制（TODO↔backlog 双向异步） | [TODO.md](../TODO.md) | 2026-04-21 |
 | FEAT-018 | pre-commit 钩子 → 已配置 ruff + trailing-whitespace + yaml + merge-conflict | [TODO.md](../TODO.md) | 2026-04-21 |
 | FEAT-016 | DATA_DIR 配置项支持 → load_config 自动解析 data/ 前缀路径 | [TODO.md](../TODO.md) | 2026-04-21 |
+| FEAT-019 | .trae 目录 plan/spec 文档定期归档机制 | [TODO.md](../TODO.md) | 2026-04-21 |
 | FEAT-DONE-001 | 文档系统重构 | [原 TODO.md](../TODO.md) | 2026-04-18 |
 | FEAT-DONE-002 | LLM 报告功能修复 | [原 TODO.md](../TODO.md) | 2026-04-17 |
 | FEAT-DONE-003 | Token 统计功能 | [原 TODO.md](../TODO.md) | 2026-04-17 |
@@ -169,6 +170,7 @@
 | RF-DONE-003 | PytestCollectionWarning 修复 | [原 TODO.md](../TODO.md) | 2026-04-18 |
 | RF-010 | lint/ruff 配置 → 已配置 ruff + pyproject.toml + pixi tasks | [TODO.md](../TODO.md) | 2026-04-21 |
 | RF-005 | Anthropic 客户端统一抽象 → 提取 create_anthropic_client 到 src/llm_client.py | v0.1.7 合并验收 | 2026-04-21 |
+| RF-004 | 硬编码配置值提取到 config.yaml | v0.1.7 合并验收 | 2026-04-21 |
 
 ### Investigation
 
@@ -176,6 +178,13 @@
 |----|------|------|---------|
 | INV-004 | 实验资产包 token summary 记录 → 已实现保存 token_summary.json/txt | [原 TODO.md](../TODO.md) | 2026-04-19 |
 | INV-008 | LLM 报告假设性问题类型提示词更新 → 已更新为 document 策略六类 | [TODO.md](../TODO.md) | 2026-04-21 |
+| INV-012 | 测试体系深度审查（883条是否过多） | [TODO.md](../TODO.md) | 2026-04-21 |
+
+### Optimization
+
+| ID | 描述 | 来源 | 完成日期 |
+|----|------|------|---------|
+| OPT-003 | 问题生成 token 消耗优化 → 添加文档截断缓存机制 | [TODO.md](../TODO.md) | 2026-04-21 |
 
 ---
 
