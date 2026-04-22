@@ -324,6 +324,7 @@ def build_chunks_if_needed(
             encoding_name=encoding_name,
             source_filter=source_filter,
             model_name=model_name,
+            cross_page_overlap=chunker_config.get("cross_page_overlap", 0),
         )
     else:
         from src.chunker import process_parsed_files

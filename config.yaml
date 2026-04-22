@@ -107,6 +107,7 @@ chunker:
   encoding: "bge"            # Tokenizer encoding: "bge" (align with embedder) or "cl100k_base" (tiktoken)
   chunk_size: 512            # Max tokens per chunk
   chunk_overlap: 64           # Overlap tokens between chunks (fixed strategy)
+  cross_page_overlap: 0       # Tokens from previous page prepended to current page (page_aware_fixed only)
   semantic:
     similarity_threshold: 0.5    # Cosine similarity threshold for breakpoints
     breakpoint_percentile: null  # Use percentile-based threshold (null = disabled)

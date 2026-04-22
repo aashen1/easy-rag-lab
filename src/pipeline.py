@@ -230,6 +230,7 @@ class RAGPipeline:
                 encoding_name=chunker_encoding,
                 source_filter=source_filter_pages,
                 model_name=embedding_model_name,
+                cross_page_overlap=chunker_config.get("cross_page_overlap", 0),
             )
         elif chunker_strategy == "semantic":
             semantic_config = chunker_config.get("semantic", {})

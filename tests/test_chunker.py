@@ -432,6 +432,166 @@ class TestChunkTextPageAware:
             )
 
 
+class TestChunkTextPageAwareCrossPageOverlap:
+    def _make_multi_page_chunks(self):
+        return [
+            {
+                "text": "Alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu. " * 10,
+                "metadata": {"page_number": 1, "page_count": 3, "file_path": "test.pdf"},
+                "toc_items": [],
+                "tables": [],
+            },
+            {
+                "text": "Nu xi omicron pi rho sigma tau upsilon phi chi psi omega end. " * 10,
+                "metadata": {"page_number": 2, "page_count": 3, "file_path": "test.pdf"},
+                "toc_items": [],
+                "tables": [],
+            },
+            {
+                "text": "One two three four five six seven eight nine ten eleven twelve. " * 10,
+                "metadata": {"page_number": 3, "page_count": 3, "file_path": "test.pdf"},
+                "toc_items": [],
+                "tables": [],
+            },
+        ]
+
+    def test_cross_page_overlap_zero_backward_compatible(self):
+        pages = self._make_multi_page_chunks()
+        result_no_cpo = chunk_text_page_aware(
+            pages, source_name="test", chunk_size=50, cross_page_overlap=0
+        )
+        result_default = chunk_text_page_aware(
+            pages, source_name="test", chunk_size=50
+        )
+        assert len(result_no_cpo) == len(result_default)
+        for c1, c2 in zip(result_no_cpo, result_default, strict=False):
+            assert c1["text"] == c2["text"]
+            assert c1["metadata"]["page_number"] == c2["metadata"]["page_number"]
+
+    def test_cross_page_overlap_zero_no_cross_page_metadata(self):
+        pages = self._make_multi_page_chunks()
+        result = chunk_text_page_aware(
+            pages, source_name="test", chunk_size=50, cross_page_overlap=0
+        )
+        for chunk in result:
+            assert "cross_page" not in chunk["metadata"]
+            assert "overlap_from_page" not in chunk["metadata"]
+
+    def test_cross_page_overlap_positive_first_page_no_overlap(self):
+        pages = self._make_multi_page_chunks()
+        result = chunk_text_page_aware(
+            pages, source_name="test", chunk_size=50, cross_page_overlap=20
+        )
+        page1_chunks = [c for c in result if c["metadata"]["page_number"] == 1]
+        for chunk in page1_chunks:
+            assert "cross_page" not in chunk["metadata"]
+
+    def test_cross_page_overlap_positive_second_page_has_overlap(self):
+        pages = self._make_multi_page_chunks()
+        result = chunk_text_page_aware(
+            pages, source_name="test", chunk_size=50, cross_page_overlap=20
+        )
+        page2_chunks = [c for c in result if c["metadata"]["page_number"] == 2]
+        cross_page_chunks = [c for c in page2_chunks if c["metadata"].get("cross_page")]
+        assert len(cross_page_chunks) >= 1
+        for chunk in cross_page_chunks:
+            assert chunk["metadata"]["cross_page"] is True
+            assert chunk["metadata"]["overlap_from_page"] == 1
+
+    def test_cross_page_overlap_positive_third_page_overlap_from_page_two(self):
+        pages = self._make_multi_page_chunks()
+        result = chunk_text_page_aware(
+            pages, source_name="test", chunk_size=50, cross_page_overlap=20
+        )
+        page3_chunks = [c for c in result if c["metadata"]["page_number"] == 3]
+        cross_page_chunks = [c for c in page3_chunks if c["metadata"].get("cross_page")]
+        assert len(cross_page_chunks) >= 1
+        for chunk in cross_page_chunks:
+            assert chunk["metadata"]["overlap_from_page"] == 2
+
+    def test_cross_page_overlap_tail_tokens_appear_in_next_page(self):
+        page1_text = "UniqueAlphaWord " * 30
+        page2_text = "UniqueBetaWord " * 30
+        pages = [
+            {
+                "text": page1_text,
+                "metadata": {"page_number": 1, "page_count": 2, "file_path": "test.pdf"},
+                "toc_items": [],
+                "tables": [],
+            },
+            {
+                "text": page2_text,
+                "metadata": {"page_number": 2, "page_count": 2, "file_path": "test.pdf"},
+                "toc_items": [],
+                "tables": [],
+            },
+        ]
+        result = chunk_text_page_aware(
+            pages, source_name="test", chunk_size=100, cross_page_overlap=20
+        )
+        page2_chunks = [c for c in result if c["metadata"]["page_number"] == 2]
+        cross_page_chunks = [c for c in page2_chunks if c["metadata"].get("cross_page")]
+        assert len(cross_page_chunks) >= 1
+        assert "UniqueAlphaWord" in cross_page_chunks[0]["text"]
+
+    def test_cross_page_overlap_negative_raises(self):
+        pages = self._make_multi_page_chunks()
+        with pytest.raises(ValueError, match="non-negative"):
+            chunk_text_page_aware(
+                pages, source_name="test", chunk_size=50, cross_page_overlap=-1
+            )
+
+    def test_cross_page_overlap_ge_chunk_size_raises(self):
+        pages = self._make_multi_page_chunks()
+        with pytest.raises(ValueError, match="less than"):
+            chunk_text_page_aware(
+                pages, source_name="test", chunk_size=50, cross_page_overlap=50
+            )
+
+    def test_cross_page_overlap_with_empty_page_skipped(self):
+        pages = [
+            {
+                "text": "Alpha beta gamma delta. " * 30,
+                "metadata": {"page_number": 1, "page_count": 3, "file_path": "test.pdf"},
+                "toc_items": [],
+                "tables": [],
+            },
+            {
+                "text": "",
+                "metadata": {"page_number": 2, "page_count": 3, "file_path": "test.pdf"},
+                "toc_items": [],
+                "tables": [],
+            },
+            {
+                "text": "One two three four five. " * 30,
+                "metadata": {"page_number": 3, "page_count": 3, "file_path": "test.pdf"},
+                "toc_items": [],
+                "tables": [],
+            },
+        ]
+        result = chunk_text_page_aware(
+            pages, source_name="test", chunk_size=100, cross_page_overlap=20
+        )
+        page3_chunks = [c for c in result if c["metadata"]["page_number"] == 3]
+        cross_page_chunks = [c for c in page3_chunks if c["metadata"].get("cross_page")]
+        assert len(cross_page_chunks) >= 1
+        assert cross_page_chunks[0]["metadata"]["overlap_from_page"] == 1
+
+    def test_cross_page_overlap_with_intra_page_overlap(self):
+        pages = self._make_multi_page_chunks()
+        result = chunk_text_page_aware(
+            pages,
+            source_name="test",
+            chunk_size=50,
+            overlap=10,
+            cross_page_overlap=20,
+        )
+        assert len(result) > 0
+        page2_chunks = [c for c in result if c["metadata"]["page_number"] == 2]
+        cross_page_chunks = [c for c in page2_chunks if c["metadata"].get("cross_page")]
+        assert len(cross_page_chunks) >= 1
+
+
 class TestProcessParsedFilesPageAware:
     def _make_pages_data(self):
         return [
@@ -524,6 +684,69 @@ class TestProcessParsedFilesPageAware:
             page_number = chunk_data["metadata"]["page_number"]
             assert chunk_id.startswith("mydoc_")
             assert f"_p{page_number}_" in chunk_id
+
+    def test_process_pages_json_with_cross_page_overlap(self, tmp_path):
+        input_dir = tmp_path / "input"
+        output_dir = tmp_path / "output"
+        input_dir.mkdir()
+
+        pages_data = [
+            {
+                "text": "Alpha beta gamma delta epsilon. " * 30,
+                "metadata": {"page_number": 1, "page_count": 2, "file_path": "test.pdf"},
+                "toc_items": [],
+                "tables": [],
+            },
+            {
+                "text": "Nu xi omicron pi rho sigma. " * 30,
+                "metadata": {"page_number": 2, "page_count": 2, "file_path": "test.pdf"},
+                "toc_items": [],
+                "tables": [],
+            },
+        ]
+        pages_file = input_dir / "test.pages.json"
+        pages_file.write_text(json.dumps(pages_data), encoding="utf-8")
+
+        results = process_parsed_files_page_aware(
+            str(input_dir), str(output_dir), chunk_size=100, cross_page_overlap=20
+        )
+
+        assert len(results) == 1
+        assert results[0]["status"] == "success"
+
+        output_file = Path(results[0]["output"])
+        assert output_file.exists()
+
+        with open(output_file, encoding="utf-8") as f:
+            lines = f.readlines()
+            cross_page_found = False
+            for line in lines:
+                chunk_data = json.loads(line)
+                if chunk_data["metadata"].get("cross_page"):
+                    cross_page_found = True
+                    assert "overlap_from_page" in chunk_data["metadata"]
+                    assert chunk_data["metadata"]["overlap_from_page"] == 1
+                    assert chunk_data["metadata"]["page_number"] == 2
+            assert cross_page_found
+
+    def test_process_pages_json_cross_page_overlap_zero_no_metadata(self, tmp_path):
+        input_dir = tmp_path / "input"
+        output_dir = tmp_path / "output"
+        input_dir.mkdir()
+
+        pages_file = input_dir / "test.pages.json"
+        pages_file.write_text(json.dumps(self._make_pages_data()), encoding="utf-8")
+
+        results = process_parsed_files_page_aware(
+            str(input_dir), str(output_dir), chunk_size=50, cross_page_overlap=0
+        )
+
+        output_file = Path(results[0]["output"])
+        with open(output_file, encoding="utf-8") as f:
+            for line in f:
+                chunk_data = json.loads(line)
+                assert "cross_page" not in chunk_data["metadata"]
+                assert "overlap_from_page" not in chunk_data["metadata"]
 
 
 class TestBGETokenizerEncoder:

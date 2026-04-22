@@ -395,11 +395,14 @@ def chunk_text_page_aware(
     overlap: int = 0,
     encoding_name: str = "cl100k_base",
     model_name: str | None = None,
+    cross_page_overlap: int = 0,
 ) -> list[dict[str, Any]]:
     """Split page-level parsed results into chunks with page metadata.
 
-    Each page is chunked independently (no cross-page chunks). Every chunk
-    carries a page_number in its metadata.
+    Each page is chunked independently by default. When *cross_page_overlap*
+    is greater than zero, the last *cross_page_overlap* tokens of the
+    previous page are prepended to the current page before chunking so that
+    information spanning page boundaries is preserved.
 
     Args:
         page_chunks: List of page dictionaries from parse_pdf(page_chunks=True).
@@ -413,21 +416,48 @@ def chunk_text_page_aware(
             ``"cl100k_base"``.
         model_name: Hugging Face model identifier.  Required when
             *encoding_name* is ``"bge"``.  Defaults to None.
+        cross_page_overlap: Number of tokens from the end of the previous
+            page to prepend to the current page before chunking.  Must be
+            non-negative and less than *chunk_size*.  Defaults to 0 (no
+            cross-page overlap, backward compatible).
 
     Returns:
         List of dictionaries, each with "text" and "metadata" keys. Metadata
         includes "page_number", "chunk_index", "char_count", "token_count",
-        "start_token", and "end_token".
+        "start_token", and "end_token".  When *cross_page_overlap* > 0,
+        chunks that contain overlap from the previous page additionally
+        include "cross_page" (True) and "overlap_from_page" (the source
+        page number).
 
     Raises:
-        ValueError: If overlap is greater than or equal to chunk_size.
+        ValueError: If overlap is greater than or equal to chunk_size, or
+            if cross_page_overlap is negative or greater than or equal to
+            chunk_size.
     """
     if overlap >= chunk_size:
         error_msg = f"Overlap ({overlap}) must be less than chunk_size ({chunk_size})"
         logger.error(error_msg)
         raise ValueError(error_msg)
 
-    all_chunks = []
+    if cross_page_overlap < 0:
+        error_msg = (
+            f"cross_page_overlap ({cross_page_overlap}) must be non-negative"
+        )
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+
+    if cross_page_overlap >= chunk_size:
+        error_msg = (
+            f"cross_page_overlap ({cross_page_overlap}) must be less than "
+            f"chunk_size ({chunk_size})"
+        )
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+
+    all_chunks: list[dict[str, Any]] = []
+    encoding = _get_encoding(encoding_name, model_name) if cross_page_overlap > 0 else None
+    prev_page_tail_tokens: list[int] | None = None
+    prev_page_number: int | None = None
 
     for page in page_chunks:
         text = page.get("text", "")
@@ -437,13 +467,45 @@ def chunk_text_page_aware(
             logger.debug(f"Skipping empty page {page_number}")
             continue
 
-        page_chunks_result = chunk_text(text, chunk_size, overlap, encoding_name, model_name)
+        if cross_page_overlap > 0 and prev_page_tail_tokens is not None:
+            overlap_text = encoding.decode(prev_page_tail_tokens)  # type: ignore[union-attr]
+            separator = "\n"
+            combined_text = overlap_text + separator + text
 
-        for chunk in page_chunks_result:
-            chunk["metadata"]["page_number"] = page_number
-            chunk_index = chunk["metadata"]["chunk_index"]
-            chunk["metadata"]["chunk_index"] = f"p{page_number}_{chunk_index:03d}"
-            all_chunks.append(chunk)
+            overlap_prefix_tokens = encoding.encode(overlap_text + separator)  # type: ignore[union-attr]
+            overlap_prefix_token_count = len(overlap_prefix_tokens)
+
+            page_chunks_result = chunk_text(
+                combined_text, chunk_size, overlap, encoding_name, model_name
+            )
+
+            for chunk in page_chunks_result:
+                chunk["metadata"]["page_number"] = page_number
+                chunk_index = chunk["metadata"]["chunk_index"]
+                chunk["metadata"]["chunk_index"] = f"p{page_number}_{chunk_index:03d}"
+
+                if chunk["metadata"]["start_token"] < overlap_prefix_token_count:
+                    chunk["metadata"]["cross_page"] = True
+                    chunk["metadata"]["overlap_from_page"] = prev_page_number
+        else:
+            page_chunks_result = chunk_text(
+                text, chunk_size, overlap, encoding_name, model_name
+            )
+
+            for chunk in page_chunks_result:
+                chunk["metadata"]["page_number"] = page_number
+                chunk_index = chunk["metadata"]["chunk_index"]
+                chunk["metadata"]["chunk_index"] = f"p{page_number}_{chunk_index:03d}"
+
+        if cross_page_overlap > 0:
+            tokens = encoding.encode(text)  # type: ignore[union-attr]
+            if len(tokens) > cross_page_overlap:
+                prev_page_tail_tokens = tokens[-cross_page_overlap:]
+            else:
+                prev_page_tail_tokens = tokens
+            prev_page_number = page_number
+
+        all_chunks.extend(page_chunks_result)
 
     logger.info(
         f"Created {len(all_chunks)} page-aware chunks from {len(page_chunks)} pages"
@@ -459,6 +521,7 @@ def process_parsed_files_page_aware(
     encoding_name: str = "cl100k_base",
     source_filter: set | None = None,
     model_name: str | None = None,
+    cross_page_overlap: int = 0,
 ) -> list[dict[str, Any]]:
     """Read .pages.json files, apply page-aware chunking, save as JSONL.
 
@@ -479,6 +542,9 @@ def process_parsed_files_page_aware(
             whose relative path is in this set will be processed.
         model_name: Hugging Face model identifier.  Required when
             *encoding_name* is ``"bge"``.  Defaults to None.
+        cross_page_overlap: Number of tokens from the end of the previous
+            page to prepend to the current page before chunking.  Defaults
+            to 0 (no cross-page overlap).
 
     Returns:
         List of result dictionaries, each containing source, output,
@@ -532,6 +598,7 @@ def process_parsed_files_page_aware(
                 overlap=overlap,
                 encoding_name=encoding_name,
                 model_name=model_name,
+                cross_page_overlap=cross_page_overlap,
             )
 
             output_file = output_path / relative_path.with_suffix(".jsonl")
@@ -559,6 +626,12 @@ def process_parsed_files_page_aware(
                             "end_token": chunk["metadata"]["end_token"],
                         },
                     }
+
+                    if chunk["metadata"].get("cross_page"):
+                        chunk_data["metadata"]["cross_page"] = True
+                        chunk_data["metadata"]["overlap_from_page"] = chunk["metadata"][
+                            "overlap_from_page"
+                        ]
 
                     f.write(json.dumps(chunk_data, ensure_ascii=False) + "\n")
 
