@@ -806,6 +806,7 @@ class TestBuildChunksIfNeeded:
                 encoding_name="cl100k_base",
                 source_filter={"report.pages.json"},
                 model_name=None,
+                cross_page_overlap=0,
             )
 
     def test_build_chunks_if_needed_md(self, tmp_path):

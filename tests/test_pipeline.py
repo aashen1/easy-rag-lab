@@ -410,6 +410,7 @@ class TestRAGPipeline:
             encoding_name="cl100k_base",
             source_filter=None,
             model_name="test-model",
+            cross_page_overlap=0,
         )
 
     @patch("src.pipeline.Generator")
@@ -523,6 +524,7 @@ class TestRAGPipeline:
             encoding_name="cl100k_base",
             source_filter=None,
             model_name="test-model",
+            cross_page_overlap=0,
         )
         mock_chunk.assert_not_called()
 
