@@ -7,6 +7,8 @@ import yaml
 from dotenv import load_dotenv
 from loguru import logger
 
+from src.exceptions import ConfigurationError
+
 load_dotenv()
 
 
@@ -212,7 +214,7 @@ def create_llm_client(
         )
         return LangchainLLMWrapper(chat_model)
     else:
-        raise ValueError(f"Unsupported LLM client mode: {mode}. Use 'sdk' or 'langchain'.")
+        raise ConfigurationError(f"Unsupported LLM client mode: {mode}. Use 'sdk' or 'langchain'.")
 
 
 def get_env_var(key: str, default: str = None, required: bool = False) -> str:
@@ -234,7 +236,7 @@ def get_env_var(key: str, default: str = None, required: bool = False) -> str:
     if required and value is None:
         error_msg = f"Required environment variable '{key}' is not set"
         logger.error(error_msg)
-        raise ValueError(error_msg)
+        raise ConfigurationError(error_msg)
 
     if value is None:
         logger.warning(f"Environment variable '{key}' not set, using default: {default}")

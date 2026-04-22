@@ -7,6 +7,8 @@ from typing import Any
 import yaml
 from loguru import logger
 
+from src.exceptions import ConfigurationError
+
 VALID_RETRIEVAL_METRICS = {"hit_rate", "mrr", "ndcg", "chunk_hit_rate", "chunk_mrr", "chunk_ndcg", "dedup_hit_rate", "dedup_mrr", "dedup_ndcg", "false_positive_rate", "context_precision", "context_recall"}
 VALID_GENERATION_METRICS = {"faithfulness", "answer_relevancy"}
 VALID_ON_MISSING_VALUES = {"auto", "clean_only", "strict"}
@@ -120,7 +122,7 @@ class ExperimentConfig:
         required_fields = ["name", "description", "data", "test_sets", "variants", "evaluation"]
         missing_fields = [f for f in required_fields if f not in data]
         if missing_fields:
-            raise ValueError(f"Missing required fields: {missing_fields}")
+            raise ConfigurationError(f"Missing required fields: {missing_fields}")
 
         return cls(
             name=data["name"],
@@ -363,7 +365,7 @@ def load_experiment_config(config_path: str) -> ExperimentConfig:
     path = Path(config_path)
 
     if not path.exists():
-        raise FileNotFoundError(f"Experiment configuration file not found: {config_path}")
+        raise ConfigurationError(f"Experiment configuration file not found: {config_path}")
 
     try:
         with open(path, encoding="utf-8") as f:
@@ -373,10 +375,10 @@ def load_experiment_config(config_path: str) -> ExperimentConfig:
         raise
 
     if data is None:
-        raise ValueError(f"Empty configuration file: {config_path}")
+        raise ConfigurationError(f"Empty configuration file: {config_path}")
 
     if not isinstance(data, dict):
-        raise ValueError(f"Configuration must be a dictionary, got {type(data).__name__}")
+        raise ConfigurationError(f"Configuration must be a dictionary, got {type(data).__name__}")
 
     try:
         config = ExperimentConfig.from_dict(data)
@@ -388,7 +390,7 @@ def load_experiment_config(config_path: str) -> ExperimentConfig:
     if validation_errors:
         error_msg = "; ".join(validation_errors)
         logger.error(f"Experiment configuration validation failed: {error_msg}")
-        raise ValueError(f"Configuration validation failed: {error_msg}")
+        raise ConfigurationError(f"Configuration validation failed: {error_msg}")
 
     logger.info(f"Experiment configuration loaded: {config.name}")
     return config
@@ -420,7 +422,7 @@ def get_variant_config(
             break
 
     if variant is None:
-        raise ValueError(f"Variant '{variant_name}' not found in experiment configuration")
+        raise ConfigurationError(f"Variant '{variant_name}' not found in experiment configuration")
 
     return merge_config(system_config, experiment_config, variant)
 
@@ -535,7 +537,7 @@ class ExperimentResult:
         required_fields = ["experiment_id", "name", "description", "created_at", "status", "config"]
         missing_fields = [f for f in required_fields if f not in data]
         if missing_fields:
-            raise ValueError(f"Missing required fields: {missing_fields}")
+            raise ConfigurationError(f"Missing required fields: {missing_fields}")
 
         config = ExperimentConfig.from_dict(data["config"])
 
@@ -748,14 +750,14 @@ class ExperimentManager:
 
         manifest_path = exp_dir / "manifest.json"
         if not manifest_path.exists():
-            raise FileNotFoundError(f"Manifest file not found: {manifest_path}")
+            raise ConfigurationError(f"Manifest file not found: {manifest_path}")
 
         try:
             with open(manifest_path, encoding="utf-8") as f:
                 manifest = json.load(f)
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse manifest file: {str(e)}")
-            raise ValueError(f"Invalid manifest file: {str(e)}") from e
+            raise ConfigurationError(f"Invalid manifest file: {str(e)}") from e
 
         config_path = exp_dir / "config_snapshot.yaml"
         config_snapshot = {}
@@ -884,7 +886,7 @@ class ExperimentManager:
         """
         exp_dir = self._exp_dir / exp_id
         if not exp_dir.exists():
-            raise FileNotFoundError(f"Experiment not found: {exp_id}")
+            raise ConfigurationError(f"Experiment not found: {exp_id}")
 
         result = self.load_experiment_result(exp_dir)
         return result.to_dict()

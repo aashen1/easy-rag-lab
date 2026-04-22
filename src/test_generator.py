@@ -8,6 +8,7 @@ from typing import Any
 
 from loguru import logger
 
+from src.exceptions import TestSetError
 from src.generator import Generator
 from src.meal import ArtifactCache, MealConfig, MealManager
 from src.test_set_manager import TestSetManager, TestSetMetadata
@@ -307,7 +308,7 @@ class TestSetGenerator:
 
         chunks = self._load_meal_chunks(meal_config)
         if not chunks:
-            raise ValueError(f"No chunks found for meal '{meal_name}'")
+            raise TestSetError(f"No chunks found for meal '{meal_name}'")
 
         grouped = self._group_chunks_by_source(chunks)
         logger.info(
@@ -350,7 +351,7 @@ class TestSetGenerator:
                     f"Failed to generate question {i + 1}, skipping")
 
         if not questions:
-            raise ValueError("No questions could be generated")
+            raise TestSetError("No questions could be generated")
 
         test_set = {
             "name": f"auto_{strategy}_n{num_questions}",
@@ -538,7 +539,7 @@ class TestSetGenerator:
         elif normalized_strategy == "multi_hop":
             return self._select_chunks_for_multi_hop(grouped_chunks, num_questions)
         else:
-            raise ValueError(f"Unknown strategy: {strategy}")
+            raise TestSetError(f"Unknown strategy: {strategy}")
 
     def _select_chunks_for_factual(
         self, grouped_chunks: dict[str, list[dict]], num_questions: int
@@ -660,7 +661,7 @@ class TestSetGenerator:
             )
             prompt = MULTI_HOP_PROMPT.format(chunk_texts=chunk_texts)
         else:
-            raise ValueError(f"Unknown strategy: {strategy}")
+            raise TestSetError(f"Unknown strategy: {strategy}")
 
         for attempt in range(self.max_retries):
             try:
@@ -791,7 +792,7 @@ class TestSetGenerator:
 
         document_contents = self._load_full_documents(meal_config)
         if not document_contents:
-            raise ValueError(f"No documents found for meal '{meal_name}'")
+            raise TestSetError(f"No documents found for meal '{meal_name}'")
 
         logger.info(f"Loaded {len(document_contents)} documents")
 
@@ -933,7 +934,7 @@ class TestSetGenerator:
                     )
 
         if not questions:
-            raise ValueError("No questions could be generated")
+            raise TestSetError("No questions could be generated")
 
         quality_metrics = self._calculate_quality_metrics(questions)
 
@@ -1018,7 +1019,7 @@ class TestSetGenerator:
 
         document_contents = self._load_full_documents(meal_config)
         if not document_contents:
-            raise ValueError(f"No documents found for meal '{meal_name}'")
+            raise TestSetError(f"No documents found for meal '{meal_name}'")
 
         llm_config = get_llm_config(self.config, llm_preset)
         generator = Generator(

@@ -5,6 +5,7 @@ from typing import Any
 import tiktoken
 from loguru import logger
 
+from src.exceptions import ParsingError
 from src.utils import detect_document_category, ensure_dir
 
 
@@ -60,14 +61,14 @@ def chunk_text(
     if overlap >= chunk_size:
         error_msg = f"Overlap ({overlap}) must be less than chunk_size ({chunk_size})"
         logger.error(error_msg)
-        raise ValueError(error_msg)
+        raise ParsingError(error_msg)
 
     try:
         encoding = tiktoken.get_encoding(encoding_name)
     except Exception as e:
         error_msg = f"Failed to load tiktoken encoding {encoding_name}: {str(e)}"
         logger.error(error_msg)
-        raise Exception(error_msg) from e
+        raise ParsingError(error_msg) from e
 
     tokens = encoding.encode(text)
     total_tokens = len(tokens)
@@ -151,7 +152,7 @@ def process_parsed_files(
     if not input_path.exists():
         error_msg = f"Input directory not found: {input_dir}"
         logger.error(error_msg)
-        raise FileNotFoundError(error_msg)
+        raise ParsingError(error_msg)
 
     output_path = ensure_dir(output_dir)
 
@@ -284,7 +285,7 @@ def chunk_text_page_aware(
     if overlap >= chunk_size:
         error_msg = f"Overlap ({overlap}) must be less than chunk_size ({chunk_size})"
         logger.error(error_msg)
-        raise ValueError(error_msg)
+        raise ParsingError(error_msg)
 
     all_chunks = []
 
@@ -347,7 +348,7 @@ def process_parsed_files_page_aware(
     if not input_path.exists():
         error_msg = f"Input directory not found: {input_dir}"
         logger.error(error_msg)
-        raise FileNotFoundError(error_msg)
+        raise ParsingError(error_msg)
 
     output_path = ensure_dir(output_dir)
 

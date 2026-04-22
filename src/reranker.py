@@ -4,6 +4,8 @@ import torch
 from loguru import logger
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
+from src.exceptions import ConfigurationError, GenerationError
+
 
 class Reranker:
     def __init__(
@@ -56,7 +58,7 @@ class Reranker:
         except Exception as e:
             error_msg = f"Failed to load reranker model {model_name}: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg) from e
+            raise GenerationError(error_msg) from e
 
     def rerank(
         self,
@@ -89,7 +91,7 @@ class Reranker:
         if not query or not isinstance(query, str):
             error_msg = "Query must be a non-empty string"
             logger.error(error_msg)
-            raise ValueError(error_msg)
+            raise ConfigurationError(error_msg)
 
         if not results:
             logger.warning("No results to rerank")
@@ -116,7 +118,7 @@ class Reranker:
         except Exception as e:
             error_msg = f"Failed to rerank results: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg) from e
+            raise GenerationError(error_msg) from e
 
     def _score_pairs(self, pairs: list[tuple]) -> list[float]:
         """Score query-document pairs using the cross-encoder model.

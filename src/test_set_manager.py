@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from src.exceptions import TestSetError
 from src.meal import MealConfig, MealManager
 from src.utils import ensure_dir
 
@@ -150,7 +151,7 @@ class TestSetManager:
         file_path = test_sets_dir / f"{test_set_name}.json"
 
         if not file_path.exists():
-            raise FileNotFoundError(
+            raise TestSetError(
                 f"Test set '{test_set_name}' not found in meal '{meal_name}'"
             )
 
@@ -239,7 +240,7 @@ class TestSetManager:
         file_path = test_sets_dir / f"{test_set_name}.json"
 
         if not file_path.exists():
-            raise FileNotFoundError(
+            raise TestSetError(
                 f"Test set '{test_set_name}' not found in meal '{meal_name}'"
             )
 
@@ -439,7 +440,7 @@ class TestSetManager:
                 token_tracker,
             )
         else:
-            raise ValueError(f"Unknown invalid_policy: {invalid_policy}")
+            raise TestSetError(f"Unknown invalid_policy: {invalid_policy}")
 
     def _clean_immutable_policy(
         self,
@@ -466,7 +467,7 @@ class TestSetManager:
         """
         if invalid_questions:
             invalid_ids = [q.get("id", "?") for q in invalid_questions]
-            raise ValueError(
+            raise TestSetError(
                 f"Test set has immutable policy but contains {len(invalid_questions)} "
                 f"invalid questions with IDs: {invalid_ids}. "
                 "Cannot modify immutable test set."
@@ -504,7 +505,7 @@ class TestSetManager:
         total_questions = len(test_set_data.get("questions", []))
 
         if len(invalid_questions) == total_questions:
-            raise ValueError(
+            raise TestSetError(
                 f"Cannot trim test set: all {total_questions} questions are invalid. "
                 "No valid questions remain."
             )
@@ -574,7 +575,7 @@ class TestSetManager:
         """
         generation_config = test_set_data["metadata"].get("generation")
         if not generation_config:
-            raise ValueError(
+            raise TestSetError(
                 "Test set has regenerate policy but no generation config in metadata. "
                 "Cannot regenerate questions without generation configuration."
             )
@@ -754,7 +755,7 @@ class TestSetManager:
                 return test_set_data
 
             if on_missing == "strict":
-                raise ValueError(
+                raise TestSetError(
                     f'Test set "{name}" is invalid (some data sources missing) '
                     f'and on_missing is "strict".'
                 )
@@ -782,18 +783,18 @@ class TestSetManager:
                 )
 
         if on_missing == "clean_only":
-            raise ValueError(
+            raise TestSetError(
                 f'Test set "{name}" not found and on_missing is "clean_only". '
                 f'Please create the test set first or change on_missing to "auto".'
             )
 
         if on_missing == "strict":
-            raise ValueError(
+            raise TestSetError(
                 f'Test set "{name}" not found and on_missing is "strict".'
             )
 
         if generator is None:
-            raise ValueError(
+            raise TestSetError(
                 f'Test set "{name}" not found and no generator provided for auto generation.'
             )
 
@@ -945,7 +946,7 @@ class TestSetManager:
             ValueError: If a source test set does not exist or target meal is invalid.
         """
         if not source_specs:
-            raise ValueError("source_specs cannot be empty")
+            raise TestSetError("source_specs cannot be empty")
 
         all_questions: list[dict[str, Any]] = []
         loaded_sources: list[dict[str, str]] = []
@@ -955,7 +956,7 @@ class TestSetManager:
             source_test_set = spec.get("test_set")
 
             if not source_meal or not source_test_set:
-                raise ValueError(
+                raise TestSetError(
                     f"Invalid source spec: {spec}. Must have 'meal' and 'test_set' keys."
                 )
 
@@ -969,7 +970,7 @@ class TestSetManager:
                     f"meal='{source_meal}', test_set='{source_test_set}'"
                 )
             except FileNotFoundError:
-                raise ValueError(
+                raise TestSetError(
                     f"Source test set '{source_test_set}' not found in meal '{source_meal}'"
                 ) from None
             except Exception as e:

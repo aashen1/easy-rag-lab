@@ -7,6 +7,8 @@ from typing import Any
 import jieba
 from loguru import logger
 
+from src.exceptions import IndexingError, RetrievalError
+
 
 class BM25Retriever:
     def __init__(
@@ -29,9 +31,9 @@ class BM25Retriever:
             ValueError: If k1 is negative or b is not in [0, 1].
         """
         if k1 < 0:
-            raise ValueError(f"k1 must be non-negative, got {k1}")
+            raise RetrievalError(f"k1 must be non-negative, got {k1}")
         if not 0 <= b <= 1:
-            raise ValueError(f"b must be in [0, 1], got {b}")
+            raise RetrievalError(f"b must be in [0, 1], got {b}")
 
         self.k1 = k1
         self.b = b
@@ -87,7 +89,7 @@ class BM25Retriever:
         if not chunks_path.exists():
             error_msg = f"Chunks directory not found: {chunks_dir}"
             logger.error(error_msg)
-            raise FileNotFoundError(error_msg)
+            raise IndexingError(error_msg)
 
         jsonl_files = list(chunks_path.rglob("*.jsonl"))
 
@@ -136,7 +138,7 @@ class BM25Retriever:
             ValueError: If chunks is empty.
         """
         if not chunks:
-            raise ValueError("Cannot build BM25 index from empty chunks list")
+            raise IndexingError("Cannot build BM25 index from empty chunks list")
 
         self._corpus_tokens = []
         self._doc_data = []
@@ -212,12 +214,12 @@ class BM25Retriever:
         if not query or not isinstance(query, str):
             error_msg = "Query must be a non-empty string"
             logger.error(error_msg)
-            raise ValueError(error_msg)
+            raise RetrievalError(error_msg)
 
         if not self._is_indexed:
             error_msg = "BM25 index not built. Call build_index() or build_index_from_chunks() first."
             logger.error(error_msg)
-            raise RuntimeError(error_msg)
+            raise IndexingError(error_msg)
 
         try:
             query_tokens = self.tokenize(query)
@@ -251,7 +253,7 @@ class BM25Retriever:
         except Exception as e:
             error_msg = f"Failed to retrieve results: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg) from e
+            raise RetrievalError(error_msg) from e
 
     def _score(self, query_tokens: list[str]) -> list[float]:
         """Compute BM25 scores for all documents against the query tokens.

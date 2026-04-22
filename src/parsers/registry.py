@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from loguru import logger
 
+from src.exceptions import ParsingError
 from src.parsers.base import BaseParser
 
 
@@ -30,7 +31,7 @@ class ParserRegistry:
             TypeError: If *parser_class* is not a subclass of ``BaseParser``.
         """
         if not issubclass(parser_class, BaseParser):
-            raise TypeError(f"{parser_class} is not a subclass of BaseParser")
+            raise ParsingError(f"{parser_class} is not a subclass of BaseParser")
         cls._parsers[name] = parser_class
         logger.debug(f"Registered parser: {name}")
 
@@ -55,7 +56,7 @@ class ParserRegistry:
             ImportError: If the parser module cannot be imported.
         """
         if name not in cls._parsers:
-            raise ValueError(
+            raise ParsingError(
                 f"Parser '{name}' is not registered. Available: {cls.list_names()}"
             )
 
@@ -117,6 +118,6 @@ class ParserRegistry:
             return parser_class
         except ImportError as e:
             logger.error(f"Failed to import parser '{name}': {str(e)}")
-            raise ImportError(
+            raise ParsingError(
                 f"Parser '{name}' requires missing dependencies: {str(e)}"
             ) from e

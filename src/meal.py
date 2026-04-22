@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from src.exceptions import MealError
 from src.sampler import SamplingConfig, count_pdf_pages, determine_sample
 from src.utils import ensure_dir
 
@@ -610,13 +611,13 @@ class MealManager:
             name = generate_timestamp_name()
 
         if not validate_meal_name(name):
-            raise ValueError(
+            raise MealError(
                 f"Invalid meal name '{name}'. "
                 "Only alphanumeric characters, underscores, and hyphens are allowed."
             )
 
         if self.meal_exists(name):
-            raise ValueError(f"Meal '{name}' already exists")
+            raise MealError(f"Meal '{name}' already exists")
 
         if seed is None:
             seed = random.randint(0, 2**32 - 1)
@@ -626,7 +627,7 @@ class MealManager:
         input_path = self.raw_dir
         all_pdfs = list(input_path.rglob("*.pdf"))
         if not all_pdfs:
-            raise ValueError("No PDF files found in input directory")
+            raise MealError("No PDF files found in input directory")
 
         sampled_pdfs = determine_sample(all_pdfs, sampling_config)
 
@@ -648,7 +649,7 @@ class MealManager:
                 logger.warning(f"Skipping {pdf_path}: {str(e)}")
 
         if not meal_files:
-            raise ValueError("No PDF files could be processed for the meal")
+            raise MealError("No PDF files could be processed for the meal")
 
         data_id = compute_data_id(meal_files)
         config_snapshot, config_hashes = self._build_config_snapshot_and_hashes()
@@ -813,7 +814,7 @@ class MealManager:
         manifest_path = meal_dir / "manifest.json"
 
         if not manifest_path.exists():
-            raise FileNotFoundError(
+            raise MealError(
                 f"Meal '{name}' not found (manifest missing)")
 
         try:
@@ -821,7 +822,7 @@ class MealManager:
                 data = json.load(f)
             return MealConfig.from_dict(data)
         except Exception as e:
-            raise ValueError(f"Failed to load meal '{name}': {str(e)}") from e
+            raise MealError(f"Failed to load meal '{name}': {str(e)}") from e
 
     def find_equivalent_meals(self, data_id: str) -> list[MealConfig]:
         """Find all meals that share the same data ID.
@@ -914,13 +915,13 @@ class MealManager:
             ValueError: If the new name is invalid or already exists.
         """
         if not validate_meal_name(new_name):
-            raise ValueError(
+            raise MealError(
                 f"Invalid meal name '{new_name}'. "
                 "Only alphanumeric characters, underscores, and hyphens are allowed."
             )
 
         if self.meal_exists(new_name):
-            raise ValueError(f"Meal '{new_name}' already exists")
+            raise MealError(f"Meal '{new_name}' already exists")
 
         meal_config = self.load_meal(old_name)
         old_dir = self.get_meal_dir(old_name)
@@ -957,13 +958,13 @@ class MealManager:
             ValueError: If the target name is invalid or already exists.
         """
         if not validate_meal_name(target_name):
-            raise ValueError(
+            raise MealError(
                 f"Invalid meal name '{target_name}'. "
                 "Only alphanumeric characters, underscores, and hyphens are allowed."
             )
 
         if self.meal_exists(target_name):
-            raise ValueError(f"Meal '{target_name}' already exists")
+            raise MealError(f"Meal '{target_name}' already exists")
 
         source_config = self.load_meal(source_name)
         source_dir = self.get_meal_dir(source_name)
@@ -1016,24 +1017,24 @@ class MealManager:
             ValueError: If meal_names is empty or contains non-existent meals.
         """
         if not meal_names:
-            raise ValueError("meal_names cannot be empty")
+            raise MealError("meal_names cannot be empty")
 
         if name is None:
             name = generate_timestamp_name()
 
         if not validate_meal_name(name):
-            raise ValueError(
+            raise MealError(
                 f"Invalid meal name '{name}'. "
                 "Only alphanumeric characters, underscores, and hyphens are allowed."
             )
 
         if self.meal_exists(name):
-            raise ValueError(f"Meal '{name}' already exists")
+            raise MealError(f"Meal '{name}' already exists")
 
         source_configs: list[MealConfig] = []
         for meal_name in meal_names:
             if not self.meal_exists(meal_name):
-                raise ValueError(f"Meal '{meal_name}' does not exist")
+                raise MealError(f"Meal '{meal_name}' does not exist")
             source_configs.append(self.load_meal(meal_name))
 
         seen_paths: set[str] = set()
@@ -1055,7 +1056,7 @@ class MealManager:
             })
 
         if not merged_pdf_files:
-            raise ValueError("No PDF files found in source meals")
+            raise MealError("No PDF files found in source meals")
 
         duplicates = total_input_pdfs - len(merged_pdf_files)
 
@@ -1318,7 +1319,7 @@ class MealManager:
                         f"File missing and no replacement specified: {meal_file.path}, skipping")
 
         if not new_pdf_files:
-            raise ValueError("No valid PDF files remain after repair")
+            raise MealError("No valid PDF files remain after repair")
 
         new_data_id = compute_data_id(new_pdf_files)
         config_snapshot, config_hashes = self._build_config_snapshot_and_hashes()
@@ -1329,7 +1330,7 @@ class MealManager:
         if create_new:
             target_name = new_name or f"{name}_repaired"
             if self.meal_exists(target_name):
-                raise ValueError(f"Meal '{target_name}' already exists")
+                raise MealError(f"Meal '{target_name}' already exists")
         else:
             target_name = name
             logger.warning(
@@ -1500,19 +1501,19 @@ class MealManager:
                 exist, or if all new PDFs already exist in the source meal.
         """
         if not self.meal_exists(source_meal):
-            raise ValueError(f"Source meal '{source_meal}' does not exist")
+            raise MealError(f"Source meal '{source_meal}' does not exist")
 
         if name is None:
             name = generate_timestamp_name()
 
         if not validate_meal_name(name):
-            raise ValueError(
+            raise MealError(
                 f"Invalid meal name '{name}'. "
                 "Only alphanumeric characters, underscores, and hyphens are allowed."
             )
 
         if self.meal_exists(name):
-            raise ValueError(f"Meal '{name}' already exists")
+            raise MealError(f"Meal '{name}' already exists")
 
         source_config = self.load_meal(source_meal)
 
@@ -1531,13 +1532,13 @@ class MealManager:
                 pdf_path = self.raw_dir / pdf_path
 
             if not pdf_path.exists():
-                raise ValueError(f"PDF file does not exist: {pdf_input}")
+                raise MealError(f"PDF file does not exist: {pdf_input}")
 
             try:
                 rel_path_obj = pdf_path.relative_to(self.raw_dir)
                 rel_path = rel_path_obj.as_posix()
             except ValueError as e:
-                raise ValueError(
+                raise MealError(
                     f"PDF file '{pdf_input}' is not within the raw directory"
                 ) from e
 
@@ -1553,7 +1554,7 @@ class MealManager:
             valid_new_pdfs.append((pdf_path, rel_path, size_bytes))
 
         if not valid_new_pdfs:
-            raise ValueError(
+            raise MealError(
                 "No new PDF files to add (all files either don't exist or are already in the source meal)"
             )
 

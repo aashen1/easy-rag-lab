@@ -1,6 +1,8 @@
 from anthropic import Anthropic
 from loguru import logger
 
+from src.exceptions import GenerationError
+
 
 def create_anthropic_client(
     api_key: str,
@@ -25,7 +27,7 @@ def create_anthropic_client(
         Exception: If client creation fails.
     """
     if not api_key:
-        raise ValueError("API key is required for Anthropic client creation")
+        raise GenerationError("API key is required for Anthropic client creation")
 
     try:
         client = Anthropic(
