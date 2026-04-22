@@ -82,6 +82,7 @@ class TestRAGPipeline:
             max_tokens=1024,
             token_tracker=pipeline.token_tracker,
             system_prompt=None,
+            max_context_tokens=None,
         )
         assert pipeline.meal_name is None
         assert pipeline.meal_config is None

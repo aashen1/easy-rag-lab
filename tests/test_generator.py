@@ -133,7 +133,7 @@ class TestGenerator:
         assert record.usage.output_tokens == 50
         assert record.metadata["question_id"] == "q1"
 
-    @patch("src.generator.Anthropic")
+    @patch("src.llm_client.Anthropic")
     def test_sources_included_in_context_format(self, mock_anthropic_cls, mock_anthropic_client):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
@@ -150,7 +150,7 @@ class TestGenerator:
         assert "参考资料 1（来源：2026年光伏行业分析）:" in user_content
         assert "参考资料 2（来源：贵州茅台2023年报）:" in user_content
 
-    @patch("src.generator.Anthropic")
+    @patch("src.llm_client.Anthropic")
     def test_sources_none_preserves_old_format(self, mock_anthropic_cls, mock_anthropic_client):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
@@ -164,7 +164,7 @@ class TestGenerator:
         assert "参考资料 2:\n" in user_content
         assert "来源" not in user_content
 
-    @patch("src.generator.Anthropic")
+    @patch("src.llm_client.Anthropic")
     def test_sources_empty_list_preserves_old_format(self, mock_anthropic_cls, mock_anthropic_client):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
@@ -178,7 +178,7 @@ class TestGenerator:
         assert "参考资料 1:\n" in user_content
         assert "来源" not in user_content
 
-    @patch("src.generator.Anthropic")
+    @patch("src.llm_client.Anthropic")
     def test_sources_fewer_than_contexts_uses_unknown(self, mock_anthropic_cls, mock_anthropic_client):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")

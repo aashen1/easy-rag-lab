@@ -1081,7 +1081,8 @@ class TestCalculateFaithfulness:
             base_url="https://custom.api.url/anthropic"
         )
         mock_extract.assert_called_once_with(
-            mock_client, "回答", "custom-model"
+            mock_client, "回答", "custom-model",
+            max_tokens=1024, temperature=0.0,
         )
 
     @patch("eval.metrics.generation._create_llm_client")
