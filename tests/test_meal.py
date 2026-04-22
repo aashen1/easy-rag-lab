@@ -116,6 +116,73 @@ class TestMealConfig:
         assert len(config.pdf_files) == len(config2.pdf_files)
         assert config.config_hashes == config2.config_hashes
 
+    def test_composition_default_empty_dict(self):
+        config = self._make_config()
+        assert config.composition == {}
+        d = config.to_dict()
+        assert d["composition"] == {}
+
+    def test_composition_serialization(self):
+        composition_data = {
+            "type": "merged",
+            "sources": [
+                {"meal": "meal_a", "pdf_count": 10},
+                {"meal": "meal_b", "pdf_count": 15},
+            ],
+            "created_at": "2026-04-23T10:00:00",
+        }
+        config = self._make_config(composition=composition_data)
+        d = config.to_dict()
+        assert d["composition"] == composition_data
+        assert d["composition"]["type"] == "merged"
+        assert len(d["composition"]["sources"]) == 2
+
+    def test_composition_deserialization(self):
+        data = {
+            "data_id": "a1b2c3d4e5f6789012345678abcdef1234567890abcdef1234567890abcdef12",
+            "name": "test_meal",
+            "created_at": "2026-04-16T14:30:00",
+            "sampling_config": {"mode": "count", "value": 10, "seed": 42},
+            "collection_name": "m_a1b2c3d4e5f6",
+            "pdf_files": [
+                {"path": "test.pdf", "sha256": "abc123", "size_bytes": 1024}
+            ],
+            "composition": {
+                "type": "extended",
+                "base_meal": "meal_a",
+                "added_files": ["new1.pdf", "new2.pdf"],
+                "created_at": "2026-04-23T10:00:00",
+            },
+        }
+        config = MealConfig.from_dict(data)
+        assert config.composition["type"] == "extended"
+        assert config.composition["base_meal"] == "meal_a"
+        assert len(config.composition["added_files"]) == 2
+
+    def test_composition_backward_compat(self):
+        data = {
+            "data_id": "a1b2c3d4e5f6789012345678abcdef1234567890abcdef1234567890abcdef12",
+            "name": "legacy_meal",
+            "created_at": "2026-04-16T14:30:00",
+            "sampling_config": None,
+            "collection_name": "m_a1b2c3d4e5f6",
+            "pdf_files": [
+                {"path": "test.pdf", "sha256": "abc123", "size_bytes": 1024}
+            ],
+        }
+        config = MealConfig.from_dict(data)
+        assert config.composition == {}
+
+    def test_composition_roundtrip(self):
+        composition_data = {
+            "type": "original",
+            "created_at": "2026-04-23T10:00:00",
+        }
+        config = self._make_config(composition=composition_data)
+        d = config.to_dict()
+        config2 = MealConfig.from_dict(d)
+        assert config2.composition == composition_data
+
 
 class TestComputeDataId:
     def test_same_files_same_id(self):
@@ -774,3 +841,667 @@ class TestBuildChunksIfNeeded:
         with patch("src.chunker.process_parsed_files") as mock_process:
             build_chunks_if_needed(parsed_dir, chunks_dir, chunker_config)
             mock_process.assert_not_called()
+
+
+class TestMergeMeals:
+    @pytest.fixture
+    def temp_dirs(self, tmp_path):
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        parsed_dir = tmp_path / "parsed"
+        parsed_dir.mkdir()
+        chunks_dir = tmp_path / "chunks"
+        chunks_dir.mkdir()
+        vector_dir = tmp_path / "vector_store"
+        vector_dir.mkdir()
+        meals_dir = tmp_path / "meals"
+        meals_dir.mkdir()
+        artifacts_dir = tmp_path / "artifacts"
+        artifacts_dir.mkdir()
+
+        pdf_dir = raw_dir / "reports"
+        pdf_dir.mkdir()
+        for i in range(10):
+            pdf_file = pdf_dir / f"report_{i}.pdf"
+            pdf_file.write_bytes(f"fake pdf content {i}".encode())
+
+        config = {
+            "parser": {
+                "input_dir": str(raw_dir),
+                "output_dir": str(parsed_dir),
+            },
+            "chunker": {
+                "input_dir": str(parsed_dir),
+                "output_dir": str(chunks_dir),
+                "chunk_size": 512,
+                "chunk_overlap": 0,
+            },
+            "embedding": {
+                "model_name": "BAAI/bge-large-zh-v1.5",
+                "device": "cpu",
+                "batch_size": 32,
+            },
+            "vector_store": {
+                "persist_dir": str(vector_dir),
+                "collection_name": "financial_reports",
+                "distance": "Cosine",
+            },
+            "meals": {
+                "dir": str(meals_dir),
+                "collection_prefix": "m_",
+            },
+            "artifacts": {
+                "dir": str(artifacts_dir),
+            },
+        }
+        return config
+
+    def _make_meal_config(self, **overrides):
+        defaults = {
+            "data_id": "a1b2c3d4e5f6789012345678abcdef1234567890abcdef1234567890abcdef12",
+            "name": "test_meal",
+            "created_at": "2026-04-16T14:30:00",
+            "sampling_config": {"mode": "count", "value": 3, "seed": 42},
+            "collection_name": "m_a1b2c3d4e5f6",
+            "pdf_files": [],
+            "config_snapshot": {"chunker": {"chunk_size": 512, "overlap": 0}},
+            "config_hashes": {"chunker": "c5d6e7f8"},
+            "stats": {"total_pdfs": 1, "total_pages": 50, "total_chunks": 200},
+        }
+        defaults.update(overrides)
+        return MealConfig(**defaults)
+
+    def _save_meal(self, manager, meal_config):
+        meal_dir = manager.get_meal_dir(meal_config.name)
+        meal_dir.mkdir(parents=True, exist_ok=True)
+        (meal_dir / "test_sets").mkdir(exist_ok=True)
+        with open(meal_dir / "manifest.json", "w", encoding="utf-8") as f:
+            json.dump(meal_config.to_dict(), f, ensure_ascii=False, indent=2)
+
+    def test_merge_meals_empty_list(self, temp_dirs):
+        manager = MealManager(temp_dirs)
+        with pytest.raises(ValueError, match="meal_names cannot be empty"):
+            manager.merge_meals([])
+
+    def test_merge_meals_nonexistent_meal(self, temp_dirs):
+        manager = MealManager(temp_dirs)
+        with pytest.raises(ValueError, match="does not exist"):
+            manager.merge_meals(["nonexistent_meal"])
+
+    def test_merge_meals_invalid_name(self, temp_dirs):
+        manager = MealManager(temp_dirs)
+        meal_a = self._make_meal_config(name="meal_a")
+        self._save_meal(manager, meal_a)
+
+        with pytest.raises(ValueError, match="Invalid meal name"):
+            manager.merge_meals(["meal_a"], name="invalid name")
+
+    def test_merge_meals_duplicate_name(self, temp_dirs):
+        manager = MealManager(temp_dirs)
+        meal_a = self._make_meal_config(name="meal_a")
+        self._save_meal(manager, meal_a)
+
+        with pytest.raises(ValueError, match="already exists"):
+            manager.merge_meals(["meal_a"], name="meal_a")
+
+    def test_merge_two_meals_no_overlap(self, temp_dirs):
+        from unittest.mock import MagicMock, patch
+
+        manager = MealManager(temp_dirs)
+
+        meal_a = self._make_meal_config(
+            name="meal_a",
+            data_id="a" * 64,
+            collection_name="m_aaaaaaaaaaaa",
+            pdf_files=[
+                MealFile(path="reports/report_0.pdf", sha256="hash_0", size_bytes=100),
+                MealFile(path="reports/report_1.pdf", sha256="hash_1", size_bytes=200),
+            ],
+        )
+        meal_b = self._make_meal_config(
+            name="meal_b",
+            data_id="b" * 64,
+            collection_name="m_bbbbbbbbbbbb",
+            pdf_files=[
+                MealFile(path="reports/report_2.pdf", sha256="hash_2", size_bytes=300),
+                MealFile(path="reports/report_3.pdf", sha256="hash_3", size_bytes=400),
+            ],
+        )
+        self._save_meal(manager, meal_a)
+        self._save_meal(manager, meal_b)
+
+        with patch("src.meal.build_index_from_chunks") as mock_build_index, \
+             patch("src.meal.build_chunks_if_needed"), \
+             patch("src.sampler.count_pdf_pages", return_value=10):
+            mock_build_index.return_value = MagicMock()
+
+            result = manager.merge_meals(["meal_a", "meal_b"], name="merged_meal")
+
+        assert result.name == "merged_meal"
+        assert len(result.pdf_files) == 4
+        assert result.composition["type"] == "merged"
+        assert len(result.composition["sources"]) == 2
+        assert result.composition["dedup_info"]["total_input_pdfs"] == 4
+        assert result.composition["dedup_info"]["unique_pdfs"] == 4
+        assert result.composition["dedup_info"]["duplicates"] == 0
+        assert manager.meal_exists("merged_meal")
+
+    def test_merge_meals_with_overlap(self, temp_dirs):
+        from unittest.mock import MagicMock, patch
+
+        manager = MealManager(temp_dirs)
+
+        meal_a = self._make_meal_config(
+            name="meal_a",
+            data_id="a" * 64,
+            collection_name="m_aaaaaaaaaaaa",
+            pdf_files=[
+                MealFile(path="reports/report_0.pdf", sha256="hash_0", size_bytes=100),
+                MealFile(path="reports/report_1.pdf", sha256="hash_1", size_bytes=200),
+            ],
+        )
+        meal_b = self._make_meal_config(
+            name="meal_b",
+            data_id="b" * 64,
+            collection_name="m_bbbbbbbbbbbb",
+            pdf_files=[
+                MealFile(path="reports/report_1.pdf", sha256="hash_1", size_bytes=200),
+                MealFile(path="reports/report_2.pdf", sha256="hash_2", size_bytes=300),
+            ],
+        )
+        self._save_meal(manager, meal_a)
+        self._save_meal(manager, meal_b)
+
+        with patch("src.meal.build_index_from_chunks") as mock_build_index, \
+             patch("src.meal.build_chunks_if_needed"), \
+             patch("src.sampler.count_pdf_pages", return_value=10):
+            mock_build_index.return_value = MagicMock()
+
+            result = manager.merge_meals(["meal_a", "meal_b"], name="merged_meal")
+
+        assert len(result.pdf_files) == 3
+        paths = [f.path for f in result.pdf_files]
+        assert "reports/report_0.pdf" in paths
+        assert "reports/report_1.pdf" in paths
+        assert "reports/report_2.pdf" in paths
+        assert result.composition["dedup_info"]["total_input_pdfs"] == 4
+        assert result.composition["dedup_info"]["unique_pdfs"] == 3
+        assert result.composition["dedup_info"]["duplicates"] == 1
+
+    def test_merge_meals_composition_metadata(self, temp_dirs):
+        from unittest.mock import MagicMock, patch
+
+        manager = MealManager(temp_dirs)
+
+        meal_a = self._make_meal_config(
+            name="meal_a",
+            data_id="a" * 64,
+            collection_name="m_aaaaaaaaaaaa",
+            pdf_files=[
+                MealFile(path="reports/report_0.pdf", sha256="hash_0", size_bytes=100),
+            ],
+        )
+        meal_b = self._make_meal_config(
+            name="meal_b",
+            data_id="b" * 64,
+            collection_name="m_bbbbbbbbbbbb",
+            pdf_files=[
+                MealFile(path="reports/report_1.pdf", sha256="hash_1", size_bytes=200),
+                MealFile(path="reports/report_2.pdf", sha256="hash_2", size_bytes=300),
+            ],
+        )
+        self._save_meal(manager, meal_a)
+        self._save_meal(manager, meal_b)
+
+        with patch("src.meal.build_index_from_chunks") as mock_build_index, \
+             patch("src.meal.build_chunks_if_needed"), \
+             patch("src.sampler.count_pdf_pages", return_value=10):
+            mock_build_index.return_value = MagicMock()
+
+            result = manager.merge_meals(["meal_a", "meal_b"], name="merged_meal")
+
+        assert result.composition["type"] == "merged"
+        assert len(result.composition["sources"]) == 2
+        assert result.composition["sources"][0]["meal"] == "meal_a"
+        assert result.composition["sources"][0]["pdf_count"] == 1
+        assert result.composition["sources"][1]["meal"] == "meal_b"
+        assert result.composition["sources"][1]["pdf_count"] == 2
+        assert "created_at" in result.composition
+
+    def test_merge_meals_auto_timestamp_name(self, temp_dirs):
+        from unittest.mock import MagicMock, patch
+
+        manager = MealManager(temp_dirs)
+
+        meal_a = self._make_meal_config(
+            name="meal_a",
+            data_id="a" * 64,
+            collection_name="m_aaaaaaaaaaaa",
+            pdf_files=[
+                MealFile(path="reports/report_0.pdf", sha256="hash_0", size_bytes=100),
+            ],
+        )
+        self._save_meal(manager, meal_a)
+
+        with patch("src.meal.build_index_from_chunks") as mock_build_index, \
+             patch("src.meal.build_chunks_if_needed"), \
+             patch("src.sampler.count_pdf_pages", return_value=10):
+            mock_build_index.return_value = MagicMock()
+
+            result = manager.merge_meals(["meal_a"])
+
+        assert result.name.startswith("meal_")
+        assert manager.meal_exists(result.name)
+
+    def test_merge_meals_cache_reuse(self, temp_dirs):
+        from unittest.mock import MagicMock, patch
+
+        manager = MealManager(temp_dirs)
+
+        meal_a = self._make_meal_config(
+            name="meal_a",
+            data_id="a" * 64,
+            collection_name="m_aaaaaaaaaaaa",
+            pdf_files=[
+                MealFile(path="reports/report_0.pdf", sha256="hash_0", size_bytes=100),
+            ],
+        )
+        self._save_meal(manager, meal_a)
+
+        with patch("src.meal.build_index_from_chunks") as mock_build_index, \
+             patch("src.meal.build_chunks_if_needed"), \
+             patch("src.sampler.count_pdf_pages", return_value=10):
+            mock_build_index.return_value = MagicMock()
+
+            result = manager.merge_meals(["meal_a"], name="merged_meal")
+
+        assert result is not None
+        assert result.name == "merged_meal"
+
+
+class TestExtendMeal:
+    @pytest.fixture
+    def temp_dirs(self, tmp_path):
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        parsed_dir = tmp_path / "parsed"
+        parsed_dir.mkdir()
+        chunks_dir = tmp_path / "chunks"
+        chunks_dir.mkdir()
+        vector_dir = tmp_path / "vector_store"
+        vector_dir.mkdir()
+        meals_dir = tmp_path / "meals"
+        meals_dir.mkdir()
+        artifacts_dir = tmp_path / "artifacts"
+        artifacts_dir.mkdir()
+
+        pdf_dir = raw_dir / "reports"
+        pdf_dir.mkdir()
+        for i in range(5):
+            pdf_file = pdf_dir / f"report_{i}.pdf"
+            pdf_file.write_bytes(f"fake pdf content {i}".encode())
+
+        config = {
+            "parser": {
+                "input_dir": str(raw_dir),
+                "output_dir": str(parsed_dir),
+            },
+            "chunker": {
+                "input_dir": str(parsed_dir),
+                "output_dir": str(chunks_dir),
+                "chunk_size": 512,
+                "chunk_overlap": 0,
+            },
+            "embedding": {
+                "model_name": "BAAI/bge-large-zh-v1.5",
+                "device": "cpu",
+                "batch_size": 32,
+            },
+            "vector_store": {
+                "persist_dir": str(vector_dir),
+                "collection_name": "financial_reports",
+                "distance": "Cosine",
+            },
+            "meals": {
+                "dir": str(meals_dir),
+                "collection_prefix": "m_",
+            },
+            "artifacts": {
+                "dir": str(artifacts_dir),
+            },
+        }
+        return config
+
+    def _make_meal_config(self, **overrides):
+        defaults = {
+            "data_id": "a1b2c3d4e5f6789012345678abcdef1234567890abcdef1234567890abcdef12",
+            "name": "test_meal",
+            "created_at": "2026-04-16T14:30:00",
+            "sampling_config": {"mode": "count", "value": 3, "seed": 42},
+            "collection_name": "m_a1b2c3d4e5f6",
+            "pdf_files": [
+                MealFile(path="reports/report_0.pdf", sha256="abc", size_bytes=100)
+            ],
+            "config_snapshot": {"chunker": {"chunk_size": 512, "overlap": 0}},
+            "config_hashes": {"chunker": "c5d6e7f8"},
+            "stats": {"total_pdfs": 1, "total_pages": 50, "total_chunks": 200},
+        }
+        defaults.update(overrides)
+        return MealConfig(**defaults)
+
+    def _save_meal(self, manager, meal_config):
+        meal_dir = manager.get_meal_dir(meal_config.name)
+        meal_dir.mkdir(parents=True, exist_ok=True)
+        (meal_dir / "test_sets").mkdir(exist_ok=True)
+        with open(meal_dir / "manifest.json", "w", encoding="utf-8") as f:
+            json.dump(meal_config.to_dict(), f, ensure_ascii=False, indent=2)
+
+    def test_extend_meal_source_not_found(self, temp_dirs):
+        manager = MealManager(temp_dirs)
+        with pytest.raises(ValueError, match="Source meal .* does not exist"):
+            manager.extend_meal("nonexistent", ["new.pdf"])
+
+    def test_extend_meal_invalid_name(self, temp_dirs):
+        manager = MealManager(temp_dirs)
+        meal = self._make_meal_config(name="source_meal")
+        self._save_meal(manager, meal)
+
+        with pytest.raises(ValueError, match="Invalid meal name"):
+            manager.extend_meal("source_meal", ["new.pdf"], name="invalid name")
+
+    def test_extend_meal_duplicate_name(self, temp_dirs):
+        manager = MealManager(temp_dirs)
+        meal = self._make_meal_config(name="existing_meal")
+        self._save_meal(manager, meal)
+
+        with pytest.raises(ValueError, match="already exists"):
+            manager.extend_meal("existing_meal", ["new.pdf"], name="existing_meal")
+
+    def test_extend_meal_pdf_not_found(self, temp_dirs):
+        manager = MealManager(temp_dirs)
+        meal = self._make_meal_config(name="source_meal")
+        self._save_meal(manager, meal)
+
+        with pytest.raises(ValueError, match="PDF file does not exist"):
+            manager.extend_meal("source_meal", ["nonexistent.pdf"])
+
+    def test_extend_meal_all_pdfs_already_exist(self, temp_dirs):
+        manager = MealManager(temp_dirs)
+        pdf_path = Path(temp_dirs["parser"]["input_dir"]) / "reports" / "report_0.pdf"
+        sha256 = compute_file_sha256(pdf_path)
+
+        meal = self._make_meal_config(
+            name="source_meal",
+            pdf_files=[
+                MealFile(
+                    path="reports/report_0.pdf",
+                    sha256=sha256,
+                    size_bytes=pdf_path.stat().st_size,
+                )
+            ],
+        )
+        self._save_meal(manager, meal)
+
+        with pytest.raises(ValueError, match="No new PDF files to add"):
+            manager.extend_meal("source_meal", ["reports/report_0.pdf"])
+
+    def test_extend_meal_success(self, temp_dirs):
+        from unittest.mock import patch
+
+        manager = MealManager(temp_dirs)
+
+        pdf_path_0 = Path(temp_dirs["parser"]["input_dir"]) / "reports" / "report_0.pdf"
+        sha256_0 = compute_file_sha256(pdf_path_0)
+
+        source_meal = self._make_meal_config(
+            name="source_meal",
+            pdf_files=[
+                MealFile(
+                    path="reports/report_0.pdf",
+                    sha256=sha256_0,
+                    size_bytes=pdf_path_0.stat().st_size,
+                )
+            ],
+        )
+        self._save_meal(manager, source_meal)
+
+        with patch.object(
+            manager, "_parse_pdfs_with_registry"
+        ) as mock_parse, patch(
+            "src.meal.build_chunks_if_needed"
+        ) as mock_chunk, patch(
+            "src.meal.build_index_from_chunks"
+        ) as mock_index:
+            result = manager.extend_meal(
+                "source_meal", ["reports/report_1.pdf"], name="extended_meal"
+            )
+
+            assert result.name == "extended_meal"
+            assert len(result.pdf_files) == 2
+            assert result.composition["type"] == "extended"
+            assert result.composition["base_meal"] == "source_meal"
+            assert "reports/report_1.pdf" in result.composition["added_files"]
+            assert "skipped_files" not in result.composition
+
+            mock_parse.assert_called_once()
+            mock_chunk.assert_called_once()
+            mock_index.assert_called_once()
+
+    def test_extend_meal_skips_existing_pdf(self, temp_dirs):
+        from unittest.mock import patch
+
+        manager = MealManager(temp_dirs)
+
+        pdf_path_0 = Path(temp_dirs["parser"]["input_dir"]) / "reports" / "report_0.pdf"
+        sha256_0 = compute_file_sha256(pdf_path_0)
+
+        source_meal = self._make_meal_config(
+            name="source_meal",
+            pdf_files=[
+                MealFile(
+                    path="reports/report_0.pdf",
+                    sha256=sha256_0,
+                    size_bytes=pdf_path_0.stat().st_size,
+                )
+            ],
+        )
+        self._save_meal(manager, source_meal)
+
+        with patch.object(
+            manager, "_parse_pdfs_with_registry"
+        ) as mock_parse, patch(
+            "src.meal.build_chunks_if_needed"
+        ), patch(
+            "src.meal.build_index_from_chunks"
+        ):
+            result = manager.extend_meal(
+                "source_meal",
+                ["reports/report_0.pdf", "reports/report_1.pdf"],
+                name="extended_meal",
+            )
+
+            assert len(result.pdf_files) == 2
+            assert "reports/report_0.pdf" in result.composition["skipped_files"]
+            assert "reports/report_1.pdf" in result.composition["added_files"]
+
+            mock_parse.assert_called_once()
+
+    def test_extend_meal_composition_metadata(self, temp_dirs):
+        from unittest.mock import patch
+
+        manager = MealManager(temp_dirs)
+
+        pdf_path_0 = Path(temp_dirs["parser"]["input_dir"]) / "reports" / "report_0.pdf"
+        sha256_0 = compute_file_sha256(pdf_path_0)
+
+        source_meal = self._make_meal_config(
+            name="source_meal",
+            pdf_files=[
+                MealFile(
+                    path="reports/report_0.pdf",
+                    sha256=sha256_0,
+                    size_bytes=pdf_path_0.stat().st_size,
+                )
+            ],
+        )
+        self._save_meal(manager, source_meal)
+
+        with patch.object(
+            manager, "_parse_pdfs_with_registry"
+        ), patch("src.meal.build_chunks_if_needed"), patch(
+            "src.meal.build_index_from_chunks"
+        ):
+            result = manager.extend_meal(
+                "source_meal", ["reports/report_1.pdf"], name="extended_meal"
+            )
+
+            assert result.composition["type"] == "extended"
+            assert result.composition["base_meal"] == "source_meal"
+            assert result.composition["added_files"] == ["reports/report_1.pdf"]
+            assert "created_at" in result.composition
+
+    def test_extend_meal_copies_source_artifacts(self, temp_dirs):
+        from unittest.mock import patch
+
+        manager = MealManager(temp_dirs)
+
+        pdf_path_0 = Path(temp_dirs["parser"]["input_dir"]) / "reports" / "report_0.pdf"
+        sha256_0 = compute_file_sha256(pdf_path_0)
+
+        source_meal = self._make_meal_config(
+            name="source_meal",
+            pdf_files=[
+                MealFile(
+                    path="reports/report_0.pdf",
+                    sha256=sha256_0,
+                    size_bytes=pdf_path_0.stat().st_size,
+                )
+            ],
+        )
+        self._save_meal(manager, source_meal)
+
+        _, config_hashes = manager._build_config_snapshot_and_hashes()
+        parser_hash = config_hashes["parser"]
+        chunker_hash = config_hashes["chunker"]
+
+        source_parsed_dir = manager.cache.get_parsed_dir(source_meal.data_id, parser_hash)
+        source_parsed_dir.mkdir(parents=True, exist_ok=True)
+        (source_parsed_dir / "report_0.md").write_text("# Source content")
+
+        source_chunks_dir = manager.cache.get_chunks_dir(
+            source_meal.data_id, chunker_hash
+        )
+        source_chunks_dir.mkdir(parents=True, exist_ok=True)
+        (source_chunks_dir / "report_0.jsonl").write_text('{"chunk": "data"}')
+
+        with patch.object(
+            manager, "_parse_pdfs_with_registry"
+        ), patch("src.meal.build_chunks_if_needed"), patch(
+            "src.meal.build_index_from_chunks"
+        ):
+            result = manager.extend_meal(
+                "source_meal", ["reports/report_1.pdf"], name="extended_meal"
+            )
+
+            new_parsed_dir = manager.cache.get_parsed_dir(result.data_id, parser_hash)
+            new_chunks_dir = manager.cache.get_chunks_dir(
+                result.data_id, chunker_hash
+            )
+
+            assert (new_parsed_dir / "report_0.md").exists()
+            assert (new_chunks_dir / "report_0.jsonl").exists()
+
+    def test_extend_meal_absolute_path(self, temp_dirs):
+        from unittest.mock import patch
+
+        manager = MealManager(temp_dirs)
+
+        pdf_path_0 = Path(temp_dirs["parser"]["input_dir"]) / "reports" / "report_0.pdf"
+        sha256_0 = compute_file_sha256(pdf_path_0)
+
+        source_meal = self._make_meal_config(
+            name="source_meal",
+            pdf_files=[
+                MealFile(
+                    path="reports/report_0.pdf",
+                    sha256=sha256_0,
+                    size_bytes=pdf_path_0.stat().st_size,
+                )
+            ],
+        )
+        self._save_meal(manager, source_meal)
+
+        pdf_path_1 = Path(temp_dirs["parser"]["input_dir"]) / "reports" / "report_1.pdf"
+
+        with patch.object(
+            manager, "_parse_pdfs_with_registry"
+        ), patch("src.meal.build_chunks_if_needed"), patch(
+            "src.meal.build_index_from_chunks"
+        ):
+            result = manager.extend_meal(
+                "source_meal", [pdf_path_1], name="extended_meal"
+            )
+
+            assert len(result.pdf_files) == 2
+            assert result.pdf_files[1].path == "reports/report_1.pdf"
+
+    def test_extend_meal_path_object(self, temp_dirs):
+        from pathlib import Path as P
+        from unittest.mock import patch
+
+        manager = MealManager(temp_dirs)
+
+        pdf_path_0 = Path(temp_dirs["parser"]["input_dir"]) / "reports" / "report_0.pdf"
+        sha256_0 = compute_file_sha256(pdf_path_0)
+
+        source_meal = self._make_meal_config(
+            name="source_meal",
+            pdf_files=[
+                MealFile(
+                    path="reports/report_0.pdf",
+                    sha256=sha256_0,
+                    size_bytes=pdf_path_0.stat().st_size,
+                )
+            ],
+        )
+        self._save_meal(manager, source_meal)
+
+        with patch.object(
+            manager, "_parse_pdfs_with_registry"
+        ), patch("src.meal.build_chunks_if_needed"), patch(
+            "src.meal.build_index_from_chunks"
+        ):
+            result = manager.extend_meal(
+                "source_meal", [P("reports/report_1.pdf")], name="extended_meal"
+            )
+
+            assert len(result.pdf_files) == 2
+
+    def test_extend_meal_generates_timestamp_name(self, temp_dirs):
+        from unittest.mock import patch
+
+        manager = MealManager(temp_dirs)
+
+        pdf_path_0 = Path(temp_dirs["parser"]["input_dir"]) / "reports" / "report_0.pdf"
+        sha256_0 = compute_file_sha256(pdf_path_0)
+
+        source_meal = self._make_meal_config(
+            name="source_meal",
+            pdf_files=[
+                MealFile(
+                    path="reports/report_0.pdf",
+                    sha256=sha256_0,
+                    size_bytes=pdf_path_0.stat().st_size,
+                )
+            ],
+        )
+        self._save_meal(manager, source_meal)
+
+        with patch.object(
+            manager, "_parse_pdfs_with_registry"
+        ), patch("src.meal.build_chunks_if_needed"), patch(
+            "src.meal.build_index_from_chunks"
+        ):
+            result = manager.extend_meal("source_meal", ["reports/report_1.pdf"])
+
+            assert result.name.startswith("meal_")

@@ -245,6 +245,28 @@ evaluation:
       - "answer_relevancy"
 ```
 
+### 合并测试集
+
+当通过合并 meal 创建新 meal 时，可以合并已有测试集：
+
+```bash
+# 合并多个测试集
+pixi run python main.py --merge-test-sets A:TA B:TB --meal C --name TC
+```
+
+| 参数 | 说明 |
+|------|------|
+| `--merge-test-sets SPEC [SPEC...]` | 测试集规格列表（格式：`meal:test_set`） |
+| `--meal MEAL` | 目标 meal 名称 |
+| `--name NAME` | 新测试集名称（可选） |
+
+**合并行为**：
+- 问题自动去重（基于问题文本完全匹配）
+- 验证问题的 `source_files` 是否在目标 meal 中
+- 移除无效问题
+- 重新分配问题 ID
+- 在 `composition` 和 `audit_log` 中记录合并信息
+
 ## 经验教训
 
 1. **向后兼容至关重要**：旧格式测试集和配置必须能正常加载，通过 `_migrate_test_set()` 实现自动迁移

@@ -64,8 +64,8 @@
 | FEAT-023 | Context 长度控制（防止超出模型 context window） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P5-3) | 📋 待处理 | 中 | 5个512-token chunk约2560 token，需截断保护 |
 | FEAT-024 | 页眉页脚清洗（PDF 解析后去除页码、logo、水印等噪声） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P1-3) | 📋 待处理 | 中 | 噪声进入检索影响质量 |
 | FEAT-025 | 检索器层面文档级去重（top_k 结果按文档多样性分配） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P6-4) | 📋 待处理 | 中 | 当前 top 5 全部来自同一文档，检索多样性为零 |
-| FEAT-026 | meal 系统升级支持扩充已有 meal | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 支持旧 meal 并集生成新抽样，"拼图"过程反映于元数据 |
-| FEAT-027 | 问题集组合功能 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 组合新 meal 后相应组合老 meal 问题集，减少重复工作量 |
+| FEAT-026 | meal 系统升级支持扩充已有 meal | [TODO.md](../TODO.md) | ✅ 已完成 | 中 | 支持 merge_meals/extend_meal，composition 元数据追踪 |
+| FEAT-027 | 问题集组合功能 | [TODO.md](../TODO.md) | ✅ 已完成 | 中 | 支持 merge_test_sets，问题去重与有效性验证 |
 
 ---
 
