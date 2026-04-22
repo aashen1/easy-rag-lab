@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
+from src.exceptions import ConfigurationError
 from src.utils import (
     create_llm_client,
     detect_document_category,
@@ -146,7 +147,7 @@ class TestGetLlmConfig:
             "LLM_BASE_URL": "https://api.test.com/",
         }.get(key, default)
         config = {"llm_presets": {"default": {"temperature": 0.5, "max_tokens": 2048}}}
-        with pytest.raises(ValueError, match="Required environment variable"):
+        with pytest.raises(ConfigurationError, match="Required environment variable"):
             get_llm_config(config)
 
 
@@ -174,7 +175,7 @@ class TestGetEnvVar:
     def test_required_var_missing(self, mock_getenv):
         mock_getenv.return_value = None
 
-        with pytest.raises(ValueError, match="Required environment variable 'REQUIRED_VAR' is not set"):
+        with pytest.raises(ConfigurationError, match="Required environment variable 'REQUIRED_VAR' is not set"):
             get_env_var("REQUIRED_VAR", required=True)
 
 
@@ -331,7 +332,7 @@ class TestCreateLlmClient:
         )
 
     def test_invalid_mode_raises_value_error(self):
-        with pytest.raises(ValueError, match="Unsupported LLM client mode: invalid"):
+        with pytest.raises(ConfigurationError, match="Unsupported LLM client mode: invalid"):
             create_llm_client(
                 llm_config=self._make_llm_config(),
                 mode="invalid",

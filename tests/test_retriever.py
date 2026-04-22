@@ -2,6 +2,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from src.exceptions import RetrievalError
 from src.retriever import Retriever
 
 
@@ -40,14 +41,14 @@ class TestRetriever:
         indexer = self._make_mock_indexer(mock_qdrant_client)
         retriever = Retriever(indexer=indexer, embedder=mock_embedder, top_k=5)
 
-        with pytest.raises(ValueError, match="Query must be a non-empty string"):
+        with pytest.raises(RetrievalError, match="Query must be a non-empty string"):
             retriever.retrieve("")
 
     def test_retrieve_non_string_query(self, mock_embedder, mock_qdrant_client):
         indexer = self._make_mock_indexer(mock_qdrant_client)
         retriever = Retriever(indexer=indexer, embedder=mock_embedder, top_k=5)
 
-        with pytest.raises(ValueError, match="Query must be a non-empty string"):
+        with pytest.raises(RetrievalError, match="Query must be a non-empty string"):
             retriever.retrieve(123)
 
     def test_retrieve_qdrant_error(self, mock_embedder, mock_qdrant_client):
@@ -56,7 +57,7 @@ class TestRetriever:
 
         retriever = Retriever(indexer=indexer, embedder=mock_embedder, top_k=5)
 
-        with pytest.raises(Exception, match="Failed to retrieve results"):
+        with pytest.raises(RetrievalError, match="Failed to retrieve results"):
             retriever.retrieve("test query")
 
     def test_retrieve_result_payload_extraction(self, mock_embedder, mock_qdrant_client):

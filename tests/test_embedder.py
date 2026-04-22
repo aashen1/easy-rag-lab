@@ -5,6 +5,7 @@ import pytest
 import torch
 
 from src.embedder import Embedder
+from src.exceptions import ConfigurationError, IndexingError
 
 
 @pytest.fixture
@@ -51,7 +52,7 @@ class TestEmbedder:
     @pytest.mark.unit
     def test_embedder_init_failure(self, embedder_setup):
         embedder_setup.mock_auto_model.from_pretrained.side_effect = Exception("Model load error")
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(IndexingError) as exc_info:
             Embedder(model_name="test-model")
         assert "Failed to load embedding model" in str(exc_info.value)
 
@@ -79,7 +80,7 @@ class TestEmbedder:
 
     @pytest.mark.unit
     def test_embed_texts_invalid_input(self, embedder_setup):
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ConfigurationError) as exc_info:
             embedder_setup.embedder.embed_texts([123, 456])
         assert "All items in texts must be strings" in str(exc_info.value)
 
@@ -94,7 +95,7 @@ class TestEmbedder:
         }
         embedder_setup.embedder._tokenizer = mock_tokenizer
 
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(IndexingError) as exc_info:
             embedder_setup.embedder.embed_texts(["text1", "text2"])
         assert "Failed to embed texts" in str(exc_info.value)
 
@@ -117,13 +118,13 @@ class TestEmbedder:
 
     @pytest.mark.unit
     def test_embed_query_empty_string(self, embedder_setup):
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ConfigurationError) as exc_info:
             embedder_setup.embedder.embed_query("")
         assert "Query must be a non-empty string" in str(exc_info.value)
 
     @pytest.mark.unit
     def test_embed_query_invalid_type(self, embedder_setup):
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ConfigurationError) as exc_info:
             embedder_setup.embedder.embed_query(123)
         assert "Query must be a non-empty string" in str(exc_info.value)
 
@@ -138,7 +139,7 @@ class TestEmbedder:
         }
         embedder_setup.embedder._tokenizer = mock_tokenizer
 
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(IndexingError) as exc_info:
             embedder_setup.embedder.embed_query("test query")
         assert "Failed to embed query" in str(exc_info.value)
 

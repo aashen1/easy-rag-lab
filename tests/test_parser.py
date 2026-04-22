@@ -4,12 +4,13 @@ from unittest.mock import patch
 
 import pytest
 
+from src.exceptions import ParsingError
 from src.parser import parse_all_pdfs, parse_pdf
 
 
 class TestParsePdf:
     def test_parse_pdf_file_not_found(self):
-        with pytest.raises(FileNotFoundError) as exc_info:
+        with pytest.raises(ParsingError) as exc_info:
             parse_pdf("nonexistent.pdf")
         assert "PDF file not found" in str(exc_info.value)
 
@@ -17,7 +18,7 @@ class TestParsePdf:
         txt_file = tmp_path / "test.txt"
         txt_file.write_text("test content")
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ParsingError) as exc_info:
             parse_pdf(str(txt_file))
         assert "File is not a PDF" in str(exc_info.value)
 
@@ -40,14 +41,14 @@ class TestParsePdf:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_bytes(b"%PDF-1.4\ntest pdf content")
 
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(ParsingError) as exc_info:
             parse_pdf(str(pdf_file))
         assert "Failed to parse PDF" in str(exc_info.value)
 
 
 class TestParseAllPdfs:
     def test_parse_all_pdfs_input_dir_not_found(self):
-        with pytest.raises(FileNotFoundError) as exc_info:
+        with pytest.raises(ParsingError) as exc_info:
             parse_all_pdfs("nonexistent_dir", "output_dir")
         assert "Input directory not found" in str(exc_info.value)
 

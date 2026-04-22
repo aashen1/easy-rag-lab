@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from src.bm25_retriever import BM25Retriever
+from src.exceptions import IndexingError, RetrievalError
 
 
 @pytest.mark.unit
@@ -38,24 +39,24 @@ class TestBM25Retriever:
 
     def test_build_index_empty_chunks_raises(self):
         retriever = BM25Retriever()
-        with pytest.raises(ValueError, match="Cannot build BM25 index from empty"):
+        with pytest.raises(IndexingError, match="Cannot build BM25 index from empty"):
             retriever.build_index([])
 
     def test_retrieve_before_index_raises(self):
         retriever = BM25Retriever()
-        with pytest.raises(RuntimeError, match="BM25 index not built"):
+        with pytest.raises(IndexingError, match="BM25 index not built"):
             retriever.retrieve("test query")
 
     def test_retrieve_empty_query_raises(self):
         retriever = BM25Retriever()
         retriever.build_index(self._make_test_chunks())
-        with pytest.raises(ValueError, match="Query must be a non-empty string"):
+        with pytest.raises(RetrievalError, match="Query must be a non-empty string"):
             retriever.retrieve("")
 
     def test_retrieve_non_string_query_raises(self):
         retriever = BM25Retriever()
         retriever.build_index(self._make_test_chunks())
-        with pytest.raises(ValueError, match="Query must be a non-empty string"):
+        with pytest.raises(RetrievalError, match="Query must be a non-empty string"):
             retriever.retrieve(123)
 
     def test_retrieve_returns_results(self):
@@ -105,11 +106,11 @@ class TestBM25Retriever:
         assert all(len(t) > 1 for t in tokens)
 
     def test_invalid_k1_raises(self):
-        with pytest.raises(ValueError, match="k1 must be non-negative"):
+        with pytest.raises(RetrievalError, match="k1 must be non-negative"):
             BM25Retriever(k1=-1)
 
     def test_invalid_b_raises(self):
-        with pytest.raises(ValueError, match="b must be in"):
+        with pytest.raises(RetrievalError, match="b must be in"):
             BM25Retriever(b=1.5)
 
     def test_build_index_from_chunks(self):
@@ -130,7 +131,7 @@ class TestBM25Retriever:
 
     def test_build_index_from_chunks_dir_not_found(self):
         retriever = BM25Retriever()
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(IndexingError):
             retriever.build_index_from_chunks("/nonexistent/path")
 
     def test_build_index_from_chunks_with_source_filter(self):

@@ -25,6 +25,7 @@ from eval.metrics import (
     normalize_source,
     normalize_source_with_equivalence,
 )
+from src.exceptions import EvaluationError
 
 
 @pytest.mark.unit
@@ -189,7 +190,7 @@ class TestCalculateHitRateValidation:
     def test_invalid_mode_raises_error(self):
         retrieved = ["doc1"]
         expected = ["doc1"]
-        with pytest.raises(ValueError, match="mode must be 'standard' or 'recall'"):
+        with pytest.raises(EvaluationError, match="mode must be 'standard' or 'recall'"):
             calculate_hit_rate(retrieved, expected, mode="invalid")
 
 
@@ -520,12 +521,12 @@ class TestParseRelevancyResponse:
 
     def test_parse_invalid_json_raises_error(self):
         response_text = "这不是有效的JSON"
-        with pytest.raises(ValueError, match="Failed to parse LLM response as JSON"):
+        with pytest.raises(EvaluationError, match="Failed to parse LLM response as JSON"):
             _parse_relevancy_response(response_text)
 
     def test_parse_partial_json(self):
         response_text = '{"direct_relevance": 5, "information_sufficiency": 5'
-        with pytest.raises(ValueError, match="Failed to parse LLM response as JSON"):
+        with pytest.raises(EvaluationError, match="Failed to parse LLM response as JSON"):
             _parse_relevancy_response(response_text)
 
 
@@ -534,7 +535,7 @@ class TestCalculateAnswerRelevancy:
     """Tests for calculate_answer_relevancy function."""
 
     def test_empty_question_raises_error(self):
-        with pytest.raises(ValueError, match="Question must be a non-empty string"):
+        with pytest.raises(EvaluationError, match="Question must be a non-empty string"):
             calculate_answer_relevancy(
                 question="",
                 answer="这是一个回答",
@@ -542,7 +543,7 @@ class TestCalculateAnswerRelevancy:
             )
 
     def test_empty_answer_raises_error(self):
-        with pytest.raises(ValueError, match="Answer must be a non-empty string"):
+        with pytest.raises(EvaluationError, match="Answer must be a non-empty string"):
             calculate_answer_relevancy(
                 question="这是一个问题",
                 answer="",
@@ -550,7 +551,7 @@ class TestCalculateAnswerRelevancy:
             )
 
     def test_none_question_raises_error(self):
-        with pytest.raises(ValueError, match="Question must be a non-empty string"):
+        with pytest.raises(EvaluationError, match="Question must be a non-empty string"):
             calculate_answer_relevancy(
                 question=None,
                 answer="这是一个回答",
@@ -558,7 +559,7 @@ class TestCalculateAnswerRelevancy:
             )
 
     def test_none_answer_raises_error(self):
-        with pytest.raises(ValueError, match="Answer must be a non-empty string"):
+        with pytest.raises(EvaluationError, match="Answer must be a non-empty string"):
             calculate_answer_relevancy(
                 question="这是一个问题",
                 answer=None,
@@ -663,7 +664,7 @@ class TestCalculateAnswerRelevancy:
         mock_create_client.return_value = mock_client
         mock_client.messages.create.side_effect = Exception("API Error")
 
-        with pytest.raises(Exception, match="Failed to calculate answer relevancy"):
+        with pytest.raises(EvaluationError, match="Failed to calculate answer relevancy"):
             calculate_answer_relevancy(
                 question="问题",
                 answer="回答",
@@ -800,7 +801,7 @@ class TestExtractStatements:
         mock_client = MagicMock()
         mock_client.messages.create.side_effect = Exception("API Error")
 
-        with pytest.raises(Exception, match="Failed to extract statements"):
+        with pytest.raises(EvaluationError, match="Failed to extract statements"):
             _extract_statements(
                 client=mock_client,
                 answer="测试回答",
@@ -900,7 +901,7 @@ class TestVerifyStatements:
         mock_client = MagicMock()
         mock_client.messages.create.side_effect = Exception("API Error")
 
-        with pytest.raises(Exception, match="Failed to verify statements"):
+        with pytest.raises(EvaluationError, match="Failed to verify statements"):
             _verify_statements(
                 client=mock_client,
                 statements=["陈述1"],
@@ -914,7 +915,7 @@ class TestCalculateFaithfulness:
     """Tests for calculate_faithfulness function."""
 
     def test_empty_answer_raises_error(self):
-        with pytest.raises(ValueError, match="Answer must be a non-empty string"):
+        with pytest.raises(EvaluationError, match="Answer must be a non-empty string"):
             calculate_faithfulness(
                 answer="",
                 contexts=["上下文"],
@@ -922,7 +923,7 @@ class TestCalculateFaithfulness:
             )
 
     def test_none_answer_raises_error(self):
-        with pytest.raises(ValueError, match="Answer must be a non-empty string"):
+        with pytest.raises(EvaluationError, match="Answer must be a non-empty string"):
             calculate_faithfulness(
                 answer=None,
                 contexts=["上下文"],
@@ -1050,7 +1051,7 @@ class TestCalculateFaithfulness:
     def test_llm_client_error_raises_exception(self, mock_create_client):
         mock_create_client.side_effect = Exception("Client creation failed")
 
-        with pytest.raises(Exception, match="Failed to calculate faithfulness"):
+        with pytest.raises(EvaluationError, match="Failed to calculate faithfulness"):
             calculate_faithfulness(
                 answer="回答",
                 contexts=["上下文"],

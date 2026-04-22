@@ -2,23 +2,24 @@ from unittest.mock import patch
 
 import pytest
 
+from src.exceptions import ConfigurationError, GenerationError
 from src.query_rewriter import QueryRewriter
 
 
 @pytest.mark.unit
 class TestQueryRewriter:
     def test_invalid_strategy_raises(self):
-        with pytest.raises(ValueError, match="strategy must be"):
+        with pytest.raises(ConfigurationError, match="strategy must be"):
             QueryRewriter(strategy="invalid")
 
     def test_empty_query_raises(self):
         rewriter = object.__new__(QueryRewriter)
-        with pytest.raises(ValueError, match="Query must be a non-empty string"):
+        with pytest.raises(GenerationError, match="Query must be a non-empty string"):
             rewriter.rewrite("")
 
     def test_non_string_query_raises(self):
         rewriter = object.__new__(QueryRewriter)
-        with pytest.raises(ValueError, match="Query must be a non-empty string"):
+        with pytest.raises(GenerationError, match="Query must be a non-empty string"):
             rewriter.rewrite(123)
 
     @patch("src.query_rewriter.QueryRewriter._call_llm")
@@ -120,5 +121,5 @@ class TestQueryRewriter:
         mock_call_llm.side_effect = Exception("API error")
 
         rewriter = QueryRewriter(strategy="hyde")
-        with pytest.raises(Exception, match="Failed to rewrite query"):
+        with pytest.raises(GenerationError, match="Failed to rewrite query"):
             rewriter.rewrite("茅台营收")

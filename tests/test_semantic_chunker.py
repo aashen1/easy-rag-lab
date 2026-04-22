@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 import numpy as np
 import pytest
 
+from src.exceptions import ParsingError
 from src.semantic_chunker import (
     _split_into_paragraphs,
     _split_into_sentences,
@@ -64,7 +65,7 @@ class TestSemanticChunker:
         assert chunks == []
 
     def test_chunk_text_semantic_none_embedder_raises(self):
-        with pytest.raises(ValueError, match="Embedder is required"):
+        with pytest.raises(ParsingError, match="Embedder is required"):
             chunk_text_semantic("test text", None)
 
     def test_chunk_text_semantic_single_sentence(self):

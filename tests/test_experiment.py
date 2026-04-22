@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from src.exceptions import ConfigurationError
 from src.experiment import (
     VALID_GENERATION_METRICS,
     VALID_ON_MISSING_VALUES,
@@ -94,10 +95,10 @@ class TestExperimentConfig:
     def test_invalid_config_catches_all_errors(self):
         data_missing_name = self._make_config_dict()
         del data_missing_name["name"]
-        with pytest.raises(ValueError, match="Missing required fields"):
+        with pytest.raises(ConfigurationError, match="Missing required fields"):
             ExperimentConfig.from_dict(data_missing_name)
 
-        with pytest.raises(ValueError, match="Missing required fields"):
+        with pytest.raises(ConfigurationError, match="Missing required fields"):
             ExperimentConfig.from_dict({"name": "test"})
 
         data = self._make_config_dict(
@@ -471,7 +472,7 @@ class TestLoadExperimentConfig:
 
     @pytest.mark.unit
     def test_load_file_not_found(self):
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(ConfigurationError):
             load_experiment_config("nonexistent_file.yaml")
 
     @pytest.mark.unit
@@ -493,7 +494,7 @@ class TestLoadExperimentConfig:
             temp_path = f.name
 
         try:
-            with pytest.raises(ValueError, match="Empty configuration file"):
+            with pytest.raises(ConfigurationError, match="Empty configuration file"):
                 load_experiment_config(temp_path)
         finally:
             Path(temp_path).unlink()
@@ -505,7 +506,7 @@ class TestLoadExperimentConfig:
             temp_path = f.name
 
         try:
-            with pytest.raises(ValueError, match="must be a dictionary"):
+            with pytest.raises(ConfigurationError, match="must be a dictionary"):
                 load_experiment_config(temp_path)
         finally:
             Path(temp_path).unlink()
@@ -526,7 +527,7 @@ class TestLoadExperimentConfig:
             temp_path = f.name
 
         try:
-            with pytest.raises(ValueError, match="validation failed"):
+            with pytest.raises(ConfigurationError, match="validation failed"):
                 load_experiment_config(temp_path)
         finally:
             Path(temp_path).unlink()
@@ -574,7 +575,7 @@ class TestGetVariantConfig:
     @pytest.mark.unit
     def test_get_variant_config_not_found(self):
         system_config, experiment_config = self._make_configs()
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(ConfigurationError, match="not found"):
             get_variant_config(system_config, experiment_config, "nonexistent")
 
 
@@ -738,7 +739,7 @@ class TestExperimentResult:
             "experiment_id": "exp_test",
             "name": "test",
         }
-        with pytest.raises(ValueError, match="Missing required fields"):
+        with pytest.raises(ConfigurationError, match="Missing required fields"):
             ExperimentResult.from_dict(data)
 
     @pytest.mark.unit
@@ -935,7 +936,7 @@ class TestExperimentManager:
             exp_dir = temp_path / "exp_reports" / "exp_test"
             exp_dir.mkdir(parents=True)
 
-            with pytest.raises(FileNotFoundError, match="Manifest file not found"):
+            with pytest.raises(ConfigurationError, match="Manifest file not found"):
                 manager.load_experiment_result(exp_dir)
 
     @pytest.mark.unit
@@ -1004,7 +1005,7 @@ class TestExperimentManager:
             system_config = self._make_system_config(temp_path)
             manager = ExperimentManager(system_config)
 
-            with pytest.raises(FileNotFoundError, match="Experiment not found"):
+            with pytest.raises(ConfigurationError, match="Experiment not found"):
                 manager.get_experiment_info("nonexistent_experiment")
 
     @pytest.mark.unit

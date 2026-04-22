@@ -6,6 +6,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
+from src.exceptions import ConfigurationError
+
 
 class TestRunEvalExpConfig:
     def _create_experiment_config(
@@ -157,7 +159,7 @@ class TestRunEvalExpConfig:
 
             from src.experiment import load_experiment_config
 
-            with pytest.raises(ValueError, match="meal"):
+            with pytest.raises(ConfigurationError, match="meal"):
                 load_experiment_config(str(config_path))
 
     @pytest.mark.unit

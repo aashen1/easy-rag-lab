@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from src.exceptions import ParsingError
 from src.parsers.fitz_pdfplumber_parser import (
     FitzPdfPlumberParser,
     _TextBlock,
@@ -310,13 +311,13 @@ class TestMergeTextAndTables:
 
 class TestParseFileErrors:
     def test_file_not_found(self, parser: FitzPdfPlumberParser) -> None:
-        with pytest.raises(FileNotFoundError) as exc_info:
+        with pytest.raises(ParsingError) as exc_info:
             parser.parse("nonexistent.pdf")
         assert "PDF file not found" in str(exc_info.value)
 
     def test_not_a_pdf(self, parser: FitzPdfPlumberParser, tmp_path) -> None:
         txt_file = tmp_path / "test.txt"
         txt_file.write_text("not a pdf")
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ParsingError) as exc_info:
             parser.parse(str(txt_file))
         assert "File is not a PDF" in str(exc_info.value)

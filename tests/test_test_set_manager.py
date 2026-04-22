@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from src.exceptions import TestSetError
 from src.meal import MealConfig, MealFile
 from src.test_set_manager import TestSetManager, TestSetMetadata
 
@@ -337,7 +338,7 @@ class TestTestSetManager:
     def test_load_test_set_not_found(self, env):
         manager, config = env
         _create_meal_dir(config, "my_meal")
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(TestSetError):
             manager.load_test_set("my_meal", "nonexistent")
 
     def test_find_by_name(self, env):
@@ -409,7 +410,7 @@ class TestTestSetManager:
     def test_delete_test_set_not_found(self, env):
         manager, config = env
         _create_meal_dir(config, "my_meal")
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(TestSetError):
             manager.delete_test_set("my_meal", "nonexistent")
 
     def test_test_set_exists_true(self, env):
@@ -750,7 +751,7 @@ class TestCleanImmutablePolicy:
             ],
         }
         invalid_questions = [{"id": 1, "question": "Q1", "source_files": ["missing.pdf"]}]
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(TestSetError) as exc_info:
             manager._clean_immutable_policy(test_set_data, meal_config, invalid_questions)
         assert "immutable policy" in str(exc_info.value).lower()
         assert "1 invalid questions" in str(exc_info.value)
@@ -775,7 +776,7 @@ class TestCleanImmutablePolicy:
             {"id": 1, "question": "Q1"},
             {"id": 2, "question": "Q2"},
         ]
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(TestSetError) as exc_info:
             manager._clean_immutable_policy(test_set_data, meal_config, invalid_questions)
         assert "2 invalid questions" in str(exc_info.value)
 
@@ -841,7 +842,7 @@ class TestCleanTrimPolicy:
             {"id": 1, "question": "Q1", "source_files": ["missing.pdf"]},
             {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]},
         ]
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(TestSetError) as exc_info:
             manager._clean_trim_policy(test_set_data, meal_config, invalid_questions)
         assert "all" in str(exc_info.value).lower()
         assert "invalid" in str(exc_info.value).lower()
@@ -924,7 +925,7 @@ class TestCleanRegeneratePolicy:
             "questions": [{"id": 1, "question": "Q1"}],
         }
         invalid_questions = [{"id": 1, "question": "Q1"}]
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(TestSetError) as exc_info:
             manager._clean_regenerate_policy(
                 test_set_data, meal_config, invalid_questions, None, "default", None
             )
@@ -945,7 +946,7 @@ class TestCleanRegeneratePolicy:
             "questions": [{"id": 1, "question": "Q1"}],
         }
         invalid_questions = [{"id": 1, "question": "Q1"}]
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(TestSetError) as exc_info:
             manager._clean_regenerate_policy(
                 test_set_data, meal_config, invalid_questions, None, "default", None
             )
@@ -1197,7 +1198,7 @@ class TestCleanUserTestSet:
             },
             "questions": [],
         }
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(TestSetError) as exc_info:
             manager._clean_user_test_set(test_set_data, meal_config, [])
         assert "unknown invalid_policy" in str(exc_info.value).lower()
 
@@ -1848,7 +1849,7 @@ class TestResolveTestSet:
         )
         _create_meal_dir(config, meal_config.name)
         test_set_config = {"name": "nonexistent", "on_missing": "clean_only"}
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(TestSetError) as exc_info:
             manager.resolve_test_set(
                 meal_name=meal_config.name,
                 test_set_config=test_set_config,
@@ -1904,7 +1905,7 @@ class TestResolveTestSet:
         }
         manager.save_test_set(meal_config.name, test_set_data)
         test_set_config = {"name": "invalid_set", "on_missing": "strict"}
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(TestSetError) as exc_info:
             manager.resolve_test_set(
                 meal_name=meal_config.name,
                 test_set_config=test_set_config,
@@ -1921,7 +1922,7 @@ class TestResolveTestSet:
         )
         _create_meal_dir(config, meal_config.name)
         test_set_config = {"name": "nonexistent", "on_missing": "strict"}
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(TestSetError) as exc_info:
             manager.resolve_test_set(
                 meal_name=meal_config.name,
                 test_set_config=test_set_config,
@@ -2251,7 +2252,7 @@ class TestMergeTestSets:
 
         source_specs = [{"meal": "nonexistent_meal", "test_set": "nonexistent_set"}]
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(TestSetError) as exc_info:
             manager.merge_test_sets(
                 source_specs=source_specs,
                 target_meal_name="target_meal",
@@ -2268,7 +2269,7 @@ class TestMergeTestSets:
             pdf_paths=["reports/report_0.pdf"],
         )
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(TestSetError) as exc_info:
             manager.merge_test_sets(
                 source_specs=[],
                 target_meal_name="target_meal",
@@ -2285,7 +2286,7 @@ class TestMergeTestSets:
             pdf_paths=["reports/report_0.pdf"],
         )
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(TestSetError) as exc_info:
             manager.merge_test_sets(
                 source_specs=[{"meal": "only_meal"}],
                 target_meal_name="target_meal",

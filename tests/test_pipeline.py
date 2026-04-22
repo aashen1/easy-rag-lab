@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.exceptions import RetrievalError
 from src.pipeline import RAGPipeline
 
 
@@ -209,10 +210,10 @@ class TestRAGPipeline:
 
         pipeline = RAGPipeline(config_path="dummy.yaml")
 
-        with pytest.raises(ValueError, match="Question must be a non-empty string"):
+        with pytest.raises(RetrievalError, match="Question must be a non-empty string"):
             pipeline.query("")
 
-        with pytest.raises(ValueError, match="Question must be a non-empty string"):
+        with pytest.raises(RetrievalError, match="Question must be a non-empty string"):
             pipeline.query(123)
 
     @patch("src.pipeline.Generator")

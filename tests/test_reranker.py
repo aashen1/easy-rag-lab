@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import torch
 
+from src.exceptions import ConfigurationError
 from src.reranker import Reranker
 
 
@@ -87,7 +88,7 @@ class TestReranker:
             pass
 
         reranker = object.__new__(Reranker)
-        with pytest.raises(ValueError, match="Query must be a non-empty string"):
+        with pytest.raises(ConfigurationError, match="Query must be a non-empty string"):
             reranker.rerank("", self._make_test_results())
 
     def test_rerank_empty_results_returns_empty(self):

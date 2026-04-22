@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from src.exceptions import MealError
 from src.meal import (
     ArtifactCache,
     MealConfig,
@@ -579,7 +580,7 @@ class TestMealManager:
 
     def test_load_meal_not_found(self, temp_dirs):
         manager = MealManager(temp_dirs)
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(MealError):
             manager.load_meal("nonexistent")
 
     def test_save_and_load_meal(self, temp_dirs):
@@ -664,7 +665,7 @@ class TestMealManager:
         meal = self._make_meal_config(name="valid_name")
         self._save_meal(manager, meal)
 
-        with pytest.raises(ValueError, match="Invalid meal name"):
+        with pytest.raises(MealError, match="Invalid meal name"):
             manager.rename_meal("valid_name", "invalid name")
 
     def test_rename_meal_duplicate_name(self, temp_dirs):
@@ -673,7 +674,7 @@ class TestMealManager:
             meal = self._make_meal_config(name=name)
             self._save_meal(manager, meal)
 
-        with pytest.raises(ValueError, match="already exists"):
+        with pytest.raises(MealError, match="already exists"):
             manager.rename_meal("meal_a", "meal_b")
 
     def test_list_meals(self, temp_dirs):
@@ -738,7 +739,7 @@ class TestMealManager:
         meal = self._make_meal_config(name="existing")
         self._save_meal(manager, meal)
 
-        with pytest.raises(ValueError, match="already exists"):
+        with pytest.raises(MealError, match="already exists"):
             manager.copy_meal("existing", "existing")
 
     def test_delete_meal(self, temp_dirs):
@@ -920,12 +921,12 @@ class TestMergeMeals:
 
     def test_merge_meals_empty_list(self, temp_dirs):
         manager = MealManager(temp_dirs)
-        with pytest.raises(ValueError, match="meal_names cannot be empty"):
+        with pytest.raises(MealError, match="meal_names cannot be empty"):
             manager.merge_meals([])
 
     def test_merge_meals_nonexistent_meal(self, temp_dirs):
         manager = MealManager(temp_dirs)
-        with pytest.raises(ValueError, match="does not exist"):
+        with pytest.raises(MealError, match="does not exist"):
             manager.merge_meals(["nonexistent_meal"])
 
     def test_merge_meals_invalid_name(self, temp_dirs):
@@ -933,7 +934,7 @@ class TestMergeMeals:
         meal_a = self._make_meal_config(name="meal_a")
         self._save_meal(manager, meal_a)
 
-        with pytest.raises(ValueError, match="Invalid meal name"):
+        with pytest.raises(MealError, match="Invalid meal name"):
             manager.merge_meals(["meal_a"], name="invalid name")
 
     def test_merge_meals_duplicate_name(self, temp_dirs):
@@ -941,7 +942,7 @@ class TestMergeMeals:
         meal_a = self._make_meal_config(name="meal_a")
         self._save_meal(manager, meal_a)
 
-        with pytest.raises(ValueError, match="already exists"):
+        with pytest.raises(MealError, match="already exists"):
             manager.merge_meals(["meal_a"], name="meal_a")
 
     def test_merge_two_meals_no_overlap(self, temp_dirs):
@@ -1198,7 +1199,7 @@ class TestExtendMeal:
 
     def test_extend_meal_source_not_found(self, temp_dirs):
         manager = MealManager(temp_dirs)
-        with pytest.raises(ValueError, match="Source meal .* does not exist"):
+        with pytest.raises(MealError, match="Source meal .* does not exist"):
             manager.extend_meal("nonexistent", ["new.pdf"])
 
     def test_extend_meal_invalid_name(self, temp_dirs):
@@ -1206,7 +1207,7 @@ class TestExtendMeal:
         meal = self._make_meal_config(name="source_meal")
         self._save_meal(manager, meal)
 
-        with pytest.raises(ValueError, match="Invalid meal name"):
+        with pytest.raises(MealError, match="Invalid meal name"):
             manager.extend_meal("source_meal", ["new.pdf"], name="invalid name")
 
     def test_extend_meal_duplicate_name(self, temp_dirs):
@@ -1214,7 +1215,7 @@ class TestExtendMeal:
         meal = self._make_meal_config(name="existing_meal")
         self._save_meal(manager, meal)
 
-        with pytest.raises(ValueError, match="already exists"):
+        with pytest.raises(MealError, match="already exists"):
             manager.extend_meal("existing_meal", ["new.pdf"], name="existing_meal")
 
     def test_extend_meal_pdf_not_found(self, temp_dirs):
@@ -1222,7 +1223,7 @@ class TestExtendMeal:
         meal = self._make_meal_config(name="source_meal")
         self._save_meal(manager, meal)
 
-        with pytest.raises(ValueError, match="PDF file does not exist"):
+        with pytest.raises(MealError, match="PDF file does not exist"):
             manager.extend_meal("source_meal", ["nonexistent.pdf"])
 
     def test_extend_meal_all_pdfs_already_exist(self, temp_dirs):
@@ -1242,7 +1243,7 @@ class TestExtendMeal:
         )
         self._save_meal(manager, meal)
 
-        with pytest.raises(ValueError, match="No new PDF files to add"):
+        with pytest.raises(MealError, match="No new PDF files to add"):
             manager.extend_meal("source_meal", ["reports/report_0.pdf"])
 
     def test_extend_meal_success(self, temp_dirs):
