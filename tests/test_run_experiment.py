@@ -11,6 +11,7 @@ from eval.run_experiment import (
     compute_aggregate_metrics,
     evaluate_test_set,
 )
+from src.exceptions import ConfigurationError
 
 
 class TestAssetVerificationResult:
@@ -185,7 +186,7 @@ class TestVerifyExperimentAssets:
             exp_dir = temp_path / "nonexistent"
             system_config = {"parser": {"input_dir": "data/raw"}}
 
-            with pytest.raises(FileNotFoundError, match="Experiment directory not found"):
+            with pytest.raises(ConfigurationError, match="Experiment directory not found"):
                 verify_experiment_assets(exp_dir, system_config)
 
     def test_verify_pdf_not_found(self):
