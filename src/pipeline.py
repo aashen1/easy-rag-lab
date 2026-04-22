@@ -197,7 +197,7 @@ class RAGPipeline:
                     output_path = Path(r["output"])
                     parsed_dir = Path(parser_config["output_dir"])
                     source_filter_md.add(
-                        str(output_path.relative_to(parsed_dir)))
+                        output_path.relative_to(parsed_dir).as_posix())
             logger.info(
                 f"Source filter for chunker: {len(source_filter_md)} files")
 
@@ -220,7 +220,7 @@ class RAGPipeline:
                         output_path = Path(r["output"])
                         parsed_dir = Path(parser_config["output_dir"])
                         source_filter_pages.add(
-                            str(output_path.relative_to(parsed_dir)))
+                            output_path.relative_to(parsed_dir).as_posix())
 
             chunk_results = process_parsed_files_page_aware(
                 input_dir=chunker_config["input_dir"],
@@ -263,7 +263,7 @@ class RAGPipeline:
                     output_path = Path(r["output"])
                     chunks_dir = Path(chunker_config["output_dir"])
                     source_filter_jsonl.add(
-                        str(output_path.relative_to(chunks_dir)))
+                        output_path.relative_to(chunks_dir).as_posix())
             logger.info(
                 f"Source filter for indexer: {len(source_filter_jsonl)} files")
 

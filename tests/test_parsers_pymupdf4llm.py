@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -31,7 +32,7 @@ class TestPyMuPDF4LLMParserWholeDocument:
         assert result.pages[0].text == "# Test Document\n\nThis is test content."
         assert result.metadata["parser"] == "pymupdf4llm"
         assert result.metadata["page_count"] == 1
-        assert result.metadata["source"] == str(pdf_file)
+        assert result.metadata["source"] == Path(pdf_file).as_posix()
         mock_to_markdown.assert_called_once_with(str(pdf_file))
 
     @patch("src.parsers.pymupdf4llm_parser.pymupdf4llm.to_markdown")
@@ -44,7 +45,7 @@ class TestPyMuPDF4LLMParserWholeDocument:
         parser = PyMuPDF4LLMParser()
         result = parser.parse(str(pdf_file))
 
-        assert result.pages[0].metadata["source"] == str(pdf_file)
+        assert result.pages[0].metadata["source"] == Path(pdf_file).as_posix()
 
 
 class TestPyMuPDF4LLMParserPageChunks:

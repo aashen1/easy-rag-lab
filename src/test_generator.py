@@ -469,15 +469,15 @@ class TestSetGenerator:
         source_filter = set()
         for mf in meal_config.pdf_files:
             md_path = Path(mf.path).with_suffix(".md")
-            source_filter.add(str(md_path).replace("\\", "/"))
+            source_filter.add(md_path.as_posix())
 
         all_chunks = []
         jsonl_files = list(chunks_dir.rglob("*.jsonl"))
 
         for jsonl_file in jsonl_files:
             try:
-                rel_path = str(jsonl_file.relative_to(
-                    chunks_dir)).replace("\\", "/")
+                rel_path = jsonl_file.relative_to(
+                    chunks_dir).as_posix()
                 jsonl_md_path = rel_path.rsplit(".", 1)[0] + ".md"
 
                 if source_filter and jsonl_md_path not in source_filter:
@@ -1190,8 +1190,8 @@ class TestSetGenerator:
         """
         source_filter = set()
         for mf in meal_config.pdf_files:
-            pages_rel = str(Path(mf.path).with_suffix(
-                ".pages.json")).replace("\\", "/")
+            pages_rel = Path(mf.path).with_suffix(
+                ".pages.json").as_posix()
             source_filter.add(pages_rel)
 
         documents = {}
@@ -1199,8 +1199,8 @@ class TestSetGenerator:
 
         for pages_file in pages_files:
             try:
-                rel_path = str(pages_file.relative_to(
-                    parsed_dir)).replace("\\", "/")
+                rel_path = pages_file.relative_to(
+                    parsed_dir).as_posix()
                 if source_filter and rel_path not in source_filter:
                     continue
 
@@ -1238,7 +1238,7 @@ class TestSetGenerator:
         """
         source_filter = set()
         for mf in meal_config.pdf_files:
-            md_rel = str(Path(mf.path).with_suffix(".md")).replace("\\", "/")
+            md_rel = Path(mf.path).with_suffix(".md").as_posix()
             source_filter.add(md_rel)
 
         documents = {}
@@ -1246,8 +1246,8 @@ class TestSetGenerator:
 
         for md_file in md_files:
             try:
-                rel_path = str(md_file.relative_to(
-                    parsed_dir)).replace("\\", "/")
+                rel_path = md_file.relative_to(
+                    parsed_dir).as_posix()
                 if source_filter and rel_path not in source_filter:
                     continue
 

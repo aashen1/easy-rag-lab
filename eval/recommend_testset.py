@@ -89,12 +89,12 @@ def analyze_meal(meal: MealConfig, parsed_dir: Path) -> list[dict]:
         text_kb = len(text.encode("utf-8")) / 1024
         size_tier = classify_size(text_kb)
 
-        pdf_path_str = str(pdf_file.path).replace("\\", "/")
+        pdf_path_str = Path(pdf_file.path).as_posix()
         category = "annual_report" if "annual_reports" in pdf_path_str else "research_report"
 
         results.append({
             "pdf_path": pdf_path_str,
-            "md_path": str(md_path),
+            "md_path": md_path.as_posix(),
             "md_name": md_path.stem,
             "display_name": f"{md_path.parent.name}/{md_path.stem}",
             "text_kb": round(text_kb, 1),

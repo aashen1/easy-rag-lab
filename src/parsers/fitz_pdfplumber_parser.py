@@ -118,13 +118,13 @@ class FitzPdfPlumberParser(BaseParser):
                 pages.append(ParsedPage(
                     page_number=page_number,
                     text=md_text,
-                    metadata={"source": str(pdf_path), "page_number": page_number},
+                    metadata={"source": Path(pdf_path).as_posix(), "page_number": page_number},
                 ))
 
             doc.close()
             return ParseResult(
                 pages=pages,
-                metadata={"source": str(pdf_path), "parser": self.name, "page_count": total_pages},
+                metadata={"source": Path(pdf_path).as_posix(), "parser": self.name, "page_count": total_pages},
             )
         except Exception as e:
             error_msg = f"Failed to parse PDF {pdf_path}: {str(e)}"

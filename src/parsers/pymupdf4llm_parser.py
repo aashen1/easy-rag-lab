@@ -82,7 +82,7 @@ class PyMuPDF4LLMParser(BaseParser):
                     ))
                 return ParseResult(
                     pages=pages,
-                    metadata={"source": str(pdf_path), "parser": self.name, "page_count": len(pages)},
+                    metadata={"source": Path(pdf_path).as_posix(), "parser": self.name, "page_count": len(pages)},
                 )
             else:
                 md_text = pymupdf4llm.to_markdown(str(pdf_file), **self._options)
@@ -90,9 +90,9 @@ class PyMuPDF4LLMParser(BaseParser):
                     pages=[ParsedPage(
                         page_number=1,
                         text=md_text,
-                        metadata={"source": str(pdf_path)},
+                        metadata={"source": Path(pdf_path).as_posix()},
                     )],
-                    metadata={"source": str(pdf_path), "parser": self.name, "page_count": 1},
+                    metadata={"source": Path(pdf_path).as_posix(), "parser": self.name, "page_count": 1},
                 )
         except Exception as e:
             error_msg = f"Failed to parse PDF {pdf_path}: {str(e)}"

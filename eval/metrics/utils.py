@@ -14,8 +14,13 @@ def normalize_source(source: str, include_parent: bool = False) -> str:
     This prevents different directories with same-named documents from
     being conflated.
 
+    Internally converts the input path to POSIX format (forward slashes)
+    before processing, ensuring consistent output regardless of whether
+    the input uses Windows backslashes or POSIX forward slashes.
+
     Args:
-        source: Source path string.
+        source: Source path string. May use Windows backslashes or POSIX
+            forward slashes; both are normalized to the same output.
         include_parent: If True, include the parent directory name in the
             normalized result as "{parent}/{stem}". If the path has no
             parent (or the parent is "."), only the stem is returned.
@@ -26,7 +31,7 @@ def normalize_source(source: str, include_parent: bool = False) -> str:
         "{parent}/{stem}" when include_parent is True and a parent
         directory exists.
     """
-    p = Path(source)
+    p = Path(Path(source).as_posix())
     stem = p.stem
     if include_parent and p.parent != Path("."):
         parent_name = p.parent.name

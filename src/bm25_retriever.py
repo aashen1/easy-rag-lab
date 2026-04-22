@@ -98,7 +98,7 @@ class BM25Retriever:
         if source_filter is not None:
             original_count = len(jsonl_files)
             jsonl_files = [
-                f for f in jsonl_files if str(f.relative_to(chunks_path)) in source_filter
+                f for f in jsonl_files if f.relative_to(chunks_path).as_posix() in source_filter
             ]
             logger.info(
                 f"Source filter applied: {len(jsonl_files)}/{original_count} files matched"
