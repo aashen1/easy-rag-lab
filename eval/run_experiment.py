@@ -10,7 +10,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import yaml
 from loguru import logger
+
+from src.exceptions import ConfigurationError, EvaluationError, TestSetError
 
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
@@ -138,7 +141,7 @@ def verify_experiment_assets(
         FileNotFoundError: If the experiment directory does not exist.
     """
     if not exp_dir.exists():
-        raise FileNotFoundError(f"Experiment directory not found: {exp_dir}")
+        raise ConfigurationError(f"Experiment directory not found: {exp_dir}")
 
     missing_files = []
     invalid_files = []
@@ -313,7 +316,7 @@ def prepare_meal(
     meal_name = exp_config.data.get("meal")
 
     if not meal_name:
-        raise ValueError("Experiment configuration must specify a meal name in data.meal field")
+        raise ConfigurationError("Experiment configuration must specify a meal name in data.meal field")
 
     if meal_manager.meal_exists(meal_name):
         logger.info(f"Meal '{meal_name}' found, loading...")
@@ -343,13 +346,13 @@ def prepare_meal(
 
     create_config = exp_config.data.get("create_if_missing")
     if not create_config:
-        raise FileNotFoundError(
+        raise ConfigurationError(
             f"Meal '{meal_name}' not found and create_if_missing is not configured. "
             "Please create the meal first or add create_if_missing configuration."
         )
 
     if skip_preprocessing:
-        raise FileNotFoundError(
+        raise ConfigurationError(
             f"Meal '{meal_name}' not found and skip_preprocessing is enabled. "
             "Cannot create meal in skip_preprocessing mode."
         )
@@ -453,7 +456,7 @@ def _prepare_legacy_test_set(
                     f"{num_questions - existing_count} more questions."
                 )
                 if skip_preprocessing:
-                    raise FileNotFoundError(
+                    raise TestSetError(
                         f"Test set '{filename}' has insufficient questions "
                         f"({existing_count}/{num_questions}) and "
                         f"skip_preprocessing is enabled. "
@@ -502,7 +505,7 @@ def _prepare_legacy_test_set(
             logger.warning(f"Failed to load test set '{filename}': {str(e)}, will regenerate")
 
     if skip_preprocessing:
-        raise FileNotFoundError(
+        raise TestSetError(
             f"Test set '{filename}' not found and skip_preprocessing is enabled. "
             "Cannot generate test set in skip_preprocessing mode."
         )
@@ -578,14 +581,14 @@ def prepare_test_sets(
                 name = test_set_config.get("name")
                 test_set_data = test_set_manager.find_by_name(meal_name, name)
                 if test_set_data is None:
-                    raise FileNotFoundError(
+                    raise TestSetError(
                         f"Test set '{name}' not found and skip_preprocessing is enabled."
                     )
                 is_valid, invalid_qs = test_set_manager.validate_test_set(
                     test_set_data, meal_config
                 )
                 if not is_valid:
-                    raise ValueError(
+                    raise TestSetError(
                         f"Test set '{name}' is invalid and skip_preprocessing is enabled."
                     )
             else:
@@ -1027,7 +1030,7 @@ def evaluate_test_set(
         ValueError: If exp_config or system_config is not provided.
     """
     if exp_config is None or system_config is None:
-        raise ValueError(
+        raise ConfigurationError(
             "exp_config and system_config are required for evaluation. "
             "Please use run_experiment.py with a valid experiment configuration."
         )
@@ -2165,7 +2168,7 @@ def reproduce_experiment(
     exp_path = Path(exp_dir)
 
     if not exp_path.exists():
-        raise FileNotFoundError(f"Experiment directory not found: {exp_dir}")
+        raise ConfigurationError(f"Experiment directory not found: {exp_dir}")
 
     system_config = load_config(system_config_path)
 
@@ -2200,13 +2203,13 @@ def reproduce_experiment(
 
             print("\nUse --skip-verification to bypass this check.")
             print("=" * 60 + "\n")
-            raise ValueError("Asset verification failed. See details above.")
+            raise EvaluationError("Asset verification failed. See details above.")
     else:
         logger.warning("Skipping asset verification (--skip-verification)")
 
     config_path = exp_path / "config_snapshot.yaml"
     if not config_path.exists():
-        raise FileNotFoundError(f"Configuration snapshot not found: {config_path}")
+        raise ConfigurationError(f"Configuration snapshot not found: {config_path}")
 
     logger.info(f"Reproducing experiment from: {exp_dir}")
     logger.info("Note: Results may differ due to LLM randomness.")
