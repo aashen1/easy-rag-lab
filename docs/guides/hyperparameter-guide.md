@@ -10,16 +10,94 @@
 
 ## 概述
 
-RAG 系统的问答质量受多个"泛超参数"影响——它们不是模型训练时的参数，而是系统设计和运行时的配置选择。本系统支持 6 大类泛超参数的调节：
+RAG 系统的问答质量受多个"泛超参数"影响——它们不是模型训练时的参数，而是系统设计和运行时的配置选择。本系统支持 7 大类泛超参数的调节：
 
 | 类别 | 影响阶段 | 核心参数 |
 |------|---------|---------|
+| PDF 解析 | 文档处理 | `parser.algorithm`, `parser.pymupdf4llm.*`, `parser.fitz_pdfplumber.*` |
 | 分块策略 | 文档处理 | `chunker.strategy`, `chunker.semantic.*` |
 | 分块参数 | 文档处理 | `chunker.chunk_size`, `chunker.chunk_overlap` |
 | 检索方式 | 语义检索 | `retrieval.method`, `retrieval.bm25.*`, `retrieval.hybrid.*` |
 | 重排序 | 检索精排 | `retrieval.reranker.*` |
 | 查询改写 | 查询预处理 | `retrieval.query_rewrite.*` |
 | 检索数量 | 语义检索 | `retrieval.top_k` |
+
+---
+
+## 0. PDF 解析策略
+
+### 参数位置
+
+```yaml
+parser:
+  algorithm: "pymupdf4llm"   # "pymupdf4llm" 或 "fitz_pdfplumber"
+```
+
+### 解析器对比
+
+| 解析器 | 优势 | 劣势 | 适用场景 |
+|--------|------|------|---------|
+| `pymupdf4llm` | 多栏检测、LLM 友好输出、OCR 兜底、表格识别 | Layout 模式下部分参数不可用 | 金融研报（双栏排版普遍） |
+| `fitz_pdfplumber` | 精确表格提取、完全参数控制、多栏检测 | 需额外依赖 pdfplumber、无 OCR 兜底 | 表格密集型文档、需要精细控制 |
+
+### pymupdf4llm 关键参数
+
+```yaml
+parser:
+  algorithm: "pymupdf4llm"
+  pymupdf4llm:
+    header: false            # 过滤页眉噪声
+    footer: false            # 过滤页脚噪声
+    page_chunks: true        # 启用页级输出（含页码元数据）
+    force_text: true         # 保留图表上的数据标注
+    ignore_code: true        # 避免财务数据被标记为代码块
+    use_ocr: true            # OCR 兜底
+    ocr_language: "chi_sim+eng"  # 中英文 OCR
+```
+
+| 参数 | 默认值 | 推荐范围 | 说明 |
+|------|--------|---------|------|
+| `header` | `false` | - | 是否提取页眉。金融研报建议关闭 |
+| `footer` | `false` | - | 是否提取页脚。金融研报建议关闭 |
+| `page_chunks` | `true` | - | 启用页级输出，输出 `.pages.json` 格式 |
+| `force_text` | `true` | - | 保留叠加在图表上的文本 |
+| `ignore_code` | `true` | - | 避免财务表格被误标为代码块 |
+| `use_ocr` | `true` | - | 启用 OCR 兜底（扫描件自动触发） |
+| `ocr_language` | `"chi_sim+eng"` | - | OCR 语言包 |
+
+> **详细参数说明和最佳实践**请参阅 [PDF 解析指南](pdf-parsing.md)。
+
+### fitz_pdfplumber 关键参数
+
+```yaml
+parser:
+  algorithm: "fitz_pdfplumber"
+  fitz_pdfplumber:
+    header_filter: true      # 过滤页眉区域
+    footer_filter: true      # 过滤页脚区域
+    header_zone_ratio: 0.10  # 页眉区域占比
+    footer_zone_ratio: 0.10  # 页脚区域占比
+    table_strategy: "lines"  # 表格检测策略
+    column_detection: true   # 启用多栏检测
+```
+
+| 参数 | 默认值 | 推荐范围 | 说明 |
+|------|--------|---------|------|
+| `header_filter` | `true` | - | 是否过滤页眉区域 |
+| `footer_filter` | `true` | - | 是否过滤页脚区域 |
+| `header_zone_ratio` | `0.10` | 0.05 - 0.15 | 页眉区域占页面高度的比例 |
+| `footer_zone_ratio` | `0.10` | 0.05 - 0.15 | 页脚区域占页面高度的比例 |
+| `table_strategy` | `"lines"` | `"lines"`, `"text"` | pdfplumber 表格检测策略 |
+| `column_detection` | `true` | - | 是否启用多栏检测 |
+
+### 使用建议
+
+| 场景 | 推荐解析器 | 关键配置 |
+|------|-----------|---------|
+| 金融年报/研报（双栏排版） | `pymupdf4llm` | `page_chunks: true`, `ignore_code: true` |
+| 表格密集型文档 | `fitz_pdfplumber` | `table_strategy: "lines"` |
+| 扫描件 PDF | `pymupdf4llm` | `use_ocr: true`, `ocr_language: "chi_sim+eng"` |
+| 技术报告（含代码） | `pymupdf4llm` | `ignore_code: false` |
 
 ---
 
