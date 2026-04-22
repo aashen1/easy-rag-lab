@@ -18,6 +18,7 @@ from typing import Any
 from loguru import logger
 
 from eval.evaluators.base import BaseEvaluator, EvaluationResult
+from src.exceptions import EvaluationError
 
 REFERENCE_REQUIRED_METRICS = {"context_precision", "context_recall", "answer_correctness", "semantic_similarity"}
 
@@ -101,7 +102,7 @@ class RagasEvaluator(BaseEvaluator):
         except ImportError as e:
             error_msg = f"Failed to create LLM client: {str(e)}"
             logger.error(error_msg)
-            raise ImportError(
+            raise EvaluationError(
                 f"{error_msg}. Please install with: pixi add langchain-anthropic ragas"
             ) from e
 
@@ -185,7 +186,7 @@ class RagasEvaluator(BaseEvaluator):
         except ImportError as e:
             error_msg = f"Failed to import RAGAS embeddings: {str(e)}"
             logger.error(error_msg)
-            raise ImportError(
+            raise EvaluationError(
                 f"{error_msg}. Please install ragas properly."
             ) from e
 
@@ -243,7 +244,7 @@ class RagasEvaluator(BaseEvaluator):
         except ImportError as e:
             error_msg = f"Failed to import RAGAS dataset classes: {str(e)}"
             logger.error(error_msg)
-            raise ImportError(error_msg) from e
+            raise EvaluationError(error_msg) from e
 
     def _create_metrics(
         self,
@@ -329,7 +330,7 @@ class RagasEvaluator(BaseEvaluator):
         except ImportError as e:
             error_msg = f"Failed to import RAGAS metrics: {str(e)}"
             logger.error(error_msg)
-            raise ImportError(error_msg) from e
+            raise EvaluationError(error_msg) from e
 
     @property
     def name(self) -> str:
@@ -421,7 +422,7 @@ class RagasEvaluator(BaseEvaluator):
 
         try:
             if not llm_config:
-                raise ValueError("llm_config is required for RAGAS evaluation")
+                raise EvaluationError("llm_config is required for RAGAS evaluation")
 
             if self._llm is None:
                 self._llm = self._create_llm(llm_config)
@@ -518,7 +519,7 @@ class RagasEvaluator(BaseEvaluator):
 
         try:
             if not llm_config:
-                raise ValueError("llm_config is required for RAGAS evaluation")
+                raise EvaluationError("llm_config is required for RAGAS evaluation")
 
             if self._llm is None:
                 self._llm = self._create_llm(llm_config)

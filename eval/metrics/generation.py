@@ -6,6 +6,7 @@ from anthropic import Anthropic
 from loguru import logger
 
 from eval.metrics.utils import _create_llm_client
+from src.exceptions import EvaluationError
 
 DEFAULT_EVAL_CONFIG = {
     "model_name": "LongCat-Flash-Lite",
@@ -161,7 +162,7 @@ def _extract_statements(
     except Exception as e:
         error_msg = f"Failed to extract statements: {str(e)}"
         logger.error(error_msg)
-        raise Exception(error_msg) from e
+        raise EvaluationError(error_msg) from e
 
 
 def _verify_statements(
@@ -220,7 +221,7 @@ def _verify_statements(
     except Exception as e:
         error_msg = f"Failed to verify statements: {str(e)}"
         logger.error(error_msg)
-        raise Exception(error_msg) from e
+        raise EvaluationError(error_msg) from e
 
 
 def calculate_faithfulness(
@@ -273,7 +274,7 @@ def calculate_faithfulness(
     if not answer or not isinstance(answer, str):
         error_msg = "Answer must be a non-empty string"
         logger.error(error_msg)
-        raise ValueError(error_msg)
+        raise EvaluationError(error_msg)
 
     if not contexts:
         logger.warning("No contexts provided for faithfulness evaluation")
@@ -333,7 +334,7 @@ def calculate_faithfulness(
     except Exception as e:
         error_msg = f"Failed to calculate faithfulness: {str(e)}"
         logger.error(error_msg)
-        raise Exception(error_msg) from e
+        raise EvaluationError(error_msg) from e
 
 
 def _parse_relevancy_response(response_text: str) -> dict[str, Any]:
@@ -358,7 +359,7 @@ def _parse_relevancy_response(response_text: str) -> dict[str, Any]:
     try:
         return json.loads(response_text)
     except json.JSONDecodeError as e:
-        raise ValueError(f"Failed to parse LLM response as JSON: {e}") from e
+        raise EvaluationError(f"Failed to parse LLM response as JSON: {e}") from e
 
 
 def calculate_answer_relevancy(
@@ -412,9 +413,9 @@ def calculate_answer_relevancy(
         >>> print(f"Relevancy: {score:.2f}")
     """
     if not question or not isinstance(question, str):
-        raise ValueError("Question must be a non-empty string")
+        raise EvaluationError("Question must be a non-empty string")
     if not answer or not isinstance(answer, str):
-        raise ValueError("Answer must be a non-empty string")
+        raise EvaluationError("Answer must be a non-empty string")
 
     eval_cfg = _get_eval_config(config)
     base_url = base_url or eval_cfg.get("base_url", DEFAULT_EVAL_CONFIG["base_url"])
@@ -471,4 +472,4 @@ def calculate_answer_relevancy(
     except Exception as e:
         error_msg = f"Failed to calculate answer relevancy: {str(e)}"
         logger.error(error_msg)
-        raise Exception(error_msg) from e
+        raise EvaluationError(error_msg) from e

@@ -5,6 +5,8 @@ from typing import Any
 
 from loguru import logger
 
+from src.exceptions import EvaluationError
+
 DEFAULT_REPORT_CONFIG = {
     "model_name": "LongCat-Flash-Lite",
     "base_url": "https://api.longcat.chat/anthropic",
@@ -1335,7 +1337,7 @@ class ExperimentReporter:
 
     def _init_llm_client(self) -> None:
         if not self.llm_api_key:
-            raise ValueError("LLM API key is required for LLM report generation")
+            raise EvaluationError("LLM API key is required for LLM report generation")
 
         try:
             from src.utils import create_llm_client
@@ -1349,9 +1351,9 @@ class ExperimentReporter:
             )
             logger.info("LLM client initialized for report generation")
         except ImportError as e:
-            raise ImportError("anthropic package is required for LLM report generation") from e
+            raise EvaluationError("anthropic package is required for LLM report generation") from e
         except Exception as e:
-            raise Exception(f"Failed to initialize LLM client: {str(e)}") from e
+            raise EvaluationError(f"Failed to initialize LLM client: {str(e)}") from e
 
     def _format_llm_report(self, result: ExperimentResult, llm_response: str) -> str:
         header = self._generate_header(result)

@@ -1,6 +1,7 @@
 import math
 
 from eval.metrics.utils import normalize_source
+from src.exceptions import EvaluationError
 
 
 def calculate_hit_rate(
@@ -35,7 +36,7 @@ def calculate_hit_rate(
         ValueError: If mode is not 'standard' or 'recall'.
     """
     if mode not in ("standard", "recall"):
-        raise ValueError(f"mode must be 'standard' or 'recall', got '{mode}'")
+        raise EvaluationError(f"mode must be 'standard' or 'recall', got '{mode}'")
 
     if not expected_sources:
         return 0.0
