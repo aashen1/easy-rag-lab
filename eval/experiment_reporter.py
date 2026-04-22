@@ -1348,10 +1348,10 @@ class ExperimentReporter:
                 mode="sdk",
             )
             logger.info("LLM client initialized for report generation")
-        except ImportError:
-            raise ImportError("anthropic package is required for LLM report generation")
+        except ImportError as e:
+            raise ImportError("anthropic package is required for LLM report generation") from e
         except Exception as e:
-            raise Exception(f"Failed to initialize LLM client: {str(e)}")
+            raise Exception(f"Failed to initialize LLM client: {str(e)}") from e
 
     def _format_llm_report(self, result: ExperimentResult, llm_response: str) -> str:
         header = self._generate_header(result)

@@ -33,17 +33,15 @@ class SamplingConfig:
                 f"Invalid sampling mode '{self.mode}', must be one of {valid_modes}"
             )
 
-        if self.mode in ("count", "pages"):
-            if not isinstance(self.value, int) or self.value <= 0:
-                raise ValueError(
-                    f"Value for mode '{self.mode}' must be a positive integer, got {self.value}"
-                )
+        if self.mode in ("count", "pages") and (not isinstance(self.value, int) or self.value <= 0):
+            raise ValueError(
+                f"Value for mode '{self.mode}' must be a positive integer, got {self.value}"
+            )
 
-        if self.mode == "ratio":
-            if not isinstance(self.value, (int, float)) or not (0.0 < self.value <= 1.0):
-                raise ValueError(
-                    f"Value for mode 'ratio' must be a float in (0.0, 1.0], got {self.value}"
-                )
+        if self.mode == "ratio" and (not isinstance(self.value, int | float) or not (0.0 < self.value <= 1.0)):
+            raise ValueError(
+                f"Value for mode 'ratio' must be a float in (0.0, 1.0], got {self.value}"
+            )
 
 
 def count_pdf_pages(pdf_path: Path) -> int:
@@ -66,7 +64,7 @@ def count_pdf_pages(pdf_path: Path) -> int:
     except Exception as e:
         error_msg = f"Failed to count pages in {pdf_path}: {str(e)}"
         logger.error(error_msg)
-        raise Exception(error_msg)
+        raise Exception(error_msg) from e
 
 
 def determine_sample(

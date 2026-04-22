@@ -37,7 +37,7 @@ def parse_pdf(pdf_path: str, page_chunks: bool = False, **kwargs) -> str | list[
         logger.error(error_msg)
         raise FileNotFoundError(error_msg)
 
-    if not pdf_file.suffix.lower() == ".pdf":
+    if pdf_file.suffix.lower() != ".pdf":
         error_msg = f"File is not a PDF: {pdf_path}"
         logger.error(error_msg)
         raise ValueError(error_msg)
@@ -53,7 +53,7 @@ def parse_pdf(pdf_path: str, page_chunks: bool = False, **kwargs) -> str | list[
     except Exception as e:
         error_msg = f"Failed to parse PDF {pdf_path}: {str(e)}"
         logger.error(error_msg)
-        raise Exception(error_msg)
+        raise Exception(error_msg) from e
 
 
 def parse_all_pdfs(

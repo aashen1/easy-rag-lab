@@ -577,7 +577,7 @@ class TestSetGenerator:
             List of two-element chunk lists, each containing an adjacent pair.
         """
         pairs = []
-        for source, chunks in grouped_chunks.items():
+        for _source, chunks in grouped_chunks.items():
             for i in range(len(chunks) - 1):
                 idx_i = chunks[i].get("metadata", {}).get("chunk_index", i)
                 idx_next = chunks[i + 1].get("metadata",
@@ -606,7 +606,7 @@ class TestSetGenerator:
             from the same source file.
         """
         groups = []
-        for source, chunks in grouped_chunks.items():
+        for _source, chunks in grouped_chunks.items():
             if len(chunks) >= 3:
                 for i in range(len(chunks)):
                     for j in range(i + 2, min(i + 5, len(chunks))):
@@ -699,7 +699,7 @@ class TestSetGenerator:
             response = response.strip()
             if response.startswith("```"):
                 lines = response.split("\n")
-                lines = [l for l in lines if not l.startswith("```")]
+                lines = [line for line in lines if not line.startswith("```")]
                 response = "\n".join(lines)
 
             start = response.find("{")
@@ -1317,7 +1317,7 @@ class TestSetGenerator:
             response = response.strip()
             if response.startswith("```"):
                 lines = response.split("\n")
-                lines = [l for l in lines if not l.startswith("```")]
+                lines = [line for line in lines if not line.startswith("```")]
                 response = "\n".join(lines)
 
             start = response.find("{")

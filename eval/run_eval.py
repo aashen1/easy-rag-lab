@@ -134,12 +134,13 @@ def run_evaluation(
                 if "ndcg" in metrics_config:
                     retrieval["ndcg"] = calculate_ndcg(retrieved_sources, expected_sources, k=5)
 
+            contexts = response.get("contexts", [])
+            answer = response.get("answer", "")
+            question = test_case.get("question", "")
+            ground_truth = test_case.get("answer", "")
+
             generation = {}
             if generation_metrics_config and llm_config:
-                contexts = response.get("contexts", [])
-                answer = response.get("answer", "")
-                question = test_case.get("question", "")
-                ground_truth = test_case.get("answer", "")
 
                 if "faithfulness" in generation_metrics_config:
                     try:

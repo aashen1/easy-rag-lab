@@ -251,7 +251,7 @@ class BM25Retriever:
         except Exception as e:
             error_msg = f"Failed to retrieve results: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg)
+            raise Exception(error_msg) from e
 
     def _score(self, query_tokens: list[str]) -> list[float]:
         """Compute BM25 scores for all documents against the query tokens.

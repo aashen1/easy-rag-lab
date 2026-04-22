@@ -208,11 +208,10 @@ class BuiltinEvaluator(BaseEvaluator):
                         norm_retrieved, norm_expected
                     )
 
-            if not expect_retrieval and not expected_sources:
-                if "false_positive_rate" in retrieval_metrics:
-                    retrieval_results["false_positive_rate"] = calculate_false_positive_rate(
-                        sources_for_retrieval, k=5
-                    )
+            if not expect_retrieval and not expected_sources and "false_positive_rate" in retrieval_metrics:
+                retrieval_results["false_positive_rate"] = calculate_false_positive_rate(
+                    sources_for_retrieval, k=5
+                )
 
             if llm_config and contexts:
                 if "context_precision" in retrieval_metrics:

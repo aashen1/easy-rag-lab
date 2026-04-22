@@ -76,7 +76,7 @@ class Generator:
         except Exception as e:
             error_msg = f"Failed to initialize Anthropic client: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg)
+            raise Exception(error_msg) from e
 
     def _truncate_contexts(
         self,
@@ -256,7 +256,7 @@ class Generator:
         except Exception as e:
             error_msg = f"Failed to generate answer: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg)
+            raise Exception(error_msg) from e
 
 
 if __name__ == "__main__":

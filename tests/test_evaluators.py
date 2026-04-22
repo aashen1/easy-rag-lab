@@ -685,15 +685,16 @@ class TestRagasEvaluatorConfigReading:
         }
         evaluator = RagasEvaluator(config=config)
 
-        mock_embeddings = MagicMock()
-        with patch("langchain_community.embeddings.HuggingFaceEmbeddings", return_value=mock_embeddings) as mock_cls:
+        mock_ragas_embeddings = MagicMock()
+        with patch("ragas.embeddings.HuggingFaceEmbeddings", return_value=mock_ragas_embeddings) as mock_cls:
             result = evaluator._create_embeddings(config)
 
             mock_cls.assert_called_once_with(
-                model_name="custom-bge-model",
-                model_kwargs={"device": "cpu"},
+                model="custom-bge-model",
+                device="cpu",
             )
-            assert result == mock_embeddings
+            assert hasattr(result, "embed_query")
+            assert hasattr(result, "embed_documents")
 
     def test_create_embeddings_uses_embedding_subconfig_as_fallback(self):
         """Test that _create_embeddings falls back to embedding sub-config."""
@@ -704,14 +705,15 @@ class TestRagasEvaluatorConfigReading:
         }
         evaluator = RagasEvaluator(config=config)
 
-        mock_embeddings = MagicMock()
-        with patch("langchain_community.embeddings.HuggingFaceEmbeddings", return_value=mock_embeddings) as mock_cls:
+        mock_ragas_embeddings = MagicMock()
+        with patch("ragas.embeddings.HuggingFaceEmbeddings", return_value=mock_ragas_embeddings) as mock_cls:
             result = evaluator._create_embeddings(config)
 
             mock_cls.assert_called_once_with(
-                model_name="fallback-model",
-                model_kwargs={"device": "mps"},
+                model="fallback-model",
+                device="mps",
             )
+            assert hasattr(result, "embed_query")
 
     def test_create_embeddings_ragas_config_overrides_subconfig(self):
         """Test that top-level ragas config keys override embedding sub-config."""
@@ -724,27 +726,29 @@ class TestRagasEvaluatorConfigReading:
         }
         evaluator = RagasEvaluator(config=config)
 
-        mock_embeddings = MagicMock()
-        with patch("langchain_community.embeddings.HuggingFaceEmbeddings", return_value=mock_embeddings) as mock_cls:
+        mock_ragas_embeddings = MagicMock()
+        with patch("ragas.embeddings.HuggingFaceEmbeddings", return_value=mock_ragas_embeddings) as mock_cls:
             result = evaluator._create_embeddings(config)
 
             mock_cls.assert_called_once_with(
-                model_name="top-level-model",
-                model_kwargs={"device": "cuda:1"},
+                model="top-level-model",
+                device="cuda:1",
             )
+            assert hasattr(result, "embed_query")
 
     def test_create_embeddings_uses_defaults_when_no_config(self):
         """Test that _create_embeddings uses defaults when no config is provided."""
         evaluator = RagasEvaluator(config={})
 
-        mock_embeddings = MagicMock()
-        with patch("langchain_community.embeddings.HuggingFaceEmbeddings", return_value=mock_embeddings) as mock_cls:
+        mock_ragas_embeddings = MagicMock()
+        with patch("ragas.embeddings.HuggingFaceEmbeddings", return_value=mock_ragas_embeddings) as mock_cls:
             result = evaluator._create_embeddings({})
 
             mock_cls.assert_called_once_with(
-                model_name="BAAI/bge-large-zh-v1.5",
-                model_kwargs={"device": "cuda"},
+                model="BAAI/bge-large-zh-v1.5",
+                device="cuda",
             )
+            assert hasattr(result, "embed_query")
 
     def test_create_embeddings_uses_config_embedding_key_as_fallback(self):
         """Test that _create_embeddings falls back to config['embedding'] when no ragas config."""
@@ -753,14 +757,15 @@ class TestRagasEvaluatorConfigReading:
             "embedding": {"model_name": "system-model", "device": "cpu"},
         }
 
-        mock_embeddings = MagicMock()
-        with patch("langchain_community.embeddings.HuggingFaceEmbeddings", return_value=mock_embeddings) as mock_cls:
+        mock_ragas_embeddings = MagicMock()
+        with patch("ragas.embeddings.HuggingFaceEmbeddings", return_value=mock_ragas_embeddings) as mock_cls:
             result = evaluator._create_embeddings(system_config)
 
             mock_cls.assert_called_once_with(
-                model_name="system-model",
-                model_kwargs={"device": "cpu"},
+                model="system-model",
+                device="cpu",
             )
+            assert hasattr(result, "embed_query")
 
 
 class TestRagasEvaluatorReferenceWarning:

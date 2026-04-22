@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import contextlib
 import hashlib
 import json
 import random
@@ -7,12 +10,15 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
 from src.sampler import SamplingConfig, count_pdf_pages, determine_sample
 from src.utils import ensure_dir
+
+if TYPE_CHECKING:
+    from src.indexer import VectorIndexer
 
 
 class MealStatus(Enum):
@@ -47,7 +53,7 @@ class MealConfig:
         return d
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "MealConfig":
+    def from_dict(cls, data: dict[str, Any]) -> MealConfig:
         pdf_files = [MealFile(**f) for f in data.get("pdf_files", [])]
 
         if "uuid" in data and "data_id" not in data:
@@ -315,7 +321,7 @@ def build_index_from_chunks(
     embedding_config: dict[str, Any],
     vector_store_config: dict[str, Any],
     collection_name: str,
-) -> "VectorIndexer":
+) -> VectorIndexer:
     """
     Build vector index from chunks directory.
 
@@ -657,7 +663,6 @@ class MealManager:
 
         parsed_dir, chunks_dir = self.cache.ensure_dirs(data_id, chunker_hash, parser_hash)
 
-        from src.parser import parse_all_pdfs
 
         cache_hit_parse = False
         cache_hit_chunk = False
@@ -692,7 +697,7 @@ class MealManager:
         logger.info(
             f"Step 3: Building vector index for meal '{name}' (collection: {collection_name})...")
 
-        indexer = build_index_from_chunks(
+        build_index_from_chunks(
             chunks_dir=chunks_dir,
             embedding_config=embedding_config,
             vector_store_config=self.config.get("vector_store", {}),
@@ -801,7 +806,7 @@ class MealManager:
                 data = json.load(f)
             return MealConfig.from_dict(data)
         except Exception as e:
-            raise ValueError(f"Failed to load meal '{name}': {str(e)}")
+            raise ValueError(f"Failed to load meal '{name}': {str(e)}") from e
 
     def find_equivalent_meals(self, data_id: str) -> list[MealConfig]:
         """Find all meals that share the same data ID.
@@ -1118,7 +1123,7 @@ class MealManager:
 
         build_chunks_if_needed(parsed_dir, chunks_dir, chunker_config)
 
-        indexer = build_index_from_chunks(
+        build_index_from_chunks(
             chunks_dir=chunks_dir,
             embedding_config=embedding_config,
             vector_store_config=self.config.get("vector_store", {}),
@@ -1134,10 +1139,8 @@ class MealManager:
         total_pages = 0
         total_chunks = 0
         for mf in new_pdf_files:
-            try:
+            with contextlib.suppress(Exception):
                 total_pages += count_pdf_pages(self.raw_dir / mf.path)
-            except Exception:
-                pass
         for jsonl_rel in source_filter_jsonl:
             jsonl_path = chunks_dir / jsonl_rel
             try:
@@ -1183,6 +1186,7 @@ class MealManager:
             ensure_dir(str(meal_dir / "test_sets"))
         else:
             try:
+                from src.indexer import VectorIndexer
                 old_indexer = VectorIndexer(
                     persist_dir=self.config.get("vector_store", {}).get(
                         "persist_dir", "data/vector_store"),
@@ -1261,11 +1265,15 @@ class MealManager:
         algorithm = parser_config.get("algorithm", "pymupdf4llm")
         parser_options = parser_config.get(algorithm, {})
         parser = ParserRegistry.get(algorithm, parser_options)
+        use_page_chunks = bool(parser_options.get("page_chunks", False))
 
         for pdf_file in pdf_files:
             try:
                 relative_path = pdf_file.relative_to(self.raw_dir)
-                output_file = output_dir / relative_path.with_suffix(".md")
+                if use_page_chunks:
+                    output_file = output_dir / relative_path.with_suffix(".pages.json")
+                else:
+                    output_file = output_dir / relative_path.with_suffix(".md")
 
                 if output_file.exists():
                     logger.info(f"Skipping (already parsed): {pdf_file.name}")
@@ -1275,10 +1283,23 @@ class MealManager:
 
                 output_file.parent.mkdir(parents=True, exist_ok=True)
 
-                with open(output_file, "w", encoding="utf-8") as f:
-                    for page in result.pages:
-                        f.write(page.text)
-                        f.write("\n\n")
+                if use_page_chunks:
+                    import json
+                    pages_data = [
+                        {
+                            "page_number": page.page_number,
+                            "text": page.text,
+                            "metadata": page.metadata,
+                        }
+                        for page in result.pages
+                    ]
+                    with open(output_file, "w", encoding="utf-8") as f:
+                        json.dump(pages_data, f, ensure_ascii=False, indent=2)
+                else:
+                    with open(output_file, "w", encoding="utf-8") as f:
+                        for page in result.pages:
+                            f.write(page.text)
+                            f.write("\n\n")
 
                 logger.success(f"Parsed: {pdf_file.name} -> {output_file.name}")
             except Exception as e:

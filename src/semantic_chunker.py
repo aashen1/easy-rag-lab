@@ -173,7 +173,7 @@ def chunk_text_semantic(
     except Exception as e:
         error_msg = f"Failed to load tiktoken encoding {encoding_name}: {str(e)}"
         logger.error(error_msg)
-        raise Exception(error_msg)
+        raise Exception(error_msg) from e
 
     sentences = _split_into_sentences(text)
 
