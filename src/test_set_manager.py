@@ -1,13 +1,18 @@
+from __future__ import annotations
+
 import json
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
 from src.meal import MealConfig, MealManager
 from src.utils import ensure_dir
+
+if TYPE_CHECKING:
+    from src.test_generator import TestSetGenerator
 
 
 @dataclass
@@ -26,7 +31,7 @@ class TestSetMetadata:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "TestSetMetadata":
+    def from_dict(cls, data: dict[str, Any]) -> TestSetMetadata:
         return cls(
             name=data["name"],
             meal_id=data["meal_id"],
@@ -259,7 +264,7 @@ class TestSetManager:
     def validate_test_set(
         self,
         test_set_data: dict[str, Any],
-        meal_config: "MealConfig",
+        meal_config: MealConfig,
     ) -> tuple[bool, list[dict[str, Any]]]:
         """
         Validate a test set against a meal configuration.
@@ -288,7 +293,7 @@ class TestSetManager:
     def _check_questions_validity(
         self,
         questions: list[dict[str, Any]],
-        meal_config: "MealConfig",
+        meal_config: MealConfig,
     ) -> list[dict[str, Any]]:
         """
         Check each question's data sources against the meal's PDF files.
@@ -389,7 +394,7 @@ class TestSetManager:
     def _clean_user_test_set(
         self,
         test_set_data: dict[str, Any],
-        meal_config: "MealConfig",
+        meal_config: MealConfig,
         invalid_questions: list[dict[str, Any]],
         generator: Any | None = None,
         llm_preset: str = "default",
@@ -436,7 +441,7 @@ class TestSetManager:
     def _clean_immutable_policy(
         self,
         test_set_data: dict[str, Any],
-        meal_config: "MealConfig",
+        meal_config: MealConfig,
         invalid_questions: list[dict[str, Any]],
     ) -> dict[str, Any]:
         """Clean a test set with immutable policy.
@@ -470,7 +475,7 @@ class TestSetManager:
     def _clean_trim_policy(
         self,
         test_set_data: dict[str, Any],
-        meal_config: "MealConfig",
+        meal_config: MealConfig,
         invalid_questions: list[dict[str, Any]],
     ) -> dict[str, Any]:
         """Clean a test set with trim policy.
@@ -533,7 +538,7 @@ class TestSetManager:
     def _clean_regenerate_policy(
         self,
         test_set_data: dict[str, Any],
-        meal_config: "MealConfig",
+        meal_config: MealConfig,
         invalid_questions: list[dict[str, Any]],
         generator: Any | None,
         llm_preset: str,
@@ -696,8 +701,8 @@ class TestSetManager:
         self,
         meal_name: str,
         test_set_config: dict[str, Any],
-        meal_config: "MealConfig",
-        generator: Optional["TestSetGenerator"] = None,
+        meal_config: MealConfig,
+        generator: TestSetGenerator | None = None,
         llm_preset: str = "default",
         token_tracker: Any | None = None,
     ) -> dict[str, Any]:
@@ -819,10 +824,10 @@ class TestSetManager:
     def _clean_machine_test_set(
         self,
         test_set_data: dict[str, Any],
-        meal_config: "MealConfig",
+        meal_config: MealConfig,
         invalid_questions: list[dict[str, Any]],
         generation_config: dict[str, Any] | None = None,
-        generator: Optional["TestSetGenerator"] = None,
+        generator: TestSetGenerator | None = None,
         llm_preset: str = "default",
         token_tracker: Any | None = None,
     ) -> dict[str, Any]:
@@ -851,7 +856,6 @@ class TestSetManager:
         ]
 
         stored_generation_config = test_set_data["metadata"].get("generation")
-        effective_generation_config = generation_config or stored_generation_config
 
         if generation_config is not None and stored_generation_config != generation_config:
             logger.warning(
@@ -868,7 +872,7 @@ class TestSetManager:
 
         added_count = 0
         if generator is not None and invalid_questions:
-            deficit = len(invalid_questions)
+            len(invalid_questions)
             try:
                 test_set_data = generator.supplement_document_based_questions(
                     meal_name=meal_config.name,

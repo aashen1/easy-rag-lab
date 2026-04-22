@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import json
 import sys
@@ -6,12 +8,14 @@ import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
+
+import contextlib
 
 from eval.evaluators.base import BaseEvaluator
 from eval.evaluators.builtin_evaluator import BuiltinEvaluator
@@ -43,6 +47,10 @@ from src.test_generator import TestSetGenerator
 from src.test_set_manager import TestSetManager
 from src.token_tracker import TokenTracker
 from src.utils import get_llm_config, load_config, setup_logger
+
+if TYPE_CHECKING:
+    from src.indexer import VectorIndexer
+    from src.meal import MealConfig
 
 
 @dataclass
@@ -98,7 +106,7 @@ def sanitize_config(config: dict[str, Any]) -> dict[str, Any]:
     import copy
     result = copy.deepcopy(config)
     llm_presets = result.get("llm_presets", {})
-    for preset_name, preset_config in llm_presets.items():
+    for _preset_name, preset_config in llm_presets.items():
         if isinstance(preset_config, dict) and "api_key" in preset_config:
             preset_config["api_key"] = "***"
     return result
@@ -392,8 +400,8 @@ def _prepare_legacy_test_set(
     system_config: dict[str, Any],
     meal_name: str,
     test_set_config: dict[str, Any],
-    meal_manager: "MealManager",
-    generator: "TestSetGenerator",
+    meal_manager: MealManager,
+    generator: TestSetGenerator,
     llm_preset: str,
     skip_preprocessing: bool,
     token_tracker: TokenTracker | None,
@@ -600,7 +608,7 @@ def prepare_test_sets(
                 "      generation:\n"
                 "        strategy: \"document\"\n"
                 "        num_questions: 10",
-                DeprecationWarning,
+                DeprecationWarning, stacklevel=2,
             )
             test_set_data = _prepare_legacy_test_set(
                 system_config=system_config,
@@ -619,9 +627,9 @@ def prepare_test_sets(
 
 def prepare_index_for_variant(
     merged_config: dict[str, Any],
-    meal_config: "MealConfig",
+    meal_config: MealConfig,
     variant_name: str,
-) -> "VectorIndexer":
+) -> VectorIndexer:
     """
     Prepare or retrieve index for a variant.
 
@@ -1409,10 +1417,8 @@ def run_variant_evaluation(
     except Exception as e:
         logger.error(f"Failed to evaluate variant '{variant_name}': {str(e)}")
         if 'pipeline' in locals():
-            try:
+            with contextlib.suppress(Exception):
                 pipeline.close()
-            except Exception:
-                pass
         raise
 
 
@@ -1454,7 +1460,7 @@ def run_experiment(
     exp_dir = exp_manager.create_experiment_dir(exp_config)
 
     experiment_log_path = exp_dir / "experiment.log"
-    experiment_log_handler = logger.add(
+    logger.add(
         str(experiment_log_path),
         format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
         level="INFO",
@@ -1598,7 +1604,7 @@ def run_experiment(
 
         exp_manager.update_manifest_status(exp_dir, "completed")
 
-        total_token_usage = experiment_tracker.get_total()
+        experiment_tracker.get_total()
         token_cost_config = system_config.get("token_cost", {})
         cost_info = experiment_tracker.estimate_cost(token_cost_config)
 
