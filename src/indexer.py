@@ -44,7 +44,7 @@ class VectorIndexer:
         except Exception as e:
             error_msg = f"Failed to initialize Qdrant client: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg)
+            raise Exception(error_msg) from e
 
     def create_collection(
         self, vector_size: int, recreate: bool = False
@@ -103,7 +103,7 @@ class VectorIndexer:
         except Exception as e:
             error_msg = f"Failed to create collection: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg)
+            raise Exception(error_msg) from e
 
     def index_chunks(
         self, chunks: list[dict[str, Any]], embeddings: np.ndarray, batch_size: int = 100
@@ -161,7 +161,7 @@ class VectorIndexer:
         except Exception as e:
             error_msg = f"Failed to index chunks: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg)
+            raise Exception(error_msg) from e
 
     def build_index(
         self,
@@ -274,7 +274,7 @@ class VectorIndexer:
         except Exception as e:
             error_msg = f"Failed to delete collection: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg)
+            raise Exception(error_msg) from e
 
     def close(self) -> None:
         """Close the Qdrant client and release associated resources."""

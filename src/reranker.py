@@ -56,7 +56,7 @@ class Reranker:
         except Exception as e:
             error_msg = f"Failed to load reranker model {model_name}: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg)
+            raise Exception(error_msg) from e
 
     def rerank(
         self,
@@ -116,7 +116,7 @@ class Reranker:
         except Exception as e:
             error_msg = f"Failed to rerank results: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg)
+            raise Exception(error_msg) from e
 
     def _score_pairs(self, pairs: list[tuple]) -> list[float]:
         """Score query-document pairs using the cross-encoder model.

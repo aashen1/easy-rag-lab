@@ -755,7 +755,7 @@ class ExperimentManager:
                 manifest = json.load(f)
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse manifest file: {str(e)}")
-            raise ValueError(f"Invalid manifest file: {str(e)}")
+            raise ValueError(f"Invalid manifest file: {str(e)}") from e
 
         config_path = exp_dir / "config_snapshot.yaml"
         config_snapshot = {}

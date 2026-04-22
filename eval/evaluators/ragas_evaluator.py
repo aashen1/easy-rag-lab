@@ -103,7 +103,7 @@ class RagasEvaluator(BaseEvaluator):
             logger.error(error_msg)
             raise ImportError(
                 f"{error_msg}. Please install with: pixi add langchain-anthropic ragas"
-            )
+            ) from e
 
     def _create_embeddings(self, config: dict[str, Any]) -> Any:
         """
@@ -187,7 +187,7 @@ class RagasEvaluator(BaseEvaluator):
             logger.error(error_msg)
             raise ImportError(
                 f"{error_msg}. Please install ragas properly."
-            )
+            ) from e
 
     def _build_run_config(self) -> Any | None:
         """
@@ -243,7 +243,7 @@ class RagasEvaluator(BaseEvaluator):
         except ImportError as e:
             error_msg = f"Failed to import RAGAS dataset classes: {str(e)}"
             logger.error(error_msg)
-            raise ImportError(error_msg)
+            raise ImportError(error_msg) from e
 
     def _create_metrics(
         self,
@@ -329,7 +329,7 @@ class RagasEvaluator(BaseEvaluator):
         except ImportError as e:
             error_msg = f"Failed to import RAGAS metrics: {str(e)}"
             logger.error(error_msg)
-            raise ImportError(error_msg)
+            raise ImportError(error_msg) from e
 
     @property
     def name(self) -> str:

@@ -68,7 +68,7 @@ class Embedder:
         except Exception as e:
             error_msg = f"Failed to load embedding model {model_name}: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg)
+            raise Exception(error_msg) from e
 
     def _encode_batch(
         self, texts: list[str], batch_size: int, max_length: int = 512, show_progress: bool = False
@@ -160,7 +160,7 @@ class Embedder:
         except Exception as e:
             error_msg = f"Failed to embed texts: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg)
+            raise Exception(error_msg) from e
 
     def embed_query(self, query: str) -> np.ndarray:
         """Generate an embedding for a single query string.
@@ -202,7 +202,7 @@ class Embedder:
         except Exception as e:
             error_msg = f"Failed to embed query: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg)
+            raise Exception(error_msg) from e
 
     def get_embedding_dimension(self) -> int:
         """Return the embedding dimension of the loaded model.

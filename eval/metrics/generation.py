@@ -161,7 +161,7 @@ def _extract_statements(
     except Exception as e:
         error_msg = f"Failed to extract statements: {str(e)}"
         logger.error(error_msg)
-        raise Exception(error_msg)
+        raise Exception(error_msg) from e
 
 
 def _verify_statements(
@@ -220,7 +220,7 @@ def _verify_statements(
     except Exception as e:
         error_msg = f"Failed to verify statements: {str(e)}"
         logger.error(error_msg)
-        raise Exception(error_msg)
+        raise Exception(error_msg) from e
 
 
 def calculate_faithfulness(
@@ -333,7 +333,7 @@ def calculate_faithfulness(
     except Exception as e:
         error_msg = f"Failed to calculate faithfulness: {str(e)}"
         logger.error(error_msg)
-        raise Exception(error_msg)
+        raise Exception(error_msg) from e
 
 
 def _parse_relevancy_response(response_text: str) -> dict[str, Any]:
@@ -358,7 +358,7 @@ def _parse_relevancy_response(response_text: str) -> dict[str, Any]:
     try:
         return json.loads(response_text)
     except json.JSONDecodeError as e:
-        raise ValueError(f"Failed to parse LLM response as JSON: {e}")
+        raise ValueError(f"Failed to parse LLM response as JSON: {e}") from e
 
 
 def calculate_answer_relevancy(
@@ -471,4 +471,4 @@ def calculate_answer_relevancy(
     except Exception as e:
         error_msg = f"Failed to calculate answer relevancy: {str(e)}"
         logger.error(error_msg)
-        raise Exception(error_msg)
+        raise Exception(error_msg) from e

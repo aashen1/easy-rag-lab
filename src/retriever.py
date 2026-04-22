@@ -92,7 +92,7 @@ class Retriever:
         except Exception as e:
             error_msg = f"Failed to retrieve results: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg)
+            raise Exception(error_msg) from e
 
 
 if __name__ == "__main__":

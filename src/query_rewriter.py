@@ -103,7 +103,7 @@ class QueryRewriter:
         except Exception as e:
             error_msg = f"Failed to rewrite query: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg)
+            raise Exception(error_msg) from e
 
     def _hyde_rewrite(self, query: str) -> dict[str, Any]:
         """Generate a hypothetical answer for HyDE retrieval.
@@ -229,7 +229,7 @@ class QueryRewriter:
         except Exception as e:
             error_msg = f"LLM call failed: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg)
+            raise Exception(error_msg) from e
 
 
 if __name__ == "__main__":

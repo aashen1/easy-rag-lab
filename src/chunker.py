@@ -67,7 +67,7 @@ def chunk_text(
     except Exception as e:
         error_msg = f"Failed to load tiktoken encoding {encoding_name}: {str(e)}"
         logger.error(error_msg)
-        raise Exception(error_msg)
+        raise Exception(error_msg) from e
 
     tokens = encoding.encode(text)
     total_tokens = len(tokens)

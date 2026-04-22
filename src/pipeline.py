@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
@@ -11,6 +13,9 @@ from src.hybrid_retriever import HybridRetriever
 from src.indexer import VectorIndexer
 from src.parser import parse_all_pdfs
 from src.query_rewriter import QueryRewriter
+
+if TYPE_CHECKING:
+    from src.meal import MealConfig
 from src.reranker import Reranker
 from src.retriever import Retriever
 from src.sampler import SamplingConfig, determine_sample
@@ -290,7 +295,7 @@ class RAGPipeline:
         self.close()
         return False
 
-    def use_meal(self, meal_name: str) -> "MealConfig":
+    def use_meal(self, meal_name: str) -> MealConfig:
         """Switch the pipeline to use a pre-built Meal's vector collection.
 
         Closes the current indexer and creates a new one pointing to the
@@ -478,7 +483,7 @@ class RAGPipeline:
         except Exception as e:
             error_msg = f"Failed to process query: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg)
+            raise Exception(error_msg) from e
 
 
 if __name__ == "__main__":
