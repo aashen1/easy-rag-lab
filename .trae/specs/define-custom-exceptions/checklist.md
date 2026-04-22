@@ -1,0 +1,34 @@
+- [ ] src/exceptions.py exists with RAGPipelineError base class and 8 subclasses
+- [ ] All custom exceptions inherit from RAGPipelineError
+- [ ] All custom exceptions have Chinese docstrings
+- [ ] src/__init__.py exports all 9 exception classes
+- [ ] No `raise ValueError` remains in src/ for config/parameter validation (replaced by ConfigurationError)
+- [ ] No `raise ValueError` remains in src/ for parsing context (replaced by ParsingError)
+- [ ] No `raise ValueError` remains in src/ for retrieval context (replaced by RetrievalError)
+- [ ] No `raise ValueError` remains in src/ for meal context (replaced by MealError)
+- [ ] No `raise ValueError` remains in src/ for test set context (replaced by TestSetError)
+- [ ] No `raise Exception from e` remains in src/ for LLM/API calls (replaced by GenerationError)
+- [ ] No `raise Exception from e` remains in src/ for retrieval failures (replaced by RetrievalError)
+- [ ] No `raise Exception from e` remains in src/ for indexing failures (replaced by IndexingError)
+- [ ] No `raise Exception from e` remains in src/ for parsing failures (replaced by ParsingError)
+- [ ] No `raise FileNotFoundError` remains in src/ for parsing context (replaced by ParsingError)
+- [ ] No `raise FileNotFoundError` remains in src/ for indexing context (replaced by IndexingError)
+- [ ] No `raise RuntimeError` remains in src/bm25_retriever.py (replaced by RetrievalError)
+- [ ] No `raise TypeError` remains in src/parsers/registry.py (replaced by ConfigurationError)
+- [ ] No `raise ImportError` remains in src/parsers/registry.py (replaced by ConfigurationError)
+- [ ] No `raise ValueError` remains in eval/ for evaluation context (replaced by EvaluationError)
+- [ ] No `raise Exception from e` remains in eval/ for evaluation failures (replaced by EvaluationError)
+- [ ] No `raise ImportError` remains in eval/ for RAGAS/eval dependency (replaced by EvaluationError)
+- [ ] No `raise FileNotFoundError` remains in eval/ for experiment config context (replaced by ConfigurationError)
+- [ ] All error message texts are preserved exactly (no message changes)
+- [ ] All exception chains (from e) are preserved exactly
+- [ ] except ValueError patterns in src/ updated to catch ConfigurationError where applicable
+- [ ] except FileNotFoundError patterns in src/ updated to catch ParsingError/IndexingError where applicable
+- [ ] except ValueError patterns in eval/ updated to catch ConfigurationError/EvaluationError where applicable
+- [ ] except FileNotFoundError patterns in eval/ updated to catch ConfigurationError where applicable
+- [ ] All pytest.raises(ValueError) in tests/ updated to correct custom exception type
+- [ ] All pytest.raises(FileNotFoundError) in tests/ updated to correct custom exception type
+- [ ] All pytest.raises(Exception) in tests/ updated to correct custom exception type where applicable
+- [ ] All pytest.raises(RuntimeError) in tests/ updated to RetrievalError
+- [ ] `pixi run lint` passes with no errors
+- [ ] All existing tests pass after the changes
