@@ -1,6 +1,6 @@
 import argparse
 import sys
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from loguru import logger
 
@@ -229,7 +229,7 @@ def main():
         _print_query_result(result)
 
 
-def _build_sampling_config(args: argparse.Namespace) -> Optional[SamplingConfig]:
+def _build_sampling_config(args: argparse.Namespace) -> SamplingConfig | None:
     sampling_config = None
     sample_modes = [
         ("count", args.sample_count),
