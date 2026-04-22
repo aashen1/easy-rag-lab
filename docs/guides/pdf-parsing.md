@@ -1,25 +1,48 @@
-# PDF 解析指南：pymupdf4llm 详细说明与最佳实践
+# PDF 解析指南：双引擎方案详解与最佳实践
 
 <!-- status: active -->
 
-> 最后更新: 2026-04-22
+> 最后更新: 2026-04-23
 
-本文档介绍 ASH Easy RAG 系统中 PDF 解析环节的技术细节、参数配置和最佳实践。
+本文档介绍 ASH Easy RAG 系统中 PDF 解析环节的技术细节、参数配置和最佳实践。系统支持两种解析方案：
+
+1. **pymupdf4llm**：LLM 友好的封装方案，开箱即用
+2. **fitz_pdfplumber**：底层组合方案，精细控制
 
 ---
 
 ## 概述
 
-系统使用 [pymupdf4llm](https://pymupdf.readthedocs.io/en/latest/pymupdf4llm/) 作为 PDF 解析引擎，它是 PyMuPDF 的 LLM 友好封装，能将 PDF 页面转换为结构化的 Markdown 文本。
+### 方案选择总览
+
+| 方案 | 特点 | 适用场景 |
+|------|------|---------|
+| **pymupdf4llm** | 开箱即用，Layout 模式自动处理多栏、表格、OCR | 快速部署，金融研报双栏排版 |
+| **fitz_pdfplumber** | 精细控制，自定义噪声过滤、表格策略 | 需要调优特定场景，复杂表格处理 |
 
 ### 核心设计决策
 
 | 决策 | 选择 | 理由 |
 |------|------|------|
-| 解析引擎 | pymupdf4llm | LLM 友好的 Markdown 输出，内置 Layout 模式 |
-| Layout 模式 | `use_layout(True)`（默认） | 金融研报双栏排版普遍，Layout 模块的多栏检测是核心能力 |
-| 页级输出 | `page_chunks=True` | RAG 系统需要页码关联，支持检索结果溯源到具体页码 |
+| 解析引擎 | 双引擎支持 | 不同场景有不同最优解 |
+| 页级输出 | 默认启用 | RAG 系统需要页码关联，支持检索结果溯源到具体页码 |
 | 输出格式 | `.pages.json` | 页级 JSON 格式，每页独立 dict，含元数据 |
+
+---
+
+## 方案一：pymupdf4llm
+
+[pymupdf4llm](https://pymupdf.readthedocs.io/en/latest/pymupdf4llm/) 是 PyMuPDF 的 LLM 友好封装，能将 PDF 页面转换为结构化的 Markdown 文本。
+
+### 核心特性
+
+| 特性 | 说明 |
+|------|------|
+| 解析引擎 | pymupdf4llm |
+| Layout 模式 | `use_layout(True)`（默认） |
+| 多栏检测 | ✅ 自动（Layout 模块内置） |
+| 表格识别 | ✅ 内置（转换为 Markdown 表格） |
+| OCR 兜底 | ✅ 自动触发 |
 
 ---
 
@@ -276,19 +299,380 @@ parser:
 
 ---
 
-## 与其他方案的对比
+## 方案二：fitz_pdfplumber
 
-| 维度 | pymupdf4llm (Layout 模式) | fitz 原生 | pdfplumber |
-|------|--------------------------|----------|------------|
-| 多栏检测 | ✅ 自动 | ❌ 需自行实现 | ❌ 需自行实现 |
-| 表格识别 | ✅ 内置 | ❌ 需自行实现 | ✅ 精细控制 |
-| 图片分类 | ✅ 自动 | ⚠️ 需参数控制 | ⚠️ 需参数控制 |
-| 页眉页脚过滤 | ✅ 参数支持 | ⚠️ margins 裁剪 | ⚠️ margins 裁剪 |
-| OCR 兜底 | ✅ 自动触发 | ✅ 自动触发 | ❌ 需额外集成 |
-| LLM 友好输出 | ✅ Markdown | ❌ 需自行转换 | ❌ 需自行转换 |
-| 参数控制力 | ⚠️ Layout 模式下部分参数不可用 | ✅ 完全控制 | ✅ 完全控制 |
+`fitz_pdfplumber` 是一种底层组合方案，使用 fitz (PyMuPDF) 进行文本提取和布局分析，使用 pdfplumber 进行精确的表格提取。
 
-**结论**：对于金融研报场景，pymupdf4llm Layout 模式的多栏检测和 LLM 友好输出是核心优势，换库成本远大于参数精调。
+### 核心设计理念
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    fitz_pdfplumber 解析流程                  │
+├─────────────────────────────────────────────────────────────┤
+│  PDF 文件                                                    │
+│     │                                                        │
+│     ├─→ fitz (PyMuPDF)                                       │
+│     │     ├─ 文本块提取                                       │
+│     │     ├─ 多栏检测                                         │
+│     │     ├─ 页眉页脚过滤                                     │
+│     │     └─ 噪声过滤                                         │
+│     │                                                        │
+│     ├─→ pdfplumber                                           │
+│     │     └─ 表格提取（精确边框识别）                          │
+│     │                                                        │
+│     └─→ 合并：表格替换重叠文本区域                             │
+│           │                                                  │
+│           ↓                                                  │
+│     Markdown 输出                                            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 核心特性
+
+| 特性 | 说明 |
+|------|------|
+| 文本提取 | fitz (PyMuPDF) |
+| 表格提取 | pdfplumber（精确边框识别） |
+| 多栏检测 | ✅ 自实现（基于文本块位置分析） |
+| 页眉页脚过滤 | ✅ 可配置区域比例 |
+| 噪声过滤 | ✅ 正则表达式模式匹配 |
+| 标题检测 | ✅ 基于字号和加粗状态 |
+
+### 参数详解
+
+#### 当前推荐配置
+
+```yaml
+parser:
+  algorithm: "fitz_pdfplumber"
+  fitz_pdfplumber:
+    header_filter: true
+    footer_filter: true
+    header_zone_ratio: 0.10
+    footer_zone_ratio: 0.10
+    table_strategy: "lines"
+    table_settings:
+      snap_tolerance: 5
+      join_tolerance: 5
+      edge_min_length: 10
+      intersection_x_tolerance: 5
+      intersection_y_tolerance: 5
+    column_detection: true
+    noise_patterns:
+      - "请务必阅读.{0,20}声明"
+      - "^\\s*\\d+\\s*$"
+      - "^\\s*\\d+\\s*/\\s*\\d+\\s*$"
+      - "(?:内部资料|机密|仅供参考).{0,30}$"
+      - "^(?:www\\.|http).+$"
+```
+
+#### 参数逐一说明
+
+##### `header_filter: true` / `footer_filter: true`
+
+- **作用**：启用页眉/页脚区域过滤
+- **推荐值**：`true`（金融研报的页眉页脚通常包含公司 logo、页码等噪声）
+- **联动**：与 `header_zone_ratio` / `footer_zone_ratio` 配合使用
+
+##### `header_zone_ratio: 0.10` / `footer_zone_ratio: 0.10`
+
+- **作用**：定义页眉/页脚区域占页面高度的比例
+- **推荐值**：`0.10`（即页面顶部/底部 10% 的区域）
+- **过滤逻辑**：位于该区域内且文本长度 < 80 字符的文本块会被过滤
+
+##### `table_strategy: "lines"`
+
+- **作用**：pdfplumber 表格检测策略
+- **可选值**：
+  - `"lines"`：基于表格线检测（推荐，适合有边框的表格）
+  - `"text"`：基于文本位置推断（适合无边框表格）
+  - `"explicit"`：仅使用显式表格线
+
+##### `table_settings`
+
+pdfplumber `find_tables()` 的详细配置：
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `snap_tolerance` | 5 | 线段对齐容差 |
+| `join_tolerance` | 5 | 线段连接容差 |
+| `edge_min_length` | 10 | 最小边长度 |
+| `intersection_x_tolerance` | 5 | 水平交叉容差 |
+| `intersection_y_tolerance` | 5 | 垂直交叉容差 |
+
+##### `column_detection: true`
+
+- **作用**：启用多栏检测
+- **推荐值**：`true`
+- **检测逻辑**：基于文本块中心点分布，判断是否为双栏布局
+- **排序策略**：双栏时按"左栏优先、从上到下"排序
+
+##### `noise_patterns`
+
+- **作用**：正则表达式列表，匹配需要过滤的噪声文本
+- **默认模式**：
+  - 页码：`^\s*\d+\s*$`
+  - 页码分式：`^\s*\d+\s*/\s*\d+\s*$`
+  - 声明文本：`请务必阅读.{0,20}声明`
+  - URL：`^(?:www\.|http).+$`
+  - 机密标记：`(?:内部资料|机密|仅供参考).{0,30}$`
+
+### 解析流程详解
+
+#### 1. 文本块提取（fitz）
+
+```python
+# 使用 fitz 提取文本块
+raw_blocks = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)["blocks"]
+
+# 提取每个块的：
+# - 文本内容
+# - 字号（用于标题检测）
+# - 加粗状态（用于标题检测）
+# - 边界框（用于位置排序和表格重叠检测）
+```
+
+#### 2. 表格提取（pdfplumber）
+
+```python
+# 使用 pdfplumber 提取表格
+plumber_tables = page.find_tables(table_settings=settings)
+
+# 转换为 Markdown 表格格式
+md_table = _table_to_markdown(table.extract())
+```
+
+#### 3. 合并文本与表格
+
+```python
+# 表格替换重叠的文本区域
+for text_block in text_blocks:
+    if overlaps_table(text_block, table_blocks):
+        remove(text_block)
+
+# 按位置排序后输出
+combined = text_blocks + table_blocks
+combined.sort(key=lambda b: b.bbox[1])  # 按 y 坐标排序
+```
+
+### 标题检测机制
+
+基于字号和加粗状态自动检测标题：
+
+| 条件 | Markdown 级别 |
+|------|---------------|
+| 字号 > 16 且加粗 | `#` (H1) |
+| 字号 > 14 且加粗 | `##` (H2) |
+| 字号 > 12 且加粗 | `###` (H3) |
+| 字号 > 11 且加粗且长度 < 100 | `####` (H4) |
+
+### 与 pymupdf4llm 的关键差异
+
+| 维度 | pymupdf4llm | fitz_pdfplumber |
+|------|-------------|-----------------|
+| **多栏检测** | Layout 模块内置 | 自实现（基于位置分析） |
+| **表格提取** | Layout 模块内置 | pdfplumber 精确控制 |
+| **页眉页脚过滤** | Layout 模块内置 | 区域比例 + 长度判断 |
+| **噪声过滤** | 无内置 | 正则表达式模式匹配 |
+| **标题检测** | 无内置 | 字号 + 加粗状态 |
+| **OCR 支持** | ✅ 自动触发 | ❌ 需额外集成 |
+| **参数控制力** | ⚠️ Layout 模式下受限 | ✅ 完全控制 |
+
+---
+
+## 双引擎对比与选择指南
+
+### 功能对比矩阵
+
+| 维度 | pymupdf4llm | fitz_pdfplumber |
+|------|-------------|-----------------|
+| **多栏检测** | ✅ 自动（Layout 模块） | ✅ 自实现 |
+| **表格识别** | ✅ 内置 | ✅ pdfplumber 精细控制 |
+| **页眉页脚过滤** | ✅ 参数支持 | ✅ 区域比例控制 |
+| **噪声过滤** | ❌ 无内置 | ✅ 正则表达式 |
+| **标题检测** | ❌ 无内置 | ✅ 字号 + 加粗 |
+| **OCR 兜底** | ✅ 自动触发 | ❌ 需额外集成 |
+| **LLM 友好输出** | ✅ Markdown | ✅ Markdown |
+| **参数控制力** | ⚠️ Layout 模式下部分参数不可用 | ✅ 完全控制 |
+| **部署复杂度** | ✅ 开箱即用 | ⚠️ 需调优参数 |
+
+### 选择决策树
+
+```
+开始
+  │
+  ├─ 文档是否包含扫描页面？
+  │   ├─ 是 → pymupdf4llm（内置 OCR）
+  │   └─ 否 ↓
+  │
+  ├─ 是否需要精细控制噪声过滤？
+  │   ├─ 是 → fitz_pdfplumber
+  │   └─ 否 ↓
+  │
+  ├─ 表格是否复杂（合并单元格、嵌套表格）？
+  │   ├─ 是 → fitz_pdfplumber（pdfplumber 更精确）
+  │   └─ 否 ↓
+  │
+  ├─ 是否需要快速部署？
+  │   ├─ 是 → pymupdf4llm（开箱即用）
+  │   └─ 否 ↓
+  │
+  └─ 默认推荐 → pymupdf4llm
+```
+
+### 场景推荐
+
+| 场景 | 推荐方案 | 理由 |
+|------|---------|------|
+| 金融研报（双栏排版） | pymupdf4llm | Layout 模式自动处理多栏 |
+| 扫描件 PDF | pymupdf4llm | 内置 OCR 兜底 |
+| 复杂表格文档 | fitz_pdfplumber | pdfplumber 表格提取更精确 |
+| 需要自定义噪声过滤 | fitz_pdfplumber | 正则表达式灵活配置 |
+| 快速原型验证 | pymupdf4llm | 开箱即用，无需调优 |
+| 生产环境调优 | fitz_pdfplumber | 参数完全可控 |
+
+---
+
+## 对比实验方法
+
+### 实验设计原则
+
+1. **控制变量**：每次只改变一个参数或方案
+2. **隔离缓存**：Meal 系统自动为不同配置生成独立缓存
+3. **统一评估**：使用相同的测试集和评估指标
+
+### 实验步骤
+
+#### 1. 准备测试集
+
+```bash
+# 生成测试集（如果还没有）
+pixi run python main.py --generate-test-set --num-questions 50
+```
+
+#### 2. 配置实验 A（pymupdf4llm）
+
+```yaml
+# config.yaml
+parser:
+  algorithm: "pymupdf4llm"
+  pymupdf4llm:
+    header: false
+    footer: false
+    page_separators: false
+    write_images: false
+    page_chunks: true
+    force_text: true
+    ignore_code: true
+    use_ocr: true
+    ocr_language: "chi_sim+eng"
+    show_progress: true
+```
+
+#### 3. 运行实验 A
+
+```bash
+# 构建索引
+pixi run python main.py --build-index
+
+# 运行评估
+pixi run python main.py --evaluate --test-set data/test_sets/default.jsonl
+
+# 记录 Meal ID（如 meal_20260423_a1b2c3）
+```
+
+#### 4. 配置实验 B（fitz_pdfplumber）
+
+```yaml
+# config.yaml
+parser:
+  algorithm: "fitz_pdfplumber"
+  fitz_pdfplumber:
+    header_filter: true
+    footer_filter: true
+    header_zone_ratio: 0.10
+    footer_zone_ratio: 0.10
+    table_strategy: "lines"
+    column_detection: true
+```
+
+#### 5. 运行实验 B
+
+```bash
+# 构建索引（Meal 系统会自动创建新的缓存目录）
+pixi run python main.py --build-index
+
+# 运行评估
+pixi run python main.py --evaluate --test-set data/test_sets/default.jsonl
+
+# 记录 Meal ID（如 meal_20260423_d4e5f6）
+```
+
+#### 6. 对比结果
+
+```bash
+# 查看两个 Meal 的评估报告
+pixi run python main.py --compare-meals meal_20260423_a1b2c3 meal_20260423_d4e5f6
+```
+
+### 关键评估指标
+
+| 指标 | 说明 | 关注点 |
+|------|------|--------|
+| **Faithfulness** | 回答对上下文的忠实度 | 解析质量是否影响幻觉 |
+| **Answer Relevancy** | 回答与问题的相关性 | 解析是否保留关键信息 |
+| **Context Precision** | 检索上下文的精确度 | 解析是否引入噪声 |
+| **Context Recall** | 检索上下文的召回率 | 解析是否丢失信息 |
+
+### 实验记录模板
+
+```markdown
+## 解析方案对比实验
+
+### 实验配置
+- 日期：YYYY-MM-DD
+- 测试集：data/test_sets/default.jsonl
+- 文档数量：N
+
+### 实验组
+| 组别 | 方案 | 关键参数 |
+|------|------|---------|
+| A | pymupdf4llm | header=false, footer=false, ignore_code=true |
+| B | fitz_pdfplumber | header_filter=true, footer_filter=true, table_strategy=lines |
+
+### 评估结果
+| 指标 | A (pymupdf4llm) | B (fitz_pdfplumber) | 差异 |
+|------|-----------------|---------------------|------|
+| Faithfulness | X.XX | X.XX | +X.XX |
+| Answer Relevancy | X.XX | X.XX | +X.XX |
+| Context Precision | X.XX | X.XX | +X.XX |
+| Context Recall | X.XX | X.XX | +X.XX |
+
+### 结论
+[记录实验发现和建议]
+```
+
+### 最小化对比实验
+
+如果只想验证单一参数的影响：
+
+```yaml
+# 实验 A：fitz_pdfplumber 默认噪声过滤
+parser:
+  algorithm: "fitz_pdfplumber"
+  fitz_pdfplumber:
+    noise_patterns:
+      - "请务必阅读.{0,20}声明"
+      - "^\\s*\\d+\\s*$"
+
+# 实验 B：fitz_pdfplumber 无噪声过滤
+parser:
+  algorithm: "fitz_pdfplumber"
+  fitz_pdfplumber:
+    noise_patterns: []  # 空列表 = 不过滤
+```
+
+Meal 系统会为两个配置生成不同的 hash，确保实验隔离。
 
 ---
 

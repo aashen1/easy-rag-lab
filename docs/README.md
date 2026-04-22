@@ -25,6 +25,7 @@
 
 - [Meal 数据管理系统](guides/meal-system.md)
 - [实验评测系统](guides/experiment-system.md)
+- [PDF 解析指南](guides/pdf-parsing.md)
 - [文档级问题生成](guides/question-generation.md)
 - [评测指标详解](guides/evaluation-metrics.md)
 - [RAGAS 评测系统](guides/ragas-evaluation.md)
