@@ -615,7 +615,7 @@ def process_parsed_files_page_aware(
                         "chunk_id": chunk_id,
                         "text": chunk["text"],
                         "metadata": {
-                            "source": relative_path.with_suffix(".pages.json").as_posix(),
+                            "source": relative_path.as_posix(),
                             "page_number": page_number,
                             "category": category,
                             "strategy": "page_aware_fixed",
