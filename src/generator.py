@@ -12,6 +12,31 @@ from src.token_tracker import (
 )
 
 
+def clean_source_name(source: str) -> str:
+    """Extract a clean display name from a source file path.
+
+    Strips directory components and file extensions, including compound
+    extensions like ``.pages.json``.  The result is suitable for showing
+    to the LLM so it can cite sources accurately.
+
+    Args:
+        source: File path string (may include directories and extensions).
+
+    Returns:
+        Cleaned source name without directory or extension components.
+
+    Examples:
+        >>> clean_source_name("research_reports/2026现代女性精力管理现状报告.pages.json")
+        '2026现代女性精力管理现状报告'
+        >>> clean_source_name("annual_reports/2023/贵州茅台2023年年度报告.md")
+        '贵州茅台2023年年度报告'
+    """
+    stem = Path(source).stem
+    if stem.endswith(".pages"):
+        stem = stem[: -len(".pages")]
+    return stem
+
+
 class Generator:
     """LLM answer generator with token usage tracking.
 
@@ -195,7 +220,7 @@ class Generator:
             if sources:
                 context_text = "\n\n".join(
                     [
-                        f"参考资料 {i+1}（来源：{Path(sources[i]).stem if i < len(sources) else '未知'}）:\n{ctx}"
+                        f"参考资料 {i+1}（来源：{clean_source_name(sources[i]) if i < len(sources) else '未知'}）:\n{ctx}"
                         for i, ctx in enumerate(contexts)
                     ]
                 )
