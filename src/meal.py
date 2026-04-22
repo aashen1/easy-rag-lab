@@ -230,22 +230,27 @@ def _infer_equivalence_groups(pdf_files: list[str]) -> dict[str, list[str]]:
 
     For each file path, extracts the filename stem (without extension) and
     removes common suffixes such as "摘要", "_摘要", "_英文版_", "_修订版_".
-    Files sharing the same resulting group key are placed in one group.
+    The group key is formed as ``parent_dir/stripped_stem`` to distinguish
+    files with the same stem residing in different directories (e.g. different
+    companies' annual reports). If the file has no parent directory, the
+    stripped stem alone is used as the group key.
 
     Args:
         pdf_files: List of relative PDF file paths.
 
     Returns:
-        Dictionary mapping group keys to lists of original file paths.
+        Dictionary mapping group keys to lists of POSIX-formatted file paths.
     """
     suffix_pattern = re.compile(
         r"(摘要|_摘要|_英文版_|_修订版_)$"
     )
     groups: dict[str, list[str]] = {}
     for file_path in pdf_files:
-        stem = Path(file_path).stem
-        group_key = suffix_pattern.sub("", stem)
-        posix_path = Path(file_path).as_posix()
+        p = Path(file_path)
+        stripped_stem = suffix_pattern.sub("", p.stem)
+        parent_name = p.parent.name
+        group_key = f"{parent_name}/{stripped_stem}" if parent_name else stripped_stem
+        posix_path = p.as_posix()
         groups.setdefault(group_key, []).append(posix_path)
     return groups
 
