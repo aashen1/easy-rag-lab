@@ -14,9 +14,10 @@
 |------|--------|--------|--------|--------|
 | Bug | 4 | 0 | 16 | 2 |
 | Feature | 17 | 0 | 20 | 0 |
-| Refactor | 12 | 0 | 12 | 0 |
+| Refactor | 11 | 0 | 13 | 0 |
 | Optimization | 7 | 0 | 1 | 0 |
-| Investigation | 18 | 0 | 4 | 0 |
+| Investigation | 16 | 0 | 6 | 0 |
+| Test | 8 | 0 | 0 | 0 |
 
 ---
 
@@ -82,7 +83,7 @@
 | RF-008 | backlog issue 详细信息记录 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 参考 GitHub 做法，支持超链接引用详情 |
 | RF-009 | commit-rule 与 CLAUDE.md 渐进式披露 | [TODO.md](../TODO.md) | ✅ 已完成 | 中 | 三层渐进式披露：commit-rule 23行+CLAUDE.md 3行+SKILL.md+docs/guides/commit-conventions.md |
 | RF-010 | lint/ruff 配置 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 添加代码检查工具 |
-| RF-011 | docs 目录组织度维护 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 打扫卫生时考量 docs 目录组织度，恢复整洁度 |
+| RF-011 | docs 目录组织度维护 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 打扫卫生时考量 docs 目录组织度，恢复整洁度 |
 | RF-012 | 旧格式 test_sets DeprecationWarning 清理 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 测试中大量旧格式警告，后续版本逐步清理 |
 | RF-013 | chunk_id 命名规范化（当前依赖文件名含下划线时解析脆弱） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P2-3) | 📋 待处理 | 小 | 需设计新格式并考虑迁移兼容 |
 | RF-014 | normalize_source 匹配精度提升（当前仅比较文件名 stem，过于宽松） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P6-1) | 📋 待处理 | 小 | 可能误判不同版本的同名文档 |
@@ -128,11 +129,26 @@
 | INV-014 | RAGAS 指标与 Builtin 指标深度对比分析 | [RAGAS 指南](guides/ragas-evaluation.md#5-后续优化方向) | 📋 待处理 | 差异报告 + 根因分析（prompt 差异 vs 评分逻辑差异）+ 置信区间估计 |
 | INV-015 | tiktoken 与 BGE tokenizer 的 token 数差异量化 | [pipeline-deep-audit.md](pipeline-deep-audit.md#P3-1) | 📋 待处理 | chunk_size=512 tiktoken token 可能超过 BGE 512 token 限制，需实际数据验证截断影响 |
 | INV-016 | PDF 表格解析质量评估与替代方案调研 | [pipeline-deep-audit.md](pipeline-deep-audit.md#P1-1) | 📋 待处理 | pymupdf4llm 对复杂表格转换错乱，金融研报财务数据可能丢失 |
-| INV-017 | 边界条件测试覆盖评估（空输入、极端值等） | 深度审查 | 📋 待处理 | 需确认测试是否覆盖边界情况 |
-| INV-018 | 异常路径测试覆盖评估 | 深度审查 | 📋 待处理 | 需确认异常分支是否有测试覆盖 |
+| INV-017 | 边界条件测试覆盖评估（空输入、极端值等） | 深度审查 | ✅ 已完成 | 详见 [评估报告](reviews/inv-017-boundary-condition-test-coverage.md) |
+| INV-018 | 异常路径测试覆盖评估 | 深度审查 | ✅ 已完成 | 详见 [评估报告](reviews/inv-018-exception-path-test-coverage.md) |
 | INV-019 | 测试并行化可行性评估（pytest-xdist） | 深度审查 | 📋 待处理 | 评估是否可用 pytest-xdist 加速测试 |
 | INV-020 | 大规模数据索引构建性能评估 | 深度审查 | 📋 待处理 | 评估大规模数据时索引构建时间和优化空间 |
 | INV-021 | 文件路径安全检查（防止路径遍历攻击） | 深度审查 | 📋 待处理 | 文件路径处理是否防止 `../` 攻击 |
+
+---
+
+## Test
+
+| ID | 描述 | 来源 | 状态 | 优先级 | 备注 |
+|----|------|------|------|--------|------|
+| TEST-001 | 补充 generator 模块边界条件测试 | [INV-017](reviews/inv-017-boundary-condition-test-coverage.md) | 📋 待处理 | 高 | 空输入、None值、极端值测试 |
+| TEST-002 | 补充 test_set_manager 模块边界条件测试 | [INV-017](reviews/inv-017-boundary-condition-test-coverage.md) | 📋 待处理 | 高 | 文件不存在、无效数据、空列表测试 |
+| TEST-003 | 补充 experiment 模块边界条件测试 | [INV-017](reviews/inv-017-boundary-condition-test-coverage.md) | 📋 待处理 | 高 | 配置缺失、无效配置、空测试集测试 |
+| TEST-004 | 补充 run_experiment 模块边界条件测试 | [INV-017](reviews/inv-017-boundary-condition-test-coverage.md) | 📋 待处理 | 高 | 权限错误、文件不存在、无效配置测试 |
+| TEST-005 | 补充 generator 模块异常路径测试 | [INV-018](reviews/inv-018-exception-path-test-coverage.md) | 📋 待处理 | 高 | API调用失败、超时、速率限制测试 |
+| TEST-006 | 补充 experiment 模块异常路径测试 | [INV-018](reviews/inv-018-exception-path-test-coverage.md) | 📋 待处理 | 高 | 无效配置、权限错误等异常测试 |
+| TEST-007 | 补充 run_experiment 模块异常路径测试 | [INV-018](reviews/inv-018-exception-path-test-coverage.md) | 📋 待处理 | 高 | 文件操作异常测试 |
+| TEST-008 | 补充 indexer 模块异常路径测试 | [INV-018](reviews/inv-018-exception-path-test-coverage.md) | 📋 待处理 | 高 | 向量索引异常测试 |
 
 ---
 
