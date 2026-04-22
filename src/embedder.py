@@ -1,4 +1,6 @@
 
+from typing import Any
+
 import numpy as np
 import torch
 from loguru import logger
@@ -7,6 +9,8 @@ from transformers import AutoModel, AutoTokenizer
 
 
 class Embedder:
+    _tokenizer_cache: dict[str, Any] = {}
+
     def __init__(
         self,
         model_name: str = "BAAI/bge-large-zh-v1.5",
@@ -50,6 +54,7 @@ class Embedder:
                 self.device = "cpu"
 
             self._tokenizer = AutoTokenizer.from_pretrained(model_name)
+            Embedder._tokenizer_cache[model_name] = self._tokenizer
             self._model = AutoModel.from_pretrained(model_name)
 
             self._model.to(self.device)
@@ -69,6 +74,37 @@ class Embedder:
             error_msg = f"Failed to load embedding model {model_name}: {str(e)}"
             logger.error(error_msg)
             raise Exception(error_msg) from e
+
+    @classmethod
+    def get_tokenizer(cls, model_name: str = "BAAI/bge-large-zh-v1.5") -> AutoTokenizer:
+        """Get or create a tokenizer for the specified model.
+
+        Returns a cached tokenizer if one exists (e.g., from an
+        already-initialized Embedder instance), otherwise creates a
+        standalone tokenizer without loading the full model.
+
+        Args:
+            model_name: Hugging Face model identifier. Defaults to
+                ``"BAAI/bge-large-zh-v1.5"``.
+
+        Returns:
+            An ``AutoTokenizer`` instance for the specified model.
+
+        Raises:
+            Exception: If the tokenizer fails to load.
+        """
+        if model_name not in cls._tokenizer_cache:
+            try:
+                logger.info(f"Loading standalone tokenizer for: {model_name}")
+                cls._tokenizer_cache[model_name] = AutoTokenizer.from_pretrained(
+                    model_name
+                )
+                logger.success(f"Standalone tokenizer loaded for: {model_name}")
+            except Exception as e:
+                error_msg = f"Failed to load tokenizer for {model_name}: {str(e)}"
+                logger.error(error_msg)
+                raise Exception(error_msg) from e
+        return cls._tokenizer_cache[model_name]
 
     def _encode_batch(
         self, texts: list[str], batch_size: int, max_length: int = 512, show_progress: bool = False

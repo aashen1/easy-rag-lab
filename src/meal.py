@@ -245,7 +245,8 @@ def _infer_equivalence_groups(pdf_files: list[str]) -> dict[str, list[str]]:
     for file_path in pdf_files:
         stem = Path(file_path).stem
         group_key = suffix_pattern.sub("", stem)
-        groups.setdefault(group_key, []).append(file_path)
+        posix_path = Path(file_path).as_posix()
+        groups.setdefault(group_key, []).append(posix_path)
     return groups
 
 
@@ -278,6 +279,7 @@ def build_chunks_if_needed(
     parsed_dir: Path,
     chunks_dir: Path,
     chunker_config: dict[str, Any],
+    model_name: str | None = None,
 ) -> None:
     """
     Build chunks from parsed files if no chunk files exist.
@@ -290,12 +292,15 @@ def build_chunks_if_needed(
         parsed_dir: Directory containing parsed files (.md or .pages.json).
         chunks_dir: Target directory for chunked files (.jsonl).
         chunker_config: Chunker configuration dictionary.
+        model_name: Hugging Face model identifier for BGE tokenizer.
+            Required when chunker encoding is "bge". Defaults to None.
     """
     if chunks_dir.exists() and any(chunks_dir.rglob("*.jsonl")):
         return
 
     logger.info("Chunking documents...")
 
+    encoding_name = chunker_config.get("encoding", "cl100k_base")
     has_pages_json = parsed_dir.exists() and any(parsed_dir.rglob("*.pages.json"))
 
     if has_pages_json:
@@ -303,7 +308,7 @@ def build_chunks_if_needed(
 
         source_filter = set()
         for pages_file in parsed_dir.rglob("*.pages.json"):
-            rel = str(pages_file.relative_to(parsed_dir))
+            rel = pages_file.relative_to(parsed_dir).as_posix()
             source_filter.add(rel)
 
         process_parsed_files_page_aware(
@@ -311,7 +316,9 @@ def build_chunks_if_needed(
             output_dir=str(chunks_dir),
             chunk_size=chunker_config.get("chunk_size", 512),
             overlap=chunker_config.get("chunk_overlap", 0),
+            encoding_name=encoding_name,
             source_filter=source_filter,
+            model_name=model_name,
         )
     else:
         from src.chunker import process_parsed_files
@@ -319,7 +326,7 @@ def build_chunks_if_needed(
         source_filter_md = set()
         if parsed_dir.exists():
             for md_file in parsed_dir.rglob("*.md"):
-                rel = str(md_file.relative_to(parsed_dir))
+                rel = md_file.relative_to(parsed_dir).as_posix()
                 source_filter_md.add(rel)
 
         process_parsed_files(
@@ -327,7 +334,9 @@ def build_chunks_if_needed(
             output_dir=str(chunks_dir),
             chunk_size=chunker_config.get("chunk_size", 512),
             overlap=chunker_config.get("chunk_overlap", 0),
+            encoding_name=encoding_name,
             source_filter=source_filter_md,
+            model_name=model_name,
         )
 
 
@@ -355,7 +364,7 @@ def build_index_from_chunks(
     source_filter_jsonl = set()
     if chunks_dir.exists():
         for jsonl_file in chunks_dir.rglob("*.jsonl"):
-            rel = str(jsonl_file.relative_to(chunks_dir))
+            rel = jsonl_file.relative_to(chunks_dir).as_posix()
             source_filter_jsonl.add(rel)
 
     embedder = Embedder(
@@ -634,7 +643,7 @@ class MealManager:
         total_pages = 0
         for pdf_path in sampled_pdfs:
             try:
-                rel_path = str(pdf_path.relative_to(input_path))
+                rel_path = pdf_path.relative_to(input_path).as_posix()
                 sha256 = compute_file_sha256(pdf_path)
                 size_bytes = pdf_path.stat().st_size
                 pages = count_pdf_pages(pdf_path)
@@ -707,7 +716,10 @@ class MealManager:
             cache_hit_chunk = True
         else:
             logger.info(f"Step 2: Chunking files for meal '{name}'...")
-            build_chunks_if_needed(parsed_dir, chunks_dir, chunker_config)
+            build_chunks_if_needed(
+                parsed_dir, chunks_dir, chunker_config,
+                model_name=embedding_config.get("model_name"),
+            )
 
         logger.info(
             f"Step 3: Building vector index for meal '{name}' (collection: {collection_name})...")
@@ -722,7 +734,7 @@ class MealManager:
         source_filter_jsonl = set()
         if chunks_dir.exists():
             for jsonl_file in chunks_dir.rglob("*.jsonl"):
-                rel = str(jsonl_file.relative_to(chunks_dir))
+                rel = jsonl_file.relative_to(chunks_dir).as_posix()
                 source_filter_jsonl.add(rel)
 
         total_chunks = 0
@@ -1116,7 +1128,10 @@ class MealManager:
 
         if not all_chunks_exist:
             logger.info("Building chunks for merged meal...")
-            build_chunks_if_needed(parsed_dir, chunks_dir, chunker_config)
+            build_chunks_if_needed(
+                parsed_dir, chunks_dir, chunker_config,
+                model_name=embedding_config.get("model_name"),
+            )
         else:
             logger.info("All chunks already exist, reusing cached artifacts")
 
@@ -1131,7 +1146,7 @@ class MealManager:
         source_filter_jsonl = set()
         if chunks_dir.exists():
             for jsonl_file in chunks_dir.rglob("*.jsonl"):
-                rel = str(jsonl_file.relative_to(chunks_dir))
+                rel = jsonl_file.relative_to(chunks_dir).as_posix()
                 source_filter_jsonl.add(rel)
 
         total_chunks = 0
@@ -1353,7 +1368,10 @@ class MealManager:
             parser_config, sampled_pdfs, parsed_dir,
         )
 
-        build_chunks_if_needed(parsed_dir, chunks_dir, chunker_config)
+        build_chunks_if_needed(
+            parsed_dir, chunks_dir, chunker_config,
+            model_name=embedding_config.get("model_name"),
+        )
 
         build_index_from_chunks(
             chunks_dir=chunks_dir,
@@ -1365,7 +1383,7 @@ class MealManager:
         source_filter_jsonl = set()
         if chunks_dir.exists():
             for jsonl_file in chunks_dir.rglob("*.jsonl"):
-                rel = str(jsonl_file.relative_to(chunks_dir))
+                rel = jsonl_file.relative_to(chunks_dir).as_posix()
                 source_filter_jsonl.add(rel)
 
         total_pages = 0
@@ -1628,7 +1646,10 @@ class MealManager:
         self._parse_pdfs_with_registry(parser_config, new_pdf_paths, new_parsed_dir)
 
         logger.info(f"Step 2: Chunking new files for extended meal '{name}'...")
-        build_chunks_if_needed(new_parsed_dir, new_chunks_dir, chunker_config)
+        build_chunks_if_needed(
+            new_parsed_dir, new_chunks_dir, chunker_config,
+            model_name=embedding_config.get("model_name"),
+        )
 
         logger.info(
             f"Step 3: Building vector index for extended meal '{name}' "

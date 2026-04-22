@@ -802,7 +802,9 @@ class TestBuildChunksIfNeeded:
                 output_dir=str(chunks_dir),
                 chunk_size=512,
                 overlap=0,
+                encoding_name="cl100k_base",
                 source_filter={"report.pages.json"},
+                model_name=None,
             )
 
     def test_build_chunks_if_needed_md(self, tmp_path):
@@ -822,7 +824,9 @@ class TestBuildChunksIfNeeded:
                 output_dir=str(chunks_dir),
                 chunk_size=512,
                 overlap=0,
+                encoding_name="cl100k_base",
                 source_filter={"report.md"},
+                model_name=None,
             )
 
     def test_build_chunks_if_needed_skips_existing(self, tmp_path):

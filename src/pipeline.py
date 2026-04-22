@@ -206,6 +206,8 @@ class RAGPipeline:
 
         logger.info("Step 2: Chunking documents...")
         chunker_strategy = chunker_config.get("strategy", "fixed")
+        chunker_encoding = chunker_config.get("encoding", "cl100k_base")
+        embedding_model_name = embedding_config.get("model_name")
 
         if use_page_chunks and chunker_strategy != "semantic":
             from src.chunker import process_parsed_files_page_aware
@@ -225,7 +227,9 @@ class RAGPipeline:
                 output_dir=chunker_config["output_dir"],
                 chunk_size=chunker_config["chunk_size"],
                 overlap=chunker_config["chunk_overlap"],
+                encoding_name=chunker_encoding,
                 source_filter=source_filter_pages,
+                model_name=embedding_model_name,
             )
         elif chunker_strategy == "semantic":
             semantic_config = chunker_config.get("semantic", {})
@@ -245,7 +249,9 @@ class RAGPipeline:
                 output_dir=chunker_config["output_dir"],
                 chunk_size=chunker_config["chunk_size"],
                 overlap=chunker_config["chunk_overlap"],
+                encoding_name=chunker_encoding,
                 source_filter=source_filter_md,
+                model_name=embedding_model_name,
             )
 
         source_filter_jsonl = None

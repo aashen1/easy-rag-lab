@@ -407,7 +407,9 @@ class TestRAGPipeline:
             output_dir="/tmp/chunker_out",
             chunk_size=500,
             overlap=50,
+            encoding_name="cl100k_base",
             source_filter=None,
+            model_name="test-model",
         )
 
     @patch("src.pipeline.Generator")
@@ -518,7 +520,9 @@ class TestRAGPipeline:
             output_dir="/tmp/chunker_out",
             chunk_size=500,
             overlap=50,
+            encoding_name="cl100k_base",
             source_filter=None,
+            model_name="test-model",
         )
         mock_chunk.assert_not_called()
 
@@ -570,5 +574,7 @@ class TestRAGPipeline:
             output_dir="/tmp/chunker_out",
             chunk_size=500,
             overlap=50,
+            encoding_name="cl100k_base",
             source_filter=None,
+            model_name="test-model",
         )
