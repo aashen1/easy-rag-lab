@@ -1142,3 +1142,37 @@ class TestEvaluateWithBuiltinContextsSourcesSeparation:
         assert results[0]["id"] == "q_err"
         assert results[0]["error"] == "Pipeline failed"
         assert results[0]["answer"] is None
+
+
+class TestGenerateLlmReportOnly:
+
+    def test_nonexistent_directory_raises(self, tmp_path):
+        from eval.run_experiment import generate_llm_report_only
+        with pytest.raises(ConfigurationError, match="Experiment directory not found"):
+            generate_llm_report_only(str(tmp_path / "nonexistent"))
+
+    def test_missing_manifest_raises(self, tmp_path):
+        from eval.run_experiment import generate_llm_report_only
+        exp_dir = tmp_path / "exp_test"
+        exp_dir.mkdir()
+        with pytest.raises(ConfigurationError, match="Manifest file not found"):
+            generate_llm_report_only(str(exp_dir))
+
+    def test_no_variant_results_raises(self, tmp_path):
+        from eval.run_experiment import generate_llm_report_only
+
+        exp_dir = tmp_path / "exp_test"
+        exp_dir.mkdir()
+
+        manifest = {
+            "experiment_id": "test_exp",
+            "name": "test",
+            "description": "test",
+            "status": "completed",
+            "variants": [],
+        }
+        with open(exp_dir / "manifest.json", "w", encoding="utf-8") as f:
+            json.dump(manifest, f)
+
+        with pytest.raises(ConfigurationError, match="No variant results found"):
+            generate_llm_report_only(str(exp_dir))
