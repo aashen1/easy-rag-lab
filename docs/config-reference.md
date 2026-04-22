@@ -111,7 +111,7 @@ parser:
 |------|--------|------|
 | `input_dir` | `"data/raw"` | PDF 文件输入目录 |
 | `output_dir` | `"data/parsed"` | 解析结果输出目录 |
-| `algorithm` | `"pymupdf4llm"` | PDF 解析算法，目前仅支持 `pymupdf4llm` |
+| `algorithm` | `"pymupdf4llm"` | PDF 解析算法。支持 `pymupdf4llm`（推荐）或 `fitz_pdfplumber` |
 
 ### pymupdf4llm 参数
 
@@ -133,6 +133,42 @@ parser:
 > ⚠️ `ignore_images` 参数在 Layout 模式下**不生效**，已从配置中移除。Layout 模式由模块自行分类处理图片，`write_images: false` 已足够控制不写出图片文件。
 >
 > 详细参数说明和最佳实践请参阅 [PDF 解析指南](guides/pdf-parsing.md)。
+
+### fitz_pdfplumber 参数
+
+以下参数用于 `fitz_pdfplumber` 解析器，该解析器结合 fitz (PyMuPDF) 进行文本提取和 pdfplumber 进行精确表格提取。
+
+```yaml
+parser:
+  algorithm: "fitz_pdfplumber"
+  fitz_pdfplumber:
+    header_filter: true
+    footer_filter: true
+    header_zone_ratio: 0.10
+    footer_zone_ratio: 0.10
+    table_strategy: "lines"
+    table_settings:
+      snap_tolerance: 5
+      join_tolerance: 5
+      edge_min_length: 10
+      intersection_x_tolerance: 5
+      intersection_y_tolerance: 5
+    column_detection: true
+    noise_patterns:
+      - "请务必阅读.{0,20}声明"
+      - "^\\s*\\d+\\s*$"
+```
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `header_filter` | `true` | 是否过滤页眉区域 |
+| `footer_filter` | `true` | 是否过滤页脚区域 |
+| `header_zone_ratio` | `0.10` | 页眉区域占页面高度的比例 |
+| `footer_zone_ratio` | `0.10` | 页脚区域占页面高度的比例 |
+| `table_strategy` | `"lines"` | pdfplumber 表格检测策略。`"lines"` 基于线条，`"text"` 基于文本 |
+| `table_settings` | 见上 | pdfplumber `find_tables()` 的详细设置 |
+| `column_detection` | `true` | 是否启用多栏检测 |
+| `noise_patterns` | 见上 | 噪声文本的正则表达式列表 |
 
 ---
 

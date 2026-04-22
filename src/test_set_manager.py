@@ -26,6 +26,7 @@ class TestSetMetadata:
     invalid_policy: str | None = None
     audit_log: list[dict[str, Any]] = field(default_factory=list)
     suppress_warnings: bool = False
+    composition: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -42,6 +43,7 @@ class TestSetMetadata:
             invalid_policy=data.get("invalid_policy"),
             audit_log=data.get("audit_log", []),
             suppress_warnings=data.get("suppress_warnings", False),
+            composition=data.get("composition", {}),
         )
 
 
@@ -183,6 +185,7 @@ class TestSetManager:
                 "invalid_policy": None,
                 "audit_log": [],
                 "suppress_warnings": False,
+                "composition": {},
             },
             "quality_metrics": test_set_data.get("quality_metrics", {}),
             "questions": test_set_data.get("questions", []),
@@ -913,3 +916,163 @@ class TestSetManager:
         )
 
         return test_set_data
+
+    def merge_test_sets(
+        self,
+        source_specs: list[dict[str, str]],
+        target_meal_name: str,
+        target_meal_config: MealConfig,
+        name: str | None = None,
+    ) -> dict[str, Any]:
+        """Merge multiple test sets into a new test set.
+
+        This method loads multiple source test sets, merges their questions,
+        removes duplicates based on question text, validates source files
+        against the target meal's PDF list, and creates a new merged test set.
+
+        Args:
+            source_specs: List of source test set specifications, each being
+                a dict with "meal" and "test_set" keys.
+            target_meal_name: Name of the target meal to save the merged test set.
+            target_meal_config: MealConfig object for the target meal.
+            name: Name for the new merged test set. If None, auto-generates
+                a name based on the first source test set name with "_merged" suffix.
+
+        Returns:
+            The merged test set dictionary.
+
+        Raises:
+            ValueError: If a source test set does not exist or target meal is invalid.
+        """
+        if not source_specs:
+            raise ValueError("source_specs cannot be empty")
+
+        all_questions: list[dict[str, Any]] = []
+        loaded_sources: list[dict[str, str]] = []
+
+        for spec in source_specs:
+            source_meal = spec.get("meal")
+            source_test_set = spec.get("test_set")
+
+            if not source_meal or not source_test_set:
+                raise ValueError(
+                    f"Invalid source spec: {spec}. Must have 'meal' and 'test_set' keys."
+                )
+
+            try:
+                test_set_data = self.load_test_set(source_meal, source_test_set)
+                questions = test_set_data.get("questions", [])
+                all_questions.extend(questions)
+                loaded_sources.append({"meal": source_meal, "test_set": source_test_set})
+                logger.info(
+                    f"Loaded {len(questions)} questions from "
+                    f"meal='{source_meal}', test_set='{source_test_set}'"
+                )
+            except FileNotFoundError:
+                raise ValueError(
+                    f"Source test set '{source_test_set}' not found in meal '{source_meal}'"
+                ) from None
+            except Exception as e:
+                logger.error(
+                    f"Failed to load test set '{source_test_set}' from meal '{source_meal}': {str(e)}"
+                )
+                raise
+
+        original_count = len(all_questions)
+
+        seen_texts: set[str] = set()
+        deduped_questions: list[dict[str, Any]] = []
+        dedup_count = 0
+
+        for question in all_questions:
+            question_text = question.get("question", "")
+            if question_text in seen_texts:
+                dedup_count += 1
+                logger.debug(f"Skipping duplicate question: {question_text[:50]}...")
+                continue
+            seen_texts.add(question_text)
+            deduped_questions.append(question)
+
+        meal_pdf_paths = {mf.path for mf in target_meal_config.pdf_files}
+        valid_questions: list[dict[str, Any]] = []
+        invalid_count = 0
+        invalid_questions_log: list[dict[str, Any]] = []
+
+        for question in deduped_questions:
+            question_type = question.get("question_type", "")
+            source_files = question.get("source_files", [])
+
+            if question_type == "irrelevant":
+                valid_questions.append(question)
+                continue
+
+            if not source_files:
+                valid_questions.append(question)
+                continue
+
+            if all(sf in meal_pdf_paths for sf in source_files):
+                valid_questions.append(question)
+            else:
+                invalid_count += 1
+                invalid_questions_log.append(question)
+                logger.warning(
+                    f"Question has invalid source_files: {source_files}, "
+                    f"not in target meal PDFs: {meal_pdf_paths}"
+                )
+
+        final_questions: list[dict[str, Any]] = []
+        for idx, question in enumerate(valid_questions, start=1):
+            new_question = dict(question)
+            new_question["id"] = f"q{idx:03d}"
+            final_questions.append(new_question)
+
+        final_count = len(final_questions)
+
+        if name is None:
+            first_source = source_specs[0]
+            name = f"{first_source['test_set']}_merged"
+
+        now = datetime.now().isoformat()
+
+        composition = {
+            "type": "merged",
+            "sources": loaded_sources,
+            "dedup_count": dedup_count,
+            "original_count": original_count,
+            "final_count": final_count,
+        }
+
+        audit_entry = {
+            "event": "merged",
+            "sources": loaded_sources,
+            "dedup_count": dedup_count,
+            "invalid_count": invalid_count,
+            "timestamp": now,
+        }
+
+        merged_test_set = {
+            "metadata": {
+                "name": name,
+                "meal_id": target_meal_config.data_id,
+                "created_at": now,
+                "updated_at": now,
+                "generation": None,
+                "user_defined": False,
+                "invalid_policy": None,
+                "audit_log": [audit_entry],
+                "suppress_warnings": False,
+                "composition": composition,
+            },
+            "quality_metrics": {},
+            "questions": final_questions,
+        }
+
+        self.save_test_set(target_meal_name, merged_test_set)
+
+        logger.success(
+            f"Merged {len(loaded_sources)} test sets into '{name}': "
+            f"original={original_count}, dedup={dedup_count}, "
+            f"invalid={invalid_count}, final={final_count}"
+        )
+
+        return merged_test_set

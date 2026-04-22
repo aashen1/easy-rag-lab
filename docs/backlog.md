@@ -2,7 +2,7 @@
 
 <!-- status: active -->
 
-> 最后更新：2026-04-22
+> 最后更新：2026-04-23（深度审查新增 9 项 issue）
 
 本文档是项目"卫生情况"的总入口，追踪所有非阻塞性质的待做事项。
 
@@ -12,11 +12,12 @@
 
 | 类型 | 待处理 | 进行中 | 已完成 | 已延期 |
 |------|--------|--------|--------|--------|
-| Bug | 3 | 0 | 16 | 1 |
-| Feature | 15 | 0 | 19 | 0 |
-| Refactor | 9 | 0 | 11 | 0 |
-| Optimization | 7 | 0 | 0 | 0 |
-| Investigation | 14 | 0 | 3 | 0 |
+| Bug | 4 | 0 | 16 | 2 |
+| Feature | 17 | 0 | 20 | 0 |
+| Refactor | 11 | 0 | 13 | 0 |
+| Optimization | 7 | 0 | 1 | 0 |
+| Investigation | 16 | 0 | 6 | 0 |
+| Test | 8 | 0 | 0 | 0 |
 
 ---
 
@@ -24,7 +25,7 @@
 
 | ID | 描述 | 来源 | 状态 | 备注 |
 |----|------|------|------|------|
-| BUG-017 | expected_sources 标注错误（LLM 生成问题涉及文档中提到的其他实体，但 source_files 仅指向生成问题时的源文档） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P6-5) | 📋 待处理 | 需重新设计问题生成策略，使 source_files 反映问题实际涉及的文档 |
+| BUG-021 | expected_sources 标注错误（LLM 生成问题涉及文档中提到的其他实体，但 source_files 仅指向生成问题时的源文档） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P6-5) | 📋 待处理 | 需重新设计问题生成策略，使 source_files 反映问题实际涉及的文档 |
 
 ### 🟡 已延期
 
@@ -64,6 +65,9 @@
 | FEAT-023 | Context 长度控制（防止超出模型 context window） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P5-3) | 📋 待处理 | 中 | 5个512-token chunk约2560 token，需截断保护 |
 | FEAT-024 | 页眉页脚清洗（PDF 解析后去除页码、logo、水印等噪声） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P1-3) | 📋 待处理 | 中 | 噪声进入检索影响质量 |
 | FEAT-025 | 检索器层面文档级去重（top_k 结果按文档多样性分配） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P6-4) | 📋 待处理 | 中 | 当前 top 5 全部来自同一文档，检索多样性为零 |
+| FEAT-026 | meal 系统升级支持扩充已有 meal | [TODO.md](../TODO.md) | ✅ 已完成 | 中 | 支持 merge_meals/extend_meal，composition 元数据追踪 |
+| FEAT-027 | 问题集组合功能 | [TODO.md](../TODO.md) | ✅ 已完成 | 中 | 支持 merge_test_sets，问题去重与有效性验证 |
+| FEAT-028 | 配置验证系统（Pydantic 模型验证 + 必填项校验 + 范围校验） | 深度审查 | 📋 待处理 | 中 | 当前 yaml.safe_load 直接加载无验证，可能导致意外行为 |
 
 ---
 
@@ -79,11 +83,15 @@
 | RF-008 | backlog issue 详细信息记录 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 参考 GitHub 做法，支持超链接引用详情 |
 | RF-009 | commit-rule 与 CLAUDE.md 渐进式披露 | [TODO.md](../TODO.md) | ✅ 已完成 | 中 | 三层渐进式披露：commit-rule 23行+CLAUDE.md 3行+SKILL.md+docs/guides/commit-conventions.md |
 | RF-010 | lint/ruff 配置 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 添加代码检查工具 |
-| RF-011 | docs 目录组织度维护 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 打扫卫生时考量 docs 目录组织度，恢复整洁度 |
+| RF-011 | docs 目录组织度维护 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 打扫卫生时考量 docs 目录组织度，恢复整洁度 |
 | RF-012 | 旧格式 test_sets DeprecationWarning 清理 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 测试中大量旧格式警告，后续版本逐步清理 |
 | RF-013 | chunk_id 命名规范化（当前依赖文件名含下划线时解析脆弱） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P2-3) | 📋 待处理 | 小 | 需设计新格式并考虑迁移兼容 |
 | RF-014 | normalize_source 匹配精度提升（当前仅比较文件名 stem，过于宽松） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P6-1) | 📋 待处理 | 小 | 可能误判不同版本的同名文档 |
+| RF-015 | 更新 hyperparameter-guide.md 增加新解析链路讲解 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 新增 PDF 解析策略章节，介绍 pymupdf4llm 和 fitz_pdfplumber 两种解析器 |
 | RF-006 | TestSet 独立管理系统重构 | 设计文档 | ✅ 已完成 | 大 | 新增 TestSetManager，重构 prepare_test_sets，支持 on_missing 三种模式 |
+| RF-016 | Optional 类型使用规范化（统一为 Python 3.10+ 的 `\| None` 语法） | 深度审查 | 📋 待处理 | 小 | 部分使用 `Optional`，部分使用 `\| None`，建议统一为新语法 |
+| RF-017 | 自定义异常类型定义（RAGPipelineError、RetrievalError 等） | 深度审查 | 📋 待处理 | 小 | 当前使用通用 ValueError/Exception，建议定义业务异常 |
+| RF-018 | Pipeline 类职责拆分（当前 560 行承担全流程） | 深度审查 | 📋 待处理 | 大 | 可拆分为 PipelineOrchestrator + 各阶段 Stage 类 |
 
 ---
 
@@ -98,6 +106,7 @@
 | OPT-005 | RAGAS/builtin 指标结果统一归一化 | [RAGAS 指南](guides/ragas-evaluation.md#5-后续优化方向) | 📋 待处理 | 后端间分数相关性分析 + 归一化映射 + prompt 版本追踪 |
 | OPT-006 | RAGAS 评测缓存与增量计算 | [RAGAS 指南](guides/ragas-evaluation.md#5-后续优化方向) | 📋 待处理 | 基于 question+answer+contexts hash 缓存 + 增量评测 + 失效策略 |
 | OPT-007 | 基线 chunk_overlap 非零优化 | [pipeline-deep-audit.md](pipeline-deep-audit.md#P2-1) | 📋 待处理 | 评测链路修复后，通过对比实验确定合适的非零 overlap 值 |
+| OPT-008 | GPU 内存管理优化（Embedder/Reranker 加载后正确释放） | 深度审查 | 📋 待处理 | 需评估 GPU 内存释放机制，避免资源泄漏 |
 
 ---
 
@@ -120,6 +129,26 @@
 | INV-014 | RAGAS 指标与 Builtin 指标深度对比分析 | [RAGAS 指南](guides/ragas-evaluation.md#5-后续优化方向) | 📋 待处理 | 差异报告 + 根因分析（prompt 差异 vs 评分逻辑差异）+ 置信区间估计 |
 | INV-015 | tiktoken 与 BGE tokenizer 的 token 数差异量化 | [pipeline-deep-audit.md](pipeline-deep-audit.md#P3-1) | 📋 待处理 | chunk_size=512 tiktoken token 可能超过 BGE 512 token 限制，需实际数据验证截断影响 |
 | INV-016 | PDF 表格解析质量评估与替代方案调研 | [pipeline-deep-audit.md](pipeline-deep-audit.md#P1-1) | 📋 待处理 | pymupdf4llm 对复杂表格转换错乱，金融研报财务数据可能丢失 |
+| INV-017 | 边界条件测试覆盖评估（空输入、极端值等） | 深度审查 | ✅ 已完成 | 详见 [评估报告](reviews/inv-017-boundary-condition-test-coverage.md) |
+| INV-018 | 异常路径测试覆盖评估 | 深度审查 | ✅ 已完成 | 详见 [评估报告](reviews/inv-018-exception-path-test-coverage.md) |
+| INV-019 | 测试并行化可行性评估（pytest-xdist） | 深度审查 | 📋 待处理 | 评估是否可用 pytest-xdist 加速测试 |
+| INV-020 | 大规模数据索引构建性能评估 | 深度审查 | 📋 待处理 | 评估大规模数据时索引构建时间和优化空间 |
+| INV-021 | 文件路径安全检查（防止路径遍历攻击） | 深度审查 | 📋 待处理 | 文件路径处理是否防止 `../` 攻击 |
+
+---
+
+## Test
+
+| ID | 描述 | 来源 | 状态 | 优先级 | 备注 |
+|----|------|------|------|--------|------|
+| TEST-001 | 补充 generator 模块边界条件测试 | [INV-017](reviews/inv-017-boundary-condition-test-coverage.md) | 📋 待处理 | 高 | 空输入、None值、极端值测试 |
+| TEST-002 | 补充 test_set_manager 模块边界条件测试 | [INV-017](reviews/inv-017-boundary-condition-test-coverage.md) | 📋 待处理 | 高 | 文件不存在、无效数据、空列表测试 |
+| TEST-003 | 补充 experiment 模块边界条件测试 | [INV-017](reviews/inv-017-boundary-condition-test-coverage.md) | 📋 待处理 | 高 | 配置缺失、无效配置、空测试集测试 |
+| TEST-004 | 补充 run_experiment 模块边界条件测试 | [INV-017](reviews/inv-017-boundary-condition-test-coverage.md) | 📋 待处理 | 高 | 权限错误、文件不存在、无效配置测试 |
+| TEST-005 | 补充 generator 模块异常路径测试 | [INV-018](reviews/inv-018-exception-path-test-coverage.md) | 📋 待处理 | 高 | API调用失败、超时、速率限制测试 |
+| TEST-006 | 补充 experiment 模块异常路径测试 | [INV-018](reviews/inv-018-exception-path-test-coverage.md) | 📋 待处理 | 高 | 无效配置、权限错误等异常测试 |
+| TEST-007 | 补充 run_experiment 模块异常路径测试 | [INV-018](reviews/inv-018-exception-path-test-coverage.md) | 📋 待处理 | 高 | 文件操作异常测试 |
+| TEST-008 | 补充 indexer 模块异常路径测试 | [INV-018](reviews/inv-018-exception-path-test-coverage.md) | 📋 待处理 | 高 | 向量索引异常测试 |
 
 ---
 

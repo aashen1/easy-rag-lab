@@ -1,6 +1,6 @@
 # 文档导航索引
 
-> 最后更新: 2026-04-19
+> 最后更新: 2026-04-23
 
 本文档是项目文档的唯一入口，提供全局导航。
 
@@ -25,6 +25,7 @@
 
 - [Meal 数据管理系统](guides/meal-system.md)
 - [实验评测系统](guides/experiment-system.md)
+- [PDF 解析指南](guides/pdf-parsing.md)
 - [文档级问题生成](guides/question-generation.md)
 - [评测指标详解](guides/evaluation-metrics.md)
 - [RAGAS 评测系统](guides/ragas-evaluation.md)
@@ -35,7 +36,10 @@
 
 ### 故障排查
 
+- [pytest tmp 目录 FileExistsError](troubleshooting/pytest-basetemp-fileexistserror.md)
 - [幽灵文件夹问题](troubleshooting/ghost-folder-mkdir.md)
+- [评测指标 Bug 修复](troubleshooting/eval-metrics-bugfix.md)
+- [评测系统验收修复](troubleshooting/eval-system-acceptance-fix.md)
 
 ---
 
@@ -61,7 +65,12 @@ docs/
 │   ├── evaluation-metrics.md
 │   ├── ragas-evaluation.md
 │   ├── token-tracking.md
-│   └── testing.md
+│   ├── testing.md
+│   ├── test-set-management.md
+│   ├── hyperparameter-guide.md
+│   ├── pdf-parsing.md
+│   ├── lint-and-precommit.md
+│   └── commit-conventions.md
 │
 ├── reviews/                   # 版本验收报告
 │   ├── v0.1.5/
@@ -71,11 +80,21 @@ docs/
 │   ├── v0.1.6/
 │   │   ├── outcome.md
 │   │   └── next-direction.md
-│   └── v0.1.7/
-│       └── outcome.md
+│   ├── v0.1.7/
+│   │   └── outcome.md
+│   ├── v0.1.8/
+│   │   ├── acceptance-report.md
+│   │   ├── changelog-detailed.md
+│   │   ├── migration-guide.md
+│   │   └── release-summary.md
+│   ├── inv-017-boundary-condition-test-coverage.md
+│   └── inv-018-exception-path-test-coverage.md
 │
 ├── troubleshooting/           # 故障排查
-│   └── ghost-folder-mkdir.md
+│   ├── pytest-basetemp-fileexistserror.md
+│   ├── ghost-folder-mkdir.md
+│   ├── eval-metrics-bugfix.md
+│   └── eval-system-acceptance-fix.md
 │
 ├── archive/                   # 历史归档
 │   ├── specs/

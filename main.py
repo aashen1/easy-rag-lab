@@ -1,12 +1,13 @@
 import argparse
 import sys
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from loguru import logger
 
 from src.meal import MealManager, MealStatus, validate_meal_name
 from src.pipeline import RAGPipeline
 from src.sampler import SamplingConfig
+from src.test_set_manager import TestSetManager
 from src.utils import load_config, setup_logger
 
 
@@ -71,6 +72,24 @@ def main():
     meal_group.add_argument(
         "--repair-meal", type=str, help="Repair an unavailable meal"
     )
+    meal_group.add_argument(
+        "--merge-meals", nargs="+", metavar="MEAL",
+        help="Merge multiple meals into a new meal"
+    )
+    meal_group.add_argument(
+        "--extend-meal", metavar="MEAL",
+        help="Extend a meal by adding new PDF files"
+    )
+    meal_group.add_argument(
+        "--add-pdfs", nargs="+", metavar="PDF",
+        help="PDF files to add (used with --extend-meal)"
+    )
+
+    testset_group = parser.add_argument_group("Test set management")
+    testset_group.add_argument(
+        "--merge-test-sets", nargs="+", metavar="SPEC",
+        help="Merge multiple test sets (format: meal:test_set)"
+    )
 
     testgen_group = parser.add_argument_group("Test set generation")
     testgen_group.add_argument(
@@ -108,6 +127,9 @@ def main():
         or args.copy_meal
         or args.repair_meal
         or args.generate_test_set
+        or args.merge_meals
+        or args.extend_meal
+        or args.merge_test_sets
         or args.meal
     )
 
@@ -150,6 +172,26 @@ def main():
         _handle_generate_test_set(meal_manager, config, args)
         return
 
+    if args.merge_meals:
+        _handle_merge_meals(meal_manager, args.merge_meals, args.name)
+        return
+
+    if args.extend_meal:
+        if not args.add_pdfs:
+            logger.error("--add-pdfs is required when using --extend-meal")
+            sys.exit(1)
+        _handle_extend_meal(meal_manager, args.extend_meal, args.add_pdfs, args.name)
+        return
+
+    if args.merge_test_sets:
+        if not args.meal:
+            logger.error("--meal is required when using --merge-test-sets")
+            sys.exit(1)
+        _handle_merge_test_sets(
+            meal_manager, config, args.merge_test_sets, args.meal, args.name
+        )
+        return
+
     if args.build_index or args.rebuild:
         sampling_config = _build_sampling_config(args)
         pipeline = RAGPipeline(config_path=args.config,
@@ -187,7 +229,7 @@ def main():
         _print_query_result(result)
 
 
-def _build_sampling_config(args: argparse.Namespace) -> Optional[SamplingConfig]:
+def _build_sampling_config(args: argparse.Namespace) -> SamplingConfig | None:
     sampling_config = None
     sample_modes = [
         ("count", args.sample_count),
@@ -552,6 +594,110 @@ def _interactive_qa(pipeline: RAGPipeline, meal_name: str) -> None:
             print()
         except Exception as e:
             logger.error(f"Query failed: {str(e)}")
+
+
+def _handle_merge_meals(
+    meal_manager: MealManager, meal_names: list[str], name: str | None
+) -> None:
+    try:
+        meal = meal_manager.merge_meals(meal_names, name=name)
+        composition = meal.composition or {}
+        dedup_info = composition.get("dedup_info", {})
+        sources = composition.get("sources", [])
+
+        logger.success(
+            f"Meal '{meal.name}' created successfully by merging {len(meal_names)} meals"
+        )
+        print(f"\n  Total PDFs: {meal.stats.get('total_pdfs', 0)}", end="")
+        if dedup_info.get("duplicates", 0) > 0:
+            print(f" (duplicates removed: {dedup_info['duplicates']})")
+        else:
+            print()
+
+        if sources:
+            print("  Sources:")
+            for src in sources:
+                print(f"    - {src['meal']} ({src['pdf_count']} PDFs)")
+
+        print()
+    except ValueError as e:
+        logger.error(str(e))
+        sys.exit(1)
+
+
+def _handle_extend_meal(
+    meal_manager: MealManager,
+    source_meal: str,
+    new_pdfs: list[str],
+    name: str | None,
+) -> None:
+    try:
+        meal = meal_manager.extend_meal(source_meal, new_pdfs, name=name)
+        composition = meal.composition or {}
+        added_files = composition.get("added_files", [])
+        skipped_files = composition.get("skipped_files", [])
+
+        logger.success(
+            f"Meal '{meal.name}' created successfully by extending '{source_meal}'"
+        )
+        print(f"\n  Total PDFs: {meal.stats.get('total_pdfs', 0)}")
+        print(f"  Added: {len(added_files)} new PDFs")
+        if skipped_files:
+            print(f"  Skipped (duplicates): {len(skipped_files)}")
+        print()
+    except ValueError as e:
+        logger.error(str(e))
+        sys.exit(1)
+
+
+def _handle_merge_test_sets(
+    meal_manager: MealManager,
+    config: Dict[str, Any],
+    source_specs: list[str],
+    target_meal: str,
+    name: str | None,
+) -> None:
+    if not meal_manager.meal_exists(target_meal):
+        logger.error(f"Target meal '{target_meal}' not found")
+        sys.exit(1)
+
+    parsed_specs = []
+    for spec in source_specs:
+        if ":" not in spec:
+            logger.error(f"Invalid test set spec '{spec}'. Format: meal:test_set")
+            sys.exit(1)
+        parts = spec.split(":", 1)
+        parsed_specs.append({"meal": parts[0], "test_set": parts[1]})
+
+    target_meal_config = meal_manager.load_meal(target_meal)
+
+    test_set_manager = TestSetManager(config)
+    try:
+        result = test_set_manager.merge_test_sets(
+            source_specs=parsed_specs,
+            target_meal_name=target_meal,
+            target_meal_config=target_meal_config,
+            name=name,
+        )
+        composition = result["metadata"].get("composition", {})
+        original_count = composition.get("original_count", 0)
+        dedup_count = composition.get("dedup_count", 0)
+        final_count = composition.get("final_count", 0)
+        sources = composition.get("sources", [])
+
+        logger.success(
+            f"Test set '{result['metadata']['name']}' created by merging {len(sources)} test sets"
+        )
+        print(f"\n  Total questions: {final_count}")
+        if dedup_count > 0:
+            print(f"  Duplicates removed: {dedup_count}")
+        print(f"  Sources:")
+        for src in sources:
+            print(f"    - {src['meal']}:{src['test_set']}")
+        print()
+    except ValueError as e:
+        logger.error(str(e))
+        sys.exit(1)
 
 
 if __name__ == "__main__":

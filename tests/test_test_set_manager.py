@@ -39,6 +39,7 @@ class TestTestSetMetadata:
         assert meta.invalid_policy is None
         assert meta.audit_log == []
         assert meta.suppress_warnings is False
+        assert meta.composition == {}
 
     def test_creation_with_all_fields(self):
         meta = TestSetMetadata(
@@ -57,6 +58,7 @@ class TestTestSetMetadata:
         assert meta.generation["strategy"] == "random"
         assert len(meta.audit_log) == 1
         assert meta.suppress_warnings is True
+        assert meta.composition == {}
 
     def test_to_dict(self):
         meta = TestSetMetadata(
@@ -72,6 +74,7 @@ class TestTestSetMetadata:
         assert d["generation"] == {"strategy": "random", "num_questions": 5}
         assert d["user_defined"] is False
         assert d["audit_log"] == []
+        assert d["composition"] == {}
 
     def test_from_dict(self):
         data = {
@@ -93,6 +96,7 @@ class TestTestSetMetadata:
         assert meta.generation["strategy"] == "random"
         assert len(meta.audit_log) == 1
         assert meta.suppress_warnings is True
+        assert meta.composition == {}
 
     def test_from_dict_defaults(self):
         data = {
@@ -107,6 +111,7 @@ class TestTestSetMetadata:
         assert meta.invalid_policy is None
         assert meta.audit_log == []
         assert meta.suppress_warnings is False
+        assert meta.composition == {}
 
     def test_roundtrip(self):
         meta = TestSetMetadata(
@@ -125,6 +130,105 @@ class TestTestSetMetadata:
         assert meta.generation == meta2.generation
         assert meta.user_defined == meta2.user_defined
         assert meta.audit_log == meta2.audit_log
+
+    def test_composition_field_default(self):
+        meta = TestSetMetadata(
+            name="test_composition",
+            meal_id="abc123",
+            created_at="2026-04-20T10:00:00",
+            updated_at="2026-04-20T10:00:00",
+        )
+        assert meta.composition == {}
+
+    def test_composition_field_with_data(self):
+        composition_data = {
+            "type": "merged",
+            "sources": [{"meal": "A", "test_set": "TA"}, {"meal": "B", "test_set": "TB"}],
+            "dedup_count": 5,
+            "original_count": 25,
+            "final_count": 20,
+        }
+        meta = TestSetMetadata(
+            name="merged_set",
+            meal_id="abc123",
+            created_at="2026-04-20T10:00:00",
+            updated_at="2026-04-20T10:00:00",
+            composition=composition_data,
+        )
+        assert meta.composition["type"] == "merged"
+        assert len(meta.composition["sources"]) == 2
+        assert meta.composition["dedup_count"] == 5
+        assert meta.composition["original_count"] == 25
+        assert meta.composition["final_count"] == 20
+
+    def test_composition_serialization(self):
+        composition_data = {
+            "type": "generated",
+            "sources": [],
+            "dedup_count": 0,
+            "original_count": 20,
+            "final_count": 20,
+        }
+        meta = TestSetMetadata(
+            name="gen_set",
+            meal_id="abc123",
+            created_at="2026-04-20T10:00:00",
+            updated_at="2026-04-20T10:00:00",
+            composition=composition_data,
+        )
+        d = meta.to_dict()
+        assert "composition" in d
+        assert d["composition"]["type"] == "generated"
+        assert d["composition"]["original_count"] == 20
+
+    def test_composition_deserialization(self):
+        data = {
+            "name": "test_set_1",
+            "meal_id": "abc123",
+            "created_at": "2026-04-20T10:00:00",
+            "updated_at": "2026-04-20T10:00:00",
+            "composition": {
+                "type": "user_defined",
+                "sources": [{"meal": "manual", "test_set": "custom"}],
+                "dedup_count": 0,
+                "original_count": 10,
+                "final_count": 10,
+            },
+        }
+        meta = TestSetMetadata.from_dict(data)
+        assert meta.composition["type"] == "user_defined"
+        assert len(meta.composition["sources"]) == 1
+
+    def test_composition_backward_compatibility(self):
+        data = {
+            "name": "old_set",
+            "meal_id": "xyz",
+            "created_at": "2026-04-20T10:00:00",
+            "updated_at": "2026-04-20T10:00:00",
+        }
+        meta = TestSetMetadata.from_dict(data)
+        assert meta.composition == {}
+
+    def test_composition_roundtrip(self):
+        composition_data = {
+            "type": "merged",
+            "sources": [{"meal": "A", "test_set": "TA"}],
+            "dedup_count": 3,
+            "original_count": 15,
+            "final_count": 12,
+        }
+        meta = TestSetMetadata(
+            name="roundtrip_comp",
+            meal_id="rt123",
+            created_at="2026-04-20T10:00:00",
+            updated_at="2026-04-20T11:00:00",
+            composition=composition_data,
+        )
+        d = meta.to_dict()
+        meta2 = TestSetMetadata.from_dict(d)
+        assert meta2.composition == composition_data
+        assert meta2.composition["type"] == "merged"
+        assert meta2.composition["dedup_count"] == 3
 
 
 def _make_config(tmp_path: Path) -> dict:
@@ -497,6 +601,7 @@ class TestMigrateTestSet:
         assert result["metadata"]["invalid_policy"] is None
         assert result["metadata"]["audit_log"] == []
         assert result["metadata"]["suppress_warnings"] is False
+        assert result["metadata"]["composition"] == {}
         assert result["quality_metrics"]["authenticity_pass_rate"] == 0.8
         assert len(result["questions"]) == 1
 
@@ -511,6 +616,7 @@ class TestMigrateTestSet:
         assert result["metadata"]["created_at"] == ""
         assert result["metadata"]["updated_at"] == ""
         assert result["metadata"]["generation"] == {}
+        assert result["metadata"]["composition"] == {}
         assert result["quality_metrics"] == {}
         assert len(result["questions"]) == 1
 
@@ -1823,3 +1929,485 @@ class TestResolveTestSet:
             )
         assert "not found" in str(exc_info.value)
         assert "strict" in str(exc_info.value)
+
+
+class TestMergeTestSets:
+    @pytest.fixture
+    def env(self, tmp_path):
+        config = _make_config(tmp_path)
+        manager = TestSetManager(config)
+        return manager, config
+
+    def test_merge_two_test_sets_without_duplicates(self, env):
+        manager, config = env
+        _create_meal_dir(config, "meal_a")
+        _create_meal_dir(config, "meal_b")
+        _create_meal_dir(config, "target_meal")
+
+        test_set_a = {
+            "metadata": {
+                "name": "set_a",
+                "meal_id": "id_a",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+            },
+            "questions": [
+                {"id": "q001", "question": "What is revenue?", "source_files": ["reports/report_0.pdf"]},
+                {"id": "q002", "question": "What is profit?", "source_files": ["reports/report_0.pdf"]},
+            ],
+        }
+        test_set_b = {
+            "metadata": {
+                "name": "set_b",
+                "meal_id": "id_b",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+            },
+            "questions": [
+                {"id": "q001", "question": "What is cash flow?", "source_files": ["reports/report_1.pdf"]},
+                {"id": "q002", "question": "What is debt?", "source_files": ["reports/report_1.pdf"]},
+            ],
+        }
+
+        manager.save_test_set("meal_a", test_set_a)
+        manager.save_test_set("meal_b", test_set_b)
+
+        target_meal_config = _make_meal_config(
+            data_id="target_id",
+            pdf_paths=["reports/report_0.pdf", "reports/report_1.pdf"],
+        )
+
+        source_specs = [
+            {"meal": "meal_a", "test_set": "set_a"},
+            {"meal": "meal_b", "test_set": "set_b"},
+        ]
+
+        result = manager.merge_test_sets(
+            source_specs=source_specs,
+            target_meal_name="target_meal",
+            target_meal_config=target_meal_config,
+            name="merged_set",
+        )
+
+        assert result["metadata"]["name"] == "merged_set"
+        assert len(result["questions"]) == 4
+        question_ids = [q["id"] for q in result["questions"]]
+        assert question_ids == ["q001", "q002", "q003", "q004"]
+
+        question_texts = {q["question"] for q in result["questions"]}
+        assert "What is revenue?" in question_texts
+        assert "What is profit?" in question_texts
+        assert "What is cash flow?" in question_texts
+        assert "What is debt?" in question_texts
+
+    def test_merge_test_sets_with_duplicates(self, env):
+        manager, config = env
+        _create_meal_dir(config, "meal_a")
+        _create_meal_dir(config, "meal_b")
+        _create_meal_dir(config, "target_meal")
+
+        test_set_a = {
+            "metadata": {
+                "name": "set_a",
+                "meal_id": "id_a",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+            },
+            "questions": [
+                {"id": "q001", "question": "What is revenue?", "source_files": ["reports/report_0.pdf"]},
+                {"id": "q002", "question": "What is profit?", "source_files": ["reports/report_0.pdf"]},
+            ],
+        }
+        test_set_b = {
+            "metadata": {
+                "name": "set_b",
+                "meal_id": "id_b",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+            },
+            "questions": [
+                {"id": "q001", "question": "What is revenue?", "source_files": ["reports/report_0.pdf"]},
+                {"id": "q002", "question": "What is cash flow?", "source_files": ["reports/report_0.pdf"]},
+            ],
+        }
+
+        manager.save_test_set("meal_a", test_set_a)
+        manager.save_test_set("meal_b", test_set_b)
+
+        target_meal_config = _make_meal_config(
+            data_id="target_id",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+
+        source_specs = [
+            {"meal": "meal_a", "test_set": "set_a"},
+            {"meal": "meal_b", "test_set": "set_b"},
+        ]
+
+        result = manager.merge_test_sets(
+            source_specs=source_specs,
+            target_meal_name="target_meal",
+            target_meal_config=target_meal_config,
+            name="merged_dedup",
+        )
+
+        assert len(result["questions"]) == 3
+        question_texts = [q["question"] for q in result["questions"]]
+        assert question_texts.count("What is revenue?") == 1
+        assert "What is profit?" in question_texts
+        assert "What is cash flow?" in question_texts
+
+        assert result["metadata"]["composition"]["dedup_count"] == 1
+        assert result["metadata"]["composition"]["original_count"] == 4
+        assert result["metadata"]["composition"]["final_count"] == 3
+
+    def test_merge_test_sets_with_invalid_questions(self, env):
+        manager, config = env
+        _create_meal_dir(config, "meal_a")
+        _create_meal_dir(config, "target_meal")
+
+        test_set_a = {
+            "metadata": {
+                "name": "set_a",
+                "meal_id": "id_a",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+            },
+            "questions": [
+                {"id": "q001", "question": "Valid question?", "source_files": ["reports/report_0.pdf"]},
+                {"id": "q002", "question": "Invalid question?", "source_files": ["reports/missing.pdf"]},
+                {"id": "q003", "question": "Another valid?", "source_files": ["reports/report_0.pdf"]},
+            ],
+        }
+
+        manager.save_test_set("meal_a", test_set_a)
+
+        target_meal_config = _make_meal_config(
+            data_id="target_id",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+
+        source_specs = [{"meal": "meal_a", "test_set": "set_a"}]
+
+        result = manager.merge_test_sets(
+            source_specs=source_specs,
+            target_meal_name="target_meal",
+            target_meal_config=target_meal_config,
+            name="merged_valid",
+        )
+
+        assert len(result["questions"]) == 2
+        question_texts = {q["question"] for q in result["questions"]}
+        assert "Valid question?" in question_texts
+        assert "Another valid?" in question_texts
+        assert "Invalid question?" not in question_texts
+
+        assert result["metadata"]["audit_log"][0]["invalid_count"] == 1
+
+    def test_merge_test_sets_composition_metadata(self, env):
+        manager, config = env
+        _create_meal_dir(config, "meal_a")
+        _create_meal_dir(config, "meal_b")
+        _create_meal_dir(config, "target_meal")
+
+        test_set_a = {
+            "metadata": {
+                "name": "set_a",
+                "meal_id": "id_a",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+            },
+            "questions": [
+                {"id": "q001", "question": "Q1", "source_files": ["reports/report_0.pdf"]},
+            ],
+        }
+        test_set_b = {
+            "metadata": {
+                "name": "set_b",
+                "meal_id": "id_b",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+            },
+            "questions": [
+                {"id": "q001", "question": "Q2", "source_files": ["reports/report_0.pdf"]},
+            ],
+        }
+
+        manager.save_test_set("meal_a", test_set_a)
+        manager.save_test_set("meal_b", test_set_b)
+
+        target_meal_config = _make_meal_config(
+            data_id="target_id",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+
+        source_specs = [
+            {"meal": "meal_a", "test_set": "set_a"},
+            {"meal": "meal_b", "test_set": "set_b"},
+        ]
+
+        result = manager.merge_test_sets(
+            source_specs=source_specs,
+            target_meal_name="target_meal",
+            target_meal_config=target_meal_config,
+            name="merged_comp",
+        )
+
+        composition = result["metadata"]["composition"]
+        assert composition["type"] == "merged"
+        assert len(composition["sources"]) == 2
+        assert {"meal": "meal_a", "test_set": "set_a"} in composition["sources"]
+        assert {"meal": "meal_b", "test_set": "set_b"} in composition["sources"]
+        assert composition["original_count"] == 2
+        assert composition["final_count"] == 2
+        assert composition["dedup_count"] == 0
+
+    def test_merge_test_sets_audit_log(self, env):
+        manager, config = env
+        _create_meal_dir(config, "meal_a")
+        _create_meal_dir(config, "target_meal")
+
+        test_set_a = {
+            "metadata": {
+                "name": "set_a",
+                "meal_id": "id_a",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+            },
+            "questions": [
+                {"id": "q001", "question": "Q1", "source_files": ["reports/report_0.pdf"]},
+                {"id": "q002", "question": "Q2", "source_files": ["reports/missing.pdf"]},
+            ],
+        }
+
+        manager.save_test_set("meal_a", test_set_a)
+
+        target_meal_config = _make_meal_config(
+            data_id="target_id",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+
+        source_specs = [{"meal": "meal_a", "test_set": "set_a"}]
+
+        result = manager.merge_test_sets(
+            source_specs=source_specs,
+            target_meal_name="target_meal",
+            target_meal_config=target_meal_config,
+            name="merged_audit",
+        )
+
+        audit_log = result["metadata"]["audit_log"]
+        assert len(audit_log) == 1
+
+        entry = audit_log[0]
+        assert entry["event"] == "merged"
+        assert entry["sources"] == [{"meal": "meal_a", "test_set": "set_a"}]
+        assert entry["dedup_count"] == 0
+        assert entry["invalid_count"] == 1
+        assert "timestamp" in entry
+
+    def test_merge_test_sets_auto_name(self, env):
+        manager, config = env
+        _create_meal_dir(config, "meal_a")
+        _create_meal_dir(config, "target_meal")
+
+        test_set_a = {
+            "metadata": {
+                "name": "original_set",
+                "meal_id": "id_a",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+            },
+            "questions": [
+                {"id": "q001", "question": "Q1", "source_files": ["reports/report_0.pdf"]},
+            ],
+        }
+
+        manager.save_test_set("meal_a", test_set_a)
+
+        target_meal_config = _make_meal_config(
+            data_id="target_id",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+
+        source_specs = [{"meal": "meal_a", "test_set": "original_set"}]
+
+        result = manager.merge_test_sets(
+            source_specs=source_specs,
+            target_meal_name="target_meal",
+            target_meal_config=target_meal_config,
+        )
+
+        assert result["metadata"]["name"] == "original_set_merged"
+
+    def test_merge_test_sets_source_not_found(self, env):
+        manager, config = env
+        _create_meal_dir(config, "target_meal")
+
+        target_meal_config = _make_meal_config(
+            data_id="target_id",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+
+        source_specs = [{"meal": "nonexistent_meal", "test_set": "nonexistent_set"}]
+
+        with pytest.raises(ValueError) as exc_info:
+            manager.merge_test_sets(
+                source_specs=source_specs,
+                target_meal_name="target_meal",
+                target_meal_config=target_meal_config,
+            )
+        assert "not found" in str(exc_info.value)
+
+    def test_merge_test_sets_empty_source_specs(self, env):
+        manager, config = env
+        _create_meal_dir(config, "target_meal")
+
+        target_meal_config = _make_meal_config(
+            data_id="target_id",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            manager.merge_test_sets(
+                source_specs=[],
+                target_meal_name="target_meal",
+                target_meal_config=target_meal_config,
+            )
+        assert "source_specs cannot be empty" in str(exc_info.value)
+
+    def test_merge_test_sets_invalid_source_spec(self, env):
+        manager, config = env
+        _create_meal_dir(config, "target_meal")
+
+        target_meal_config = _make_meal_config(
+            data_id="target_id",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            manager.merge_test_sets(
+                source_specs=[{"meal": "only_meal"}],
+                target_meal_name="target_meal",
+                target_meal_config=target_meal_config,
+            )
+        assert "Invalid source spec" in str(exc_info.value)
+
+    def test_merge_test_sets_irrelevant_questions_preserved(self, env):
+        manager, config = env
+        _create_meal_dir(config, "meal_a")
+        _create_meal_dir(config, "target_meal")
+
+        test_set_a = {
+            "metadata": {
+                "name": "set_a",
+                "meal_id": "id_a",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+            },
+            "questions": [
+                {"id": "q001", "question": "Normal question?", "source_files": ["reports/report_0.pdf"]},
+                {
+                    "id": "q002",
+                    "question": "Irrelevant question?",
+                    "question_type": "irrelevant",
+                    "source_files": ["reports/nonexistent.pdf"],
+                },
+            ],
+        }
+
+        manager.save_test_set("meal_a", test_set_a)
+
+        target_meal_config = _make_meal_config(
+            data_id="target_id",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+
+        source_specs = [{"meal": "meal_a", "test_set": "set_a"}]
+
+        result = manager.merge_test_sets(
+            source_specs=source_specs,
+            target_meal_name="target_meal",
+            target_meal_config=target_meal_config,
+            name="merged_irrelevant",
+        )
+
+        assert len(result["questions"]) == 2
+        question_types = {q.get("question_type", "simple") for q in result["questions"]}
+        assert "irrelevant" in question_types
+
+    def test_merge_test_sets_saves_to_target_meal(self, env):
+        manager, config = env
+        _create_meal_dir(config, "meal_a")
+        _create_meal_dir(config, "target_meal")
+
+        test_set_a = {
+            "metadata": {
+                "name": "set_a",
+                "meal_id": "id_a",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+            },
+            "questions": [
+                {"id": "q001", "question": "Q1", "source_files": ["reports/report_0.pdf"]},
+            ],
+        }
+
+        manager.save_test_set("meal_a", test_set_a)
+
+        target_meal_config = _make_meal_config(
+            data_id="target_id",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+
+        source_specs = [{"meal": "meal_a", "test_set": "set_a"}]
+
+        manager.merge_test_sets(
+            source_specs=source_specs,
+            target_meal_name="target_meal",
+            target_meal_config=target_meal_config,
+            name="saved_merged",
+        )
+
+        loaded = manager.load_test_set("target_meal", "saved_merged")
+        assert loaded is not None
+        assert loaded["metadata"]["name"] == "saved_merged"
+        assert len(loaded["questions"]) == 1
+
+    def test_merge_test_sets_question_id_reassigned(self, env):
+        manager, config = env
+        _create_meal_dir(config, "meal_a")
+        _create_meal_dir(config, "target_meal")
+
+        test_set_a = {
+            "metadata": {
+                "name": "set_a",
+                "meal_id": "id_a",
+                "created_at": "2026-04-20T10:00:00",
+                "updated_at": "2026-04-20T10:00:00",
+            },
+            "questions": [
+                {"id": "old_id_1", "question": "Q1", "source_files": ["reports/report_0.pdf"]},
+                {"id": "old_id_2", "question": "Q2", "source_files": ["reports/report_0.pdf"]},
+                {"id": "old_id_3", "question": "Q3", "source_files": ["reports/report_0.pdf"]},
+            ],
+        }
+
+        manager.save_test_set("meal_a", test_set_a)
+
+        target_meal_config = _make_meal_config(
+            data_id="target_id",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+
+        source_specs = [{"meal": "meal_a", "test_set": "set_a"}]
+
+        result = manager.merge_test_sets(
+            source_specs=source_specs,
+            target_meal_name="target_meal",
+            target_meal_config=target_meal_config,
+            name="reassigned_ids",
+        )
+
+        question_ids = [q["id"] for q in result["questions"]]
+        assert question_ids == ["q001", "q002", "q003"]

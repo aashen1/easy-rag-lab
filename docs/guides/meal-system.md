@@ -105,6 +105,41 @@ pixi run python main.py --delete-meal <meal_name>
 pixi run python main.py --repair-meal <meal_name>
 ```
 
+### 合并 Meal
+
+```bash
+# 合并多个 meal 创建新 meal
+pixi run python main.py --merge-meals A B C --name D
+```
+
+| 参数 | 说明 |
+|------|------|
+| `--merge-meals MEAL [MEAL...]` | 要合并的 meal 名称列表 |
+| `--name NAME` | 新 meal 名称（可选，默认自动生成） |
+
+**合并行为**：
+- PDF 文件自动去重（基于路径）
+- 复用已有的解析/分块缓存
+- 在 `composition` 字段记录合并来源
+
+### 扩充 Meal
+
+```bash
+# 在已有 meal 基础上添加新 PDF
+pixi run python main.py --extend-meal A --add-pdfs path/to/new1.pdf path/to/new2.pdf --name B
+```
+
+| 参数 | 说明 |
+|------|------|
+| `--extend-meal MEAL` | 源 meal 名称 |
+| `--add-pdfs PDF [PDF...]` | 要添加的 PDF 文件路径 |
+| `--name NAME` | 新 meal 名称（可选，默认自动生成） |
+
+**扩充行为**：
+- 自动检测并跳过已存在的 PDF
+- 仅对新 PDF 执行解析/分块
+- 在 `composition` 字段记录扩充来源
+
 ### 生成测试集
 
 ```bash
