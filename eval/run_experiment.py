@@ -13,12 +13,12 @@ from typing import TYPE_CHECKING, Any
 import yaml
 from loguru import logger
 
-from src.exceptions import ConfigurationError, EvaluationError, TestSetError
-
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
 import contextlib
+
+from src.exceptions import ConfigurationError, EvaluationError, TestSetError
 
 from eval.evaluators.base import BaseEvaluator
 from eval.evaluators.builtin_evaluator import BuiltinEvaluator
