@@ -165,6 +165,32 @@ def _extract_statements(
         raise EvaluationError(error_msg) from e
 
 
+def calculate_hallucination_rate(
+    faithfulness_scores: list[float],
+    threshold: float = 0.5,
+) -> float:
+    """Calculate hallucination rate from faithfulness scores.
+
+    Measures the fraction of questions whose faithfulness score falls
+    below the given threshold, indicating potential hallucination.
+
+    Args:
+        faithfulness_scores: List of faithfulness scores per question.
+        threshold: Hallucination detection threshold. Scores below this
+            value are considered hallucinated. Defaults to 0.5.
+
+    Returns:
+        Hallucination rate as a float between 0.0 and 1.0.
+    """
+    if not faithfulness_scores:
+        return 0.0
+    valid_scores = [s for s in faithfulness_scores if s is not None]
+    if not valid_scores:
+        return 0.0
+    hallucinated = sum(1 for s in valid_scores if s < threshold)
+    return hallucinated / len(valid_scores)
+
+
 def _verify_statements(
     client: Anthropic,
     statements: list[str],
