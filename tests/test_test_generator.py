@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -254,6 +255,154 @@ class TestLoadMealChunks:
 
         assert len(chunks) == 2
         assert all(c["metadata"]["source"] == "reports/report_0.md" for c in chunks)
+
+
+class TestLocateAnswerChunks:
+    def setup_method(self):
+        self.config = {
+            "chunker": {"output_dir": "data/chunks"},
+            "test_generation": {"max_retries": 3},
+        }
+        self.generator = TestSetGenerator(self.config)
+
+    def _create_chunks_dir(self, tmp_path, chunks_data):
+        chunks_dir = tmp_path / "chunks"
+        chunks_dir.mkdir()
+        for source_path, chunks in chunks_data.items():
+            source_dir = chunks_dir / Path(source_path).parent
+            source_dir.mkdir(parents=True, exist_ok=True)
+            jsonl_name = Path(source_path).stem + ".jsonl"
+            jsonl_file = chunks_dir / source_path.replace(source_path, jsonl_name)
+            jsonl_file = source_dir / jsonl_name
+            with open(jsonl_file, "w", encoding="utf-8") as f:
+                for chunk in chunks:
+                    f.write(json.dumps(chunk, ensure_ascii=False) + "\n")
+        return chunks_dir
+
+    def test_locate_with_meal_config_uses_artifact_cache(self, tmp_path):
+        from src.meal import MealConfig, MealFile
+
+        chunks_dir = tmp_path / "artifacts" / "abc123000000" / "chunks_hash123"
+        chunks_dir.mkdir(parents=True)
+        source_dir = chunks_dir / "reports"
+        source_dir.mkdir()
+
+        chunk_data = [
+            {"chunk_id": "report_0::chunk::000", "text": "2024年营收增长9.53%，净利润增长12.75%", "metadata": {"source": "reports/report_0.pages.json", "chunk_index": 0}},
+            {"chunk_id": "report_0::chunk::001", "text": "其他无关内容", "metadata": {"source": "reports/report_0.pages.json", "chunk_index": 1}},
+        ]
+        jsonl_file = source_dir / "report_0.jsonl"
+        with open(jsonl_file, "w", encoding="utf-8") as f:
+            for chunk in chunk_data:
+                f.write(json.dumps(chunk, ensure_ascii=False) + "\n")
+
+        meal_config = MealConfig(
+            data_id="abc123" + "0" * 58,
+            name="test_meal",
+            created_at="2026-04-16T14:30:00",
+            sampling_config=None,
+            collection_name="m_test1234567",
+            pdf_files=[
+                MealFile(path="reports/report_0.pdf", sha256="abc", size_bytes=100)
+            ],
+            stats={"total_pdfs": 1, "total_pages": 50, "total_chunks": 2},
+            config_hashes={"chunker": "hash123"},
+        )
+
+        config = {
+            "artifacts": {"dir": str(tmp_path / "artifacts")},
+            "chunker": {"output_dir": "data/chunks"},
+            "test_generation": {"max_retries": 3},
+        }
+        generator = TestSetGenerator(config)
+
+        result = generator._locate_answer_chunks(
+            answer="2024年营收增长9.53%",
+            source_path="reports/report_0.pages.json",
+            meal_config=meal_config,
+        )
+
+        assert len(result) > 0
+        assert "report_0::chunk::000" in result
+
+    def test_locate_without_meal_config_falls_back_to_config(self, tmp_path):
+        chunks_dir = tmp_path / "chunks"
+        chunks_dir.mkdir()
+        source_dir = chunks_dir / "reports"
+        source_dir.mkdir()
+
+        chunk_data = [
+            {"chunk_id": "doc::chunk::000", "text": "净利润12.75%", "metadata": {"source": "reports/doc.pages.json", "chunk_index": 0}},
+        ]
+        jsonl_file = source_dir / "doc.jsonl"
+        with open(jsonl_file, "w", encoding="utf-8") as f:
+            for chunk in chunk_data:
+                f.write(json.dumps(chunk, ensure_ascii=False) + "\n")
+
+        config = {
+            "chunker": {"output_dir": str(chunks_dir)},
+            "test_generation": {"max_retries": 3},
+        }
+        generator = TestSetGenerator(config)
+
+        result = generator._locate_answer_chunks(
+            answer="净利润12.75%",
+            source_path="reports/doc.pages.json",
+        )
+
+        assert len(result) > 0
+
+    def test_locate_returns_empty_when_no_chunks_dir(self):
+        config = {
+            "chunker": {"output_dir": "/nonexistent/path"},
+            "test_generation": {"max_retries": 3},
+        }
+        generator = TestSetGenerator(config)
+
+        result = generator._locate_answer_chunks(
+            answer="some answer",
+            source_path="reports/doc.md",
+        )
+
+        assert result == []
+
+    def test_adjacent_tolerance_expands_matches(self, tmp_path):
+        chunks_dir = tmp_path / "chunks"
+        chunks_dir.mkdir()
+        source_dir = chunks_dir / "reports"
+        source_dir.mkdir()
+
+        chunk_data = [
+            {"chunk_id": "doc::chunk::000", "text": "无关内容0", "metadata": {"source": "reports/doc.md", "chunk_index": 0}},
+            {"chunk_id": "doc::chunk::001", "text": "营收增长9.53%", "metadata": {"source": "reports/doc.md", "chunk_index": 1}},
+            {"chunk_id": "doc::chunk::002", "text": "无关内容2", "metadata": {"source": "reports/doc.md", "chunk_index": 2}},
+            {"chunk_id": "doc::chunk::003", "text": "无关内容3", "metadata": {"source": "reports/doc.md", "chunk_index": 3}},
+        ]
+        jsonl_file = source_dir / "doc.jsonl"
+        with open(jsonl_file, "w", encoding="utf-8") as f:
+            for chunk in chunk_data:
+                f.write(json.dumps(chunk, ensure_ascii=False) + "\n")
+
+        config = {
+            "chunker": {"output_dir": str(chunks_dir)},
+            "test_generation": {"max_retries": 3},
+        }
+        generator = TestSetGenerator(config)
+
+        result_no_expand = generator._locate_answer_chunks(
+            answer="营收增长9.53%",
+            source_path="reports/doc.md",
+            adjacent_tolerance=0,
+        )
+
+        result_expand = generator._locate_answer_chunks(
+            answer="营收增长9.53%",
+            source_path="reports/doc.md",
+            adjacent_tolerance=1,
+        )
+
+        assert len(result_no_expand) == 1
+        assert len(result_expand) == 3
 
 
 class TestCalculateQuestionDistribution:

@@ -552,8 +552,8 @@ class TestBuiltinEvaluator:
         assert "false_positive_rate" in results[1].retrieval_metrics
 
 
-    def test_missing_type_computes_doc_metrics(self):
-        """Test that missing type questions compute doc-level metrics."""
+    def test_missing_type_computes_fpr_not_doc_metrics(self):
+        """Test that missing type questions compute FPR but not doc-level metrics."""
         evaluator = BuiltinEvaluator()
 
         result = evaluator.evaluate_single(
@@ -563,12 +563,13 @@ class TestBuiltinEvaluator:
             contexts=["annual_report/company_2023.pdf"],
             expected_sources=["annual_report/company_2023.pdf"],
             expect_retrieval=False,
-            retrieval_metrics=["hit_rate", "mrr", "ndcg"],
+            retrieval_metrics=["hit_rate", "mrr", "ndcg", "false_positive_rate"],
         )
 
-        assert "hit_rate" in result.retrieval_metrics
-        assert "mrr" in result.retrieval_metrics
-        assert "ndcg" in result.retrieval_metrics
+        assert "hit_rate" not in result.retrieval_metrics
+        assert "mrr" not in result.retrieval_metrics
+        assert "ndcg" not in result.retrieval_metrics
+        assert "false_positive_rate" in result.retrieval_metrics
 
     def test_irrelevant_type_computes_fpr_only(self):
         """Test that irrelevant type questions compute FPR but not doc metrics."""
