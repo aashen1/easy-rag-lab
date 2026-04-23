@@ -18,12 +18,11 @@ sys.path.insert(0, str(project_root))
 
 import contextlib
 
-from src.exceptions import ConfigurationError, EvaluationError, TestSetError
-
 from eval.evaluators.base import BaseEvaluator
 from eval.evaluators.builtin_evaluator import BuiltinEvaluator
 from eval.evaluators.ragas_evaluator import RagasEvaluator
 from eval.experiment_reporter import ExperimentReporter
+from src.exceptions import ConfigurationError, EvaluationError, TestSetError
 from src.experiment import (
     ExperimentConfig,
     ExperimentManager,
@@ -745,6 +744,7 @@ def _create_evaluators(
 def _collect_rag_samples(
     pipeline: RAGPipeline,
     test_set: dict[str, Any],
+    equivalence_groups: dict[str, list[str]] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Run pipeline queries and collect raw samples for evaluation.
@@ -752,6 +752,8 @@ def _collect_rag_samples(
     Args:
         pipeline: Configured RAG pipeline.
         test_set: Test set dictionary with questions.
+        equivalence_groups: Optional dict mapping group keys to lists of
+            equivalent file paths for dedup normalization.
 
     Returns:
         List of sample dictionaries with query results.
@@ -786,6 +788,8 @@ def _collect_rag_samples(
                 "expected_answer": question_data.get("answer"),
                 "retrieved_sources": response.get("sources", []),
                 "chunk_ids": response.get("chunk_ids", []),
+                "expected_chunks": question_data.get("source_chunks", []),
+                "equivalence_groups": equivalence_groups,
                 "question_type": question_data.get("question_type", "factual"),
                 "time_seconds": case_time,
                 "test_set": test_set_name,
@@ -811,7 +815,10 @@ def _collect_rag_samples(
                 "expected_answer": question_data.get("answer"),
                 "retrieved_sources": [],
                 "chunk_ids": [],
+                "expected_chunks": question_data.get("source_chunks", []),
+                "equivalence_groups": equivalence_groups,
                 "question_type": question_data.get("question_type", "factual"),
+                "expect_retrieval": question_data.get("expect_retrieval", True),
                 "time_seconds": case_time,
                 "test_set": test_set_name,
                 "category": question_data.get("category"),
@@ -872,21 +879,46 @@ def _evaluate_with_builtin(
             retrieval_metrics=retrieval_metrics,
             generation_metrics=generation_metrics,
             chunk_ids=sample.get("chunk_ids"),
-            question_type=sample.get("question_type"),
+            expected_chunks=sample.get("expected_chunks"),
+            equivalence_groups=sample.get("equivalence_groups"),
+            expect_retrieval=sample.get("expect_retrieval", True),
             retrieved_sources=sample.get("retrieved_sources", []),
+            question_type=sample.get("question_type"),
         )
+
+        raw_retrieval = eval_result.retrieval_metrics
+
+        doc_metrics = {}
+        chunk_metrics = {}
+        dedup_metrics = {}
+        fpr_value = None
+
+        for k, v in raw_retrieval.items():
+            if k.startswith("chunk_"):
+                chunk_metrics[k.removeprefix("chunk_")] = v
+            elif k.startswith("dedup_"):
+                dedup_metrics[k.removeprefix("dedup_")] = v
+            elif k == "false_positive_rate":
+                fpr_value = v
+            else:
+                doc_metrics[k] = v
 
         result = {
             "id": question_id,
             "question": sample["question"],
             "answer": sample["answer"],
-            "retrieval": eval_result.retrieval_metrics,
+            "retrieval": doc_metrics,
+            "chunk_retrieval": chunk_metrics if chunk_metrics else None,
+            "dedup_retrieval": dedup_metrics if dedup_metrics else None,
+            "false_positive_rate": fpr_value,
             "sources": sample.get("retrieved_sources", []),
             "expected_sources": sample.get("expected_sources", []),
             "time_seconds": sample.get("time_seconds", 0),
             "test_set": sample.get("test_set", ""),
             "category": sample.get("category"),
             "difficulty": sample.get("difficulty"),
+            "question_type": sample.get("question_type"),
+            "expect_retrieval": sample.get("expect_retrieval", True),
             "token_usage": sample.get("token_usage"),
         }
 
@@ -1016,6 +1048,7 @@ def evaluate_test_set(
     test_set: dict[str, Any],
     exp_config: ExperimentConfig | None = None,
     system_config: dict[str, Any] | None = None,
+    meal_info: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Evaluate a single test set against the pipeline.
@@ -1028,6 +1061,7 @@ def evaluate_test_set(
         test_set: Test set dictionary with questions.
         exp_config: Experiment configuration for backend selection.
         system_config: System configuration for evaluator creation.
+        meal_info: Optional meal information containing equivalence_groups.
 
     Returns:
         List of evaluation result dictionaries.
@@ -1050,7 +1084,8 @@ def evaluate_test_set(
     llm_preset = exp_config.evaluation.get("llm_preset", "default")
     llm_config = get_llm_config(system_config, llm_preset)
 
-    samples = _collect_rag_samples(pipeline, test_set)
+    equivalence_groups = meal_info.get("equivalence_groups") if meal_info else None
+    samples = _collect_rag_samples(pipeline, test_set, equivalence_groups=equivalence_groups)
 
     all_results: dict[str, dict[str, Any]] = {}
 
@@ -1126,21 +1161,21 @@ def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
     """
     Compute aggregate metrics from evaluation results.
 
-    Supports both retrieval and generation metrics.
-
-    Questions with expect_retrieval=False (irrelevant type) are excluded
-    from retrieval metric averages since they have no expected sources.
+    Supports both retrieval and generation metrics. Includes chunk-level,
+    dedup, FPR, diversity, hallucination rate, and per-question-type breakdown.
 
     Args:
         results: List of evaluation result dictionaries.
 
     Returns:
         Dictionary containing average metrics including hit_rate, mrr, ndcg,
-        chunk_level_metrics, dedup_metrics, and generation_metrics.
+        chunk_level_metrics, dedup_metrics, diversity, hallucination_rate,
+        and by_question_type breakdown.
     """
+    from eval.metrics import calculate_hallucination_rate
+
     metrics: dict[str, Any] = {}
 
-    # Basic retrieval metrics
     valid_retrieval = [r for r in results if "retrieval" in r and r["retrieval"]]
     if valid_retrieval:
         for metric_name in ["hit_rate", "mrr", "ndcg"]:
@@ -1161,15 +1196,14 @@ def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
     metrics["retrieval_applicable_questions"] = len(valid_retrieval)
     metrics["total_questions"] = len(results)
 
-    # Generation metrics (from RAGAS or builtin)
     valid_generation = [r for r in results if "generation" in r and r["generation"]]
     if valid_generation:
-        generation_metrics = set()
+        generation_metrics_set = set()
         for r in valid_generation:
-            generation_metrics.update(r["generation"].keys())
+            generation_metrics_set.update(r["generation"].keys())
 
         generation_aggregate = {}
-        for metric_name in sorted(generation_metrics):
+        for metric_name in sorted(generation_metrics_set):
             values = [
                 r["generation"][metric_name]
                 for r in valid_generation
@@ -1181,22 +1215,21 @@ def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
         if generation_aggregate:
             metrics["generation_metrics"] = generation_aggregate
 
-    # Chunk-level metrics
-    chunk_results = [r for r in results if r.get("chunk_retrieval") is not None]
+    chunk_results = [r for r in results if r.get("chunk_retrieval") is not None and r["chunk_retrieval"]]
     if chunk_results:
-        avg_chunk_hit_rate = sum(r["chunk_retrieval"]["hit_rate"] for r in chunk_results) / len(chunk_results)
-        avg_chunk_mrr = sum(r["chunk_retrieval"]["mrr"] for r in chunk_results) / len(chunk_results)
-        avg_chunk_ndcg = sum(r["chunk_retrieval"]["ndcg"] for r in chunk_results) / len(chunk_results)
+        avg_chunk_hit_rate = sum(r["chunk_retrieval"].get("hit_rate", 0) for r in chunk_results) / len(chunk_results)
+        avg_chunk_mrr = sum(r["chunk_retrieval"].get("mrr", 0) for r in chunk_results) / len(chunk_results)
+        avg_chunk_ndcg = sum(r["chunk_retrieval"].get("ndcg", 0) for r in chunk_results) / len(chunk_results)
     else:
         avg_chunk_hit_rate = None
         avg_chunk_mrr = None
         avg_chunk_ndcg = None
 
-    dedup_results = [r for r in results if r.get("dedup_retrieval") is not None]
+    dedup_results = [r for r in results if r.get("dedup_retrieval") is not None and r["dedup_retrieval"]]
     if dedup_results:
-        avg_dedup_hit_rate = sum(r["dedup_retrieval"]["hit_rate"] for r in dedup_results) / len(dedup_results)
-        avg_dedup_mrr = sum(r["dedup_retrieval"]["mrr"] for r in dedup_results) / len(dedup_results)
-        avg_dedup_ndcg = sum(r["dedup_retrieval"]["ndcg"] for r in dedup_results) / len(dedup_results)
+        avg_dedup_hit_rate = sum(r["dedup_retrieval"].get("hit_rate", 0) for r in dedup_results) / len(dedup_results)
+        avg_dedup_mrr = sum(r["dedup_retrieval"].get("mrr", 0) for r in dedup_results) / len(dedup_results)
+        avg_dedup_ndcg = sum(r["dedup_retrieval"].get("ndcg", 0) for r in dedup_results) / len(dedup_results)
     else:
         avg_dedup_hit_rate = None
         avg_dedup_mrr = None
@@ -1221,6 +1254,56 @@ def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
     }
     metrics["avg_false_positive_rate"] = avg_false_positive_rate
     metrics["irrelevant_questions_count"] = len(fpr_results)
+
+    diversity_values = [
+        r["retrieval"]["retrieval_diversity"]
+        for r in valid_retrieval
+        if "retrieval_diversity" in r.get("retrieval", {}) and r["retrieval"]["retrieval_diversity"] is not None
+    ]
+    metrics["avg_retrieval_diversity"] = sum(diversity_values) / len(diversity_values) if diversity_values else None
+
+    faithfulness_values = [
+        r["generation"]["faithfulness"]
+        for r in valid_generation
+        if "faithfulness" in r.get("generation", {}) and r["generation"]["faithfulness"] is not None
+    ]
+    metrics["hallucination_rate"] = calculate_hallucination_rate(faithfulness_values) if faithfulness_values else None
+
+    type_groups: dict[str, list[dict[str, Any]]] = {}
+    for r in results:
+        qtype = r.get("question_type", "unknown")
+        if qtype not in type_groups:
+            type_groups[qtype] = []
+        type_groups[qtype].append(r)
+
+    type_metrics: dict[str, dict[str, Any]] = {}
+    for qtype, group in type_groups.items():
+        type_entry: dict[str, Any] = {"count": len(group)}
+
+        type_valid_retrieval = [r for r in group if "retrieval" in r and r["retrieval"]]
+        for mn in ["hit_rate", "mrr", "ndcg", "retrieval_diversity"]:
+            vals = [
+                r["retrieval"][mn]
+                for r in type_valid_retrieval
+                if mn in r["retrieval"] and r["retrieval"][mn] is not None
+            ]
+            if vals:
+                type_entry[f"avg_{mn}"] = sum(vals) / len(vals)
+
+        type_valid_gen = [r for r in group if "generation" in r and r["generation"]]
+        for mn in ["faithfulness", "answer_relevancy"]:
+            vals = [
+                r["generation"][mn]
+                for r in type_valid_gen
+                if mn in r["generation"] and r["generation"][mn] is not None
+            ]
+            if vals:
+                type_entry[f"avg_{mn}"] = sum(vals) / len(vals)
+
+        type_metrics[qtype] = type_entry
+
+    if type_metrics:
+        metrics["by_question_type"] = type_metrics
 
     llm_retrieval_results = [r for r in results if "llm_retrieval" in r and r["llm_retrieval"]]
     llm_retrieval_from_generation = []
@@ -1366,6 +1449,7 @@ def run_variant_evaluation(
                 pipeline, test_set,
                 exp_config=exp_config,
                 system_config=system_config,
+                meal_info=meal_info,
             )
             all_results.extend(results)
 
