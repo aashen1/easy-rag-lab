@@ -879,7 +879,7 @@ class TestSetGenerator:
                         qa["source_files"] = [source_path]
                         answer_text = qa.get("answer", "")
                         qa["source_chunks"] = self._locate_answer_chunks(
-                            answer_text, source_path
+                            answer_text, source_path, meal_config=meal_config
                         )
 
                     questions.append(qa)
@@ -937,7 +937,7 @@ class TestSetGenerator:
                         qa["source_files"] = [source_path]
                         answer_text = qa.get("answer", "")
                         qa["source_chunks"] = self._locate_answer_chunks(
-                            answer_text, source_path
+                            answer_text, source_path, meal_config=meal_config
                         )
 
                     questions.append(qa)
@@ -1090,7 +1090,7 @@ class TestSetGenerator:
                     qa["source_files"] = [source_path]
                     answer_text = qa.get("answer", "")
                     qa["source_chunks"] = self._locate_answer_chunks(
-                        answer_text, source_path
+                        answer_text, source_path, meal_config=meal_config
                     )
 
                 new_questions.append(qa)
@@ -1576,8 +1576,8 @@ class TestSetGenerator:
         self,
         answer: str,
         source_path: str,
-        chunks_dir: str = "data/chunks",
-        adjacent_tolerance: int = 0,
+        meal_config: "MealConfig" = None,
+        adjacent_tolerance: int = 1,
     ) -> list[str]:
         """Locate chunk IDs that contain information relevant to the answer.
 
@@ -1589,8 +1589,10 @@ class TestSetGenerator:
             answer: The answer text to locate in chunks.
             source_path: Relative path of the source document (e.g.
                 'research_reports/doc.md'), using forward slashes.
-            chunks_dir: Directory containing JSONL chunk files. Defaults to
-                the configured chunker output directory.
+            meal_config: MealConfig object for resolving chunks directory
+                via ArtifactCache. If provided, uses
+                ``_resolve_chunks_dir()`` to find the actual chunks
+                location. Falls back to config-based path otherwise.
             adjacent_tolerance: Number of adjacent chunks (by chunk_index)
                 to include around each matched chunk. Defaults to 1.
 
@@ -1602,10 +1604,20 @@ class TestSetGenerator:
         if not answer or not source_path:
             return []
 
-        resolved_chunks_dir = self.config.get("chunker", {}).get(
-            "output_dir", chunks_dir
-        )
-        chunks_path = Path(resolved_chunks_dir)
+        if meal_config is not None:
+            chunks_path = self._resolve_chunks_dir(meal_config)
+            if not chunks_path:
+                logger.warning(
+                    f"Chunks directory not found via ArtifactCache for "
+                    f"meal_config data_id={meal_config.data_id}"
+                )
+                return []
+        else:
+            resolved_chunks_dir = self.config.get("chunker", {}).get(
+                "output_dir", "data/chunks"
+            )
+            chunks_path = Path(resolved_chunks_dir)
+
         if not chunks_path.exists():
             logger.warning(f"Chunks directory not found: {chunks_path}")
             return []
