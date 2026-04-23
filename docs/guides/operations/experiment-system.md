@@ -1,6 +1,8 @@
 # 实验评测系统使用指南
 
-<!-- status: active -->
+<!-- status: needs-update -->
+
+> ⚠️ **文档状态**：本文档内容基本准确，但缺少 v0.1.8 新增功能的说明（TestSetManager 集成、等价组支持、问题有效性检查、增量生成、config_snapshot 完整保存、Technology Summary 等）。建议补充更新。
 
 > 最后更新: 2026-04-18
 

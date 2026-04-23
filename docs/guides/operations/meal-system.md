@@ -1,6 +1,8 @@
 # Meal 数据管理系统使用指南
 
-<!-- status: active -->
+<!-- status: needs-update -->
+
+> ⚠️ **文档状态**：本文档缺少 v0.1.8 新增功能的说明，包括：等价组（equivalence group）推断、meal 的 `composition` 元数据结构、TestSetManager 集成（`--merge-test-sets`）、以及 `document` 策略的问题生成。`--generate-test-set` 的 `--strategy` 默认值已变更为 `document`，但文档仍显示 `factual`。建议全面更新。
 
 > 最后更新: 2026-04-18
 

@@ -1,6 +1,8 @@
 # v0.2.0 开发方向
 
-<!-- status: active -->
+<!-- status: archived -->
+
+> ⚠️ **文档状态**：本规划中的功能（Faithfulness/Answer Relevancy、混合检索、Reranker、查询改写、语义分块）均已于 v0.1.7/v0.1.8 实现，本文档已过时，仅保留供历史参考。
 
 > 拟定日期: 2026-04-18
 
