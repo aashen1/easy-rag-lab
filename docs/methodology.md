@@ -26,6 +26,12 @@
    - 复盘：生成 outcome 文档（承诺 vs 交付 vs 调整）
    - 归档：形成项目"年轮"
 
+4. **文档即记忆**
+   - 文档系统是项目的跨 session 记忆系统
+   - 每个 AI session 都是 stateless 的，唯一延续性来自文档
+   - 读写分离：读记忆理解状态，写记忆延续进度
+   - 详见 `project-memory` skill
+
 ---
 
 ## 文档体系结构
@@ -243,3 +249,4 @@ docs/inbox-processed/ # 已处理的原始文件（定期清理）
 - [版本演进年轮](version-history.md)
 - [待做事项总表](backlog.md)
 - [版本验收报告](reviews/v0.1.5/)
+- [项目记忆系统使用指南](../.trae/skills/project-memory/SKILL.md) — 跨 session 项目记忆读写方法论

@@ -1,6 +1,8 @@
 # 配置文件参考手册
 
-<!-- status: active -->
+<!-- status: needs-update -->
+
+> ⚠️ **文档状态**：本文档缺少 v0.1.8 新增配置项的说明，包括：TestSetManager 相关配置（`testset_manager`）、等价组推断配置（`equivalence_group`）、问题有效性检查配置（`validity_check`）、以及 `evaluation` 中新增的 `context_precision`、`context_recall` 等 builtin 指标。此外，`test_generation.default_strategy` 实际默认值已变更为 `document`，但文档仍显示 `factual`。建议全面更新。
 
 > 最后更新: 2026-04-19
 

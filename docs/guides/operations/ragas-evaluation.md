@@ -1,6 +1,8 @@
 # RAGAS 评测系统使用指南
 
-<!-- status: active -->
+<!-- status: needs-update -->
+
+> ⚠️ **文档状态**：本文档缺少 v0.1.8 新增 builtin 指标（Chunk-level、Dedup、FPR）的说明，且 "已知未修复问题" 章节中的部分问题（如 context_precision 聚合位置）可能已在后续修复中解决。建议核对并更新。
 
 > 最后更新: 2026-04-21
 

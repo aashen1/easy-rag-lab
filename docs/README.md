@@ -1,6 +1,6 @@
 # 文档导航索引
 
-> 最后更新: 2026-04-23
+> 最后更新: 2026-04-24
 
 本文档是项目文档的唯一入口，提供全局导航。
 
@@ -23,23 +23,32 @@
 
 ### 使用指南
 
-- [Meal 数据管理系统](guides/meal-system.md)
-- [实验评测系统](guides/experiment-system.md)
-- [PDF 解析指南](guides/pdf-parsing.md)
-- [文档级问题生成](guides/question-generation.md)
-- [评测指标详解](guides/evaluation-metrics.md)
-- [RAGAS 评测系统](guides/ragas-evaluation.md)
-- [Token 追踪](guides/token-tracking.md)
-- [测试运行指南](guides/testing.md)
-- [RAG 泛超参数使用指南](guides/hyperparameter-guide.md)
-- [RAG 优化实现与测试保障](guides/rag-optimization-implementation.md)
+- [Meal 数据管理系统](guides/operations/meal-system.md)
+- [实验评测系统](guides/operations/experiment-system.md)
+- [PDF 解析指南](guides/operations/pdf-parsing.md)
+- [文档级问题生成](guides/operations/question-generation.md)
+- [评测指标详解](guides/operations/evaluation-metrics.md)
+- [RAGAS 评测系统](guides/operations/ragas-evaluation.md)
+- [Token 追踪](guides/operations/token-tracking.md)
+- [RAG 泛超参数使用指南](guides/operations/hyperparameter-guide.md)
+- [RAG 优化实现与测试保障](guides/operations/rag-optimization-implementation.md)
+- [测试集管理](guides/operations/test-set-management.md)
+
+### 开发指南
+
+- [测试运行指南](guides/development/testing.md)
+- [Lint 与 pre-commit](guides/development/lint-and-precommit.md)
+- [Commit 规范](guides/development/commit-conventions.md)
 
 ### 故障排查
 
-- [pytest tmp 目录 FileExistsError](troubleshooting/pytest-basetemp-fileexistserror.md)
-- [幽灵文件夹问题](troubleshooting/ghost-folder-mkdir.md)
 - [评测指标 Bug 修复](troubleshooting/eval-metrics-bugfix.md)
 - [评测系统验收修复](troubleshooting/eval-system-acceptance-fix.md)
+
+### 已解决问题归档
+
+- [pytest tmp 目录 FileExistsError](troubleshooting/resolved/pytest-basetemp-fileexistserror.md)
+- [幽灵文件夹问题](troubleshooting/resolved/ghost-folder-mkdir.md)
 
 ---
 
@@ -58,46 +67,50 @@ docs/
 ├── cli-reference.md           # CLI 参考
 ├── config-reference.md        # 配置参考
 │
-├── guides/                    # 使用指南
-│   ├── meal-system.md
-│   ├── experiment-system.md
-│   ├── question-generation.md
-│   ├── evaluation-metrics.md
-│   ├── ragas-evaluation.md
-│   ├── token-tracking.md
-│   ├── testing.md
-│   ├── test-set-management.md
-│   ├── hyperparameter-guide.md
-│   ├── pdf-parsing.md
-│   ├── lint-and-precommit.md
-│   └── commit-conventions.md
+├── guides/                    # 使用与开发指南
+│   ├── operations/            # 系统运维与使用指南
+│   │   ├── meal-system.md
+│   │   ├── experiment-system.md
+│   │   ├── question-generation.md
+│   │   ├── evaluation-metrics.md
+│   │   ├── ragas-evaluation.md
+│   │   ├── token-tracking.md
+│   │   ├── hyperparameter-guide.md
+│   │   ├── rag-optimization-implementation.md
+│   │   ├── test-set-management.md
+│   │   └── pdf-parsing.md
+│   └── development/           # 开发规范与工具指南
+│       ├── testing.md
+│       ├── lint-and-precommit.md
+│       └── commit-conventions.md
 │
-├── reviews/                   # 版本验收报告
+├── reviews/                   # 版本验收与审查报告
 │   ├── v0.1.5/
-│   │   ├── code-review.md
-│   │   ├── outcome.md
-│   │   └── next-direction.md
 │   ├── v0.1.6/
-│   │   ├── outcome.md
-│   │   └── next-direction.md
 │   ├── v0.1.7/
-│   │   └── outcome.md
 │   ├── v0.1.8/
-│   │   ├── acceptance-report.md
-│   │   ├── changelog-detailed.md
-│   │   ├── migration-guide.md
-│   │   └── release-summary.md
-│   ├── inv-017-boundary-condition-test-coverage.md
-│   └── inv-018-exception-path-test-coverage.md
+│   ├── sessions/              # 开发会话记录
+│   │   ├── baseline-evaluation-fix-record.md
+│   │   └── independent-issues-batch-session.md
+│   └── investigations/        # 技术调研报告
+│       ├── inv-017-boundary-condition-test-coverage.md
+│       ├── inv-018-exception-path-test-coverage.md
+│       ├── inv-019-test-parallelization.md
+│       ├── inv-021-file-path-security.md
+│       └── rf-002-project-structure.md
 │
 ├── troubleshooting/           # 故障排查
-│   ├── pytest-basetemp-fileexistserror.md
-│   ├── ghost-folder-mkdir.md
 │   ├── eval-metrics-bugfix.md
-│   └── eval-system-acceptance-fix.md
+│   ├── eval-system-acceptance-fix.md
+│   └── resolved/              # 已修复问题归档
+│       ├── pytest-basetemp-fileexistserror.md
+│       └── ghost-folder-mkdir.md
 │
 ├── archive/                   # 历史归档
-│   ├── specs/
+│   ├── archive-log.md         # 归档日志
+│   ├── trae-plans/            # .trae 计划书归档
+│   ├── trae-specs/            # .trae Spec 归档
+│   ├── trae-reports/          # .trae 报告归档
 │   └── ...
 │
 ├── inbox/                     # 待处理文档收件箱
@@ -138,7 +151,7 @@ docs/
 每个文档头部包含状态标签：
 
 ```markdown
-<!-- status: active | archived | deprecated -->
+<!-- status: active | archived | deprecated | needs-update -->
 ```
 
 ### 何时不创建文档

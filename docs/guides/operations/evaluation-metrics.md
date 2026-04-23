@@ -1,6 +1,8 @@
 # 评测指标详解
 
-<!-- status: active -->
+<!-- status: needs-update -->
+
+> ⚠️ **文档状态**：指标概述表格中 "RAGAS 生成指标" 的归类已不准确——Context Precision 和 Context Recall 现已由 builtin 和 ragas 双后端支持（见指标对比表）。此外，builtin 后端还新增了 Chunk-level、Dedup、FPR 等指标，本文档尚未涵盖。建议统一更新指标分类和说明。
 
 > 最后更新: 2026-04-21
 

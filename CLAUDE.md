@@ -33,6 +33,12 @@
 ### 持久化
 - 文档解析结果、向量索引等中间产物必须落盘，避免每次启动时重建
 
+### 项目记忆
+- 本项目文档系统同时服务于人类与 AI，是跨 session 的项目记忆系统
+- 新 session 启动时必须先读 CLAUDE.md + backlog.md + version-history.md 理解项目状态
+- 代码变更必须同步更新文档，确保下个 session 能理解本次变更意图
+- 详细方法论：调用 skill `project-memory`；完整参考：[docs/methodology.md](docs/methodology.md)
+
 ---
 
 ## 文档维护规则

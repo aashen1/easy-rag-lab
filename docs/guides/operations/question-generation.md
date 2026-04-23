@@ -1,6 +1,8 @@
 # 文档级问题生成指南
 
-<!-- status: active -->
+<!-- status: needs-update -->
+
+> ⚠️ **文档状态**：本文档缺少 v0.1.8 新增功能的说明，包括：`source_chunks` 字段（document 级问题生成中标注问题来源 chunk）、增量生成机制（自动补充生成以达到目标数量）、问题有效性检查、以及 irrelevant/missing 类型问题的 `source_files` 正确设置（`[]` 和 `expect_no_answer=True`）。建议补充更新。
 
 > 最后更新: 2026-04-18
 
