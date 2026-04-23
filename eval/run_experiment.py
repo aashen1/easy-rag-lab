@@ -543,6 +543,7 @@ def prepare_test_sets(
     meal_info: dict[str, Any],
     skip_preprocessing: bool = False,
     token_tracker: TokenTracker | None = None,
+    chunks_dir: Path | None = None,
 ) -> list[dict[str, Any]]:
     """
     Prepare test sets for experiment.
@@ -556,6 +557,7 @@ def prepare_test_sets(
         meal_info: Meal information dictionary from prepare_meal.
         skip_preprocessing: If True, skip generation even if test sets don't exist.
         token_tracker: Optional token tracker.
+        chunks_dir: Optional path to chunks directory for answer chunk location.
 
     Returns:
         List of test set dictionaries.
@@ -598,6 +600,7 @@ def prepare_test_sets(
                     generator=generator,
                     llm_preset=llm_preset,
                     token_tracker=token_tracker,
+                    chunks_dir=chunks_dir,
                 )
             test_sets.append(test_set_data)
         else:
@@ -625,6 +628,48 @@ def prepare_test_sets(
             test_sets.append(test_set_data)
 
     return test_sets
+
+
+def prepare_variant_chunks(
+    merged_config: dict[str, Any],
+    meal_config: MealConfig,
+    variant_name: str,
+) -> Path:
+    """Build chunks for a variant if not already cached.
+
+    This function ensures chunks are available before test set generation,
+    so that _locate_answer_chunks() can find the correct chunk files.
+
+    Args:
+        merged_config: Merged configuration dictionary.
+        meal_config: Meal configuration object.
+        variant_name: Name of the variant.
+
+    Returns:
+        Path to the chunks directory for this variant.
+    """
+    chunker_config = merged_config.get("chunker", {})
+    embedding_config = merged_config.get("embedding", {})
+
+    chunker_hash = compute_chunker_config_hash(chunker_config)
+
+    artifacts_config = merged_config.get("artifacts") or {}
+    artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
+    cache = ArtifactCache(artifacts_dir)
+
+    parsed_dir = cache.get_parsed_dir(
+        meal_config.data_id,
+        parser_hash=meal_config.config_hashes.get("parser"),
+    )
+    chunks_dir = cache.get_chunks_dir(meal_config.data_id, chunker_hash)
+
+    build_chunks_if_needed(
+        parsed_dir, chunks_dir, chunker_config,
+        model_name=chunker_config.get("model_name") or embedding_config.get("model_name"),
+    )
+
+    logger.info(f"Chunks ready for variant '{variant_name}': {chunks_dir}")
+    return chunks_dir
 
 
 def prepare_index_for_variant(
@@ -1650,10 +1695,22 @@ def run_experiment(
 
         test_generation_tracker = TokenTracker()
 
-        logger.info("Step 2: Preparing test sets...")
+        logger.info("Step 2: Preparing variant chunks...")
+        first_chunks_dir = None
+        for i, variant in enumerate(exp_config.variants, 1):
+            variant_name = variant.get("name", f"variant_{i}")
+            merged_config = merge_config(system_config, exp_config, variant)
+            chunks_dir = prepare_variant_chunks(
+                merged_config, meal_info["config"], variant_name,
+            )
+            if first_chunks_dir is None:
+                first_chunks_dir = chunks_dir
+
+        logger.info("Step 3: Preparing test sets...")
         test_sets = prepare_test_sets(
             system_config, exp_config, meal_info, skip_preprocessing,
             token_tracker=test_generation_tracker,
+            chunks_dir=first_chunks_dir,
         )
 
         meal_snapshot = meal_info["config"].to_dict()
@@ -1688,7 +1745,7 @@ def run_experiment(
             config_snapshot=config_snapshot,
         )
 
-        logger.info("Step 3: Running variant evaluations...")
+        logger.info("Step 4: Running variant evaluations...")
         all_variant_results = []
         experiment_tracker = TokenTracker()
 

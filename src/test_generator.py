@@ -767,6 +767,7 @@ class TestSetGenerator:
         type_distribution: dict[str, float] | None = None,
         llm_preset: str = "default",
         token_tracker: Any | None = None,
+        chunks_dir: Path | None = None,
     ) -> dict[str, Any]:
         """Generate questions based on full MD documents.
 
@@ -786,6 +787,9 @@ class TestSetGenerator:
                 question generation.
             token_tracker: Optional token usage tracker passed to the LLM
                 generator.
+            chunks_dir: Optional path to chunks directory for locating answer
+                chunks. When provided, passed to _locate_answer_chunks() to
+                bypass ArtifactCache resolution.
 
         Returns:
             Dictionary containing the test set metadata and generated questions
@@ -880,7 +884,8 @@ class TestSetGenerator:
                         qa["source_files"] = [source_path]
                         answer_text = qa.get("answer", "")
                         qa["source_chunks"] = self._locate_answer_chunks(
-                            answer_text, source_path, meal_config=meal_config
+                            answer_text, source_path, meal_config=meal_config,
+                            chunks_dir=chunks_dir,
                         )
 
                     questions.append(qa)
@@ -938,7 +943,8 @@ class TestSetGenerator:
                         qa["source_files"] = [source_path]
                         answer_text = qa.get("answer", "")
                         qa["source_chunks"] = self._locate_answer_chunks(
-                            answer_text, source_path, meal_config=meal_config
+                            answer_text, source_path, meal_config=meal_config,
+                            chunks_dir=chunks_dir,
                         )
 
                     questions.append(qa)
@@ -996,6 +1002,7 @@ class TestSetGenerator:
         target_count: int,
         llm_preset: str = "default",
         token_tracker: Any | None = None,
+        chunks_dir: Path | None = None,
     ) -> dict[str, Any]:
         """Supplement an existing test set with additional questions.
 
@@ -1008,6 +1015,8 @@ class TestSetGenerator:
             target_count: Target total number of questions.
             llm_preset: LLM preset name from the configuration.
             token_tracker: Optional token usage tracker.
+            chunks_dir: Optional path to chunks directory for locating answer
+                chunks.
 
         Returns:
             Updated test set dictionary with supplemented questions.
@@ -1091,7 +1100,8 @@ class TestSetGenerator:
                     qa["source_files"] = [source_path]
                     answer_text = qa.get("answer", "")
                     qa["source_chunks"] = self._locate_answer_chunks(
-                        answer_text, source_path, meal_config=meal_config
+                        answer_text, source_path, meal_config=meal_config,
+                        chunks_dir=chunks_dir,
                     )
 
                 new_questions.append(qa)
@@ -1580,6 +1590,7 @@ class TestSetGenerator:
         source_path: str,
         meal_config: "MealConfig" = None,
         adjacent_tolerance: int = 1,
+        chunks_dir: Path | None = None,
     ) -> list[str]:
         """Locate chunk IDs that contain information relevant to the answer.
 
@@ -1597,6 +1608,9 @@ class TestSetGenerator:
                 location. Falls back to config-based path otherwise.
             adjacent_tolerance: Number of adjacent chunks (by chunk_index)
                 to include around each matched chunk. Defaults to 1.
+            chunks_dir: Optional path to chunks directory. When provided,
+                bypasses ArtifactCache resolution and uses this path
+                directly.
 
         Returns:
             List of chunk_id strings for matched and adjacent chunks.
@@ -1606,7 +1620,9 @@ class TestSetGenerator:
         if not answer or not source_path:
             return []
 
-        if meal_config is not None:
+        if chunks_dir is not None:
+            chunks_path = chunks_dir
+        elif meal_config is not None:
             chunks_path = self._resolve_chunks_dir(meal_config)
             if not chunks_path:
                 logger.warning(
