@@ -74,6 +74,9 @@ evaluation:
       - "dedup_mrr"
       - "dedup_ndcg"
       - "false_positive_rate"
+      - "recall_3"
+      - "recall_5"
+      - "recall_10"
     generation:
       - "faithfulness"
       - "answer_relevancy"
