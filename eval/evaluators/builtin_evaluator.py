@@ -174,6 +174,15 @@ class BuiltinEvaluator(BaseEvaluator):
                         retrieved_sources=sources_for_retrieval,
                         expected_sources=expected_sources,
                     )
+                for _k in (3, 5, 10):
+                    _key = f"recall_{_k}"
+                    if _key in retrieval_metrics:
+                        retrieval_results[_key] = calculate_hit_rate(
+                            retrieved_sources=sources_for_retrieval,
+                            expected_sources=expected_sources,
+                            k=_k,
+                            mode="recall",
+                        )
 
             if chunk_ids and expected_chunks and expect_retrieval:
                 if "chunk_hit_rate" in retrieval_metrics:
