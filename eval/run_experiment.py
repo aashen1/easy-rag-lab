@@ -758,7 +758,7 @@ def _collect_rag_samples(
     Returns:
         List of sample dictionaries with query results.
     """
-    test_set_name = test_set.get("name", "unknown")
+    test_set_name = test_set.get("name") or test_set.get("metadata", {}).get("name", "unknown")
     questions = test_set.get("questions", [])
 
     logger.info(f"Collecting results for test set '{test_set_name}' ({len(questions)} questions)...")
