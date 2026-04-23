@@ -153,17 +153,21 @@ LLM_REPORT_PROMPT_TEMPLATE = """你是一位专业的RAG系统分析师。请根
 - 解读 LLM 检索指标（Context Precision、Context Recall）
   - Context Precision: 检索到的上下文是否与问题相关，以及排序质量
   - Context Recall: Ground Truth 中的信息是否能从检索上下文中推断
+- **必须分析检索多样性（Retrieval Diversity）**：如果 top-k 结果来自同一文档，说明信息来源单一
 - 分析不同问题类型的表现差异
 - 识别潜在的瓶颈或问题
+- **必须标出检索完全失败的问题（hit_rate=0）**
 
 ### 5. 生成质量分析
 - 解读生成质量指标（Faithfulness、Answer Relevancy）
 - 分析回答是否基于检索内容（Faithfulness）
 - 分析回答是否切题（Answer Relevancy）
+- **必须标出幻觉问题（faithfulness < 0.5 的问题）**，逐个列出问题ID和具体错误
 - 识别潜在的幻觉或不相关问题
 
 ### 6. 结论与建议
 - 总结关键发现
+- **如果有幻觉或检索失败，必须在结论中明确指出，不得用"表现优异"等笼统描述掩盖**
 - 提出可行的改进建议
 - 建议下一步优化方向
 
@@ -806,6 +810,42 @@ class ExperimentReporter:
 
             lines.append(f"- **Faithfulness ({best_faithfulness:.4f})**: {fa_assessment}")
             lines.append(f"- **Answer Relevancy ({best_relevancy:.4f})**: {ar_assessment}")
+            lines.append("")
+
+        lines.append("### Anomaly Detection")
+        lines.append("")
+
+        hallucination_rate = best_metrics.get("hallucination_rate")
+        if hallucination_rate is not None and hallucination_rate > 0:
+            lines.append(f"- **Hallucination Rate ({hallucination_rate:.2%})**: {hallucination_rate * 100:.1f}% of questions show faithfulness below 0.5, indicating potential hallucination.")
+        else:
+            lines.append("- **Hallucination Rate**: No hallucination detected (all faithfulness scores >= 0.5).")
+
+        avg_diversity = best_metrics.get("avg_retrieval_diversity")
+        if avg_diversity is not None:
+            if avg_diversity < 0.4:
+                lines.append(f"- **Retrieval Diversity ({avg_diversity:.4f})**: ⚠️ LOW - Top-k results often come from the same document, limiting information breadth.")
+            elif avg_diversity < 0.7:
+                lines.append(f"- **Retrieval Diversity ({avg_diversity:.4f})**: Moderate - Some diversity in retrieved documents.")
+            else:
+                lines.append(f"- **Retrieval Diversity ({avg_diversity:.4f})**: Good - Top-k results come from diverse documents.")
+        lines.append("")
+
+        by_type = best_metrics.get("by_question_type")
+        if by_type:
+            lines.append("### Per-Question-Type Breakdown")
+            lines.append("")
+            lines.append("| Type | Count | Avg Hit Rate | Avg MRR | Avg Faithfulness |")
+            lines.append("|------|-------|-------------|---------|-----------------|")
+            for qtype, tm in sorted(by_type.items()):
+                count = tm.get("count", 0)
+                hr = tm.get("avg_hit_rate", "N/A")
+                mrr = tm.get("avg_mrr", "N/A")
+                faith = tm.get("avg_faithfulness", "N/A")
+                hr_str = f"{hr:.4f}" if isinstance(hr, int | float) else hr
+                mrr_str = f"{mrr:.4f}" if isinstance(mrr, int | float) else mrr
+                faith_str = f"{faith:.4f}" if isinstance(faith, int | float) else faith
+                lines.append(f"| {qtype} | {count} | {hr_str} | {mrr_str} | {faith_str} |")
             lines.append("")
 
         lines.append("### Optimization Suggestions")

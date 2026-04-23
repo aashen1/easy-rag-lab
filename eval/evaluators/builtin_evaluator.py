@@ -25,6 +25,7 @@ from eval.metrics import (
     calculate_hit_rate,
     calculate_mrr,
     calculate_ndcg,
+    calculate_retrieval_diversity,
     normalize_source,
     normalize_source_with_equivalence,
 )
@@ -56,7 +57,7 @@ class BuiltinEvaluator(BaseEvaluator):
             "hit_rate", "mrr", "ndcg",
             "chunk_hit_rate", "chunk_mrr", "chunk_ndcg",
             "dedup_hit_rate", "dedup_mrr", "dedup_ndcg",
-            "false_positive_rate",
+            "false_positive_rate", "retrieval_diversity",
             "context_precision", "context_recall",
         ]
         self._generation_metrics = ["faithfulness", "answer_relevancy"]
@@ -157,7 +158,7 @@ class BuiltinEvaluator(BaseEvaluator):
         error = None
 
         try:
-            if expected_sources and expect_retrieval:
+            if expected_sources:
                 if "hit_rate" in retrieval_metrics:
                     retrieval_results["hit_rate"] = calculate_hit_rate(
                         retrieved_sources=sources_for_retrieval,
@@ -174,7 +175,7 @@ class BuiltinEvaluator(BaseEvaluator):
                         expected_sources=expected_sources,
                     )
 
-            if chunk_ids and expected_chunks and expect_retrieval:
+            if chunk_ids and expected_chunks:
                 if "chunk_hit_rate" in retrieval_metrics:
                     retrieval_results["chunk_hit_rate"] = calculate_chunk_hit_rate(
                         chunk_ids, expected_chunks
@@ -188,7 +189,7 @@ class BuiltinEvaluator(BaseEvaluator):
                         chunk_ids, expected_chunks, k=5
                     )
 
-            if expected_sources and expect_retrieval:
+            if expected_sources:
                 if equivalence_groups:
                     norm_retrieved = [normalize_source_with_equivalence(s, equivalence_groups, include_parent=True) for s in sources_for_retrieval]
                     norm_expected = [normalize_source_with_equivalence(s, equivalence_groups, include_parent=True) for s in expected_sources]
@@ -211,6 +212,11 @@ class BuiltinEvaluator(BaseEvaluator):
 
             if not expect_retrieval and not expected_sources and "false_positive_rate" in retrieval_metrics:
                 retrieval_results["false_positive_rate"] = calculate_false_positive_rate(
+                    sources_for_retrieval, k=5
+                )
+
+            if "retrieval_diversity" in retrieval_metrics and sources_for_retrieval:
+                retrieval_results["retrieval_diversity"] = calculate_retrieval_diversity(
                     sources_for_retrieval, k=5
                 )
 

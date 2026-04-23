@@ -18,9 +18,11 @@ from eval.metrics import (
     calculate_dedup_ndcg,
     calculate_faithfulness,
     calculate_false_positive_rate,
+    calculate_hallucination_rate,
     calculate_hit_rate,
     calculate_mrr,
     calculate_ndcg,
+    calculate_retrieval_diversity,
     deduplicate_by_document,
     normalize_source,
     normalize_source_with_equivalence,
@@ -1837,6 +1839,90 @@ class TestEquivalenceGroupDocumentMatching:
         retrieved = ["annual_report/中国建筑2023年年度报告摘要.md"]
         expected = ["中国建筑2023年年度报告.pdf"]
         assert calculate_hit_rate(retrieved, expected) == 0.0
+
+
+@pytest.mark.unit
+class TestRetrievalDiversity:
+
+    def test_all_same_document(self):
+        sources = [
+            "reports/doc_a.pdf",
+            "reports/doc_a.pdf",
+            "reports/doc_a.pdf",
+            "reports/doc_a.pdf",
+            "reports/doc_a.pdf",
+        ]
+        assert calculate_retrieval_diversity(sources, k=5) == pytest.approx(0.2)
+
+    def test_all_different_documents(self):
+        sources = [
+            "reports/doc_a.pdf",
+            "reports/doc_b.pdf",
+            "reports/doc_c.pdf",
+            "reports/doc_d.pdf",
+            "reports/doc_e.pdf",
+        ]
+        assert calculate_retrieval_diversity(sources, k=5) == pytest.approx(1.0)
+
+    def test_mixed_documents(self):
+        sources = [
+            "reports/doc_a.pdf",
+            "reports/doc_a.pdf",
+            "reports/doc_b.pdf",
+            "reports/doc_c.pdf",
+            "reports/doc_d.pdf",
+        ]
+        assert calculate_retrieval_diversity(sources, k=5) == pytest.approx(0.8)
+
+    def test_empty_sources(self):
+        assert calculate_retrieval_diversity([], k=5) == 0.0
+
+    def test_k_smaller_than_results(self):
+        sources = [
+            "reports/doc_a.pdf",
+            "reports/doc_a.pdf",
+            "reports/doc_b.pdf",
+        ]
+        assert calculate_retrieval_diversity(sources, k=2) == pytest.approx(0.5)
+
+    def test_normalizes_paths(self):
+        sources = [
+            "annual_report/doc_a.pdf",
+            "annual_report/doc_a.md",
+        ]
+        diversity = calculate_retrieval_diversity(sources, k=5)
+        assert diversity == pytest.approx(0.5)
+
+
+@pytest.mark.unit
+class TestHallucinationRate:
+
+    def test_no_hallucination(self):
+        scores = [1.0, 0.9, 0.8, 0.7, 0.6]
+        assert calculate_hallucination_rate(scores) == pytest.approx(0.0)
+
+    def test_all_hallucinated(self):
+        scores = [0.0, 0.1, 0.2, 0.3, 0.4]
+        assert calculate_hallucination_rate(scores) == pytest.approx(1.0)
+
+    def test_partial_hallucination(self):
+        scores = [1.0, 0.0, 0.8, 0.3, 0.9]
+        assert calculate_hallucination_rate(scores) == pytest.approx(0.4)
+
+    def test_custom_threshold(self):
+        scores = [0.9, 0.7, 0.6]
+        assert calculate_hallucination_rate(scores, threshold=0.8) == pytest.approx(2 / 3)
+
+    def test_empty_scores(self):
+        assert calculate_hallucination_rate([]) == 0.0
+
+    def test_none_scores_filtered(self):
+        scores = [1.0, None, 0.3, None]
+        assert calculate_hallucination_rate(scores) == pytest.approx(0.5)
+
+    def test_all_none_scores(self):
+        scores = [None, None]
+        assert calculate_hallucination_rate(scores) == 0.0
 
     def test_non_equivalent_documents_not_matched(self):
         groups = {

@@ -36,19 +36,24 @@ def calculate_hit_rate(
         ValueError: If mode is not 'standard' or 'recall'.
     """
     if mode not in ("standard", "recall"):
-        raise EvaluationError(f"mode must be 'standard' or 'recall', got '{mode}'")
+        raise EvaluationError(
+            f"mode must be 'standard' or 'recall', got '{mode}'")
 
     if not expected_sources:
         return 0.0
 
     if mode == "standard":
         top_k = retrieved_sources[:k]
-        top_k_set = set(normalize_source(s, include_parent=True) for s in top_k)
-        expected_set = set(normalize_source(s, include_parent=True) for s in expected_sources)
+        top_k_set = set(normalize_source(s, include_parent=True)
+                        for s in top_k)
+        expected_set = set(normalize_source(s, include_parent=True)
+                           for s in expected_sources)
         return 1.0 if top_k_set & expected_set else 0.0
 
-    retrieved_set = set(normalize_source(s, include_parent=True) for s in retrieved_sources)
-    expected_set = set(normalize_source(s, include_parent=True) for s in expected_sources)
+    retrieved_set = set(normalize_source(s, include_parent=True)
+                        for s in retrieved_sources)
+    expected_set = set(normalize_source(s, include_parent=True)
+                       for s in expected_sources)
     hits = len(retrieved_set & expected_set)
     return hits / len(expected_set)
 
@@ -88,7 +93,8 @@ def calculate_mrr(
     if not expected_sources:
         return 0.0
 
-    expected_set = set(normalize_source(s, include_parent=True) for s in expected_sources)
+    expected_set = set(normalize_source(s, include_parent=True)
+                       for s in expected_sources)
 
     for i, source in enumerate(retrieved_sources):
         if normalize_source(source, include_parent=True) in expected_set:
@@ -142,13 +148,16 @@ def calculate_ndcg(
     if not expected_sources:
         return 0.0
 
-    expected_normalized = [normalize_source(s, include_parent=True) for s in expected_sources]
+    expected_normalized = [normalize_source(
+        s, include_parent=True) for s in expected_sources]
     expected_set = set(expected_normalized)
 
     if relevance_scores is None:
-        relevance_scores = {normalize_source(s, include_parent=True): 1 for s in expected_sources}
+        relevance_scores = {normalize_source(
+            s, include_parent=True): 1 for s in expected_sources}
 
-    retrieved_normalized = [normalize_source(s, include_parent=True) for s in retrieved_sources[:k]]
+    retrieved_normalized = [normalize_source(
+        s, include_parent=True) for s in retrieved_sources[:k]]
 
     seen: set = set()
     unique_retrieved: list[str] = []
@@ -181,3 +190,27 @@ def calculate_ndcg(
     ndcg = dcg / ideal_dcg
 
     return min(1.0, max(0.0, ndcg))
+
+
+def calculate_retrieval_diversity(
+    retrieved_sources: list[str],
+    k: int = 5,
+) -> float:
+    """Calculate document diversity of retrieval results.
+
+    Measures the ratio of unique documents to total results in top-k.
+    A value of 1.0 means all top-k results come from different documents.
+    A value close to 0 means all results come from the same document.
+
+    Args:
+        retrieved_sources: List of retrieved source file paths.
+        k: Number of top results to consider. Defaults to 5.
+
+    Returns:
+        Diversity ratio as a float between 0.0 and 1.0.
+    """
+    top_k = retrieved_sources[:k]
+    if not top_k:
+        return 0.0
+    unique = len(set(normalize_source(s, include_parent=True) for s in top_k))
+    return unique / len(top_k)
