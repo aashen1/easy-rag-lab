@@ -1,0 +1,39 @@
+name: "baseline_evaluation"
+description: "基线评测 - 固定长度分块，无优化"
+
+data:
+  meal: "m1_10p"
+  create_if_missing:
+    sample_ratio: 0.1
+    seed: 107
+
+test_sets:
+  - name: "m1t1_q20"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 20
+
+variants:
+  - name: "baseline"
+    description: "基线配置 (chunk_size: 512, chunk_overlap: 0)"
+    config_overrides:
+      chunker:
+        strategy: "fixed"
+        chunk_size: 512
+        chunk_overlap: 0
+evaluation:
+  llm_preset: "default"
+  llm_report: true
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+
+llm:
+  question_generation: "default"
+  answering: "default"
