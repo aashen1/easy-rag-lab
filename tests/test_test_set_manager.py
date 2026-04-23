@@ -2412,3 +2412,170 @@ class TestMergeTestSets:
 
         question_ids = [q["id"] for q in result["questions"]]
         assert question_ids == ["q001", "q002", "q003"]
+
+
+class TestBoundaryConditions:
+    @pytest.fixture
+    def env(self, tmp_path):
+        config = _make_config(tmp_path)
+        manager = TestSetManager(config)
+        return manager, config
+
+    def test_save_test_set_missing_metadata_key_raises_key_error(self, env):
+        manager, config = env
+        _create_meal_dir(config, "my_meal")
+        data = {"questions": []}
+        with pytest.raises(KeyError):
+            manager.save_test_set("my_meal", data)
+
+    def test_save_test_set_missing_name_in_metadata_raises_key_error(self, env):
+        manager, config = env
+        _create_meal_dir(config, "my_meal")
+        data = {"metadata": {"meal_id": "abc"}, "questions": []}
+        with pytest.raises(KeyError):
+            manager.save_test_set("my_meal", data)
+
+    def test_find_by_name_corrupted_json_returns_none(self, env):
+        manager, config = env
+        _create_meal_dir(config, "my_meal")
+        test_sets_dir = Path(config["meals"]["dir"]) / "my_meal" / "test_sets"
+        bad_file = test_sets_dir / "corrupted.json"
+        with open(bad_file, "w", encoding="utf-8") as f:
+            f.write("not valid json")
+        result = manager.find_by_name("my_meal", "corrupted")
+        assert result is None
+
+    def test_list_test_sets_corrupted_json_skipped(self, env):
+        manager, config = env
+        _create_meal_dir(config, "my_meal")
+        test_sets_dir = Path(config["meals"]["dir"]) / "my_meal" / "test_sets"
+        bad_file = test_sets_dir / "corrupted.json"
+        with open(bad_file, "w", encoding="utf-8") as f:
+            f.write("not valid json")
+        manager.save_test_set("my_meal", _make_test_set_data("good_set"))
+        result = manager.list_test_sets("my_meal")
+        assert len(result) == 1
+        assert result[0]["name"] == "good_set"
+
+    def test_load_test_set_corrupted_json_raises_exception(self, env):
+        manager, config = env
+        _create_meal_dir(config, "my_meal")
+        test_sets_dir = Path(config["meals"]["dir"]) / "my_meal" / "test_sets"
+        bad_file = test_sets_dir / "corrupted.json"
+        with open(bad_file, "w", encoding="utf-8") as f:
+            f.write("not valid json")
+        with pytest.raises(Exception):
+            manager.load_test_set("my_meal", "corrupted")
+
+    def test_validate_test_set_missing_metadata_key_raises_key_error(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(data_id="abc")
+        test_set_data = {"questions": []}
+        with pytest.raises(KeyError):
+            manager.validate_test_set(test_set_data, meal_config)
+
+    def test_derive_test_set_name_none_config(self, env):
+        manager, config = env
+        name = manager._derive_test_set_name(None)
+        assert name.startswith("document_n")
+
+    def test_derive_test_set_name_with_strategy(self, env):
+        manager, config = env
+        generation_config = {"strategy": "chunk", "num_questions": 25}
+        name = manager._derive_test_set_name(generation_config)
+        assert name == "chunk_n25"
+
+    def test_derive_test_set_name_missing_strategy_defaults_to_document(self, env):
+        manager, config = env
+        generation_config = {"num_questions": 15}
+        name = manager._derive_test_set_name(generation_config)
+        assert name == "document_n15"
+
+    def test_derive_test_set_name_missing_num_questions_defaults_to_10(self, env):
+        manager, config = env
+        generation_config = {"strategy": "random"}
+        name = manager._derive_test_set_name(generation_config)
+        assert name == "random_n10"
+
+    def test_resolve_test_set_auto_derived_name(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(
+            data_id="current_meal",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+        _create_meal_dir(config, meal_config.name)
+
+        class MockGenerator:
+            def generate_document_based_questions(
+                self, meal_name, num_questions, name, llm_preset, token_tracker
+            ):
+                return {
+                    "metadata": {
+                        "name": name,
+                        "meal_id": "current_meal",
+                        "created_at": "2026-04-20T10:00:00",
+                        "updated_at": "2026-04-20T10:00:00",
+                    },
+                    "questions": [{"id": i, "question": f"Q{i}"} for i in range(num_questions)],
+                }
+
+        test_set_config = {
+            "on_missing": "auto",
+            "generation": {"strategy": "document", "num_questions": 5},
+        }
+        result = manager.resolve_test_set(
+            meal_name=meal_config.name,
+            test_set_config=test_set_config,
+            meal_config=meal_config,
+            generator=MockGenerator(),
+        )
+        assert result["metadata"]["name"] == "document_n5"
+
+    def test_resolve_test_set_auto_not_found_without_generator_raises_error(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(
+            data_id="current_meal",
+            pdf_paths=["reports/report_0.pdf"],
+        )
+        _create_meal_dir(config, meal_config.name)
+        test_set_config = {"name": "nonexistent", "on_missing": "auto"}
+        with pytest.raises(TestSetError, match="no generator provided"):
+            manager.resolve_test_set(
+                meal_name=meal_config.name,
+                test_set_config=test_set_config,
+                meal_config=meal_config,
+            )
+
+    def test_update_meal_id_persists_to_disk(self, env):
+        manager, config = env
+        _create_meal_dir(config, "my_meal")
+        data = _make_test_set_data("set_a", meal_id="old_id")
+        manager.save_test_set("my_meal", data)
+        manager.update_meal_id("my_meal", "set_a", "new_id_123")
+        loaded = manager.load_test_set("my_meal", "set_a")
+        assert loaded["metadata"]["meal_id"] == "new_id_123"
+
+    def test_check_questions_validity_empty_questions(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(data_id="abc")
+        result = manager._check_questions_validity([], meal_config)
+        assert result == []
+
+    def test_check_questions_validity_irrelevant_type_skipped(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(data_id="abc")
+        questions = [
+            {"id": 1, "question_type": "irrelevant", "source_files": ["nonexistent.pdf"]},
+        ]
+        result = manager._check_questions_validity(questions, meal_config)
+        assert result == []
+
+    def test_check_questions_validity_empty_source_files_skipped(self, env):
+        manager, config = env
+        meal_config = _make_meal_config(data_id="abc")
+        questions = [
+            {"id": 1, "source_files": []},
+            {"id": 2},
+        ]
+        result = manager._check_questions_validity(questions, meal_config)
+        assert result == []
