@@ -13,8 +13,8 @@
 | 类型 | 待处理 | 进行中 | 已完成 | 已延期 |
 |------|--------|--------|--------|--------|
 | Bug | 4 | 0 | 16 | 2 |
-| Feature | 15 | 0 | 21 | 0 |
-| Refactor | 10 | 0 | 13 | 0 |
+| Feature | 14 | 0 | 19 | 0 |
+| Refactor | 9 | 0 | 12 | 0 |
 | Optimization | 7 | 0 | 1 | 0 |
 | Investigation | 15 | 0 | 5 | 1 |
 | Test | 8 | 0 | 0 | 0 |
@@ -50,7 +50,7 @@
 | FEAT-005 | 语义分块 | [CLAUDE.md](../CLAUDE.md) | ✅ 已完成 | 中 | v0.1.8 已实现 |
 | FEAT-008 | test-future-directions 剩余方向落实 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 完成测试未来方向文档中的待办项 |
 | FEAT-010 | golden_qa 数据源适配指引 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 新用户部署指引：如何载入手头数据、做 meal、精调 golden_qa、跑保活测试 |
-| FEAT-011 | 补做 LLM 报告功能 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 实验跑完后补生成 LLM 总结报告 |
+| FEAT-011 | 补做 LLM 报告功能 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 新增 `--llm-report-only` CLI 参数，追溯生成 LLM 报告 |
 | FEAT-012 | 断点续传（实验中断恢复） | [TODO.md](../TODO.md) | 📋 待处理 | 大 | 支持实验中断后继续，需记录时间戳和基模变化 warning |
 | FEAT-013 | 部分评测支持 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 如仅评测 PDF→MD 环节，不停换提取策略对比 |
 | FEAT-014 | 透明版完整实验报告 | [TODO.md](../TODO.md) | 📋 待处理 | 大 | 含问题/答案/emb/recall/提示词/回复/指标计算过程 |
@@ -91,7 +91,7 @@
 | RF-015 | 更新 hyperparameter-guide.md 增加新解析链路讲解 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 新增 PDF 解析策略章节，介绍 pymupdf4llm 和 fitz_pdfplumber 两种解析器 |
 | RF-006 | TestSet 独立管理系统重构 | 设计文档 | ✅ 已完成 | 大 | 新增 TestSetManager，重构 prepare_test_sets，支持 on_missing 三种模式 |
 | RF-016 | Optional 类型使用规范化（统一为 Python 3.10+ 的 `\| None` 语法） | 深度审查 | 📋 待处理 | 小 | 部分使用 `Optional`，部分使用 `\| None`，建议统一为新语法 |
-| RF-017 | 自定义异常类型定义（RAGPipelineError、RetrievalError 等） | 深度审查 | 📋 待处理 | 小 | 当前使用通用 ValueError/Exception，建议定义业务异常 |
+| RF-017 | 自定义异常类型定义（RAGPipelineError、RetrievalError 等） | 深度审查 | ✅ 已完成 | 小 | 新增 src/exceptions.py，9个业务异常类，全项目替换 |
 | RF-018 | Pipeline 类职责拆分（当前 560 行承担全流程） | 深度审查 | 📋 待处理 | 大 | 可拆分为 PipelineOrchestrator + 各阶段 Stage 类 |
 
 ---
@@ -187,6 +187,7 @@
 | FEAT-016 | DATA_DIR 配置项支持 → load_config 自动解析 data/ 前缀路径 | [TODO.md](../TODO.md) | 2026-04-21 |
 | FEAT-019 | .trae 目录 plan/spec 文档定期归档机制 | [TODO.md](../TODO.md) | 2026-04-21 |
 | FEAT-029 | 项目记忆系统 Skill（project-memory） | [TODO.md](../TODO.md) | 2026-04-24 |
+| FEAT-011 | 补做 LLM 报告功能 | [TODO.md](../TODO.md) | 2026-04-24 |
 | FEAT-DONE-001 | 文档系统重构 | [原 TODO.md](../TODO.md) | 2026-04-18 |
 | FEAT-DONE-002 | LLM 报告功能修复 | [原 TODO.md](../TODO.md) | 2026-04-17 |
 | FEAT-DONE-003 | Token 统计功能 | [原 TODO.md](../TODO.md) | 2026-04-17 |
@@ -204,6 +205,7 @@
 | RF-005 | Anthropic 客户端统一抽象 → 提取 create_anthropic_client 到 src/llm_client.py | v0.1.7 合并验收 | 2026-04-21 |
 | RF-004 | 硬编码配置值提取到 config.yaml | v0.1.7 合并验收 | 2026-04-21 |
 | RF-009 | commit-rule 与 CLAUDE.md 渐进式披露 → 三层架构：commit-rule 23行+CLAUDE.md 3行+SKILL.md+docs/guides/commit-conventions.md | [TODO.md](../TODO.md) | 2026-04-22 |
+| RF-017 | 自定义异常类型定义 → 新增 src/exceptions.py，9个业务异常类，全项目替换 | 深度审查 | 2026-04-24 |
 
 ### Investigation
 
