@@ -2464,7 +2464,7 @@ class TestBoundaryConditions:
         bad_file = test_sets_dir / "corrupted.json"
         with open(bad_file, "w", encoding="utf-8") as f:
             f.write("not valid json")
-        with pytest.raises(Exception):
+        with pytest.raises(json.JSONDecodeError):
             manager.load_test_set("my_meal", "corrupted")
 
     def test_validate_test_set_missing_metadata_key_raises_key_error(self, env):
