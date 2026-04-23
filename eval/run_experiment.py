@@ -797,6 +797,7 @@ def _collect_rag_samples(
                 "difficulty": question_data.get("difficulty"),
                 "token_usage": response.get("token_usage"),
                 "expect_retrieval": question_data.get("expect_retrieval", True),
+                "expect_no_answer": question_data.get("expect_no_answer", False),
             }
 
             logger.success(
@@ -819,6 +820,7 @@ def _collect_rag_samples(
                 "equivalence_groups": equivalence_groups,
                 "question_type": question_data.get("question_type", "factual"),
                 "expect_retrieval": question_data.get("expect_retrieval", True),
+                "expect_no_answer": question_data.get("expect_no_answer", False),
                 "time_seconds": case_time,
                 "test_set": test_set_name,
                 "category": question_data.get("category"),
@@ -882,6 +884,7 @@ def _evaluate_with_builtin(
             expected_chunks=sample.get("expected_chunks"),
             equivalence_groups=sample.get("equivalence_groups"),
             expect_retrieval=sample.get("expect_retrieval", True),
+            expect_no_answer=sample.get("expect_no_answer", False),
             retrieved_sources=sample.get("retrieved_sources", []),
             question_type=sample.get("question_type"),
         )

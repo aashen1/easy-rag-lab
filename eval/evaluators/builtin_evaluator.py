@@ -107,6 +107,7 @@ class BuiltinEvaluator(BaseEvaluator):
         expected_chunks: list[str] | None = None,
         equivalence_groups: dict[str, list[str]] | None = None,
         expect_retrieval: bool = True,
+        expect_no_answer: bool = False,
         retrieved_sources: list[str] | None = None,
         question_type: str | None = None,
     ) -> EvaluationResult:
@@ -135,6 +136,9 @@ class BuiltinEvaluator(BaseEvaluator):
                 equivalent file paths for dedup normalization.
             expect_retrieval: Whether the question expects retrieval results.
                 Defaults to True. Set to False for irrelevant questions.
+            expect_no_answer: Whether the answer is not expected to be found
+                in the documents. Defaults to False. Set to True for missing
+                knowledge questions. When True, faithfulness is skipped.
             retrieved_sources: Optional list of retrieved source file paths.
                 Used for retrieval metrics (hit_rate, mrr, ndcg, dedup, FPR).
                 When not provided, falls back to contexts for backward
@@ -262,20 +266,23 @@ class BuiltinEvaluator(BaseEvaluator):
 
             if generation_metrics and llm_config:
                 if "faithfulness" in generation_metrics:
-                    try:
-                        faithfulness_score = calculate_faithfulness(
-                            answer=answer,
-                            contexts=contexts,
-                            api_key=llm_config["api_key"],
-                            base_url=llm_config["base_url"],
-                            model_name=llm_config["model_name"],
-                        )
-                        generation_results["faithfulness"] = faithfulness_score
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to calculate faithfulness for {question_id}: {str(e)}"
-                        )
+                    if expect_no_answer:
                         generation_results["faithfulness"] = None
+                    else:
+                        try:
+                            faithfulness_score = calculate_faithfulness(
+                                answer=answer,
+                                contexts=contexts,
+                                api_key=llm_config["api_key"],
+                                base_url=llm_config["base_url"],
+                                model_name=llm_config["model_name"],
+                            )
+                            generation_results["faithfulness"] = faithfulness_score
+                        except Exception as e:
+                            logger.error(
+                                f"Failed to calculate faithfulness for {question_id}: {str(e)}"
+                            )
+                            generation_results["faithfulness"] = None
 
                 if "answer_relevancy" in generation_metrics:
                     try:
@@ -349,6 +356,7 @@ class BuiltinEvaluator(BaseEvaluator):
                 expected_chunks=sample.get("expected_chunks"),
                 equivalence_groups=sample.get("equivalence_groups"),
                 expect_retrieval=sample.get("expect_retrieval", True),
+                expect_no_answer=sample.get("expect_no_answer", False),
                 retrieved_sources=sample.get("retrieved_sources"),
                 question_type=sample.get("question_type"),
             )
