@@ -1179,7 +1179,7 @@ def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
 
     metrics: dict[str, Any] = {}
 
-    valid_retrieval = [r for r in results if "retrieval" in r and r["retrieval"]]
+    valid_retrieval = [r for r in results if r.get("retrieval", {}).get("hit_rate") is not None]
     if valid_retrieval:
         for metric_name in ["hit_rate", "mrr", "ndcg"]:
             values = [
@@ -1283,7 +1283,7 @@ def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
     for qtype, group in type_groups.items():
         type_entry: dict[str, Any] = {"count": len(group)}
 
-        type_valid_retrieval = [r for r in group if "retrieval" in r and r["retrieval"]]
+        type_valid_retrieval = [r for r in group if r.get("retrieval", {}).get("hit_rate") is not None]
         for mn in ["hit_rate", "mrr", "ndcg", "retrieval_diversity"]:
             vals = [
                 r["retrieval"][mn]
