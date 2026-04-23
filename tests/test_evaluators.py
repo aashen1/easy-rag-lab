@@ -619,6 +619,43 @@ class TestBuiltinEvaluator:
         assert "retrieval_diversity" in result.retrieval_metrics
         assert result.retrieval_metrics["retrieval_diversity"] == pytest.approx(0.2)
 
+    def test_recall_3_5_10_metrics(self):
+        """Test recall_3, recall_5, recall_10 metrics."""
+        evaluator = BuiltinEvaluator()
+
+        result = evaluator.evaluate_single(
+            question_id="test_recall_001",
+            question="What is the revenue?",
+            answer="Revenue is $1M.",
+            contexts=["doc1.pdf", "doc2.pdf", "doc3.pdf", "doc4.pdf", "doc5.pdf"],
+            expected_sources=["doc1.pdf", "doc2.pdf", "doc6.pdf"],
+            retrieval_metrics=["recall_3", "recall_5", "recall_10"],
+        )
+
+        assert "recall_3" in result.retrieval_metrics
+        assert "recall_5" in result.retrieval_metrics
+        assert "recall_10" in result.retrieval_metrics
+        assert result.retrieval_metrics["recall_3"] == pytest.approx(2 / 3)
+        assert result.retrieval_metrics["recall_5"] == pytest.approx(2 / 3)
+        assert result.retrieval_metrics["recall_10"] == pytest.approx(2 / 3)
+
+    def test_recall_not_computed_when_expect_retrieval_false(self):
+        """Test that recall metrics are not computed for non-retrieval questions."""
+        evaluator = BuiltinEvaluator()
+
+        result = evaluator.evaluate_single(
+            question_id="test_recall_no_retrieval",
+            question="Tell me a joke.",
+            answer="I don't know.",
+            contexts=["doc1.pdf"],
+            expect_retrieval=False,
+            retrieval_metrics=["recall_3", "recall_5", "recall_10"],
+        )
+
+        assert "recall_3" not in result.retrieval_metrics
+        assert "recall_5" not in result.retrieval_metrics
+        assert "recall_10" not in result.retrieval_metrics
+
 
 class TestRagasEvaluator:
     """Tests for RagasEvaluator."""
