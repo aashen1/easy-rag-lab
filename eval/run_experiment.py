@@ -18,12 +18,11 @@ sys.path.insert(0, str(project_root))
 
 import contextlib
 
-from src.exceptions import ConfigurationError, EvaluationError, TestSetError
-
 from eval.evaluators.base import BaseEvaluator
 from eval.evaluators.builtin_evaluator import BuiltinEvaluator
 from eval.evaluators.ragas_evaluator import RagasEvaluator
 from eval.experiment_reporter import ExperimentReporter
+from src.exceptions import ConfigurationError, EvaluationError, TestSetError
 from src.experiment import (
     ExperimentConfig,
     ExperimentManager,

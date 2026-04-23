@@ -8,6 +8,7 @@ from typing import Any
 
 from loguru import logger
 
+from src.document_loader import LazyDocumentLoader
 from src.exceptions import TestSetError
 from src.generator import Generator
 from src.meal import ArtifactCache, MealConfig, MealManager
@@ -1154,7 +1155,8 @@ class TestSetGenerator:
 
         Resolves the parsed directory via the ArtifactCache first, falling
         back to the config-based ``parser.output_dir`` path. Supports both
-        .md and .pages.json formats.
+        .md and .pages.json formats using LazyDocumentLoader for efficient
+        on-demand loading.
 
         Args:
             meal_config: MealConfig object whose pdf_files determine the
@@ -1170,12 +1172,41 @@ class TestSetGenerator:
             logger.warning(f"Parsed directory not found: {parsed_dir}")
             return {}
 
-        has_pages_json = any(parsed_dir.rglob("*.pages.json"))
+        try:
+            loader = LazyDocumentLoader(parsed_dir)
+        except FileNotFoundError as e:
+            logger.error(f"Failed to initialize LazyDocumentLoader: {str(e)}")
+            return {}
 
-        if has_pages_json:
-            return self._load_pages_json_documents(parsed_dir, meal_config)
-        else:
-            return self._load_md_documents(parsed_dir, meal_config)
+        source_filter = set()
+        for mf in meal_config.pdf_files:
+            md_path = Path(mf.path).with_suffix(".md").as_posix()
+            pages_path = Path(mf.path).with_suffix(".pages.json").as_posix()
+            source_filter.add(md_path)
+            source_filter.add(pages_path)
+
+        documents: dict[str, dict[str, str]] = {}
+
+        for doc_name in loader.document_names:
+            try:
+                doc = loader.get(doc_name)
+                rel_path = Path(doc.source_path).relative_to(parsed_dir).as_posix()
+
+                if source_filter and rel_path not in source_filter:
+                    continue
+
+                documents[doc_name] = {
+                    "content": doc.content,
+                    "source_path": rel_path,
+                }
+                logger.debug(
+                    f"Loaded document: {doc_name} ({len(doc.content)} chars)"
+                )
+            except Exception as e:
+                logger.error(f"Failed to load document '{doc_name}': {str(e)}")
+                continue
+
+        return documents
 
     def _load_pages_json_documents(
         self, parsed_dir: Path, meal_config: MealConfig
