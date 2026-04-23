@@ -3,6 +3,7 @@ from typing import Any
 
 from loguru import logger
 
+from src.exceptions import GenerationError
 from src.llm_client import create_anthropic_client
 from src.token_tracker import (
     DetailedTokenUsage,
@@ -76,7 +77,7 @@ class Generator:
         except Exception as e:
             error_msg = f"Failed to initialize Anthropic client: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg) from e
+            raise GenerationError(error_msg) from e
 
     def _truncate_contexts(
         self,
@@ -179,7 +180,7 @@ class Generator:
         if not query or not isinstance(query, str):
             error_msg = "Query must be a non-empty string"
             logger.error(error_msg)
-            raise ValueError(error_msg)
+            raise GenerationError(error_msg)
 
         if not contexts:
             logger.warning("No contexts provided for generation")
@@ -256,7 +257,7 @@ class Generator:
         except Exception as e:
             error_msg = f"Failed to generate answer: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg) from e
+            raise GenerationError(error_msg) from e
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ from typing import Any
 
 from loguru import logger
 
+from src.exceptions import ConfigurationError, GenerationError
 from src.token_tracker import DetailedTokenUsage, TokenTracker
 
 
@@ -46,7 +47,7 @@ class QueryRewriter:
             ValueError: If strategy is not ``"hyde"`` or ``"multi_query"``.
         """
         if strategy not in ("hyde", "multi_query"):
-            raise ValueError(
+            raise ConfigurationError(
                 f"strategy must be 'hyde' or 'multi_query', got '{strategy}'"
             )
 
@@ -93,7 +94,7 @@ class QueryRewriter:
         if not query or not isinstance(query, str):
             error_msg = "Query must be a non-empty string"
             logger.error(error_msg)
-            raise ValueError(error_msg)
+            raise GenerationError(error_msg)
 
         try:
             if self.strategy == "hyde":
@@ -103,7 +104,7 @@ class QueryRewriter:
         except Exception as e:
             error_msg = f"Failed to rewrite query: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg) from e
+            raise GenerationError(error_msg) from e
 
     def _hyde_rewrite(self, query: str) -> dict[str, Any]:
         """Generate a hypothetical answer for HyDE retrieval.
@@ -229,7 +230,7 @@ class QueryRewriter:
         except Exception as e:
             error_msg = f"LLM call failed: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg) from e
+            raise GenerationError(error_msg) from e
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ from loguru import logger
 from src.bm25_retriever import BM25Retriever
 from src.chunker import process_parsed_files
 from src.embedder import Embedder
+from src.exceptions import RetrievalError
 from src.generator import Generator
 from src.hybrid_retriever import HybridRetriever
 from src.indexer import VectorIndexer
@@ -378,7 +379,7 @@ class RAGPipeline:
         if not question or not isinstance(question, str):
             error_msg = "Question must be a non-empty string"
             logger.error(error_msg)
-            raise ValueError(error_msg)
+            raise RetrievalError(error_msg)
 
         try:
             logger.info(f"Processing query: {question[:50]}...")
@@ -483,7 +484,7 @@ class RAGPipeline:
         except Exception as e:
             error_msg = f"Failed to process query: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg) from e
+            raise RetrievalError(error_msg) from e
 
 
 if __name__ == "__main__":

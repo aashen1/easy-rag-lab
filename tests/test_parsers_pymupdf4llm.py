@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
+from src.exceptions import ParsingError
 from src.parsers.base import ParseResult
 from src.parsers.pymupdf4llm_parser import PyMuPDF4LLMParser
 
@@ -109,7 +110,7 @@ class TestPyMuPDF4LLMParserPageChunks:
 class TestPyMuPDF4LLMParserFileNotFound:
     def test_raises_file_not_found_for_missing_file(self):
         parser = PyMuPDF4LLMParser()
-        with pytest.raises(FileNotFoundError) as exc_info:
+        with pytest.raises(ParsingError) as exc_info:
             parser.parse("nonexistent.pdf")
         assert "PDF file not found" in str(exc_info.value)
 
@@ -120,7 +121,7 @@ class TestPyMuPDF4LLMParserNotAPdf:
         txt_file.write_text("not a pdf")
 
         parser = PyMuPDF4LLMParser()
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ParsingError) as exc_info:
             parser.parse(str(txt_file))
         assert "File is not a PDF" in str(exc_info.value)
 
@@ -184,6 +185,6 @@ class TestPyMuPDF4LLMParserParseFailure:
         pdf_file.write_bytes(b"%PDF-1.4\ntest pdf content")
 
         parser = PyMuPDF4LLMParser()
-        with pytest.raises(Exception) as exc_info:
+        with pytest.raises(ParsingError) as exc_info:
             parser.parse(str(pdf_file))
         assert "Failed to parse PDF" in str(exc_info.value)

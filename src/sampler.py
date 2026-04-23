@@ -5,6 +5,8 @@ from pathlib import Path
 import fitz
 from loguru import logger
 
+from src.exceptions import ConfigurationError, ParsingError
+
 
 @dataclass
 class SamplingConfig:
@@ -29,17 +31,17 @@ class SamplingConfig:
     def __post_init__(self) -> None:
         valid_modes = {"count", "pages", "ratio"}
         if self.mode not in valid_modes:
-            raise ValueError(
+            raise ConfigurationError(
                 f"Invalid sampling mode '{self.mode}', must be one of {valid_modes}"
             )
 
         if self.mode in ("count", "pages") and (not isinstance(self.value, int) or self.value <= 0):
-            raise ValueError(
+            raise ConfigurationError(
                 f"Value for mode '{self.mode}' must be a positive integer, got {self.value}"
             )
 
         if self.mode == "ratio" and (not isinstance(self.value, int | float) or not (0.0 < self.value <= 1.0)):
-            raise ValueError(
+            raise ConfigurationError(
                 f"Value for mode 'ratio' must be a float in (0.0, 1.0], got {self.value}"
             )
 
@@ -64,7 +66,7 @@ def count_pdf_pages(pdf_path: Path) -> int:
     except Exception as e:
         error_msg = f"Failed to count pages in {pdf_path}: {str(e)}"
         logger.error(error_msg)
-        raise Exception(error_msg) from e
+        raise ParsingError(error_msg) from e
 
 
 def determine_sample(
@@ -83,7 +85,7 @@ def determine_sample(
         ValueError: If pdf_files is empty.
     """
     if not pdf_files:
-        raise ValueError("Cannot sample from an empty list of PDF files")
+        raise ConfigurationError("Cannot sample from an empty list of PDF files")
 
     total = len(pdf_files)
     logger.info(f"Sampling from {total} PDF files (mode={config.mode}, value={config.value})")

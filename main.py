@@ -4,6 +4,7 @@ from typing import Any, Dict
 
 from loguru import logger
 
+from src.exceptions import ConfigurationError
 from src.meal import MealManager, MealStatus, validate_meal_name
 from src.pipeline import RAGPipeline
 from src.sampler import SamplingConfig
@@ -110,6 +111,12 @@ def main():
         help="Name for the test set (new format)",
     )
 
+    report_group = parser.add_argument_group("Report generation")
+    report_group.add_argument(
+        "--llm-report-only", type=str, metavar="EXP_DIR",
+        help="Generate LLM report for a completed experiment directory"
+    )
+
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -131,6 +138,7 @@ def main():
         or args.extend_meal
         or args.merge_test_sets
         or args.meal
+        or args.llm_report_only
     )
 
     if not has_action:
@@ -170,6 +178,18 @@ def main():
 
     if args.generate_test_set:
         _handle_generate_test_set(meal_manager, config, args)
+        return
+
+    if args.llm_report_only:
+        try:
+            from eval.run_experiment import generate_llm_report_only
+            generate_llm_report_only(args.llm_report_only, args.config)
+        except ConfigurationError as e:
+            logger.error(str(e))
+            sys.exit(1)
+        except Exception as e:
+            logger.error(f"Failed to generate LLM report: {str(e)}")
+            sys.exit(1)
         return
 
     if args.merge_meals:

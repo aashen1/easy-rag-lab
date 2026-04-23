@@ -10,7 +10,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import yaml
 from loguru import logger
+
+from src.exceptions import ConfigurationError, EvaluationError, TestSetError
 
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
@@ -138,7 +141,7 @@ def verify_experiment_assets(
         FileNotFoundError: If the experiment directory does not exist.
     """
     if not exp_dir.exists():
-        raise FileNotFoundError(f"Experiment directory not found: {exp_dir}")
+        raise ConfigurationError(f"Experiment directory not found: {exp_dir}")
 
     missing_files = []
     invalid_files = []
@@ -313,7 +316,7 @@ def prepare_meal(
     meal_name = exp_config.data.get("meal")
 
     if not meal_name:
-        raise ValueError("Experiment configuration must specify a meal name in data.meal field")
+        raise ConfigurationError("Experiment configuration must specify a meal name in data.meal field")
 
     if meal_manager.meal_exists(meal_name):
         logger.info(f"Meal '{meal_name}' found, loading...")
@@ -343,13 +346,13 @@ def prepare_meal(
 
     create_config = exp_config.data.get("create_if_missing")
     if not create_config:
-        raise FileNotFoundError(
+        raise ConfigurationError(
             f"Meal '{meal_name}' not found and create_if_missing is not configured. "
             "Please create the meal first or add create_if_missing configuration."
         )
 
     if skip_preprocessing:
-        raise FileNotFoundError(
+        raise ConfigurationError(
             f"Meal '{meal_name}' not found and skip_preprocessing is enabled. "
             "Cannot create meal in skip_preprocessing mode."
         )
@@ -453,7 +456,7 @@ def _prepare_legacy_test_set(
                     f"{num_questions - existing_count} more questions."
                 )
                 if skip_preprocessing:
-                    raise FileNotFoundError(
+                    raise TestSetError(
                         f"Test set '{filename}' has insufficient questions "
                         f"({existing_count}/{num_questions}) and "
                         f"skip_preprocessing is enabled. "
@@ -502,7 +505,7 @@ def _prepare_legacy_test_set(
             logger.warning(f"Failed to load test set '{filename}': {str(e)}, will regenerate")
 
     if skip_preprocessing:
-        raise FileNotFoundError(
+        raise TestSetError(
             f"Test set '{filename}' not found and skip_preprocessing is enabled. "
             "Cannot generate test set in skip_preprocessing mode."
         )
@@ -578,14 +581,14 @@ def prepare_test_sets(
                 name = test_set_config.get("name")
                 test_set_data = test_set_manager.find_by_name(meal_name, name)
                 if test_set_data is None:
-                    raise FileNotFoundError(
+                    raise TestSetError(
                         f"Test set '{name}' not found and skip_preprocessing is enabled."
                     )
                 is_valid, invalid_qs = test_set_manager.validate_test_set(
                     test_set_data, meal_config
                 )
                 if not is_valid:
-                    raise ValueError(
+                    raise TestSetError(
                         f"Test set '{name}' is invalid and skip_preprocessing is enabled."
                     )
             else:
@@ -1027,7 +1030,7 @@ def evaluate_test_set(
         ValueError: If exp_config or system_config is not provided.
     """
     if exp_config is None or system_config is None:
-        raise ValueError(
+        raise ConfigurationError(
             "exp_config and system_config are required for evaluation. "
             "Please use run_experiment.py with a valid experiment configuration."
         )
@@ -1420,6 +1423,85 @@ def run_variant_evaluation(
             with contextlib.suppress(Exception):
                 pipeline.close()
         raise
+
+
+def generate_llm_report_only(exp_dir: str, system_config_path: str = "config.yaml") -> None:
+    """Generate LLM report for an already-completed experiment.
+
+    Loads the experiment results from the given directory and generates
+    an LLM-enhanced report without re-running the experiment.
+
+    Args:
+        exp_dir: Path to the experiment directory.
+        system_config_path: Path to system configuration file.
+
+    Raises:
+        ConfigurationError: If the experiment directory or required files are missing.
+    """
+    exp_path = Path(exp_dir)
+    if not exp_path.exists():
+        raise ConfigurationError(f"Experiment directory not found: {exp_dir}")
+
+    manifest_path = exp_path / "manifest.json"
+    if not manifest_path.exists():
+        raise ConfigurationError(f"Manifest file not found: {manifest_path}")
+
+    system_config = load_config(system_config_path)
+    setup_logger(system_config)
+
+    exp_manager = ExperimentManager(system_config)
+    exp_result = exp_manager.load_experiment_result(exp_path)
+
+    variant_results = []
+    results_dir = exp_path / "results"
+    if results_dir.exists():
+        for result_file in sorted(results_dir.glob("*.json")):
+            try:
+                with open(result_file, encoding="utf-8") as f:
+                    variant_results.append(json.load(f))
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to load variant result {result_file}: {str(e)}")
+
+    if not variant_results:
+        raise ConfigurationError(f"No variant results found in {exp_dir}")
+
+    meal_info = {"config": exp_result.config} if exp_result.config else {}
+
+    config_snapshot = {}
+    config_path = exp_path / "config_snapshot.yaml"
+    if config_path.exists():
+        try:
+            with open(config_path, encoding="utf-8") as f:
+                config_snapshot = yaml.safe_load(f) or {}
+        except yaml.YAMLError as e:
+            logger.warning(f"Failed to load config snapshot: {str(e)}")
+
+    llm_preset_name = config_snapshot.get("evaluation", {}).get("llm_preset", "default")
+    llm_config = get_llm_config(system_config, llm_preset_name)
+
+    token_tracker = TokenTracker()
+
+    reporter = ExperimentReporter(
+        llm_api_key=llm_config.get("api_key"),
+        llm_base_url=llm_config.get("base_url"),
+        llm_model_name=llm_config.get("model_name"),
+        token_tracker=token_tracker,
+    )
+
+    logger.info("Generating LLM-enhanced report...")
+    try:
+        reporter.generate_variant_comparison_report(
+            exp_dir=exp_path,
+            variant_results=variant_results,
+            meal_info=meal_info,
+            config_snapshot=config_snapshot,
+            output_filename="experiment_report_llm.md",
+            use_llm=True,
+        )
+        logger.success("LLM-enhanced report generated successfully")
+    except Exception as e:
+        logger.error(f"Failed to generate LLM report: {str(e)}")
+        raise EvaluationError(f"Failed to generate LLM report: {str(e)}") from e
 
 
 def run_experiment(
@@ -2165,7 +2247,7 @@ def reproduce_experiment(
     exp_path = Path(exp_dir)
 
     if not exp_path.exists():
-        raise FileNotFoundError(f"Experiment directory not found: {exp_dir}")
+        raise ConfigurationError(f"Experiment directory not found: {exp_dir}")
 
     system_config = load_config(system_config_path)
 
@@ -2200,13 +2282,13 @@ def reproduce_experiment(
 
             print("\nUse --skip-verification to bypass this check.")
             print("=" * 60 + "\n")
-            raise ValueError("Asset verification failed. See details above.")
+            raise EvaluationError("Asset verification failed. See details above.")
     else:
         logger.warning("Skipping asset verification (--skip-verification)")
 
     config_path = exp_path / "config_snapshot.yaml"
     if not config_path.exists():
-        raise FileNotFoundError(f"Configuration snapshot not found: {config_path}")
+        raise ConfigurationError(f"Configuration snapshot not found: {config_path}")
 
     logger.info(f"Reproducing experiment from: {exp_dir}")
     logger.info("Note: Results may differ due to LLM randomness.")

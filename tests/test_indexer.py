@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+from src.exceptions import IndexingError
 from src.indexer import VectorIndexer
 
 
@@ -67,14 +68,14 @@ class TestVectorIndexer:
         indexer = VectorIndexer(persist_dir=str(temp_project_dir / "data" / "vector_store"))
         chunks = [{"text": "hello"}]
         embeddings = np.array([[0.1], [0.2]], dtype=np.float32)
-        with pytest.raises(ValueError, match="does not match"):
+        with pytest.raises(IndexingError, match="does not match"):
             indexer.index_chunks(chunks, embeddings)
 
     @patch("src.indexer.QdrantClient")
     def test_build_index_dir_not_exists(self, mock_qdrant_class, mock_qdrant_client, temp_project_dir):
         mock_qdrant_class.return_value = mock_qdrant_client
         indexer = VectorIndexer(persist_dir=str(temp_project_dir / "data" / "vector_store"))
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(IndexingError):
             indexer.build_index("/nonexistent/path", embedder=MagicMock())
 
     @patch("src.indexer.QdrantClient")

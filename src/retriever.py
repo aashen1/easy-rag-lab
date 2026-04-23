@@ -3,6 +3,7 @@ from typing import Any
 from loguru import logger
 
 from src.embedder import Embedder
+from src.exceptions import RetrievalError
 from src.indexer import VectorIndexer
 
 
@@ -51,7 +52,7 @@ class Retriever:
         if not query or not isinstance(query, str):
             error_msg = "Query must be a non-empty string"
             logger.error(error_msg)
-            raise ValueError(error_msg)
+            raise RetrievalError(error_msg)
 
         try:
             logger.info(f"Retrieving top-{self.top_k} results for query: {query[:50]}...")
@@ -92,7 +93,7 @@ class Retriever:
         except Exception as e:
             error_msg = f"Failed to retrieve results: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg) from e
+            raise RetrievalError(error_msg) from e
 
 
 if __name__ == "__main__":

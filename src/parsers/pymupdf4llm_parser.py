@@ -5,6 +5,7 @@ from pathlib import Path
 import pymupdf4llm
 from loguru import logger
 
+from src.exceptions import ParsingError
 from src.parsers.base import BaseParser, ParsedPage, ParseResult
 
 
@@ -59,11 +60,11 @@ class PyMuPDF4LLMParser(BaseParser):
         if not pdf_file.exists():
             error_msg = f"PDF file not found: {pdf_path}"
             logger.error(error_msg)
-            raise FileNotFoundError(error_msg)
+            raise ParsingError(error_msg)
         if pdf_file.suffix.lower() != ".pdf":
             error_msg = f"File is not a PDF: {pdf_path}"
             logger.error(error_msg)
-            raise ValueError(error_msg)
+            raise ParsingError(error_msg)
 
         page_chunks = self._config.get("page_chunks", False)
 
@@ -97,4 +98,4 @@ class PyMuPDF4LLMParser(BaseParser):
         except Exception as e:
             error_msg = f"Failed to parse PDF {pdf_path}: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg) from e
+            raise ParsingError(error_msg) from e

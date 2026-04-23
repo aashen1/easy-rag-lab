@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from src.exceptions import ParsingError
 from src.parsers.base import BaseParser, ParsedPage, ParseResult
 from src.parsers.registry import ParserRegistry
 
@@ -38,7 +39,7 @@ class TestParserRegistry:
         assert "fitz_pdfplumber" in names
 
     def test_get_unknown_raises_value_error(self) -> None:
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ParsingError) as exc_info:
             ParserRegistry.get("unknown_parser")
         assert "unknown_parser" in str(exc_info.value)
 
@@ -62,5 +63,5 @@ class TestParserRegistry:
         assert parser.name == "custom"
 
     def test_register_non_subclass_raises_type_error(self) -> None:
-        with pytest.raises(TypeError):
+        with pytest.raises(ParsingError):
             ParserRegistry.register("bad", object)

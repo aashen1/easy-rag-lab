@@ -4,6 +4,7 @@ from loguru import logger
 
 from src.bm25_retriever import BM25Retriever
 from src.embedder import Embedder
+from src.exceptions import RetrievalError
 from src.indexer import VectorIndexer
 from src.retriever import Retriever
 
@@ -48,12 +49,12 @@ class HybridRetriever:
             ValueError: If vector_weight + bm25_weight is close to zero.
         """
         if fusion_method not in ("rrf", "weighted"):
-            raise ValueError(
+            raise RetrievalError(
                 f"fusion_method must be 'rrf' or 'weighted', got '{fusion_method}'"
             )
 
         if abs(vector_weight + bm25_weight) < 1e-9:
-            raise ValueError("vector_weight + bm25_weight must not be zero")
+            raise RetrievalError("vector_weight + bm25_weight must not be zero")
 
         self.vector_retriever = vector_retriever
         self.bm25_retriever = bm25_retriever
@@ -83,7 +84,7 @@ class HybridRetriever:
         if not query or not isinstance(query, str):
             error_msg = "Query must be a non-empty string"
             logger.error(error_msg)
-            raise ValueError(error_msg)
+            raise RetrievalError(error_msg)
 
         try:
             logger.info(
@@ -107,7 +108,7 @@ class HybridRetriever:
         except Exception as e:
             error_msg = f"Failed to retrieve hybrid results: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg) from e
+            raise RetrievalError(error_msg) from e
 
     def _rrf_fusion(
         self,

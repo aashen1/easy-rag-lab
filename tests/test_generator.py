@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
+from src.exceptions import GenerationError
 from src.generator import Generator
 from src.token_tracker import TokenTracker
 
@@ -24,14 +25,14 @@ class TestGenerator:
     def test_generate_empty_query(self, mock_anthropic_cls, mock_anthropic_client):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
-        with pytest.raises(ValueError, match="Query must be a non-empty string"):
+        with pytest.raises(GenerationError, match="Query must be a non-empty string"):
             generator.generate(query="", contexts=["some context"])
 
     @patch("src.llm_client.Anthropic")
     def test_generate_non_string_query(self, mock_anthropic_cls, mock_anthropic_client):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
-        with pytest.raises(ValueError, match="Query must be a non-empty string"):
+        with pytest.raises(GenerationError, match="Query must be a non-empty string"):
             generator.generate(query=123, contexts=["some context"])
 
     @patch("src.llm_client.Anthropic")
@@ -48,7 +49,7 @@ class TestGenerator:
         mock_anthropic_client.messages.create.side_effect = Exception("API timeout")
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
-        with pytest.raises(Exception, match="Failed to generate answer"):
+        with pytest.raises(GenerationError, match="Failed to generate answer"):
             generator.generate(query="What is the revenue?", contexts=["some context"])
 
     @patch("src.llm_client.Anthropic")

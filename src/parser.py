@@ -4,6 +4,7 @@ from pathlib import Path
 import pymupdf4llm
 from loguru import logger
 
+from src.exceptions import ParsingError
 from src.utils import detect_document_category, ensure_dir
 
 
@@ -35,12 +36,12 @@ def parse_pdf(pdf_path: str, page_chunks: bool = False, **kwargs) -> str | list[
     if not pdf_file.exists():
         error_msg = f"PDF file not found: {pdf_path}"
         logger.error(error_msg)
-        raise FileNotFoundError(error_msg)
+        raise ParsingError(error_msg)
 
     if pdf_file.suffix.lower() != ".pdf":
         error_msg = f"File is not a PDF: {pdf_path}"
         logger.error(error_msg)
-        raise ValueError(error_msg)
+        raise ParsingError(error_msg)
 
     try:
         logger.info(f"Parsing PDF: {pdf_path}")
@@ -53,7 +54,7 @@ def parse_pdf(pdf_path: str, page_chunks: bool = False, **kwargs) -> str | list[
     except Exception as e:
         error_msg = f"Failed to parse PDF {pdf_path}: {str(e)}"
         logger.error(error_msg)
-        raise Exception(error_msg) from e
+        raise ParsingError(error_msg) from e
 
 
 def parse_all_pdfs(
@@ -100,7 +101,7 @@ def parse_all_pdfs(
     if not input_path.exists():
         error_msg = f"Input directory not found: {input_dir}"
         logger.error(error_msg)
-        raise FileNotFoundError(error_msg)
+        raise ParsingError(error_msg)
 
     output_path = ensure_dir(output_dir)
 

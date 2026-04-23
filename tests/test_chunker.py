@@ -10,6 +10,7 @@ from src.chunker import (
     process_parsed_files,
     process_parsed_files_page_aware,
 )
+from src.exceptions import ParsingError
 
 
 class TestExtractHeadings:
@@ -91,7 +92,7 @@ class TestChunkText:
 
 class TestProcessParsedFiles:
     def test_process_parsed_files_input_dir_not_found(self):
-        with pytest.raises(FileNotFoundError) as exc_info:
+        with pytest.raises(ParsingError) as exc_info:
             process_parsed_files("nonexistent_dir", "output_dir")
         assert "Input directory not found" in str(exc_info.value)
 
@@ -422,7 +423,7 @@ class TestChunkTextPageAware:
                 "tables": [],
             }
         ]
-        with pytest.raises(ValueError, match="Overlap"):
+        with pytest.raises(ParsingError, match="Overlap"):
             chunk_text_page_aware(
                 page_chunks, source_name="test", chunk_size=50, overlap=50
             )
@@ -446,7 +447,7 @@ class TestProcessParsedFilesPageAware:
         ]
 
     def test_input_dir_not_found(self):
-        with pytest.raises(FileNotFoundError) as exc_info:
+        with pytest.raises(ParsingError) as exc_info:
             process_parsed_files_page_aware("nonexistent_dir", "output_dir")
         assert "Input directory not found" in str(exc_info.value)
 

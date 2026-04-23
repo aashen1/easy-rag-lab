@@ -5,6 +5,8 @@ from loguru import logger
 from tqdm import tqdm
 from transformers import AutoModel, AutoTokenizer
 
+from src.exceptions import ConfigurationError, IndexingError
+
 
 class Embedder:
     def __init__(
@@ -68,7 +70,7 @@ class Embedder:
         except Exception as e:
             error_msg = f"Failed to load embedding model {model_name}: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg) from e
+            raise IndexingError(error_msg) from e
 
     def _encode_batch(
         self, texts: list[str], batch_size: int, max_length: int = 512, show_progress: bool = False
@@ -146,7 +148,7 @@ class Embedder:
         if not all(isinstance(text, str) for text in texts):
             error_msg = "All items in texts must be strings"
             logger.error(error_msg)
-            raise ValueError(error_msg)
+            raise ConfigurationError(error_msg)
 
         try:
             logger.info(f"Embedding {len(texts)} texts with batch size {batch_size}")
@@ -160,7 +162,7 @@ class Embedder:
         except Exception as e:
             error_msg = f"Failed to embed texts: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg) from e
+            raise IndexingError(error_msg) from e
 
     def embed_query(self, query: str) -> np.ndarray:
         """Generate an embedding for a single query string.
@@ -183,7 +185,7 @@ class Embedder:
         if not query or not isinstance(query, str):
             error_msg = "Query must be a non-empty string"
             logger.error(error_msg)
-            raise ValueError(error_msg)
+            raise ConfigurationError(error_msg)
 
         try:
             prefixed_query = query
@@ -202,7 +204,7 @@ class Embedder:
         except Exception as e:
             error_msg = f"Failed to embed query: {str(e)}"
             logger.error(error_msg)
-            raise Exception(error_msg) from e
+            raise IndexingError(error_msg) from e
 
     def get_embedding_dimension(self) -> int:
         """Return the embedding dimension of the loaded model.

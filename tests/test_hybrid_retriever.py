@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.bm25_retriever import BM25Retriever
+from src.exceptions import RetrievalError
 from src.hybrid_retriever import HybridRetriever
 from src.retriever import Retriever
 
@@ -64,7 +65,7 @@ class TestHybridRetriever:
 
     def test_invalid_fusion_method_raises(self):
         vector_ret, bm25_ret = self._make_mock_retrievers()
-        with pytest.raises(ValueError, match="fusion_method must be"):
+        with pytest.raises(RetrievalError, match="fusion_method must be"):
             HybridRetriever(
                 vector_retriever=vector_ret,
                 bm25_retriever=bm25_ret,
@@ -73,7 +74,7 @@ class TestHybridRetriever:
 
     def test_zero_weights_raises(self):
         vector_ret, bm25_ret = self._make_mock_retrievers()
-        with pytest.raises(ValueError, match="vector_weight.*bm25_weight.*must not be zero"):
+        with pytest.raises(RetrievalError, match="vector_weight.*bm25_weight.*must not be zero"):
             HybridRetriever(
                 vector_retriever=vector_ret,
                 bm25_retriever=bm25_ret,
@@ -183,7 +184,7 @@ class TestHybridRetriever:
             bm25_retriever=bm25_ret,
         )
 
-        with pytest.raises(ValueError, match="Query must be a non-empty string"):
+        with pytest.raises(RetrievalError, match="Query must be a non-empty string"):
             hybrid.retrieve("")
 
     def test_normalize_scores_empty_dict(self):

@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.exceptions import TestSetError
 from src.test_generator import TestSetGenerator
 
 
@@ -946,7 +947,7 @@ class TestGenerateDocumentBasedQuestionsSupplemental:
                 "base_url": "http://test",
             },
         ):
-            with pytest.raises(ValueError, match="No questions could be generated"):
+            with pytest.raises(TestSetError, match="No questions could be generated"):
                 self.generator.generate_document_based_questions(
                     meal_name="test_meal",
                     num_questions=5,

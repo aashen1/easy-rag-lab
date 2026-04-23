@@ -4,6 +4,8 @@ from typing import Any
 
 from loguru import logger
 
+from src.exceptions import EvaluationError
+
 try:
     import matplotlib
     matplotlib.use("Agg")
@@ -31,11 +33,11 @@ def load_experiment_results(exp_dir: str) -> dict[str, Any]:
     exp_path = Path(exp_dir)
 
     if not exp_path.exists():
-        raise FileNotFoundError(f"Experiment directory not found: {exp_dir}")
+        raise EvaluationError(f"Experiment directory not found: {exp_dir}")
 
     manifest_path = exp_path / "manifest.json"
     if not manifest_path.exists():
-        raise FileNotFoundError(f"Manifest not found: {manifest_path}")
+        raise EvaluationError(f"Manifest not found: {manifest_path}")
 
     with open(manifest_path, encoding="utf-8") as f:
         manifest = json.load(f)
@@ -112,7 +114,7 @@ def plot_metrics_comparison(
     """
     if not HAS_MATPLOTLIB:
         logger.error("matplotlib is required for visualization. Install with: pixi add matplotlib")
-        raise ImportError("matplotlib is not available")
+        raise EvaluationError("matplotlib is not available")
 
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -200,7 +202,7 @@ def plot_metric_trend(
         ImportError: If matplotlib is not available.
     """
     if not HAS_MATPLOTLIB:
-        raise ImportError("matplotlib is not available")
+        raise EvaluationError("matplotlib is not available")
 
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)

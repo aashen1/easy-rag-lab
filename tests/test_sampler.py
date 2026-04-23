@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.exceptions import ConfigurationError, ParsingError
 from src.sampler import SamplingConfig, count_pdf_pages, determine_sample
 
 
@@ -27,35 +28,35 @@ class TestSamplingConfig:
         assert config.value == 1.0
 
     def test_invalid_mode(self):
-        with pytest.raises(ValueError, match="Invalid sampling mode"):
+        with pytest.raises(ConfigurationError, match="Invalid sampling mode"):
             SamplingConfig(mode="invalid", value=10)
 
     def test_count_mode_zero(self):
-        with pytest.raises(ValueError, match="must be a positive integer"):
+        with pytest.raises(ConfigurationError, match="must be a positive integer"):
             SamplingConfig(mode="count", value=0)
 
     def test_count_mode_negative(self):
-        with pytest.raises(ValueError, match="must be a positive integer"):
+        with pytest.raises(ConfigurationError, match="must be a positive integer"):
             SamplingConfig(mode="count", value=-5)
 
     def test_count_mode_float(self):
-        with pytest.raises(ValueError, match="must be a positive integer"):
+        with pytest.raises(ConfigurationError, match="must be a positive integer"):
             SamplingConfig(mode="count", value=5.5)
 
     def test_pages_mode_zero(self):
-        with pytest.raises(ValueError, match="must be a positive integer"):
+        with pytest.raises(ConfigurationError, match="must be a positive integer"):
             SamplingConfig(mode="pages", value=0)
 
     def test_ratio_mode_zero(self):
-        with pytest.raises(ValueError, match="must be a float in"):
+        with pytest.raises(ConfigurationError, match="must be a float in"):
             SamplingConfig(mode="ratio", value=0.0)
 
     def test_ratio_mode_negative(self):
-        with pytest.raises(ValueError, match="must be a float in"):
+        with pytest.raises(ConfigurationError, match="must be a float in"):
             SamplingConfig(mode="ratio", value=-0.1)
 
     def test_ratio_mode_over_one(self):
-        with pytest.raises(ValueError, match="must be a float in"):
+        with pytest.raises(ConfigurationError, match="must be a float in"):
             SamplingConfig(mode="ratio", value=1.5)
 
 
@@ -74,14 +75,14 @@ class TestCountPdfPages:
     def test_count_pages_failure(self, mock_fitz):
         mock_fitz.open.side_effect = Exception("Cannot open file")
 
-        with pytest.raises(Exception, match="Failed to count pages"):
+        with pytest.raises(ParsingError, match="Failed to count pages"):
             count_pdf_pages(Path("bad.pdf"))
 
 
 class TestDetermineSample:
     def test_empty_pdf_list_raises(self):
         config = SamplingConfig(mode="count", value=5)
-        with pytest.raises(ValueError, match="Cannot sample from an empty list"):
+        with pytest.raises(ConfigurationError, match="Cannot sample from an empty list"):
             determine_sample([], config)
 
     def test_count_mode_basic(self):

@@ -6,6 +6,7 @@ import numpy as np
 import tiktoken
 from loguru import logger
 
+from src.exceptions import ParsingError
 from src.utils import detect_document_category, ensure_dir
 
 
@@ -166,14 +167,14 @@ def chunk_text_semantic(
         return []
 
     if embedder is None:
-        raise ValueError("Embedder is required for semantic chunking")
+        raise ParsingError("Embedder is required for semantic chunking")
 
     try:
         encoding = tiktoken.get_encoding(encoding_name)
     except Exception as e:
         error_msg = f"Failed to load tiktoken encoding {encoding_name}: {str(e)}"
         logger.error(error_msg)
-        raise Exception(error_msg) from e
+        raise ParsingError(error_msg) from e
 
     sentences = _split_into_sentences(text)
 
@@ -374,7 +375,7 @@ def process_parsed_files_semantic(
     if not input_path.exists():
         error_msg = f"Input directory not found: {input_dir}"
         logger.error(error_msg)
-        raise FileNotFoundError(error_msg)
+        raise ParsingError(error_msg)
 
     output_path = ensure_dir(output_dir)
 
