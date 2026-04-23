@@ -6,6 +6,8 @@ This module tests the evaluator base classes and implementations.
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from eval.evaluators.base import EvaluationResult
 from eval.evaluators.builtin_evaluator import BuiltinEvaluator
 from eval.evaluators.ragas_evaluator import RagasEvaluator
@@ -131,7 +133,9 @@ class TestBuiltinEvaluator:
             contexts=["doc1.pdf", "doc2.pdf"],
         )
 
-        assert result.retrieval_metrics == {}
+        assert "hit_rate" not in result.retrieval_metrics
+        assert "mrr" not in result.retrieval_metrics
+        assert "ndcg" not in result.retrieval_metrics
 
     def test_validate_metrics(self):
         """Test metric validation."""
@@ -325,7 +329,7 @@ class TestBuiltinEvaluator:
         assert result.retrieval_metrics["context_precision"] is None
 
     def test_evaluate_single_no_retrieval_for_irrelevant_question(self):
-        """Test that basic retrieval metrics are skipped for irrelevant questions."""
+        """Test that basic retrieval metrics are skipped for truly irrelevant questions (no expected_sources)."""
         evaluator = BuiltinEvaluator()
 
         result = evaluator.evaluate_single(
@@ -333,14 +337,15 @@ class TestBuiltinEvaluator:
             question="Tell me a joke.",
             answer="I don't know.",
             contexts=["doc1.pdf"],
-            expected_sources=["doc1.pdf"],
+            expected_sources=[],
             expect_retrieval=False,
-            retrieval_metrics=["hit_rate", "mrr", "ndcg"],
+            retrieval_metrics=["hit_rate", "mrr", "ndcg", "false_positive_rate"],
         )
 
         assert "hit_rate" not in result.retrieval_metrics
         assert "mrr" not in result.retrieval_metrics
         assert "ndcg" not in result.retrieval_metrics
+        assert "false_positive_rate" in result.retrieval_metrics
 
     def test_evaluate_batch_with_new_params(self):
         """Test batch evaluation with new parameters."""
@@ -545,6 +550,73 @@ class TestBuiltinEvaluator:
         assert "hit_rate" in results[0].retrieval_metrics
         assert results[0].retrieval_metrics["hit_rate"] == 1.0
         assert "false_positive_rate" in results[1].retrieval_metrics
+
+
+    def test_missing_type_computes_doc_metrics(self):
+        """Test that missing type questions compute doc-level metrics."""
+        evaluator = BuiltinEvaluator()
+
+        result = evaluator.evaluate_single(
+            question_id="test_missing_001",
+            question="What is the quantum computing strategy?",
+            answer="The document does not mention quantum computing.",
+            contexts=["annual_report/company_2023.pdf"],
+            expected_sources=["annual_report/company_2023.pdf"],
+            expect_retrieval=False,
+            retrieval_metrics=["hit_rate", "mrr", "ndcg"],
+        )
+
+        assert "hit_rate" in result.retrieval_metrics
+        assert "mrr" in result.retrieval_metrics
+        assert "ndcg" in result.retrieval_metrics
+
+    def test_irrelevant_type_computes_fpr_only(self):
+        """Test that irrelevant type questions compute FPR but not doc metrics."""
+        evaluator = BuiltinEvaluator()
+
+        result = evaluator.evaluate_single(
+            question_id="test_irrelevant_001",
+            question="Tell me a joke.",
+            answer="I don't know.",
+            contexts=["doc1.pdf", "doc2.pdf"],
+            expect_retrieval=False,
+            retrieval_metrics=["hit_rate", "mrr", "ndcg", "false_positive_rate"],
+        )
+
+        assert "hit_rate" not in result.retrieval_metrics
+        assert "false_positive_rate" in result.retrieval_metrics
+
+    def test_retrieval_diversity_metric(self):
+        """Test that retrieval_diversity is computed when sources exist."""
+        evaluator = BuiltinEvaluator()
+
+        result = evaluator.evaluate_single(
+            question_id="test_diversity_001",
+            question="What is the revenue?",
+            answer="Revenue is $1M.",
+            contexts=["doc1.pdf", "doc1.pdf", "doc2.pdf"],
+            expected_sources=["doc1.pdf"],
+            retrieval_metrics=["retrieval_diversity"],
+        )
+
+        assert "retrieval_diversity" in result.retrieval_metrics
+        assert result.retrieval_metrics["retrieval_diversity"] == pytest.approx(2 / 3)
+
+    def test_retrieval_diversity_all_same_doc(self):
+        """Test retrieval_diversity when all results from same document."""
+        evaluator = BuiltinEvaluator()
+
+        result = evaluator.evaluate_single(
+            question_id="test_diversity_002",
+            question="What is the revenue?",
+            answer="Revenue is $1M.",
+            contexts=["doc1.pdf", "doc1.pdf", "doc1.pdf", "doc1.pdf", "doc1.pdf"],
+            expected_sources=["doc1.pdf"],
+            retrieval_metrics=["retrieval_diversity"],
+        )
+
+        assert "retrieval_diversity" in result.retrieval_metrics
+        assert result.retrieval_metrics["retrieval_diversity"] == pytest.approx(0.2)
 
 
 class TestRagasEvaluator:

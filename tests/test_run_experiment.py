@@ -1176,3 +1176,89 @@ class TestGenerateLlmReportOnly:
 
         with pytest.raises(ConfigurationError, match="No variant results found"):
             generate_llm_report_only(str(exp_dir))
+
+
+class TestComputeAggregateMetricsEnhanced:
+
+    def test_diversity_aggregation(self):
+        results = [
+            {
+                "id": "q1",
+                "retrieval": {"hit_rate": 1.0, "mrr": 1.0, "ndcg": 1.0, "retrieval_diversity": 0.4},
+            },
+            {
+                "id": "q2",
+                "retrieval": {"hit_rate": 0.0, "mrr": 0.0, "ndcg": 0.0, "retrieval_diversity": 0.8},
+            },
+        ]
+        metrics = compute_aggregate_metrics(results)
+        assert metrics["avg_retrieval_diversity"] == pytest.approx(0.6)
+
+    def test_hallucination_rate_aggregation(self):
+        results = [
+            {
+                "id": "q1",
+                "retrieval": {"hit_rate": 1.0},
+                "generation": {"faithfulness": 1.0, "answer_relevancy": 0.9},
+            },
+            {
+                "id": "q2",
+                "retrieval": {"hit_rate": 0.0},
+                "generation": {"faithfulness": 0.0, "answer_relevancy": 0.5},
+            },
+            {
+                "id": "q3",
+                "retrieval": {"hit_rate": 1.0},
+                "generation": {"faithfulness": 0.8, "answer_relevancy": 0.7},
+            },
+        ]
+        metrics = compute_aggregate_metrics(results)
+        assert metrics["hallucination_rate"] == pytest.approx(1 / 3)
+
+    def test_by_question_type_breakdown(self):
+        results = [
+            {
+                "id": "q1",
+                "question_type": "single_fact",
+                "retrieval": {"hit_rate": 1.0, "mrr": 1.0, "ndcg": 1.0},
+                "generation": {"faithfulness": 0.9},
+            },
+            {
+                "id": "q2",
+                "question_type": "single_fact",
+                "retrieval": {"hit_rate": 0.0, "mrr": 0.0, "ndcg": 0.0},
+                "generation": {"faithfulness": 0.5},
+            },
+            {
+                "id": "q3",
+                "question_type": "reasoning",
+                "retrieval": {"hit_rate": 0.5, "mrr": 0.5, "ndcg": 0.5},
+                "generation": {"faithfulness": 0.7},
+            },
+        ]
+        metrics = compute_aggregate_metrics(results)
+        assert "by_question_type" in metrics
+        assert "single_fact" in metrics["by_question_type"]
+        assert "reasoning" in metrics["by_question_type"]
+        assert metrics["by_question_type"]["single_fact"]["count"] == 2
+        assert metrics["by_question_type"]["single_fact"]["avg_hit_rate"] == pytest.approx(0.5)
+        assert metrics["by_question_type"]["reasoning"]["avg_hit_rate"] == pytest.approx(0.5)
+
+    def test_chunk_dedup_fpr_from_separate_keys(self):
+        results = [
+            {
+                "id": "q1",
+                "retrieval": {"hit_rate": 1.0, "mrr": 1.0, "ndcg": 1.0},
+                "chunk_retrieval": {"hit_rate": 0.8, "mrr": 0.7, "ndcg": 0.75},
+                "dedup_retrieval": {"hit_rate": 1.0, "mrr": 1.0, "ndcg": 1.0},
+            },
+            {
+                "id": "q2",
+                "retrieval": {"hit_rate": 0.0, "mrr": 0.0, "ndcg": 0.0},
+                "false_positive_rate": 0.6,
+            },
+        ]
+        metrics = compute_aggregate_metrics(results)
+        assert metrics["chunk_level_metrics"]["avg_hit_rate"] == pytest.approx(0.8)
+        assert metrics["dedup_metrics"]["avg_hit_rate"] == pytest.approx(1.0)
+        assert metrics["avg_false_positive_rate"] == pytest.approx(0.6)
