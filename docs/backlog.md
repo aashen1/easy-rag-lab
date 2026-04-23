@@ -2,7 +2,7 @@
 
 <!-- status: active -->
 
-> 最后更新：2026-04-24（RF-012 降级为已延期，链接分析报告）
+> 最后更新：2026-04-24（RF-016 标记为已完成，TEST-008/TEST-002 标记为已完成）
 
 本文档是项目"卫生情况"的总入口，追踪所有非阻塞性质的待做事项。
 
@@ -14,7 +14,7 @@
 |------|--------|--------|--------|--------|
 | Bug | 4 | 0 | 16 | 2 |
 | Feature | 14 | 0 | 19 | 0 |
-| Refactor | 8 | 0 | 12 | 1 |
+| Refactor | 6 | 0 | 14 | 1 |
 | Optimization | 7 | 0 | 1 | 0 |
 | Investigation | 15 | 0 | 5 | 1 |
 | Test | 8 | 0 | 0 | 0 |
@@ -90,7 +90,6 @@
 | RF-014 | normalize_source 匹配精度提升（当前仅比较文件名 stem，过于宽松） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P6-1) | 📋 待处理 | 小 | 可能误判不同版本的同名文档 |
 | RF-015 | 更新 hyperparameter-guide.md 增加新解析链路讲解 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 新增 PDF 解析策略章节，介绍 pymupdf4llm 和 fitz_pdfplumber 两种解析器 |
 | RF-006 | TestSet 独立管理系统重构 | 设计文档 | ✅ 已完成 | 大 | 新增 TestSetManager，重构 prepare_test_sets，支持 on_missing 三种模式 |
-| RF-016 | Optional 类型使用规范化（统一为 Python 3.10+ 的 `\| None` 语法） | 深度审查 | 📋 待处理 | 小 | 部分使用 `Optional`，部分使用 `\| None`，建议统一为新语法 |
 | RF-017 | 自定义异常类型定义（RAGPipelineError、RetrievalError 等） | 深度审查 | ✅ 已完成 | 小 | 新增 src/exceptions.py，9个业务异常类，全项目替换 |
 | RF-018 | Pipeline 类职责拆分（当前 560 行承担全流程） | 深度审查 | 📋 待处理 | 大 | 可拆分为 PipelineOrchestrator + 各阶段 Stage 类 |
 
@@ -205,6 +204,7 @@
 | RF-005 | Anthropic 客户端统一抽象 → 提取 create_anthropic_client 到 src/llm_client.py | v0.1.7 合并验收 | 2026-04-21 |
 | RF-004 | 硬编码配置值提取到 config.yaml | v0.1.7 合并验收 | 2026-04-21 |
 | RF-009 | commit-rule 与 CLAUDE.md 渐进式披露 → 三层架构：commit-rule 23行+CLAUDE.md 3行+SKILL.md+docs/guides/commit-conventions.md | [TODO.md](../TODO.md) | 2026-04-22 |
+| RF-016 | Optional 类型使用规范化 → 统一为 Python 3.10+ 的 `| None` 语法 | 深度审查 | 2026-04-24 |
 | RF-017 | 自定义异常类型定义 → 新增 src/exceptions.py，9个业务异常类，全项目替换 | 深度审查 | 2026-04-24 |
 
 ### Investigation
