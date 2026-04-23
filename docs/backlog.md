@@ -2,7 +2,7 @@
 
 <!-- status: active -->
 
-> 最后更新：2026-04-24（打扫卫生：同步已完成 issue，更新统计）
+> 最后更新：2026-04-24（RF-012 降级为已延期，链接分析报告）
 
 本文档是项目"卫生情况"的总入口，追踪所有非阻塞性质的待做事项。
 
@@ -14,7 +14,7 @@
 |------|--------|--------|--------|--------|
 | Bug | 4 | 0 | 16 | 2 |
 | Feature | 14 | 0 | 19 | 0 |
-| Refactor | 9 | 0 | 12 | 0 |
+| Refactor | 8 | 0 | 12 | 1 |
 | Optimization | 7 | 0 | 1 | 0 |
 | Investigation | 15 | 0 | 5 | 1 |
 | Test | 8 | 0 | 0 | 0 |
@@ -85,7 +85,7 @@
 | RF-009 | commit-rule 与 CLAUDE.md 渐进式披露 | [TODO.md](../TODO.md) | ✅ 已完成 | 中 | 三层渐进式披露：commit-rule 23行+CLAUDE.md 3行+SKILL.md+docs/guides/commit-conventions.md |
 | RF-010 | lint/ruff 配置 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 添加代码检查工具 |
 | RF-011 | docs 目录组织度维护 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 打扫卫生时考量 docs 目录组织度，恢复整洁度 |
-| RF-012 | 旧格式 test_sets DeprecationWarning 清理 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 测试中大量旧格式警告，后续版本逐步清理 |
+| RF-012 | 旧格式 test_sets DeprecationWarning 清理 | [TODO.md](../TODO.md) | ⏳ 已延期 | ⬇️ 低优先级暂缓；chunk-based 策略有不可替代优势，待升级为 chunk-aware 策略后再清理；详见 [分析报告](reviews/investigations/rf-012-chunk-vs-document-strategy-analysis.md) |
 | RF-013 | chunk_id 命名规范化（当前依赖文件名含下划线时解析脆弱） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P2-3) | 📋 待处理 | 小 | 需设计新格式并考虑迁移兼容 |
 | RF-014 | normalize_source 匹配精度提升（当前仅比较文件名 stem，过于宽松） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P6-1) | 📋 待处理 | 小 | 可能误判不同版本的同名文档 |
 | RF-015 | 更新 hyperparameter-guide.md 增加新解析链路讲解 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 新增 PDF 解析策略章节，介绍 pymupdf4llm 和 fitz_pdfplumber 两种解析器 |
