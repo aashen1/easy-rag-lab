@@ -686,6 +686,7 @@ class TestSetGenerator:
                     contexts=[],
                     system_prompt="你是一个测试数据生成器。请严格按照要求的JSON格式输出，不要输出任何其他内容。",
                     category="test_generation",
+                    allow_no_contexts=True,
                 )
 
                 qa = self._parse_llm_response(response)
@@ -1407,6 +1408,7 @@ class TestSetGenerator:
                     contexts=[],
                     system_prompt="你是一位金融行业从业者。请严格按照要求的JSON格式输出，不要输出任何其他内容。",
                     category="test_generation",
+                    allow_no_contexts=True,
                 )
 
                 qa = self._parse_document_question_response(response)

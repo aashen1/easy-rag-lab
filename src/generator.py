@@ -177,6 +177,7 @@ class Generator:
         system_prompt: str = None,
         category: str = "rag_qa",
         sources: list[str] | None = None,
+        allow_no_contexts: bool = False,
         **metadata: Any,
     ) -> str:
         """Generate an answer using the LLM.
@@ -208,7 +209,10 @@ class Generator:
             raise GenerationError(error_msg)
 
         if not contexts:
-            logger.warning("No contexts provided for generation")
+            if allow_no_contexts:
+                logger.debug("No contexts provided for generation (allowed)")
+            else:
+                logger.warning("No contexts provided for generation")
 
         try:
             if system_prompt is None:
