@@ -104,8 +104,10 @@ chunker:
   input_dir: "data/parsed"
   output_dir: "data/chunks"
   strategy: "fixed"          # Chunking strategy: "fixed" or "semantic"
+  encoding: "bge"            # Tokenizer encoding: "bge" (align with embedder) or "cl100k_base" (tiktoken)
   chunk_size: 512            # Max tokens per chunk
   chunk_overlap: 64           # Overlap tokens between chunks (fixed strategy)
+  cross_page_overlap: 0       # Tokens from previous page prepended to current page (page_aware_fixed only)
   semantic:
     similarity_threshold: 0.5    # Cosine similarity threshold for breakpoints
     breakpoint_percentile: null  # Use percentile-based threshold (null = disabled)
@@ -129,7 +131,7 @@ vector_store:
 retrieval:
   method: "vector"          # Retrieval method: "vector", "bm25", or "hybrid"
   top_k: 5
-  score_threshold: 0        # Minimum similarity score to include (0 = no filtering; typical: 0.3-0.5)
+  score_threshold: 0.3      # Minimum similarity score to include (typical: 0.3-0.5)
   bm25:                     # BM25 参数（method=bm25 或 hybrid 时生效）
     k1: 1.5                 # BM25 term frequency saturation parameter
     b: 0.75                 # BM25 length normalization parameter
@@ -151,7 +153,7 @@ retrieval:
 # 生成配置（基线：使用硬编码默认 system prompt，通过实验配置覆盖）
 generation:
   system_prompt: null       # Custom system prompt for the generator (null = use hardcoded default)
-  max_context_tokens: null  # Maximum total input tokens (system_prompt + contexts + query). null = no limit.
+  max_context_tokens: 8000  # Maximum total input tokens (system_prompt + contexts + query). 8000 = protect against context overflow
 
 # ============================================================
 # 实验管理配置

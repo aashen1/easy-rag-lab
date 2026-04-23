@@ -66,6 +66,22 @@ class TestNormalizeSource:
     def test_deeply_nested_path(self):
         assert normalize_source("a/b/c/report.md", include_parent=True) == "c/report"
 
+    def test_windows_backslash_normalizes_to_posix(self):
+        assert normalize_source("some\\path\\file.pdf") == normalize_source("some/path/file.pdf")
+
+    def test_windows_backslash_include_parent(self):
+        assert normalize_source("annual_report\\贵州茅台2023年年度报告.md", include_parent=True) == "annual_report/贵州茅台2023年年度报告"
+
+    def test_mixed_separators_normalize_consistently(self):
+        result_backslash = normalize_source("a\\b\\c\\report.md", include_parent=True)
+        result_forward = normalize_source("a/b/c/report.md", include_parent=True)
+        assert result_backslash == result_forward
+
+    def test_windows_backslash_no_parent(self):
+        result_backslash = normalize_source("annual_report\\贵州茅台2023年年度报告.md")
+        result_forward = normalize_source("annual_report/贵州茅台2023年年度报告.md")
+        assert result_backslash == result_forward
+
 
 @pytest.mark.unit
 class TestCalculateHitRateStandard:

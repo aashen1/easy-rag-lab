@@ -242,11 +242,14 @@ class TestSetGenerator:
         self.max_retries = tg_config.get("max_retries", 3)
         self.default_strategy = tg_config.get("default_strategy", "factual")
         self.default_num_questions = tg_config.get("default_num_questions", 20)
-        self.test_gen_model_name = tg_config.get("model_name", "LongCat-Flash-Lite")
+        self.test_gen_model_name = tg_config.get(
+            "model_name", "LongCat-Flash-Lite")
         self.test_gen_temperature = tg_config.get("temperature", 0.7)
         self.test_gen_max_tokens = tg_config.get("max_tokens", 1024)
-        self.test_gen_initial_max_tokens = tg_config.get("initial_max_tokens", 512)
-        self.test_gen_supplement_max_tokens = tg_config.get("supplement_max_tokens", 1024)
+        self.test_gen_initial_max_tokens = tg_config.get(
+            "initial_max_tokens", 512)
+        self.test_gen_supplement_max_tokens = tg_config.get(
+            "supplement_max_tokens", 1024)
         self._doc_truncate_cache: dict[str, str] = {}
 
     def generate_test_set(
@@ -379,8 +382,8 @@ class TestSetGenerator:
     def _resolve_parsed_dir(self, meal_config: MealConfig) -> Path | None:
         """Resolve the parsed artifacts directory for a meal.
 
-        Tries the ArtifactCache first (based on meal data_id), then falls
-        back to the config-based ``parser.output_dir`` path.
+        Tries the ArtifactCache first (based on meal data_id and parser_hash),
+        then falls back to the config-based ``parser.output_dir`` path.
 
         Args:
             meal_config: MealConfig object with data_id and config_hashes.
@@ -388,18 +391,25 @@ class TestSetGenerator:
         Returns:
             Path to the parsed directory, or None if not found.
         """
-        if meal_config.data_id:
-            artifacts_config = self.config.get("artifacts", {})
-            artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
-            cache = ArtifactCache(artifacts_dir)
-            parsed_dir = cache.get_parsed_dir(meal_config.data_id)
-            if parsed_dir.exists():
-                logger.debug(f"Resolved parsed dir via ArtifactCache: {parsed_dir}")
-                return parsed_dir
+        if meal_config.data_id and meal_config.config_hashes:
+            parser_hash = meal_config.config_hashes.get("parser", "")
+            if parser_hash:
+                artifacts_config = self.config.get("artifacts", {})
+                artifacts_dir = Path(
+                    artifacts_config.get("dir", "data/artifacts"))
+                cache = ArtifactCache(artifacts_dir)
+                parsed_dir = cache.get_parsed_dir(
+                    meal_config.data_id, parser_hash)
+                if parsed_dir.exists():
+                    logger.debug(
+                        f"Resolved parsed dir via ArtifactCache: {parsed_dir}")
+                    return parsed_dir
 
-        fallback = Path(self.config.get("parser", {}).get("output_dir", "data/parsed"))
+        fallback = Path(self.config.get("parser", {}).get(
+            "output_dir", "data/parsed"))
         if fallback.exists():
-            logger.debug(f"Resolved parsed dir via config fallback: {fallback}")
+            logger.debug(
+                f"Resolved parsed dir via config fallback: {fallback}")
             return fallback
 
         return None
@@ -421,16 +431,21 @@ class TestSetGenerator:
             chunker_hash = meal_config.config_hashes.get("chunker", "")
             if chunker_hash:
                 artifacts_config = self.config.get("artifacts", {})
-                artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
+                artifacts_dir = Path(
+                    artifacts_config.get("dir", "data/artifacts"))
                 cache = ArtifactCache(artifacts_dir)
-                chunks_dir = cache.get_chunks_dir(meal_config.data_id, chunker_hash)
+                chunks_dir = cache.get_chunks_dir(
+                    meal_config.data_id, chunker_hash)
                 if chunks_dir.exists():
-                    logger.debug(f"Resolved chunks dir via ArtifactCache: {chunks_dir}")
+                    logger.debug(
+                        f"Resolved chunks dir via ArtifactCache: {chunks_dir}")
                     return chunks_dir
 
-        fallback = Path(self.config.get("chunker", {}).get("output_dir", "data/chunks"))
+        fallback = Path(self.config.get("chunker", {}).get(
+            "output_dir", "data/chunks"))
         if fallback.exists():
-            logger.debug(f"Resolved chunks dir via config fallback: {fallback}")
+            logger.debug(
+                f"Resolved chunks dir via config fallback: {fallback}")
             return fallback
 
         return None
@@ -455,15 +470,15 @@ class TestSetGenerator:
         source_filter = set()
         for mf in meal_config.pdf_files:
             md_path = Path(mf.path).with_suffix(".md")
-            source_filter.add(str(md_path).replace("\\", "/"))
+            source_filter.add(md_path.as_posix())
 
         all_chunks = []
         jsonl_files = list(chunks_dir.rglob("*.jsonl"))
 
         for jsonl_file in jsonl_files:
             try:
-                rel_path = str(jsonl_file.relative_to(
-                    chunks_dir)).replace("\\", "/")
+                rel_path = jsonl_file.relative_to(
+                    chunks_dir).as_posix()
                 jsonl_md_path = rel_path.rsplit(".", 1)[0] + ".md"
 
                 if source_filter and jsonl_md_path not in source_filter:
@@ -1097,7 +1112,8 @@ class TestSetGenerator:
         existing_test_set["quality_metrics"] = quality_metrics
 
         if "metadata" in existing_test_set:
-            existing_test_set["metadata"]["updated_at"] = datetime.now().isoformat()
+            existing_test_set["metadata"]["updated_at"] = datetime.now(
+            ).isoformat()
             if "generation" in existing_test_set["metadata"]:
                 existing_test_set["metadata"]["generation"]["num_questions"] = target_count
             audit_entry = {
@@ -1105,13 +1121,15 @@ class TestSetGenerator:
                 "added_count": len(new_questions),
                 "timestamp": datetime.now().isoformat(),
             }
-            existing_test_set["metadata"].setdefault("audit_log", []).append(audit_entry)
+            existing_test_set["metadata"].setdefault(
+                "audit_log", []).append(audit_entry)
             test_set_name = existing_test_set["metadata"]["name"]
         else:
             if "generation_config" not in existing_test_set:
                 existing_test_set["generation_config"] = {}
             existing_test_set["generation_config"]["num_questions"] = target_count
-            test_set_name = existing_test_set.get("name", f"document_level_n{target_count}")
+            test_set_name = existing_test_set.get(
+                "name", f"document_level_n{target_count}")
 
         self._save_test_set(meal_name, existing_test_set, test_set_name)
 
@@ -1132,10 +1150,11 @@ class TestSetGenerator:
     def _load_full_documents(
         self, meal_config: MealConfig
     ) -> dict[str, dict[str, str]]:
-        """Load full MD documents associated with a meal's PDF files.
+        """Load full documents associated with a meal's PDF files.
 
         Resolves the parsed directory via the ArtifactCache first, falling
-        back to the config-based ``parser.output_dir`` path.
+        back to the config-based ``parser.output_dir`` path. Supports both
+        .md and .pages.json formats.
 
         Args:
             meal_config: MealConfig object whose pdf_files determine the
@@ -1151,9 +1170,76 @@ class TestSetGenerator:
             logger.warning(f"Parsed directory not found: {parsed_dir}")
             return {}
 
+        has_pages_json = any(parsed_dir.rglob("*.pages.json"))
+
+        if has_pages_json:
+            return self._load_pages_json_documents(parsed_dir, meal_config)
+        else:
+            return self._load_md_documents(parsed_dir, meal_config)
+
+    def _load_pages_json_documents(
+        self, parsed_dir: Path, meal_config: MealConfig
+    ) -> dict[str, dict[str, str]]:
+        """Load documents from .pages.json format.
+
+        Args:
+            parsed_dir: Directory containing .pages.json files.
+            meal_config: MealConfig object for source filtering.
+
+        Returns:
+            Dictionary mapping document names to content dicts.
+        """
         source_filter = set()
         for mf in meal_config.pdf_files:
-            md_rel = str(Path(mf.path).with_suffix(".md")).replace("\\", "/")
+            pages_rel = Path(mf.path).with_suffix(
+                ".pages.json").as_posix()
+            source_filter.add(pages_rel)
+
+        documents = {}
+        pages_files = list(parsed_dir.rglob("*.pages.json"))
+
+        for pages_file in pages_files:
+            try:
+                rel_path = pages_file.relative_to(
+                    parsed_dir).as_posix()
+                if source_filter and rel_path not in source_filter:
+                    continue
+
+                with open(pages_file, encoding="utf-8") as f:
+                    pages_data = json.load(f)
+
+                full_text = "\n\n".join(
+                    page.get("text", "")
+                    for page in sorted(pages_data, key=lambda p: p.get("page_number", 0))
+                )
+
+                doc_name = pages_file.stem.replace(".pages", "")
+                documents[doc_name] = {
+                    "content": full_text,
+                    "source_path": rel_path,
+                }
+                logger.debug(
+                    f"Loaded document: {doc_name} ({len(full_text)} chars)")
+            except Exception as e:
+                logger.error(f"Failed to load {pages_file}: {str(e)}")
+
+        return documents
+
+    def _load_md_documents(
+        self, parsed_dir: Path, meal_config: MealConfig
+    ) -> dict[str, dict[str, str]]:
+        """Load documents from .md format.
+
+        Args:
+            parsed_dir: Directory containing .md files.
+            meal_config: MealConfig object for source filtering.
+
+        Returns:
+            Dictionary mapping document names to content dicts.
+        """
+        source_filter = set()
+        for mf in meal_config.pdf_files:
+            md_rel = Path(mf.path).with_suffix(".md").as_posix()
             source_filter.add(md_rel)
 
         documents = {}
@@ -1161,7 +1247,8 @@ class TestSetGenerator:
 
         for md_file in md_files:
             try:
-                rel_path = str(md_file.relative_to(parsed_dir)).replace("\\", "/")
+                rel_path = md_file.relative_to(
+                    parsed_dir).as_posix()
                 if source_filter and rel_path not in source_filter:
                     continue
 
@@ -1173,7 +1260,8 @@ class TestSetGenerator:
                     "content": content,
                     "source_path": rel_path,
                 }
-                logger.debug(f"Loaded document: {doc_name} ({len(content)} chars)")
+                logger.debug(
+                    f"Loaded document: {doc_name} ({len(content)} chars)")
             except Exception as e:
                 logger.error(f"Failed to load {md_file}: {str(e)}")
 
@@ -1551,7 +1639,8 @@ class TestSetGenerator:
 
         expanded_indices.discard(-1)
 
-        result = [doc_chunks[i].get("chunk_id", "") for i in sorted(expanded_indices)]
+        result = [doc_chunks[i].get("chunk_id", "")
+                  for i in sorted(expanded_indices)]
         result = [cid for cid in result if cid]
 
         return result
@@ -1610,7 +1699,8 @@ class TestSetGenerator:
         )
         terms.extend(number_patterns)
 
-        proper_nouns = re.findall(r'[\u4e00-\u9fff]{2,8}(?:股份|集团|公司|行业|市场|技术|产品|业务|报告|年度)', answer)
+        proper_nouns = re.findall(
+            r'[\u4e00-\u9fff]{2,8}(?:股份|集团|公司|行业|市场|技术|产品|业务|报告|年度)', answer)
         terms.extend(proper_nouns)
 
         domain_keywords = [

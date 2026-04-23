@@ -388,7 +388,7 @@ def process_parsed_files_semantic(
     if source_filter is not None:
         original_count = len(md_files)
         md_files = [
-            f for f in md_files if str(f.relative_to(input_path)) in source_filter
+            f for f in md_files if f.relative_to(input_path).as_posix() in source_filter
         ]
         logger.info(
             f"Source filter applied: {len(md_files)}/{original_count} files matched"
@@ -432,7 +432,7 @@ def process_parsed_files_semantic(
                         "chunk_id": chunk_id,
                         "text": chunk["text"],
                         "metadata": {
-                            "source": str(relative_path),
+                            "source": relative_path.as_posix(),
                             "category": category,
                             "chunk_index": chunk["metadata"]["chunk_index"],
                             "char_count": chunk["metadata"]["char_count"],

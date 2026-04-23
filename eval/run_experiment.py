@@ -685,10 +685,16 @@ def prepare_index_for_variant(
         artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
         cache = ArtifactCache(artifacts_dir)
 
-        parsed_dir = cache.get_parsed_dir(meal_config.data_id)
+        parsed_dir = cache.get_parsed_dir(
+            meal_config.data_id,
+            parser_hash=meal_config.config_hashes.get("parser"),
+        )
         chunks_dir = cache.get_chunks_dir(meal_config.data_id, chunker_hash)
 
-        build_chunks_if_needed(parsed_dir, chunks_dir, chunker_config)
+        build_chunks_if_needed(
+            parsed_dir, chunks_dir, chunker_config,
+            model_name=chunker_config.get("model_name") or embedding_config.get("model_name"),
+        )
 
         indexer = build_index_from_chunks(
             chunks_dir=chunks_dir,

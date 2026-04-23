@@ -350,3 +350,80 @@ class TestQueryInstruction:
         embedder.embed_texts(texts, batch_size=32)
 
         assert captured_texts == texts
+
+
+class TestGetTokenizer:
+    @pytest.mark.unit
+    def test_get_tokenizer_creates_standalone_tokenizer(self):
+        with patch("src.embedder.AutoTokenizer") as mock_auto_tokenizer:
+            mock_tokenizer = MagicMock()
+            mock_auto_tokenizer.from_pretrained.return_value = mock_tokenizer
+
+            Embedder._tokenizer_cache.clear()
+
+            result = Embedder.get_tokenizer("test-model")
+
+            mock_auto_tokenizer.from_pretrained.assert_called_once_with("test-model")
+            assert result is mock_tokenizer
+
+    @pytest.mark.unit
+    def test_get_tokenizer_caches_result(self):
+        with patch("src.embedder.AutoTokenizer") as mock_auto_tokenizer:
+            mock_tokenizer = MagicMock()
+            mock_auto_tokenizer.from_pretrained.return_value = mock_tokenizer
+
+            Embedder._tokenizer_cache.clear()
+
+            result1 = Embedder.get_tokenizer("test-model")
+            result2 = Embedder.get_tokenizer("test-model")
+
+            assert result1 is result2
+            mock_auto_tokenizer.from_pretrained.assert_called_once_with("test-model")
+
+    @pytest.mark.unit
+    def test_get_tokenizer_different_models_different_cache(self):
+        with patch("src.embedder.AutoTokenizer") as mock_auto_tokenizer:
+            mock_tokenizer_a = MagicMock()
+            mock_tokenizer_b = MagicMock()
+            mock_auto_tokenizer.from_pretrained.side_effect = [
+                mock_tokenizer_a, mock_tokenizer_b
+            ]
+
+            Embedder._tokenizer_cache.clear()
+
+            result_a = Embedder.get_tokenizer("model-a")
+            result_b = Embedder.get_tokenizer("model-b")
+
+            assert result_a is not result_b
+
+    @pytest.mark.unit
+    def test_get_tokenizer_failure_raises(self):
+        with patch("src.embedder.AutoTokenizer") as mock_auto_tokenizer:
+            mock_auto_tokenizer.from_pretrained.side_effect = Exception("load error")
+
+            Embedder._tokenizer_cache.clear()
+
+            with pytest.raises(Exception, match="Failed to load tokenizer"):
+                Embedder.get_tokenizer("bad-model")
+
+    @pytest.mark.unit
+    def test_embedder_init_registers_tokenizer_in_cache(self):
+        with patch("src.embedder.AutoTokenizer") as mock_auto_tokenizer, \
+             patch("src.embedder.AutoModel") as mock_auto_model, \
+             patch("src.embedder.torch.cuda.is_available") as mock_cuda:
+
+            mock_cuda.return_value = False
+            mock_tokenizer = MagicMock()
+            mock_auto_tokenizer.from_pretrained.return_value = mock_tokenizer
+            mock_model = MagicMock()
+            mock_model.config.hidden_size = 1024
+            mock_model.eval.return_value = mock_model
+            mock_auto_model.from_pretrained.return_value = mock_model
+
+            Embedder._tokenizer_cache.clear()
+
+            Embedder(model_name="cached-model", device="cpu")
+
+            assert "cached-model" in Embedder._tokenizer_cache
+            assert Embedder._tokenizer_cache["cached-model"] is mock_tokenizer
+            assert Embedder.get_tokenizer("cached-model") is mock_tokenizer

@@ -25,6 +25,7 @@ from eval.metrics import (
     calculate_hit_rate,
     calculate_mrr,
     calculate_ndcg,
+    normalize_source,
     normalize_source_with_equivalence,
 )
 
@@ -192,8 +193,8 @@ class BuiltinEvaluator(BaseEvaluator):
                     norm_retrieved = [normalize_source_with_equivalence(s, equivalence_groups, include_parent=True) for s in sources_for_retrieval]
                     norm_expected = [normalize_source_with_equivalence(s, equivalence_groups, include_parent=True) for s in expected_sources]
                 else:
-                    norm_retrieved = sources_for_retrieval
-                    norm_expected = expected_sources
+                    norm_retrieved = [normalize_source(s, include_parent=True) for s in sources_for_retrieval]
+                    norm_expected = [normalize_source(s, include_parent=True) for s in expected_sources]
 
                 if "dedup_hit_rate" in retrieval_metrics:
                     retrieval_results["dedup_hit_rate"] = calculate_dedup_hit_rate(

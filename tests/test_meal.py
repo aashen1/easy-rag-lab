@@ -11,6 +11,7 @@ from src.meal import (
     MealFile,
     MealManager,
     MealStatus,
+    _infer_equivalence_groups,
     build_chunks_if_needed,
     compute_chunker_config_hash,
     compute_data_id,
@@ -803,7 +804,10 @@ class TestBuildChunksIfNeeded:
                 output_dir=str(chunks_dir),
                 chunk_size=512,
                 overlap=0,
+                encoding_name="cl100k_base",
                 source_filter={"report.pages.json"},
+                model_name=None,
+                cross_page_overlap=0,
             )
 
     def test_build_chunks_if_needed_md(self, tmp_path):
@@ -823,7 +827,9 @@ class TestBuildChunksIfNeeded:
                 output_dir=str(chunks_dir),
                 chunk_size=512,
                 overlap=0,
+                encoding_name="cl100k_base",
                 source_filter={"report.md"},
+                model_name=None,
             )
 
     def test_build_chunks_if_needed_skips_existing(self, tmp_path):
@@ -1506,3 +1512,92 @@ class TestExtendMeal:
             result = manager.extend_meal("source_meal", ["reports/report_1.pdf"])
 
             assert result.name.startswith("meal_")
+
+
+class TestInferEquivalenceGroups:
+    def test_different_dirs_same_stem_different_groups(self):
+        pdf_files = [
+            "annual_reports/2023/云南白药/2023年年度报告.pdf",
+            "annual_reports/2023/隆基绿能/2023年年度报告.pdf",
+        ]
+        groups = _infer_equivalence_groups(pdf_files)
+        assert "云南白药/2023年年度报告" in groups
+        assert "隆基绿能/2023年年度报告" in groups
+        assert len(groups) == 2
+        assert groups["云南白药/2023年年度报告"] == [
+            "annual_reports/2023/云南白药/2023年年度报告.pdf"
+        ]
+        assert groups["隆基绿能/2023年年度报告"] == [
+            "annual_reports/2023/隆基绿能/2023年年度报告.pdf"
+        ]
+
+    def test_same_dir_suffix_strip_same_group(self):
+        pdf_files = [
+            "annual_reports/2023/云南白药/2023年年度报告.pdf",
+            "annual_reports/2023/云南白药/2023年年度报告_英文版_.pdf",
+            "annual_reports/2023/云南白药/2023年年度报告摘要.pdf",
+        ]
+        groups = _infer_equivalence_groups(pdf_files)
+        assert "云南白药/2023年年度报告" in groups
+        assert len(groups) == 1
+        assert len(groups["云南白药/2023年年度报告"]) == 3
+
+    def test_suffix_stripping_with_parent_dir(self):
+        pdf_files = [
+            "annual_reports/2023/云南白药/2023年年度报告_修订版_.pdf",
+        ]
+        groups = _infer_equivalence_groups(pdf_files)
+        assert "云南白药/2023年年度报告" in groups
+
+    def test_research_reports_each_own_group(self):
+        pdf_files = [
+            "research_reports/2026现代女性精力管理现状报告.pdf",
+            "research_reports/2025新能源行业白皮书.pdf",
+        ]
+        groups = _infer_equivalence_groups(pdf_files)
+        assert "research_reports/2026现代女性精力管理现状报告" in groups
+        assert "research_reports/2025新能源行业白皮书" in groups
+        assert len(groups) == 2
+
+    def test_research_reports_suffix_strip(self):
+        pdf_files = [
+            "research_reports/2026现代女性精力管理现状报告.pdf",
+            "research_reports/2026现代女性精力管理现状报告摘要.pdf",
+        ]
+        groups = _infer_equivalence_groups(pdf_files)
+        assert "research_reports/2026现代女性精力管理现状报告" in groups
+        assert len(groups) == 1
+        assert len(groups["research_reports/2026现代女性精力管理现状报告"]) == 2
+
+    def test_posix_paths_in_output(self):
+        pdf_files = [
+            "annual_reports/2023/云南白药/2023年年度报告.pdf",
+        ]
+        groups = _infer_equivalence_groups(pdf_files)
+        paths = groups["云南白药/2023年年度报告"]
+        assert all("\\" not in p for p in paths)
+
+    def test_no_parent_dir_uses_stem_only(self):
+        pdf_files = [
+            "2023年年度报告.pdf",
+        ]
+        groups = _infer_equivalence_groups(pdf_files)
+        assert "2023年年度报告" in groups
+
+    def test_empty_input(self):
+        groups = _infer_equivalence_groups([])
+        assert groups == {}
+
+    def test_mixed_annual_and_research_reports(self):
+        pdf_files = [
+            "annual_reports/2023/云南白药/2023年年度报告.pdf",
+            "annual_reports/2023/云南白药/2023年年度报告_英文版_.pdf",
+            "annual_reports/2023/隆基绿能/2023年年度报告.pdf",
+            "research_reports/2026现代女性精力管理现状报告.pdf",
+        ]
+        groups = _infer_equivalence_groups(pdf_files)
+        assert len(groups) == 3
+        assert "云南白药/2023年年度报告" in groups
+        assert "隆基绿能/2023年年度报告" in groups
+        assert "research_reports/2026现代女性精力管理现状报告" in groups
+        assert len(groups["云南白药/2023年年度报告"]) == 2

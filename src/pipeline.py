@@ -198,7 +198,7 @@ class RAGPipeline:
                     output_path = Path(r["output"])
                     parsed_dir = Path(parser_config["output_dir"])
                     source_filter_md.add(
-                        str(output_path.relative_to(parsed_dir)))
+                        output_path.relative_to(parsed_dir).as_posix())
             logger.info(
                 f"Source filter for chunker: {len(source_filter_md)} files")
 
@@ -207,6 +207,8 @@ class RAGPipeline:
 
         logger.info("Step 2: Chunking documents...")
         chunker_strategy = chunker_config.get("strategy", "fixed")
+        chunker_encoding = chunker_config.get("encoding", "cl100k_base")
+        embedding_model_name = embedding_config.get("model_name")
 
         if use_page_chunks and chunker_strategy != "semantic":
             from src.chunker import process_parsed_files_page_aware
@@ -219,14 +221,17 @@ class RAGPipeline:
                         output_path = Path(r["output"])
                         parsed_dir = Path(parser_config["output_dir"])
                         source_filter_pages.add(
-                            str(output_path.relative_to(parsed_dir)))
+                            output_path.relative_to(parsed_dir).as_posix())
 
             chunk_results = process_parsed_files_page_aware(
                 input_dir=chunker_config["input_dir"],
                 output_dir=chunker_config["output_dir"],
                 chunk_size=chunker_config["chunk_size"],
                 overlap=chunker_config["chunk_overlap"],
+                encoding_name=chunker_encoding,
                 source_filter=source_filter_pages,
+                model_name=embedding_model_name,
+                cross_page_overlap=chunker_config.get("cross_page_overlap", 0),
             )
         elif chunker_strategy == "semantic":
             semantic_config = chunker_config.get("semantic", {})
@@ -246,7 +251,9 @@ class RAGPipeline:
                 output_dir=chunker_config["output_dir"],
                 chunk_size=chunker_config["chunk_size"],
                 overlap=chunker_config["chunk_overlap"],
+                encoding_name=chunker_encoding,
                 source_filter=source_filter_md,
+                model_name=embedding_model_name,
             )
 
         source_filter_jsonl = None
@@ -257,7 +264,7 @@ class RAGPipeline:
                     output_path = Path(r["output"])
                     chunks_dir = Path(chunker_config["output_dir"])
                     source_filter_jsonl.add(
-                        str(output_path.relative_to(chunks_dir)))
+                        output_path.relative_to(chunks_dir).as_posix())
             logger.info(
                 f"Source filter for indexer: {len(source_filter_jsonl)} files")
 

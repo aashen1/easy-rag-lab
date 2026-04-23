@@ -3,7 +3,7 @@ from unittest.mock import patch
 import pytest
 
 from src.exceptions import GenerationError
-from src.generator import Generator
+from src.generator import Generator, clean_source_name
 from src.token_tracker import TokenTracker
 
 
@@ -143,7 +143,7 @@ class TestGenerator:
             contexts=["Revenue was 100 billion.", "Profit was 50 billion."],
             sources=[
                 "research_reports/2026年光伏行业分析.md",
-                "annual_reports/贵州茅台2023年报.md",
+                "annual_reports/贵州茅台2023年报.pages.json",
             ],
         )
         call_kwargs = mock_anthropic_client.messages.create.call_args
@@ -261,3 +261,36 @@ class TestTruncateContexts:
         user_content = call_kwargs.kwargs["messages"][0]["content"]
         assert "truncated" in user_content
         assert "Profit was 50 billion" not in user_content
+
+
+@pytest.mark.unit
+class TestCleanSourceName:
+
+    def test_pages_json_extension(self):
+        assert clean_source_name(
+            "research_reports/2026现代女性精力管理现状报告.pages.json"
+        ) == "2026现代女性精力管理现状报告"
+
+    def test_md_extension(self):
+        assert clean_source_name(
+            "annual_reports/2023/贵州茅台2023年年度报告.md"
+        ) == "贵州茅台2023年年度报告"
+
+    def test_json_extension(self):
+        assert clean_source_name(
+            "annual_reports/2023/贵州茅台2023年年度报告.json"
+        ) == "贵州茅台2023年年度报告"
+
+    def test_simple_txt_extension(self):
+        assert clean_source_name("simple_name.txt") == "simple_name"
+
+    def test_pages_json_with_annual_reports(self):
+        assert clean_source_name(
+            "annual_reports/2023/贵州茅台2023年年度报告.pages.json"
+        ) == "贵州茅台2023年年度报告"
+
+    def test_filename_only(self):
+        assert clean_source_name("report.pages.json") == "report"
+
+    def test_no_extension(self):
+        assert clean_source_name("annual_reports/2023/贵州茅台2023年年度报告") == "贵州茅台2023年年度报告"
