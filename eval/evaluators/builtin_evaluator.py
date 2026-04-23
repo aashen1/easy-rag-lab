@@ -158,7 +158,7 @@ class BuiltinEvaluator(BaseEvaluator):
         error = None
 
         try:
-            if expected_sources:
+            if expected_sources and expect_retrieval:
                 if "hit_rate" in retrieval_metrics:
                     retrieval_results["hit_rate"] = calculate_hit_rate(
                         retrieved_sources=sources_for_retrieval,
@@ -175,7 +175,7 @@ class BuiltinEvaluator(BaseEvaluator):
                         expected_sources=expected_sources,
                     )
 
-            if chunk_ids and expected_chunks:
+            if chunk_ids and expected_chunks and expect_retrieval:
                 if "chunk_hit_rate" in retrieval_metrics:
                     retrieval_results["chunk_hit_rate"] = calculate_chunk_hit_rate(
                         chunk_ids, expected_chunks
@@ -189,7 +189,7 @@ class BuiltinEvaluator(BaseEvaluator):
                         chunk_ids, expected_chunks, k=5
                     )
 
-            if expected_sources:
+            if expected_sources and expect_retrieval:
                 if equivalence_groups:
                     norm_retrieved = [normalize_source_with_equivalence(s, equivalence_groups, include_parent=True) for s in sources_for_retrieval]
                     norm_expected = [normalize_source_with_equivalence(s, equivalence_groups, include_parent=True) for s in expected_sources]
@@ -210,7 +210,7 @@ class BuiltinEvaluator(BaseEvaluator):
                         norm_retrieved, norm_expected
                     )
 
-            if not expect_retrieval and not expected_sources and "false_positive_rate" in retrieval_metrics:
+            if not expect_retrieval and "false_positive_rate" in retrieval_metrics:
                 retrieval_results["false_positive_rate"] = calculate_false_positive_rate(
                     sources_for_retrieval, k=5
                 )
