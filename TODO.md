@@ -95,6 +95,9 @@ v0.1.10→v0.1.11 的主要任务：
 - [x] 更新 hyperparameter-guide.md 增加新解析链路讲解（RF-015）
 - [x] meal 系统升级支持扩充已有 meal（FEAT-026）
 - [x] 问题集组合功能（FEAT-027）
+- [x] Optional→|None 语法统一标记完成（RF-016）
+- [x] 补充 indexer 模块异常路径测试（TEST-008）
+- [x] 补充 test_set_manager 模块边界条件测试（TEST-002）
 
 ### verbose
 
@@ -102,6 +105,9 @@ v0.1.10→v0.1.11 的主要任务：
 - [x] 更新 [hyperparameter-guide.md](docs\guides\hyperparameter-guide.md) 和其他涉及链路介绍的文档，增加新的解析链路讲解 📋 2026-04-23 归档为 [RF-015] ✅ 2026-04-23 该issue已确认完成
 - [x] meal 系统升级支持扩充已有 meal 📋 2026-04-23 归档为 [FEAT-026] ✅ 2026-04-24 该issue已确认完成
 - [x] 问题集组合功能 📋 2026-04-23 归档为 [FEAT-027] ✅ 2026-04-24 该issue已确认完成
+- [x] Optional→|None 语法统一标记完成 📋 2026-04-24 归档为 [RF-016] ✅ 2026-04-24 该issue已确认完成
+- [x] 补充 indexer 模块异常路径测试（11个新测试用例） 📋 2026-04-24 归档为 [TEST-008] ✅ 2026-04-24 该issue已确认完成
+- [x] 补充 test_set_manager 模块边界条件测试（18个新测试用例） 📋 2026-04-24 归档为 [TEST-002] ✅ 2026-04-24 该issue已确认完成
 
 ---
 
