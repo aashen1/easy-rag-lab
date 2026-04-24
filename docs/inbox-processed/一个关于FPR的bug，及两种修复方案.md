@@ -88,3 +88,9 @@ else:
 **方案 A 明显更优**。FPR 这个指标的设计初衷就是只对 `irrelevant` 计算的——"系统面对完全无关的问题时，有多安静"。`missing` 类型的问题根本不应该进入 FPR 的计算范围，因为它们有相关文档应该被检索到。
 
 方案 B 看起来给了 `missing` 一个"更合理的 FPR"，但 FPR 对 `missing` 类型本身就没有意义——`missing` 类型应该用 hit_rate/MRR 来衡量检索质量，而不是 FPR。
+
+---
+
+> **处理状态**: ✅ 已修复
+> **处理时间**: 2026-04-25
+> **修复方案**: 采用方案 A，`missing` 类型的 `expect_retrieval` 已在 `test_generator.py` 中设为 `True`

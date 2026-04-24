@@ -153,6 +153,12 @@ LLM_REPORT_PROMPT_TEMPLATE = """你是一位专业的RAG系统分析师。请根
 - 解读 LLM 检索指标（Context Precision、Context Recall）
   - Context Precision: 检索到的上下文是否与问题相关，以及排序质量
   - Context Recall: Ground Truth 中的信息是否能从检索上下文中推断
+- **解读 False Positive Rate (FPR)**：
+  - FPR 仅对无关问题（irrelevant）计算，衡量系统面对无关问题时"有多安静"
+  - FPR = 0.0 表示系统正确地没有返回任何结果（最佳表现）
+  - FPR = 1.0 表示系统返回了满额的无关结果（最差表现）
+  - FPR > 0.3 应视为警告，表明系统无法有效拒绝无关问题
+  - **注意：FPR 越低越好，与 Hit Rate/MRR/NDCG 的方向相反**
 - **必须分析检索多样性（Retrieval Diversity）**：如果 top-k 结果来自同一文档，说明信息来源单一
 - 分析不同问题类型的表现差异
 - 识别潜在的瓶颈或问题
@@ -196,13 +202,15 @@ class ExperimentReporter:
             for k, v in data.items():
                 if isinstance(v, dict):
                     lines.append(f"{prefix}{k}:")
-                    lines.extend(ExperimentReporter._dict_to_yaml_lines(v, indent + 1))
+                    lines.extend(
+                        ExperimentReporter._dict_to_yaml_lines(v, indent + 1))
                 elif isinstance(v, list):
                     lines.append(f"{prefix}{k}:")
                     for item in v:
                         if isinstance(item, dict):
                             lines.append(f"{prefix}  -")
-                            lines.extend(ExperimentReporter._dict_to_yaml_lines(item, indent + 2))
+                            lines.extend(
+                                ExperimentReporter._dict_to_yaml_lines(item, indent + 2))
                         else:
                             lines.append(f"{prefix}  - {item}")
                 else:
@@ -211,7 +219,8 @@ class ExperimentReporter:
             for item in data:
                 if isinstance(item, dict):
                     lines.append(f"{prefix}-")
-                    lines.extend(ExperimentReporter._dict_to_yaml_lines(item, indent + 1))
+                    lines.extend(
+                        ExperimentReporter._dict_to_yaml_lines(item, indent + 1))
                 else:
                     lines.append(f"{prefix}- {item}")
         else:
@@ -246,23 +255,28 @@ class ExperimentReporter:
 
         reranker = retrieval.get("reranker", {})
         if reranker.get("enabled", False):
-            lines.append(f"- Reranker: {reranker.get('model_name', 'N/A')} (top_n={reranker.get('top_n', 3)})")
+            lines.append(
+                f"- Reranker: {reranker.get('model_name', 'N/A')} (top_n={reranker.get('top_n', 3)})")
         else:
             lines.append("- Reranker: Disabled")
 
         query_rewrite = retrieval.get("query_rewrite", {})
         if query_rewrite.get("enabled", False):
-            lines.append(f"- Query Rewrite: {query_rewrite.get('strategy', 'N/A')}")
+            lines.append(
+                f"- Query Rewrite: {query_rewrite.get('strategy', 'N/A')}")
         else:
             lines.append("- Query Rewrite: Disabled")
 
         if method == "hybrid":
             hybrid = retrieval.get("hybrid", {})
-            lines.append(f"- Fusion: {hybrid.get('fusion', 'rrf')} (rrf_k={hybrid.get('rrf_k', 60)})")
+            lines.append(
+                f"- Fusion: {hybrid.get('fusion', 'rrf')} (rrf_k={hybrid.get('rrf_k', 60)})")
 
-        lines.append(f"- Chunking: {chunker.get('strategy', 'fixed')} (size={chunker.get('chunk_size', 512)}, overlap={chunker.get('chunk_overlap', 0)})")
+        lines.append(
+            f"- Chunking: {chunker.get('strategy', 'fixed')} (size={chunker.get('chunk_size', 512)}, overlap={chunker.get('chunk_overlap', 0)})")
         lines.append(f"- Embedding: {embedding.get('model_name', 'N/A')}")
-        lines.append(f"- Vector Store: {vector_store.get('type', 'N/A')} ({vector_store.get('distance', 'Cosine')})")
+        lines.append(
+            f"- Vector Store: {vector_store.get('type', 'N/A')} ({vector_store.get('distance', 'Cosine')})")
 
         return lines
 
@@ -340,7 +354,8 @@ class ExperimentReporter:
             output_path.parent.mkdir(parents=True, exist_ok=True)
             with open(output_path, "w", encoding="utf-8") as f:
                 f.write(report)
-            logger.success(f"Variant comparison report saved to: {output_path}")
+            logger.success(
+                f"Variant comparison report saved to: {output_path}")
         except Exception as e:
             logger.error(f"Failed to save report: {str(e)}")
             raise
@@ -355,11 +370,13 @@ class ExperimentReporter:
     ) -> str:
         sections = [
             self._generate_variant_header(meal_info),
-            self._generate_variant_overview_section(variant_results, meal_info),
+            self._generate_variant_overview_section(
+                variant_results, meal_info),
             self._generate_variant_comparison_table_section(variant_results),
             self._generate_best_variant_section(variant_results),
             self._generate_variant_details_section(variant_results),
-            self._generate_variant_config_section(variant_results, config_snapshot),
+            self._generate_variant_config_section(
+                variant_results, config_snapshot),
             self._generate_variant_recommendations_section(variant_results),
         ]
         return "\n\n".join(s for s in sections if s)
@@ -379,7 +396,8 @@ class ExperimentReporter:
                 variant_results, llm_response, meal_info
             )
         except Exception as e:
-            logger.warning(f"LLM report generation failed, falling back to template: {str(e)}")
+            logger.warning(
+                f"LLM report generation failed, falling back to template: {str(e)}")
             return self._generate_variant_comparison_template(
                 variant_results, meal_info, config_snapshot
             )
@@ -411,7 +429,8 @@ class ExperimentReporter:
 
         if meal_info:
             if meal_info.get("data_id"):
-                lines.append(f"- **Data ID**: `{meal_info['data_id'][:12]}...`")
+                lines.append(
+                    f"- **Data ID**: `{meal_info['data_id'][:12]}...`")
             if meal_info.get("name"):
                 lines.append(f"- **Meal Name**: {meal_info['name']}")
 
@@ -458,12 +477,18 @@ class ExperimentReporter:
             if "retrieval_metrics" in vr:
                 metrics = vr["retrieval_metrics"]
                 hr = metrics.get("avg_hit_rate", 0)
-                chunk_hr = metrics.get("avg_chunk_hit_rate")
-                dedup_hr = metrics.get("avg_dedup_hit_rate")
+                chunk_metrics = metrics.get("chunk_level_metrics", {})
+                chunk_hr = chunk_metrics.get(
+                    "avg_hit_rate") if chunk_metrics else None
+                dedup_metrics = metrics.get("dedup_metrics", {})
+                dedup_hr = dedup_metrics.get(
+                    "avg_hit_rate") if dedup_metrics else None
                 mrr = metrics.get("avg_mrr", 0)
-                chunk_mrr = metrics.get("avg_chunk_mrr")
+                chunk_mrr = chunk_metrics.get(
+                    "avg_mrr") if chunk_metrics else None
                 ndcg = metrics.get("avg_ndcg", 0)
-                chunk_ndcg = metrics.get("avg_chunk_ndcg")
+                chunk_ndcg = chunk_metrics.get(
+                    "avg_ndcg") if chunk_metrics else None
                 fpr = metrics.get("avg_false_positive_rate")
                 q_count = vr.get("total_questions", 0)
                 time_s = vr.get("total_time_seconds", 0)
@@ -555,11 +580,13 @@ class ExperimentReporter:
         lines.append(f"- MRR (doc): {metrics.get('avg_mrr', 0):.4f}")
         lines.append(f"- NDCG (doc): {metrics.get('avg_ndcg', 0):.4f}")
 
-        chunk_hr = metrics.get("avg_chunk_hit_rate")
-        chunk_mrr = metrics.get("avg_chunk_mrr")
-        chunk_ndcg = metrics.get("avg_chunk_ndcg")
-        dedup_hr = metrics.get("avg_dedup_hit_rate")
-        dedup_mrr = metrics.get("avg_dedup_mrr")
+        chunk_metrics = metrics.get("chunk_level_metrics", {})
+        chunk_hr = chunk_metrics.get("avg_hit_rate") if chunk_metrics else None
+        chunk_mrr = chunk_metrics.get("avg_mrr") if chunk_metrics else None
+        chunk_ndcg = chunk_metrics.get("avg_ndcg") if chunk_metrics else None
+        dedup_metrics = metrics.get("dedup_metrics", {})
+        dedup_hr = dedup_metrics.get("avg_hit_rate") if dedup_metrics else None
+        dedup_mrr = dedup_metrics.get("avg_mrr") if dedup_metrics else None
         fpr = metrics.get("avg_false_positive_rate")
 
         if any(v is not None for v in [chunk_hr, chunk_mrr, chunk_ndcg, dedup_hr, dedup_mrr, fpr]):
@@ -637,7 +664,8 @@ class ExperimentReporter:
             if "retrieval_metrics" in vr:
                 metrics = vr["retrieval_metrics"]
                 lines.append("**Retrieval Metrics**:")
-                lines.append(f"- Hit Rate: {metrics.get('avg_hit_rate', 0):.4f}")
+                lines.append(
+                    f"- Hit Rate: {metrics.get('avg_hit_rate', 0):.4f}")
                 lines.append(f"- MRR: {metrics.get('avg_mrr', 0):.4f}")
                 lines.append(f"- NDCG: {metrics.get('avg_ndcg', 0):.4f}")
                 lines.append("")
@@ -702,7 +730,8 @@ class ExperimentReporter:
 
         best = self._find_best_variant(variant_results)
         if not best:
-            lines.append("Unable to generate recommendations due to lack of successful variants.")
+            lines.append(
+                "Unable to generate recommendations due to lack of successful variants.")
             lines.append("")
             return "\n".join(lines)
 
@@ -735,11 +764,13 @@ class ExperimentReporter:
             mrr_assessment = "Ranking quality needs improvement."
 
         lines.append(f"- **MRR ({best_mrr:.4f})**: {mrr_assessment}")
-        lines.append(f"- **NDCG ({best_ndcg:.4f})**: Overall ranking quality metric.")
+        lines.append(
+            f"- **NDCG ({best_ndcg:.4f})**: Overall ranking quality metric.")
         lines.append("")
 
         has_chunk_metrics = any(
-            vr.get("retrieval_metrics", {}).get("avg_chunk_hit_rate") is not None
+            vr.get("retrieval_metrics", {}).get(
+                "chunk_level_metrics", {}).get("avg_hit_rate") is not None
             for vr in variant_results
         )
 
@@ -747,8 +778,12 @@ class ExperimentReporter:
             lines.append("### Document vs Chunk-Level Analysis")
             lines.append("")
 
-            best_chunk_hr = best_metrics.get("avg_chunk_hit_rate")
-            best_dedup_hr = best_metrics.get("avg_dedup_hit_rate")
+            chunk_metrics = best_metrics.get("chunk_level_metrics", {})
+            best_chunk_hr = chunk_metrics.get(
+                "avg_hit_rate") if chunk_metrics else None
+            dedup_metrics = best_metrics.get("dedup_metrics", {})
+            best_dedup_hr = dedup_metrics.get(
+                "avg_hit_rate") if dedup_metrics else None
             best_fpr = best_metrics.get("avg_false_positive_rate")
 
             if best_chunk_hr is not None:
@@ -759,7 +794,8 @@ class ExperimentReporter:
                     gap_assessment = "Moderate gap - chunk-level performance is lower but acceptable."
                 else:
                     gap_assessment = "Small gap - chunk-level retrieval performs nearly as well as document-level."
-                lines.append(f"- **Doc vs Chunk Hit Rate Gap ({doc_chunk_gap:.4f})**: {gap_assessment}")
+                lines.append(
+                    f"- **Doc vs Chunk Hit Rate Gap ({doc_chunk_gap:.4f})**: {gap_assessment}")
 
             if best_dedup_hr is not None and best_chunk_hr is not None:
                 dedup_improvement = best_dedup_hr - best_chunk_hr
@@ -769,7 +805,8 @@ class ExperimentReporter:
                     dedup_assessment = "Deduplication provides marginal improvement in hit rate."
                 else:
                     dedup_assessment = "Deduplication shows no improvement, suggesting minimal redundancy in retrieved chunks."
-                lines.append(f"- **Dedup vs Chunk Hit Rate ({dedup_improvement:+.4f})**: {dedup_assessment}")
+                lines.append(
+                    f"- **Dedup vs Chunk Hit Rate ({dedup_improvement:+.4f})**: {dedup_assessment}")
 
             if best_fpr is not None:
                 if best_fpr > 0.3:
@@ -778,7 +815,8 @@ class ExperimentReporter:
                     fpr_assessment = "Moderate false positive rate - some irrelevant chunks are retrieved."
                 else:
                     fpr_assessment = "Low false positive rate - retrieved chunks are mostly relevant."
-                lines.append(f"- **False Positive Rate ({best_fpr:.4f})**: {fpr_assessment}")
+                lines.append(
+                    f"- **False Positive Rate ({best_fpr:.4f})**: {fpr_assessment}")
 
             lines.append("")
 
@@ -808,8 +846,10 @@ class ExperimentReporter:
             else:
                 ar_assessment = "Low - Answers often irrelevant, needs improvement."
 
-            lines.append(f"- **Faithfulness ({best_faithfulness:.4f})**: {fa_assessment}")
-            lines.append(f"- **Answer Relevancy ({best_relevancy:.4f})**: {ar_assessment}")
+            lines.append(
+                f"- **Faithfulness ({best_faithfulness:.4f})**: {fa_assessment}")
+            lines.append(
+                f"- **Answer Relevancy ({best_relevancy:.4f})**: {ar_assessment}")
             lines.append("")
 
         lines.append("### Anomaly Detection")
@@ -817,26 +857,33 @@ class ExperimentReporter:
 
         hallucination_rate = best_metrics.get("hallucination_rate")
         if hallucination_rate is not None and hallucination_rate > 0:
-            lines.append(f"- **Hallucination Rate ({hallucination_rate:.2%})**: {hallucination_rate * 100:.1f}% of questions show faithfulness below 0.5, indicating potential hallucination.")
+            lines.append(
+                f"- **Hallucination Rate ({hallucination_rate:.2%})**: {hallucination_rate * 100:.1f}% of questions show faithfulness below 0.5, indicating potential hallucination.")
         else:
-            lines.append("- **Hallucination Rate**: No hallucination detected (all faithfulness scores >= 0.5).")
+            lines.append(
+                "- **Hallucination Rate**: No hallucination detected (all faithfulness scores >= 0.5).")
 
         avg_diversity = best_metrics.get("avg_retrieval_diversity")
         if avg_diversity is not None:
             if avg_diversity < 0.4:
-                lines.append(f"- **Retrieval Diversity ({avg_diversity:.4f})**: ⚠️ LOW - Top-k results often come from the same document, limiting information breadth.")
+                lines.append(
+                    f"- **Retrieval Diversity ({avg_diversity:.4f})**: ⚠️ LOW - Top-k results often come from the same document, limiting information breadth.")
             elif avg_diversity < 0.7:
-                lines.append(f"- **Retrieval Diversity ({avg_diversity:.4f})**: Moderate - Some diversity in retrieved documents.")
+                lines.append(
+                    f"- **Retrieval Diversity ({avg_diversity:.4f})**: Moderate - Some diversity in retrieved documents.")
             else:
-                lines.append(f"- **Retrieval Diversity ({avg_diversity:.4f})**: Good - Top-k results come from diverse documents.")
+                lines.append(
+                    f"- **Retrieval Diversity ({avg_diversity:.4f})**: Good - Top-k results come from diverse documents.")
         lines.append("")
 
         by_type = best_metrics.get("by_question_type")
         if by_type:
             lines.append("### Per-Question-Type Breakdown")
             lines.append("")
-            lines.append("| Type | Count | Avg Hit Rate | Avg MRR | Avg Faithfulness |")
-            lines.append("|------|-------|-------------|---------|-----------------|")
+            lines.append(
+                "| Type | Count | Avg Hit Rate | Avg MRR | Avg Faithfulness |")
+            lines.append(
+                "|------|-------|-------------|---------|-----------------|")
             for qtype, tm in sorted(by_type.items()):
                 count = tm.get("count", 0)
                 hr = tm.get("avg_hit_rate", "N/A")
@@ -844,8 +891,10 @@ class ExperimentReporter:
                 faith = tm.get("avg_faithfulness", "N/A")
                 hr_str = f"{hr:.4f}" if isinstance(hr, int | float) else hr
                 mrr_str = f"{mrr:.4f}" if isinstance(mrr, int | float) else mrr
-                faith_str = f"{faith:.4f}" if isinstance(faith, int | float) else faith
-                lines.append(f"| {qtype} | {count} | {hr_str} | {mrr_str} | {faith_str} |")
+                faith_str = f"{faith:.4f}" if isinstance(
+                    faith, int | float) else faith
+                lines.append(
+                    f"| {qtype} | {count} | {hr_str} | {mrr_str} | {faith_str} |")
             lines.append("")
 
         lines.append("### Optimization Suggestions")
@@ -928,8 +977,10 @@ class ExperimentReporter:
 
         lines.append("### Next Steps")
         lines.append("")
-        lines.append("1. Deploy the best performing variant for production use.")
-        lines.append("2. Continue experimenting with other optimization techniques.")
+        lines.append(
+            "1. Deploy the best performing variant for production use.")
+        lines.append(
+            "2. Continue experimenting with other optimization techniques.")
         lines.append("3. Monitor performance in real-world usage.")
         lines.append("")
 
@@ -955,7 +1006,8 @@ class ExperimentReporter:
             llm_response = self._call_llm(prompt)
             return self._format_llm_report(result, llm_response)
         except Exception as e:
-            logger.warning(f"LLM report generation failed, falling back to template: {str(e)}")
+            logger.warning(
+                f"LLM report generation failed, falling back to template: {str(e)}")
             return self._generate_template_report(result)
 
     def _generate_header(self, result: ExperimentResult) -> str:
@@ -991,7 +1043,8 @@ class ExperimentReporter:
                 size_kb = size / 1024
                 lines.append(f"| {path} | {size_kb:.1f} KB |")
             if len(result.pdf_files) > 20:
-                lines.append(f"| ... and {len(result.pdf_files) - 20} more files | |")
+                lines.append(
+                    f"| ... and {len(result.pdf_files) - 20} more files | |")
             lines.append("")
 
         if result.stats:
@@ -1008,7 +1061,8 @@ class ExperimentReporter:
         lines = ["## 3. Technical Configuration", ""]
 
         if result.config_snapshot:
-            merged = result.config_snapshot.get("merged", result.config_snapshot)
+            merged = result.config_snapshot.get(
+                "merged", result.config_snapshot)
             if "retrieval" in merged or "chunker" in merged:
                 lines.append("### Technology Summary")
                 lines.append("")
@@ -1127,9 +1181,11 @@ class ExperimentReporter:
             lines.append("| Metric | Value | Description |")
             lines.append("|--------|-------|-------------|")
             for metric, value in result.generation_metrics.items():
-                metric_name = metric.replace("avg_", "").replace("_", " ").title()
+                metric_name = metric.replace(
+                    "avg_", "").replace("_", " ").title()
                 description = self._get_generation_metric_description(metric)
-                lines.append(f"| {metric_name} | {value:.4f} | {description} |")
+                lines.append(
+                    f"| {metric_name} | {value:.4f} | {description} |")
             lines.append("")
 
         categories = {}
@@ -1137,8 +1193,10 @@ class ExperimentReporter:
             if r.retrieval:
                 cat = r.category or "uncategorized"
                 if cat not in categories:
-                    categories[cat] = {"hit_rate": [], "mrr": [], "ndcg": [], "count": 0}
-                categories[cat]["hit_rate"].append(r.retrieval.get("hit_rate", 0))
+                    categories[cat] = {"hit_rate": [],
+                                       "mrr": [], "ndcg": [], "count": 0}
+                categories[cat]["hit_rate"].append(
+                    r.retrieval.get("hit_rate", 0))
                 categories[cat]["mrr"].append(r.retrieval.get("mrr", 0))
                 categories[cat]["ndcg"].append(r.retrieval.get("ndcg", 0))
                 categories[cat]["count"] += 1
@@ -1146,13 +1204,19 @@ class ExperimentReporter:
         if categories:
             lines.append("### Results by Question Category")
             lines.append("")
-            lines.append("| Category | Count | Avg Hit Rate | Avg MRR | Avg NDCG |")
-            lines.append("|----------|-------|--------------|---------|----------|")
+            lines.append(
+                "| Category | Count | Avg Hit Rate | Avg MRR | Avg NDCG |")
+            lines.append(
+                "|----------|-------|--------------|---------|----------|")
             for cat, metrics in sorted(categories.items()):
-                avg_hr = sum(metrics["hit_rate"]) / len(metrics["hit_rate"]) if metrics["hit_rate"] else 0
-                avg_mrr = sum(metrics["mrr"]) / len(metrics["mrr"]) if metrics["mrr"] else 0
-                avg_ndcg = sum(metrics["ndcg"]) / len(metrics["ndcg"]) if metrics["ndcg"] else 0
-                lines.append(f"| {cat} | {metrics['count']} | {avg_hr:.4f} | {avg_mrr:.4f} | {avg_ndcg:.4f} |")
+                avg_hr = sum(
+                    metrics["hit_rate"]) / len(metrics["hit_rate"]) if metrics["hit_rate"] else 0
+                avg_mrr = sum(metrics["mrr"]) / \
+                    len(metrics["mrr"]) if metrics["mrr"] else 0
+                avg_ndcg = sum(metrics["ndcg"]) / \
+                    len(metrics["ndcg"]) if metrics["ndcg"] else 0
+                lines.append(
+                    f"| {cat} | {metrics['count']} | {avg_hr:.4f} | {avg_mrr:.4f} | {avg_ndcg:.4f} |")
             lines.append("")
 
         error_count = sum(1 for r in result.results if r.error)
@@ -1172,14 +1236,19 @@ class ExperimentReporter:
         has_generation = any(r.generation for r in result.results)
 
         if has_generation:
-            lines.append("| ID | Question | Hit Rate | MRR | NDCG | Faithfulness | Relevancy | Time (s) |")
-            lines.append("|----|----------|----------|-----|------|--------------|-----------|----------|")
+            lines.append(
+                "| ID | Question | Hit Rate | MRR | NDCG | Faithfulness | Relevancy | Time (s) |")
+            lines.append(
+                "|----|----------|----------|-----|------|--------------|-----------|----------|")
         else:
-            lines.append("| ID | Question | Hit Rate | MRR | NDCG | Time (s) |")
-            lines.append("|----|----------|----------|-----|------|----------|")
+            lines.append(
+                "| ID | Question | Hit Rate | MRR | NDCG | Time (s) |")
+            lines.append(
+                "|----|----------|----------|-----|------|----------|")
 
         for r in result.results[:50]:
-            q_short = r.question[:30] + "..." if len(r.question) > 30 else r.question
+            q_short = r.question[:30] + \
+                "..." if len(r.question) > 30 else r.question
             if r.retrieval:
                 hr = r.retrieval.get("hit_rate", 0)
                 mrr = r.retrieval.get("mrr", 0)
@@ -1190,17 +1259,22 @@ class ExperimentReporter:
                     relevancy = r.generation.get("answer_relevancy")
                     fa_str = f"{faithfulness:.2f}" if faithfulness is not None else "N/A"
                     ar_str = f"{relevancy:.2f}" if relevancy is not None else "N/A"
-                    lines.append(f"| {r.id} | {q_short} | {hr:.4f} | {mrr:.4f} | {ndcg:.4f} | {fa_str} | {ar_str} | {r.time_seconds:.2f} |")
+                    lines.append(
+                        f"| {r.id} | {q_short} | {hr:.4f} | {mrr:.4f} | {ndcg:.4f} | {fa_str} | {ar_str} | {r.time_seconds:.2f} |")
                 else:
-                    lines.append(f"| {r.id} | {q_short} | {hr:.4f} | {mrr:.4f} | {ndcg:.4f} | {r.time_seconds:.2f} |")
+                    lines.append(
+                        f"| {r.id} | {q_short} | {hr:.4f} | {mrr:.4f} | {ndcg:.4f} | {r.time_seconds:.2f} |")
             else:
                 if has_generation:
-                    lines.append(f"| {r.id} | {q_short} | N/A | N/A | N/A | N/A | N/A | {r.time_seconds:.2f} |")
+                    lines.append(
+                        f"| {r.id} | {q_short} | N/A | N/A | N/A | N/A | N/A | {r.time_seconds:.2f} |")
                 else:
-                    lines.append(f"| {r.id} | {q_short} | N/A | N/A | N/A | {r.time_seconds:.2f} |")
+                    lines.append(
+                        f"| {r.id} | {q_short} | N/A | N/A | N/A | {r.time_seconds:.2f} |")
 
         if len(result.results) > 50:
-            lines.append(f"| ... | ... and {len(result.results) - 50} more results | ... | ... | ... | ... |")
+            lines.append(
+                f"| ... | ... and {len(result.results) - 50} more results | ... | ... | ... | ... |")
 
         lines.append("")
         return "\n".join(lines)
@@ -1233,12 +1307,15 @@ class ExperimentReporter:
 
         lines.append(f"- **Hit Rate ({avg_hr:.4f})**: {hr_assessment}")
         lines.append(f"- **MRR ({avg_mrr:.4f})**: {mrr_assessment}")
-        lines.append(f"- **NDCG ({avg_ndcg:.4f})**: Ranking quality assessment.")
+        lines.append(
+            f"- **NDCG ({avg_ndcg:.4f})**: Ranking quality assessment.")
         lines.append("")
 
         if result.generation_metrics:
-            avg_faithfulness = result.generation_metrics.get("avg_faithfulness", 0)
-            avg_relevancy = result.generation_metrics.get("avg_answer_relevancy", 0)
+            avg_faithfulness = result.generation_metrics.get(
+                "avg_faithfulness", 0)
+            avg_relevancy = result.generation_metrics.get(
+                "avg_answer_relevancy", 0)
 
             lines.append("### Generation Quality Summary")
             lines.append("")
@@ -1261,8 +1338,10 @@ class ExperimentReporter:
             else:
                 ar_assessment = "Needs Improvement - Answers often irrelevant to questions."
 
-            lines.append(f"- **Faithfulness ({avg_faithfulness:.4f})**: {fa_assessment}")
-            lines.append(f"- **Answer Relevancy ({avg_relevancy:.4f})**: {ar_assessment}")
+            lines.append(
+                f"- **Faithfulness ({avg_faithfulness:.4f})**: {fa_assessment}")
+            lines.append(
+                f"- **Answer Relevancy ({avg_relevancy:.4f})**: {ar_assessment}")
             lines.append("")
 
         lines.append("### Recommendations")
@@ -1272,40 +1351,54 @@ class ExperimentReporter:
         rec_num = 1
 
         if avg_hr < 0.6:
-            recommendations.append(f"{rec_num}. Consider increasing `top_k` to retrieve more candidates.")
+            recommendations.append(
+                f"{rec_num}. Consider increasing `top_k` to retrieve more candidates.")
             rec_num += 1
-            recommendations.append(f"{rec_num}. Evaluate embedding model quality for domain-specific content.")
+            recommendations.append(
+                f"{rec_num}. Evaluate embedding model quality for domain-specific content.")
             rec_num += 1
         if avg_mrr < 0.5:
-            recommendations.append(f"{rec_num}. Consider adding a reranker to improve ranking.")
+            recommendations.append(
+                f"{rec_num}. Consider adding a reranker to improve ranking.")
             rec_num += 1
-            recommendations.append(f"{rec_num}. Review chunking strategy for better context preservation.")
+            recommendations.append(
+                f"{rec_num}. Review chunking strategy for better context preservation.")
             rec_num += 1
         if avg_ndcg < 0.5:
-            recommendations.append(f"{rec_num}. Consider hybrid retrieval (BM25 + vector search).")
+            recommendations.append(
+                f"{rec_num}. Consider hybrid retrieval (BM25 + vector search).")
             rec_num += 1
 
         if result.generation_metrics:
-            avg_faithfulness = result.generation_metrics.get("avg_faithfulness", 0)
-            avg_relevancy = result.generation_metrics.get("avg_answer_relevancy", 0)
+            avg_faithfulness = result.generation_metrics.get(
+                "avg_faithfulness", 0)
+            avg_relevancy = result.generation_metrics.get(
+                "avg_answer_relevancy", 0)
 
             if avg_faithfulness < 0.6:
-                recommendations.append(f"{rec_num}. Review prompt engineering to reduce hallucinations.")
+                recommendations.append(
+                    f"{rec_num}. Review prompt engineering to reduce hallucinations.")
                 rec_num += 1
-                recommendations.append(f"{rec_num}. Ensure retrieved contexts are relevant and complete.")
+                recommendations.append(
+                    f"{rec_num}. Ensure retrieved contexts are relevant and complete.")
                 rec_num += 1
             if avg_relevancy < 0.6:
-                recommendations.append(f"{rec_num}. Improve question understanding in the generation prompt.")
+                recommendations.append(
+                    f"{rec_num}. Improve question understanding in the generation prompt.")
                 rec_num += 1
-                recommendations.append(f"{rec_num}. Consider answer validation or filtering.")
+                recommendations.append(
+                    f"{rec_num}. Consider answer validation or filtering.")
                 rec_num += 1
 
         if not recommendations:
-            recommendations.append(f"{rec_num}. Current performance is satisfactory for baseline.")
+            recommendations.append(
+                f"{rec_num}. Current performance is satisfactory for baseline.")
             rec_num += 1
-            recommendations.append(f"{rec_num}. Consider fine-tuning embedding model for domain-specific improvements.")
+            recommendations.append(
+                f"{rec_num}. Consider fine-tuning embedding model for domain-specific improvements.")
             rec_num += 1
-            recommendations.append(f"{rec_num}. Explore advanced retrieval strategies for edge cases.")
+            recommendations.append(
+                f"{rec_num}. Explore advanced retrieval strategies for edge cases.")
             rec_num += 1
 
         lines.extend(recommendations)
@@ -1315,12 +1408,14 @@ class ExperimentReporter:
 
     def _generate_assets_section(self, result: ExperimentResult) -> str:
         lines = ["## 8. Experiment Assets", ""]
-        lines.append("The following artifacts are available for this experiment:")
+        lines.append(
+            "The following artifacts are available for this experiment:")
         lines.append("")
         lines.append("- Evaluation results: `baseline_report.json`")
         lines.append("- Experiment report: `experiment_report.md`")
         if result.meal_data_id:
-            lines.append(f"- Data artifacts: `data/artifacts/{result.meal_data_id[:12]}/`")
+            lines.append(
+                f"- Data artifacts: `data/artifacts/{result.meal_data_id[:12]}/`")
         lines.append("")
 
         return "\n".join(lines)
@@ -1377,7 +1472,8 @@ class ExperimentReporter:
 
     def _init_llm_client(self) -> None:
         if not self.llm_api_key:
-            raise EvaluationError("LLM API key is required for LLM report generation")
+            raise EvaluationError(
+                "LLM API key is required for LLM report generation")
 
         try:
             from src.utils import create_llm_client
@@ -1391,9 +1487,11 @@ class ExperimentReporter:
             )
             logger.info("LLM client initialized for report generation")
         except ImportError as e:
-            raise EvaluationError("anthropic package is required for LLM report generation") from e
+            raise EvaluationError(
+                "anthropic package is required for LLM report generation") from e
         except Exception as e:
-            raise EvaluationError(f"Failed to initialize LLM client: {str(e)}") from e
+            raise EvaluationError(
+                f"Failed to initialize LLM client: {str(e)}") from e
 
     def _format_llm_report(self, result: ExperimentResult, llm_response: str) -> str:
         header = self._generate_header(result)
