@@ -12,7 +12,7 @@ from src.exceptions import RetrievalError
 from src.generator import Generator
 from src.hybrid_retriever import HybridRetriever
 from src.indexer import VectorIndexer
-from src.parser import parse_all_pdfs
+from src.parser import parse_all_pdfs_unified
 from src.query_rewriter import QueryRewriter
 
 if TYPE_CHECKING:
@@ -198,11 +198,10 @@ class RAGPipeline:
             )
 
         logger.info("Step 1: Parsing PDFs...")
-        parse_results = parse_all_pdfs(
+        parse_results = parse_all_pdfs_unified(
             input_dir=parser_config["input_dir"],
-            output_dir=parser_config["output_dir"],
+            artifacts_dir=parser_config["output_dir"],
             force=force_parse,
-            pdf_files=sampled_pdf_files,
             parser_options=parser_config.get("pymupdf4llm"),
         )
 
