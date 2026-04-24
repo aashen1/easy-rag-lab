@@ -50,9 +50,7 @@
 
 ### 检查范围
 
-当前 ruff 覆盖的目录：`src/`、`eval/`、`tests/`
-
-**已知盲区**：根目录的 `main.py` 和 `interactive.py` 不在检查范围内。如需修复，在 `pixi.toml` 的 ruff task 中添加这些文件。
+当前 ruff 覆盖的路径：`src/`、`eval/`、`tests/`、`main.py`、`interactive.py`
 
 ---
 

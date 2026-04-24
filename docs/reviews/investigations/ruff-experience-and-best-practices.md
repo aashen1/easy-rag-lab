@@ -51,7 +51,7 @@ Ruff 成为日常开发流程的一部分，`pixi run lint` 作为每次代码�
 - 每次跑 `ruff-check` 都能看到 15 个左右的错误
 - 全部在测试文件中，不影响功能，所以"以后再修"
 - 全局忽略的 `SIM108` 和 `E402` 让部分代码绕过了检查
-- 发现 lint 盲区：`pixi.toml` 中 ruff task 仅覆盖 `src/ eval/ tests/`，根目录的 `main.py` 和 `interactive.py` 不在检查范围内
+- 发现 lint 盲区：`pixi.toml` 中 ruff task 仅覆盖 `src/ eval/ tests/`，根目录的 `main.py` 和 `interactive.py` 不在检查范围内（后于阶段五修复）
 
 这一阶段的特征是**新代码质量可控，旧代码债务累积**。
 
@@ -83,6 +83,10 @@ Ruff 成为日常开发流程的一部分，`pixi run lint` 作为每次代码�
 
 **最终结果**：`ruff check` → **All checks passed!** 零错误零警告。
 
+**Lint 盲区修复**：
+- 在 `pixi.toml` 的 ruff task 中加入 `main.py` 和 `interactive.py`
+- 修复根目录 .py 文件中的 17 个 lint 错误（F541、UP006、UP035、B905、F841）
+
 ### 演进时间线
 
 ```
@@ -90,7 +94,7 @@ v0.1.0~v0.1.5  ████████████████████  无
 v0.1.6         ██                    手动规范：治标不治本
 04-21          █                     引入 Ruff：配置宽松，积压未清
 v0.1.7~v0.1.8  ██████                日常使用：新代码可控，旧债拖延期
-v0.1.8+        █                     一次性清偿：配置收紧 + 全部修复
+v0.1.8+        ██                    一次性清偿：配置收紧 + 全部修复 + 盲区消除
                                        → All checks passed!
 ```
 
