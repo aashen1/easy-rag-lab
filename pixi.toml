@@ -22,6 +22,12 @@ cmd = "pre-commit install"
 [tasks.pre-commit-run]
 cmd = "pre-commit run --all-files"
 
+[tasks.test]
+cmd = "pytest tests/ -m \"not integration\" --tb=short -q --durations=10"
+
+[tasks.test-all]
+cmd = "pytest tests/ --tb=short -q --durations=10"
+
 
 
 [tasks._run-exp]

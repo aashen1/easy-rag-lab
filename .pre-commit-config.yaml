@@ -94,6 +94,46 @@ repos:
       - id: check-merge-conflict
         name: check merge conflicts
 
+  # ---------------------------------------------------------------------------
+  # post-merge-test：合并后自动跑单元测试
+  # ---------------------------------------------------------------------------
+  # 这个钩子跟上面那些不一样——上面的是 commit 前检查（防止坏代码提交），
+  # 这个是 merge 后检查（确认合并后的代码整体没闯祸）。
+  #
+  # 【为什么需要它？】
+  # 两个功能分支各自测试都通过，但合到一起可能出问题：
+  # - 分支 A 改了 retriever.py 的接口
+  # - 分支 B 还在用旧接口调用 retriever.py
+  # - 各自 commit 时 lint/format 都通过（因为只检查格式，不跑测试）
+  # - 合并后 pipeline 就炸了 💥
+  #
+  # 【工作流程】
+  # 1. 你在 dev/main 分支执行 git merge feature-xxx
+  # 2. 合并成功后，这个钩子自动触发
+  # 3. 运行 pytest（跳过需要外部 API 的 integration 测试）
+  # 4. ✅ 通过 → 一切正常，继续工作
+  #    ❌ 失败 → 打印失败信息，你可以用 git reset --hard ORIG_HEAD 回滚
+  #
+  # 【关键参数解释】
+  # - repo: local        → 不从远程下载，直接运行本地命令
+  # - stages: [post-merge] → 只在 git merge 完成后触发，不影响 commit
+  # - always_run: true   → 不管改了什么文件都跑测试（因为任何改动都可能影响全局）
+  # - pass_filenames: false → pytest 不需要接收文件名参数
+  #
+  # 【手动运行测试】
+  #   pixi run test          → 跑单元测试（跳过 integration）
+  #   pixi run test-all      → 跑全部测试（包括 integration）
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: post-merge-test
+        name: run tests after merge
+        entry: pixi run test
+        language: system
+        stages: [post-merge]
+        always_run: true
+        pass_filenames: false
+
 # 全局排除：这些目录下的文件不会被任何钩子检查
 exclude: |
   (?x)^(
