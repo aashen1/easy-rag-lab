@@ -139,15 +139,15 @@ def compute_parser_config_hash(parser_config: dict) -> str:
     """Compute a short hash of the parser configuration.
 
     Args:
-        parser_config: Parser configuration dictionary. May contain
-            ``algorithm``, ``options``, or a nested key like ``pymupdf4llm``
-            that holds algorithm-specific options.
+        parser_config: Parser configuration dictionary. Expected to contain
+            ``algorithm`` and ``options`` keys as built by
+            ``_build_config_snapshot_and_hashes``.
 
     Returns:
         First 8 characters of the SHA-256 hex digest.
     """
     algorithm = parser_config.get("algorithm", "pymupdf4llm")
-    options = parser_config.get(algorithm, {})
+    options = parser_config.get("options", {})
     relevant = {"algorithm": algorithm, "options": options}
     return hashlib.sha256(json.dumps(relevant, sort_keys=True).encode()).hexdigest()[:8]
 
