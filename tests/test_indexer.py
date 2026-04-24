@@ -154,3 +154,105 @@ class TestVectorIndexer:
         texts_arg = mock_embedder_inst.embed_texts.call_args[0][0]
         assert len(texts_arg) == 1
         assert texts_arg[0] == "valid"
+
+    @patch("src.indexer.QdrantClient")
+    def test_init_client_failure_raises_indexing_error(self, mock_qdrant_class, temp_project_dir):
+        mock_qdrant_class.side_effect = RuntimeError("Qdrant init failed")
+        with pytest.raises(IndexingError, match="Failed to initialize Qdrant client"):
+            VectorIndexer(persist_dir=str(temp_project_dir / "data" / "vector_store"))
+
+    @patch("src.indexer.QdrantClient")
+    def test_create_collection_failure_raises_indexing_error(self, mock_qdrant_class, mock_qdrant_client, temp_project_dir):
+        mock_qdrant_class.return_value = mock_qdrant_client
+        mock_qdrant_client.get_collections.side_effect = RuntimeError("RPC failed")
+        indexer = VectorIndexer(persist_dir=str(temp_project_dir / "data" / "vector_store"))
+        with pytest.raises(IndexingError, match="Failed to create collection"):
+            indexer.create_collection(vector_size=1024)
+
+    @patch("src.indexer.QdrantClient")
+    def test_index_chunks_upsert_failure_raises_indexing_error(self, mock_qdrant_class, mock_qdrant_client, temp_project_dir):
+        mock_qdrant_class.return_value = mock_qdrant_client
+        mock_qdrant_client.upsert.side_effect = RuntimeError("Upsert failed")
+        indexer = VectorIndexer(persist_dir=str(temp_project_dir / "data" / "vector_store"))
+        chunks = [{"chunk_id": "c1", "text": "hello", "metadata": {}}]
+        embeddings = np.array([[0.1, 0.2, 0.3]], dtype=np.float32)
+        with pytest.raises(IndexingError, match="Failed to index chunks"):
+            indexer.index_chunks(chunks, embeddings)
+
+    @patch("src.indexer.QdrantClient")
+    def test_delete_collection_failure_raises_indexing_error(self, mock_qdrant_class, mock_qdrant_client, temp_project_dir):
+        mock_qdrant_class.return_value = mock_qdrant_client
+        mock_qdrant_client.delete_collection.side_effect = RuntimeError("Delete failed")
+        indexer = VectorIndexer(persist_dir=str(temp_project_dir / "data" / "vector_store"))
+        with pytest.raises(IndexingError, match="Failed to delete collection"):
+            indexer.delete_collection()
+
+    @patch("src.indexer.QdrantClient")
+    def test_build_index_embedder_failure(self, mock_qdrant_class, mock_qdrant_client, temp_project_dir):
+        mock_qdrant_class.return_value = mock_qdrant_client
+        chunks_dir = temp_project_dir / "data" / "chunks"
+        chunk_file = chunks_dir / "test.jsonl"
+        with open(chunk_file, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"chunk_id": "c1", "text": "hello", "metadata": {}}) + "\n")
+        mock_embedder_inst = MagicMock()
+        mock_embedder_inst.embed_texts.side_effect = RuntimeError("Embedding API failed")
+        indexer = VectorIndexer(persist_dir=str(temp_project_dir / "data" / "vector_store"))
+        with pytest.raises(RuntimeError, match="Embedding API failed"):
+            indexer.build_index(chunks_dir=str(chunks_dir), embedder=mock_embedder_inst)
+
+    @patch("src.indexer.QdrantClient")
+    def test_build_index_no_jsonl_files(self, mock_qdrant_class, mock_qdrant_client, temp_project_dir):
+        mock_qdrant_class.return_value = mock_qdrant_client
+        chunks_dir = temp_project_dir / "data" / "chunks"
+        indexer = VectorIndexer(persist_dir=str(temp_project_dir / "data" / "vector_store"))
+        indexer.build_index(chunks_dir=str(chunks_dir), embedder=MagicMock())
+        mock_qdrant_client.create_collection.assert_not_called()
+
+    @patch("src.indexer.QdrantClient")
+    def test_build_index_source_filter_no_match(self, mock_qdrant_class, mock_qdrant_client, temp_project_dir):
+        mock_qdrant_class.return_value = mock_qdrant_client
+        chunks_dir = temp_project_dir / "data" / "chunks"
+        chunk_file = chunks_dir / "report_a.jsonl"
+        with open(chunk_file, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"chunk_id": "c1", "text": "hello", "metadata": {}}) + "\n")
+        indexer = VectorIndexer(persist_dir=str(temp_project_dir / "data" / "vector_store"))
+        indexer.build_index(
+            chunks_dir=str(chunks_dir),
+            embedder=MagicMock(),
+            source_filter={"nonexistent.jsonl"},
+        )
+        mock_qdrant_client.create_collection.assert_not_called()
+
+    @patch("src.indexer.QdrantClient")
+    def test_close_without_client_attribute(self, mock_qdrant_class, mock_qdrant_client, temp_project_dir):
+        mock_qdrant_class.return_value = mock_qdrant_client
+        indexer = VectorIndexer(persist_dir=str(temp_project_dir / "data" / "vector_store"))
+        del indexer.client
+        indexer.close()
+
+    @patch("src.indexer.QdrantClient")
+    def test_close_client_error_logs_warning(self, mock_qdrant_class, mock_qdrant_client, temp_project_dir):
+        mock_qdrant_class.return_value = mock_qdrant_client
+        mock_qdrant_client.close.side_effect = RuntimeError("Close failed")
+        indexer = VectorIndexer(persist_dir=str(temp_project_dir / "data" / "vector_store"))
+        indexer.close()
+
+    @patch("src.indexer.QdrantClient")
+    def test_index_chunks_missing_text_key_raises_key_error(self, mock_qdrant_class, mock_qdrant_client, temp_project_dir):
+        mock_qdrant_class.return_value = mock_qdrant_client
+        indexer = VectorIndexer(persist_dir=str(temp_project_dir / "data" / "vector_store"))
+        chunks = [{"chunk_id": "c1"}]
+        embeddings = np.array([[0.1, 0.2, 0.3]], dtype=np.float32)
+        with pytest.raises(IndexingError, match="Failed to index chunks"):
+            indexer.index_chunks(chunks, embeddings)
+
+    @patch("src.indexer.QdrantClient")
+    def test_build_index_all_corrupted_jsonl(self, mock_qdrant_class, mock_qdrant_client, temp_project_dir):
+        mock_qdrant_class.return_value = mock_qdrant_client
+        chunks_dir = temp_project_dir / "data" / "chunks"
+        bad_file = chunks_dir / "bad.jsonl"
+        with open(bad_file, "w", encoding="utf-8") as f:
+            f.write("not valid json\n")
+        indexer = VectorIndexer(persist_dir=str(temp_project_dir / "data" / "vector_store"))
+        indexer.build_index(chunks_dir=str(chunks_dir), embedder=MagicMock())
+        mock_qdrant_client.create_collection.assert_not_called()
