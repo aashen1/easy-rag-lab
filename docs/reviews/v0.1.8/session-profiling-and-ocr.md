@@ -130,13 +130,17 @@ S6/S7 在多问题场景下被多次 begin/end，`PipelineProfiler.end_stage()` 
 
 ## 三、OCR 对比实验
 
+> **⚠️ 勘误（2026-04-25）**：本章节原始结论因两个叠加 Bug 而完全错误。错误部分已用 ~~删除线~~ 标注，更正内容紧随其后。详见第六章反思。
+
 ### 3.1 实验设计
 
 **控制变量**：只改 OCR 开关，保持同一套 PDF 文件。
 
-**缓存安全性验证**：系统的三层缓存隔离机制（data_id → config_hash → index_key）确保不同配置使用独立缓存路径，不存在污染风险：
-- OCR 开：parser_hash = `e936d3e3`，解析目录 `parsed_e936d3e3/`
-- OCR 关：parser_hash = `6a7f018d`，解析目录 `parsed_6a7f018d/`
+**缓存安全性验证**：~~系统的三层缓存隔离机制（data_id → config_hash → index_key）确保不同配置使用独立缓存路径，不存在污染风险~~：
+- ~~OCR 开：parser_hash = `e936d3e3`，解析目录 `parsed_e936d3e3/`~~
+- ~~OCR 关：parser_hash = `6a7f018d`，解析目录 `parsed_6a7f018d/`~~
+
+**更正**：实验时 `compute_parser_config_hash()` 存在 Bug（用 `parser_config.get(algorithm, {})` 而非 `parser_config.get("options", {})`），导致 OCR 开/关产生**相同的** hash `e936d3e3`，指向同一个缓存目录。OCR off 实验直接命中了 OCR on 已解析的缓存，152s 不是"关 OCR 更快"，而是"跳过了解析"。
 
 **Meal 复用**：创建新 meal `1kpage_no_ocr`，使用相同 seed=42 确保采样同一套 PDF（data_id 相同）。
 
@@ -144,28 +148,50 @@ S6/S7 在多问题场景下被多次 begin/end，`PipelineProfiler.end_stage()` 
 
 | 指标 | OCR 开 | OCR 关 | 变化 |
 |------|--------|--------|------|
-| S1 PDF解析 | 412.35s | 151.81s | **-63.2%** |
-| 单页耗时 | 0.412s/页 | 0.152s/页 | -63.2% |
-| CPU 平均 | 73.3% | 58.3% | -20.5% |
-| 内存峰值 | 1907.2 MB | 1547.5 MB | -18.8% |
+| S1 PDF解析 | 412.35s | ~~151.81s~~ | ~~**-63.2%**~~ |
+| 单页耗时 | 0.412s/页 | ~~0.152s/页~~ | ~~-63.2%~~ |
+| CPU 平均 | 73.3% | ~~58.3%~~ | ~~-20.5%~~ |
+| 内存峰值 | 1907.2 MB | ~~1547.5 MB~~ | ~~-18.8%~~ |
 | Faithfulness | 0.7771 | 0.8143 | **+4.8%** |
 | Answer Relevancy | 0.7650 | 0.7680 | +0.4% |
 
+**更正**：上表中 S1/CPU/内存的差异全部是假象。OCR off 实验的 151.81s 是缓存命中后的分块+索引构建时间，不是解析时间。两个实验实际使用的是同一份解析产物（MD5: `db294e2903d1`）。
+
+**更正后的真实对比**（hash 修复后重测，exp_20260425_061926 vs exp_20260425_063020）：
+
+| 指标 | OCR 开 | OCR 关 | 变化 |
+|------|--------|--------|------|
+| S1 PDF解析 | 365.78s | 401.34s | +9.7%（随机波动） |
+| 单页耗时 | 0.366s/页 | 0.401s/页 | +9.7% |
+| CPU 平均 | 70.8% | 79.9% | +12.9% |
+| 内存峰值 | 1921.75 MB | 1937.0 MB | +0.8% |
+
+**两次无显著差异**——因为当前环境没有 OCR 引擎，`use_ocr=True` 被 pymupdf4llm 静默降级为 `OCRMode.NEVER`，OCR 从未真正执行。
+
 ### 3.3 核心发现
 
-1. **OCR 贡献了 63.2% 的解析时间**（260s），关闭后解析速度提升 2.7 倍
-2. **OCR 不提升 RAG 质量**：关闭 OCR 后 Faithfulness 反而提升 4.8%，OCR 文本中的识别错误可能引入噪声
+1. ~~**OCR 贡献了 63.2% 的解析时间**（260s），关闭后解析速度提升 2.7 倍~~
+   **更正**：63.2% 的差异是缓存命中造成的假象。真实情况是 OCR 开/关无任何性能差异，因为环境中未安装 OCR 引擎（Tesseract/RapidOCR/PaddleOCR 均不可用），pymupdf4llm 将 `use_ocr=True` 静默降级为 `OCRMode.NEVER`，OCR 从未执行。
+
+2. ~~**OCR 不提升 RAG 质量**：关闭 OCR 后 Faithfulness 反而提升 4.8%，OCR 文本中的识别错误可能引入噪声~~
+   **更正**：Faithfulness 的 4.8% 差异来自 LLM API 的随机波动（两次实验使用完全相同的解析产物），与 OCR 无关。
+
 3. **S7 答案生成异常**：从 17.96s 飙升至 132.85s（+639.6%），最可能是 LLM API 延迟波动
+   **确认**：S7 异常确实为 LLM API 延迟波动，与 OCR 无关。
 
 ### 3.4 建议
 
-- 默认关闭 OCR，仅对扫描件按需启用
-- 可实现智能 OCR 策略：先检测页面是否有文本层，无文本层时才启用 OCR
+- ~~默认关闭 OCR，仅对扫描件按需启用~~
+  **更正**：当前 `use_ocr: true` 是无效配置（无 OCR 引擎），建议改为 `false` 避免误导，或安装 OCR 引擎后再做真实对比。
+- ~~可实现智能 OCR 策略：先检测页面是否有文本层，无文本层时才启用 OCR~~
+  **保留**：智能 OCR 策略仍有价值，但需先安装 OCR 引擎才能验证效果。
+- **新增**：pymupdf4llm 的 `use_ocr` 静默降级行为应添加日志告警，避免用户误以为 OCR 在工作。
 
 ### 3.5 归档位置
 
 - 报告：`docs/reviews/v0.1.8/ocr-comparison-report.md`
 - OCR 关实验数据：`data/exp_reports/exp_20260425_043733_baseline_1kpage_no_ocr/`
+- **更正后的重测数据**：`data/exp_reports/exp_20260425_061926_baseline_1kpage/`（OCR on）和 `data/exp_reports/exp_20260425_063020_baseline_1kpage_no_ocr/`（OCR off）
 
 ---
 
@@ -201,3 +227,92 @@ S6/S7 在多问题场景下被多次 begin/end，`PipelineProfiler.end_stage()` 
 2. **并行 PDF 解析**：多进程解析，充分利用多核 CPU
 3. **性能回归检测**：对比历史实验的 profiling 数据，自动检测性能退化
 4. **S1 子阶段拆分**：在 `create_meal()` 内部添加解析/分块/索引构建的子阶段计时
+
+---
+
+## 六、反思与教训：一场半宿的乌龙
+
+### 6.1 事件回顾
+
+本次 OCR 对比实验从 03:44 跑到 06:30，耗时近 3 小时，产生了"OCR 贡献 63.2% 解析时间"的结论，写进了专题报告。然而这个结论完全是两个 Bug 叠加制造的假象：
+
+| Bug | 影响 | 本应如何提前发现 |
+|-----|------|-----------------|
+| `compute_parser_config_hash()` 用错 key | OCR 开/关产生相同 hash，缓存污染 | 对比两次实验的 `parser_hash` 字段即可发现 |
+| 环境无 OCR 引擎 | `use_ocr=True` 被静默降级，OCR 从未执行 | 跑一行 `select_ocr_function()` 即可确认 |
+
+### 6.2 浪费的算力
+
+| 实验 | 耗时 | 实际价值 |
+|------|------|---------|
+| exp_20260425_033126 (OCR on, 第1次) | ~526s | 有效（首次基线） |
+| exp_20260425_034425 (OCR on, 第3次) | ~526s | 重复（前两次有 bug） |
+| exp_20260425_043733 (OCR off, hash bug) | ~437s | 无效（缓存命中假象） |
+| exp_20260425_061926 (OCR on, hash 修复后) | ~480s | 有效但无新信息（OCR 未执行） |
+| exp_20260425_063020 (OCR off, hash 修复后) | ~589s | 有效但无新信息（OCR 未执行） |
+
+**总计约 2500s（~42 分钟）的 GPU/CPU 时间**，其中只有第一次基线有实际价值。如果一开始就排查两个 Bug，整个 OCR 对比实验可以立即结案，无需跑任何对比。
+
+### 6.3 排查清单：性能对比实验的前置检查
+
+以后做任何 A/B 对比实验，**在跑实验之前**，先完成以下检查：
+
+#### 第一层：环境可用性检查（30 秒）
+
+```python
+# 1. 确认被测功能确实可用
+from pymupdf4llm.helpers.document_layout import select_ocr_function
+assert callable(select_ocr_function()), "OCR 引擎不可用，use_ocr=True 会被静默降级！"
+
+# 2. 确认外部依赖已安装
+import shutil
+assert shutil.which("tesseract"), "Tesseract 未安装"
+```
+
+**原则**：如果被测功能本身不可用，对比实验毫无意义。
+
+#### 第二层：配置隔离验证（1 分钟）
+
+```python
+# 1. 确认两个配置产生不同的 hash
+from src.meal import compute_parser_config_hash
+h_on = compute_parser_config_hash({"algorithm": "pymupdf4llm", "options": {"use_ocr": True, ...}})
+h_off = compute_parser_config_hash({"algorithm": "pymupdf4llm", "options": {"use_ocr": False, ...}})
+assert h_on != h_off, f"Hash 相同！{h_on} == {h_off}，配置未生效！"
+
+# 2. 确认解析产物确实不同
+# （对同一 PDF，两种配置的输出 MD5 应不同）
+```
+
+**原则**：如果 A/B 配置的 hash 相同，它们会共享缓存，对比结果无效。
+
+#### 第三层：产物一致性验证（2 分钟）
+
+```python
+# 对比两次实验的解析产物
+import hashlib, glob
+def dir_md5(pattern):
+    h = hashlib.md5()
+    for f in sorted(glob.glob(pattern, recursive=True)):
+        with open(f, "rb") as fh:
+            h.update(fh.read())
+    return h.hexdigest()
+
+md5_a = dir_md5("parsed_hash_a/**/*.pages.json")
+md5_b = dir_md5("parsed_hash_b/**/*.pages.json")
+assert md5_a != md5_b, "解析产物完全一致，被测变量未产生任何效果！"
+```
+
+**原则**：如果 A/B 产物完全一致，说明被测变量没有实际影响，对比数据只是噪声。
+
+### 6.4 反思教训
+
+1. **静默降级是实验杀手**：pymupdf4llm 在 OCR 不可用时静默降级为 `OCRMode.NEVER`，不抛异常不打印警告。这种"友好"行为让用户误以为功能在正常工作。**教训**：对实验中涉及的外部功能，必须先验证其可用性，不能假设配置了就一定生效。
+
+2. **缓存 hash Bug 的隐蔽性**：`compute_parser_config_hash()` 用 `algorithm` 名作为 key 查找 options，而 snapshot 结构用的是 `"options"` key。这个 typo 导致 hash 永远基于空 dict 计算，任何 parser 配置变更都不会产生新 hash。**教训**：缓存隔离机制本身也需要被测试——对比实验前必须验证 A/B 配置确实产生了不同的 hash。
+
+3. **"显著差异"不等于"正确结论"**：63.2% 的性能差异非常醒目，让人容易跳过验证直接采信。但这个"显著差异"恰恰是 Bug 造成的——缓存命中 vs 从零解析，当然差很多。**教训**：越是显著的结果越要怀疑，先做 sanity check。
+
+4. **缺少最小可复现验证**：如果一开始用单个 PDF、5 秒钟跑一次 `pymupdf4llm.to_markdown(pdf, use_ocr=True)` vs `use_ocr=False`，就能发现两者输出完全一致，立即知道 OCR 没有生效。**教训**：大规模实验前，先用最小用例验证被测变量确实能产生差异。
+
+5. **实验系统需要自检能力**：当前系统在实验开始时没有检查 OCR 引擎是否可用、hash 是否正确隔离。**教训**：应在 `run_experiment.py` 中添加前置检查，在实验开始前自动验证关键前提条件，不满足时立即报错而非静默继续。
