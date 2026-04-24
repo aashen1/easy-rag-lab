@@ -107,6 +107,7 @@ class BuiltinEvaluator(BaseEvaluator):
         expected_chunks: list[str] | None = None,
         equivalence_groups: dict[str, list[str]] | None = None,
         expect_retrieval: bool = True,
+        expect_no_answer: bool = False,
         retrieved_sources: list[str] | None = None,
         question_type: str | None = None,
     ) -> EvaluationResult:
@@ -135,6 +136,9 @@ class BuiltinEvaluator(BaseEvaluator):
                 equivalent file paths for dedup normalization.
             expect_retrieval: Whether the question expects retrieval results.
                 Defaults to True. Set to False for irrelevant questions.
+            expect_no_answer: Whether the answer is not expected to be found
+                in the documents. Defaults to False. Set to True for missing
+                knowledge questions. When True, faithfulness is skipped.
             retrieved_sources: Optional list of retrieved source file paths.
                 Used for retrieval metrics (hit_rate, mrr, ndcg, dedup, FPR).
                 When not provided, falls back to contexts for backward
@@ -158,7 +162,7 @@ class BuiltinEvaluator(BaseEvaluator):
         error = None
 
         try:
-            if expected_sources:
+            if expected_sources and expect_retrieval:
                 if "hit_rate" in retrieval_metrics:
                     retrieval_results["hit_rate"] = calculate_hit_rate(
                         retrieved_sources=sources_for_retrieval,
@@ -174,8 +178,17 @@ class BuiltinEvaluator(BaseEvaluator):
                         retrieved_sources=sources_for_retrieval,
                         expected_sources=expected_sources,
                     )
+                for _k in (3, 5, 10):
+                    _key = f"recall_{_k}"
+                    if _key in retrieval_metrics:
+                        retrieval_results[_key] = calculate_hit_rate(
+                            retrieved_sources=sources_for_retrieval,
+                            expected_sources=expected_sources,
+                            k=_k,
+                            mode="recall",
+                        )
 
-            if chunk_ids and expected_chunks:
+            if chunk_ids and expected_chunks and expect_retrieval:
                 if "chunk_hit_rate" in retrieval_metrics:
                     retrieval_results["chunk_hit_rate"] = calculate_chunk_hit_rate(
                         chunk_ids, expected_chunks
@@ -189,7 +202,7 @@ class BuiltinEvaluator(BaseEvaluator):
                         chunk_ids, expected_chunks, k=5
                     )
 
-            if expected_sources:
+            if expected_sources and expect_retrieval:
                 if equivalence_groups:
                     norm_retrieved = [normalize_source_with_equivalence(s, equivalence_groups, include_parent=True) for s in sources_for_retrieval]
                     norm_expected = [normalize_source_with_equivalence(s, equivalence_groups, include_parent=True) for s in expected_sources]
@@ -210,7 +223,7 @@ class BuiltinEvaluator(BaseEvaluator):
                         norm_retrieved, norm_expected
                     )
 
-            if not expect_retrieval and not expected_sources and "false_positive_rate" in retrieval_metrics:
+            if not expect_retrieval and "false_positive_rate" in retrieval_metrics:
                 retrieval_results["false_positive_rate"] = calculate_false_positive_rate(
                     sources_for_retrieval, k=5
                 )
@@ -253,20 +266,23 @@ class BuiltinEvaluator(BaseEvaluator):
 
             if generation_metrics and llm_config:
                 if "faithfulness" in generation_metrics:
-                    try:
-                        faithfulness_score = calculate_faithfulness(
-                            answer=answer,
-                            contexts=contexts,
-                            api_key=llm_config["api_key"],
-                            base_url=llm_config["base_url"],
-                            model_name=llm_config["model_name"],
-                        )
-                        generation_results["faithfulness"] = faithfulness_score
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to calculate faithfulness for {question_id}: {str(e)}"
-                        )
+                    if expect_no_answer:
                         generation_results["faithfulness"] = None
+                    else:
+                        try:
+                            faithfulness_score = calculate_faithfulness(
+                                answer=answer,
+                                contexts=contexts,
+                                api_key=llm_config["api_key"],
+                                base_url=llm_config["base_url"],
+                                model_name=llm_config["model_name"],
+                            )
+                            generation_results["faithfulness"] = faithfulness_score
+                        except Exception as e:
+                            logger.error(
+                                f"Failed to calculate faithfulness for {question_id}: {str(e)}"
+                            )
+                            generation_results["faithfulness"] = None
 
                 if "answer_relevancy" in generation_metrics:
                     try:
@@ -340,6 +356,7 @@ class BuiltinEvaluator(BaseEvaluator):
                 expected_chunks=sample.get("expected_chunks"),
                 equivalence_groups=sample.get("equivalence_groups"),
                 expect_retrieval=sample.get("expect_retrieval", True),
+                expect_no_answer=sample.get("expect_no_answer", False),
                 retrieved_sources=sample.get("retrieved_sources"),
                 question_type=sample.get("question_type"),
             )

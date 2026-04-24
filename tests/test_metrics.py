@@ -200,6 +200,13 @@ class TestCalculateHitRateRecall:
         expected = ["贵州茅台2023年年度报告.pdf"]
         assert calculate_hit_rate(retrieved, expected, mode="recall") == 0.0
 
+    def test_recall_respects_k(self):
+        retrieved = ["doc1", "doc3", "doc4", "doc2", "doc5"]
+        expected = ["doc1", "doc2", "doc6"]
+        assert calculate_hit_rate(retrieved, expected, k=3, mode="recall") == pytest.approx(1 / 3)
+        assert calculate_hit_rate(retrieved, expected, k=5, mode="recall") == pytest.approx(2 / 3)
+        assert calculate_hit_rate(retrieved, expected, k=10, mode="recall") == pytest.approx(2 / 3)
+
 
 @pytest.mark.unit
 class TestCalculateHitRateValidation:

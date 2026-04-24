@@ -237,6 +237,7 @@ class TestExperimentConfig:
             "dedup_hit_rate", "dedup_mrr", "dedup_ndcg",
             "false_positive_rate",
             "context_precision", "context_recall",
+            "recall_3", "recall_5", "recall_10",
         } == VALID_RETRIEVAL_METRICS
         assert {"faithfulness", "answer_relevancy"} == VALID_GENERATION_METRICS
 

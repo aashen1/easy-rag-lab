@@ -543,6 +543,7 @@ def prepare_test_sets(
     meal_info: dict[str, Any],
     skip_preprocessing: bool = False,
     token_tracker: TokenTracker | None = None,
+    chunks_dir: Path | None = None,
 ) -> list[dict[str, Any]]:
     """
     Prepare test sets for experiment.
@@ -556,6 +557,7 @@ def prepare_test_sets(
         meal_info: Meal information dictionary from prepare_meal.
         skip_preprocessing: If True, skip generation even if test sets don't exist.
         token_tracker: Optional token tracker.
+        chunks_dir: Optional path to chunks directory for answer chunk location.
 
     Returns:
         List of test set dictionaries.
@@ -598,6 +600,7 @@ def prepare_test_sets(
                     generator=generator,
                     llm_preset=llm_preset,
                     token_tracker=token_tracker,
+                    chunks_dir=chunks_dir,
                 )
             test_sets.append(test_set_data)
         else:
@@ -625,6 +628,48 @@ def prepare_test_sets(
             test_sets.append(test_set_data)
 
     return test_sets
+
+
+def prepare_variant_chunks(
+    merged_config: dict[str, Any],
+    meal_config: MealConfig,
+    variant_name: str,
+) -> Path:
+    """Build chunks for a variant if not already cached.
+
+    This function ensures chunks are available before test set generation,
+    so that _locate_answer_chunks() can find the correct chunk files.
+
+    Args:
+        merged_config: Merged configuration dictionary.
+        meal_config: Meal configuration object.
+        variant_name: Name of the variant.
+
+    Returns:
+        Path to the chunks directory for this variant.
+    """
+    chunker_config = merged_config.get("chunker", {})
+    embedding_config = merged_config.get("embedding", {})
+
+    chunker_hash = compute_chunker_config_hash(chunker_config)
+
+    artifacts_config = merged_config.get("artifacts") or {}
+    artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
+    cache = ArtifactCache(artifacts_dir)
+
+    parsed_dir = cache.get_parsed_dir(
+        meal_config.data_id,
+        parser_hash=meal_config.config_hashes.get("parser"),
+    )
+    chunks_dir = cache.get_chunks_dir(meal_config.data_id, chunker_hash)
+
+    build_chunks_if_needed(
+        parsed_dir, chunks_dir, chunker_config,
+        model_name=chunker_config.get("model_name") or embedding_config.get("model_name"),
+    )
+
+    logger.info(f"Chunks ready for variant '{variant_name}': {chunks_dir}")
+    return chunks_dir
 
 
 def prepare_index_for_variant(
@@ -758,7 +803,7 @@ def _collect_rag_samples(
     Returns:
         List of sample dictionaries with query results.
     """
-    test_set_name = test_set.get("name", "unknown")
+    test_set_name = test_set.get("name") or test_set.get("metadata", {}).get("name", "unknown")
     questions = test_set.get("questions", [])
 
     logger.info(f"Collecting results for test set '{test_set_name}' ({len(questions)} questions)...")
@@ -797,6 +842,7 @@ def _collect_rag_samples(
                 "difficulty": question_data.get("difficulty"),
                 "token_usage": response.get("token_usage"),
                 "expect_retrieval": question_data.get("expect_retrieval", True),
+                "expect_no_answer": question_data.get("expect_no_answer", False),
             }
 
             logger.success(
@@ -819,6 +865,7 @@ def _collect_rag_samples(
                 "equivalence_groups": equivalence_groups,
                 "question_type": question_data.get("question_type", "factual"),
                 "expect_retrieval": question_data.get("expect_retrieval", True),
+                "expect_no_answer": question_data.get("expect_no_answer", False),
                 "time_seconds": case_time,
                 "test_set": test_set_name,
                 "category": question_data.get("category"),
@@ -882,6 +929,7 @@ def _evaluate_with_builtin(
             expected_chunks=sample.get("expected_chunks"),
             equivalence_groups=sample.get("equivalence_groups"),
             expect_retrieval=sample.get("expect_retrieval", True),
+            expect_no_answer=sample.get("expect_no_answer", False),
             retrieved_sources=sample.get("retrieved_sources", []),
             question_type=sample.get("question_type"),
         )
@@ -1176,7 +1224,7 @@ def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
 
     metrics: dict[str, Any] = {}
 
-    valid_retrieval = [r for r in results if "retrieval" in r and r["retrieval"]]
+    valid_retrieval = [r for r in results if r.get("retrieval", {}).get("hit_rate") is not None]
     if valid_retrieval:
         for metric_name in ["hit_rate", "mrr", "ndcg"]:
             values = [
@@ -1280,7 +1328,7 @@ def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
     for qtype, group in type_groups.items():
         type_entry: dict[str, Any] = {"count": len(group)}
 
-        type_valid_retrieval = [r for r in group if "retrieval" in r and r["retrieval"]]
+        type_valid_retrieval = [r for r in group if r.get("retrieval", {}).get("hit_rate") is not None]
         for mn in ["hit_rate", "mrr", "ndcg", "retrieval_diversity"]:
             vals = [
                 r["retrieval"][mn]
@@ -1647,10 +1695,22 @@ def run_experiment(
 
         test_generation_tracker = TokenTracker()
 
-        logger.info("Step 2: Preparing test sets...")
+        logger.info("Step 2: Preparing variant chunks...")
+        first_chunks_dir = None
+        for i, variant in enumerate(exp_config.variants, 1):
+            variant_name = variant.get("name", f"variant_{i}")
+            merged_config = merge_config(system_config, exp_config, variant)
+            chunks_dir = prepare_variant_chunks(
+                merged_config, meal_info["config"], variant_name,
+            )
+            if first_chunks_dir is None:
+                first_chunks_dir = chunks_dir
+
+        logger.info("Step 3: Preparing test sets...")
         test_sets = prepare_test_sets(
             system_config, exp_config, meal_info, skip_preprocessing,
             token_tracker=test_generation_tracker,
+            chunks_dir=first_chunks_dir,
         )
 
         meal_snapshot = meal_info["config"].to_dict()
@@ -1685,7 +1745,7 @@ def run_experiment(
             config_snapshot=config_snapshot,
         )
 
-        logger.info("Step 3: Running variant evaluations...")
+        logger.info("Step 4: Running variant evaluations...")
         all_variant_results = []
         experiment_tracker = TokenTracker()
 

@@ -686,6 +686,7 @@ class TestSetGenerator:
                     contexts=[],
                     system_prompt="你是一个测试数据生成器。请严格按照要求的JSON格式输出，不要输出任何其他内容。",
                     category="test_generation",
+                    allow_no_contexts=True,
                 )
 
                 qa = self._parse_llm_response(response)
@@ -766,6 +767,7 @@ class TestSetGenerator:
         type_distribution: dict[str, float] | None = None,
         llm_preset: str = "default",
         token_tracker: Any | None = None,
+        chunks_dir: Path | None = None,
     ) -> dict[str, Any]:
         """Generate questions based on full MD documents.
 
@@ -785,6 +787,9 @@ class TestSetGenerator:
                 question generation.
             token_tracker: Optional token usage tracker passed to the LLM
                 generator.
+            chunks_dir: Optional path to chunks directory for locating answer
+                chunks. When provided, passed to _locate_answer_chunks() to
+                bypass ArtifactCache resolution.
 
         Returns:
             Dictionary containing the test set metadata and generated questions
@@ -874,12 +879,13 @@ class TestSetGenerator:
                         qa["source_files"] = [source_path]
                         qa["source_chunks"] = []
                         qa["expect_no_answer"] = True
-                        qa["expect_retrieval"] = False
+                        qa["expect_retrieval"] = True
                     else:
                         qa["source_files"] = [source_path]
                         answer_text = qa.get("answer", "")
                         qa["source_chunks"] = self._locate_answer_chunks(
-                            answer_text, source_path
+                            answer_text, source_path, meal_config=meal_config,
+                            chunks_dir=chunks_dir,
                         )
 
                     questions.append(qa)
@@ -932,12 +938,13 @@ class TestSetGenerator:
                         qa["source_files"] = [source_path]
                         qa["source_chunks"] = []
                         qa["expect_no_answer"] = True
-                        qa["expect_retrieval"] = False
+                        qa["expect_retrieval"] = True
                     else:
                         qa["source_files"] = [source_path]
                         answer_text = qa.get("answer", "")
                         qa["source_chunks"] = self._locate_answer_chunks(
-                            answer_text, source_path
+                            answer_text, source_path, meal_config=meal_config,
+                            chunks_dir=chunks_dir,
                         )
 
                     questions.append(qa)
@@ -995,6 +1002,7 @@ class TestSetGenerator:
         target_count: int,
         llm_preset: str = "default",
         token_tracker: Any | None = None,
+        chunks_dir: Path | None = None,
     ) -> dict[str, Any]:
         """Supplement an existing test set with additional questions.
 
@@ -1007,6 +1015,8 @@ class TestSetGenerator:
             target_count: Target total number of questions.
             llm_preset: LLM preset name from the configuration.
             token_tracker: Optional token usage tracker.
+            chunks_dir: Optional path to chunks directory for locating answer
+                chunks.
 
         Returns:
             Updated test set dictionary with supplemented questions.
@@ -1085,12 +1095,13 @@ class TestSetGenerator:
                     qa["source_files"] = [source_path]
                     qa["source_chunks"] = []
                     qa["expect_no_answer"] = True
-                    qa["expect_retrieval"] = False
+                    qa["expect_retrieval"] = True
                 else:
                     qa["source_files"] = [source_path]
                     answer_text = qa.get("answer", "")
                     qa["source_chunks"] = self._locate_answer_chunks(
-                        answer_text, source_path
+                        answer_text, source_path, meal_config=meal_config,
+                        chunks_dir=chunks_dir,
                     )
 
                 new_questions.append(qa)
@@ -1407,6 +1418,7 @@ class TestSetGenerator:
                     contexts=[],
                     system_prompt="你是一位金融行业从业者。请严格按照要求的JSON格式输出，不要输出任何其他内容。",
                     category="test_generation",
+                    allow_no_contexts=True,
                 )
 
                 qa = self._parse_document_question_response(response)
@@ -1576,8 +1588,9 @@ class TestSetGenerator:
         self,
         answer: str,
         source_path: str,
-        chunks_dir: str = "data/chunks",
-        adjacent_tolerance: int = 0,
+        meal_config: "MealConfig" = None,
+        adjacent_tolerance: int = 1,
+        chunks_dir: Path | None = None,
     ) -> list[str]:
         """Locate chunk IDs that contain information relevant to the answer.
 
@@ -1589,10 +1602,15 @@ class TestSetGenerator:
             answer: The answer text to locate in chunks.
             source_path: Relative path of the source document (e.g.
                 'research_reports/doc.md'), using forward slashes.
-            chunks_dir: Directory containing JSONL chunk files. Defaults to
-                the configured chunker output directory.
+            meal_config: MealConfig object for resolving chunks directory
+                via ArtifactCache. If provided, uses
+                ``_resolve_chunks_dir()`` to find the actual chunks
+                location. Falls back to config-based path otherwise.
             adjacent_tolerance: Number of adjacent chunks (by chunk_index)
                 to include around each matched chunk. Defaults to 1.
+            chunks_dir: Optional path to chunks directory. When provided,
+                bypasses ArtifactCache resolution and uses this path
+                directly.
 
         Returns:
             List of chunk_id strings for matched and adjacent chunks.
@@ -1602,10 +1620,22 @@ class TestSetGenerator:
         if not answer or not source_path:
             return []
 
-        resolved_chunks_dir = self.config.get("chunker", {}).get(
-            "output_dir", chunks_dir
-        )
-        chunks_path = Path(resolved_chunks_dir)
+        if chunks_dir is not None:
+            chunks_path = chunks_dir
+        elif meal_config is not None:
+            chunks_path = self._resolve_chunks_dir(meal_config)
+            if not chunks_path:
+                logger.warning(
+                    f"Chunks directory not found via ArtifactCache for "
+                    f"meal_config data_id={meal_config.data_id}"
+                )
+                return []
+        else:
+            resolved_chunks_dir = self.config.get("chunker", {}).get(
+                "output_dir", "data/chunks"
+            )
+            chunks_path = Path(resolved_chunks_dir)
+
         if not chunks_path.exists():
             logger.warning(f"Chunks directory not found: {chunks_path}")
             return []

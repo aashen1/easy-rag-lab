@@ -9,7 +9,7 @@ from loguru import logger
 
 from src.exceptions import ConfigurationError
 
-VALID_RETRIEVAL_METRICS = {"hit_rate", "mrr", "ndcg", "chunk_hit_rate", "chunk_mrr", "chunk_ndcg", "dedup_hit_rate", "dedup_mrr", "dedup_ndcg", "false_positive_rate", "context_precision", "context_recall"}
+VALID_RETRIEVAL_METRICS = {"hit_rate", "mrr", "ndcg", "chunk_hit_rate", "chunk_mrr", "chunk_ndcg", "dedup_hit_rate", "dedup_mrr", "dedup_ndcg", "false_positive_rate", "context_precision", "context_recall", "recall_3", "recall_5", "recall_10"}
 VALID_GENERATION_METRICS = {"faithfulness", "answer_relevancy"}
 VALID_ON_MISSING_VALUES = {"auto", "clean_only", "strict"}
 VALID_EVALUATION_BACKENDS = {"builtin", "ragas"}

@@ -18,7 +18,7 @@ def calculate_hit_rate(
         other systems.
 
     Legacy Mode (mode='recall'):
-        Calculates recall = (retrieved relevant docs) / (total relevant docs).
+        Calculates Recall@k = (relevant docs in top-k) / (total relevant docs).
         This mode is kept for backward compatibility but may produce inflated
         scores compared to standard Hit Rate.
 
@@ -50,11 +50,12 @@ def calculate_hit_rate(
                            for s in expected_sources)
         return 1.0 if top_k_set & expected_set else 0.0
 
-    retrieved_set = set(normalize_source(s, include_parent=True)
-                        for s in retrieved_sources)
+    top_k = retrieved_sources[:k]
+    top_k_set = set(normalize_source(s, include_parent=True)
+                    for s in top_k)
     expected_set = set(normalize_source(s, include_parent=True)
                        for s in expected_sources)
-    hits = len(retrieved_set & expected_set)
+    hits = len(top_k_set & expected_set)
     return hits / len(expected_set)
 
 

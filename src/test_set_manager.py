@@ -403,6 +403,7 @@ class TestSetManager:
         generator: Any | None = None,
         llm_preset: str = "default",
         token_tracker: Any | None = None,
+        chunks_dir: Path | None = None,
     ) -> dict[str, Any]:
         """Clean a user-defined test set according to its invalid_policy.
 
@@ -413,6 +414,7 @@ class TestSetManager:
             generator: Optional TestSetGenerator for regenerate policy.
             llm_preset: LLM preset for generation.
             token_tracker: Optional token tracker.
+            chunks_dir: Optional path to chunks directory.
 
         Returns:
             Cleaned test set dictionary.
@@ -438,6 +440,7 @@ class TestSetManager:
                 generator,
                 llm_preset,
                 token_tracker,
+                chunks_dir=chunks_dir,
             )
         else:
             raise TestSetError(f"Unknown invalid_policy: {invalid_policy}")
@@ -547,6 +550,7 @@ class TestSetManager:
         generator: Any | None,
         llm_preset: str,
         token_tracker: Any | None,
+        chunks_dir: Path | None = None,
     ) -> dict[str, Any]:
         """Clean a test set with regenerate policy.
 
@@ -566,6 +570,7 @@ class TestSetManager:
             generator: Optional TestSetGenerator for regeneration.
             llm_preset: LLM preset for generation.
             token_tracker: Optional token tracker.
+            chunks_dir: Optional path to chunks directory.
 
         Returns:
             Cleaned test set dictionary.
@@ -709,6 +714,7 @@ class TestSetManager:
         generator: TestSetGenerator | None = None,
         llm_preset: str = "default",
         token_tracker: Any | None = None,
+        chunks_dir: Path | None = None,
     ) -> dict[str, Any]:
         """
         Resolve a test set according to the experiment configuration.
@@ -729,6 +735,8 @@ class TestSetManager:
             generator: Optional TestSetGenerator for generating/supplementing.
             llm_preset: LLM preset for generation.
             token_tracker: Optional token tracker.
+            chunks_dir: Optional path to chunks directory for answer chunk
+                location during test generation.
 
         Returns:
             Resolved test set dictionary.
@@ -770,6 +778,7 @@ class TestSetManager:
                     generator,
                     llm_preset,
                     token_tracker,
+                    chunks_dir=chunks_dir,
                 )
             else:
                 return self._clean_machine_test_set(
@@ -780,6 +789,7 @@ class TestSetManager:
                     generator,
                     llm_preset,
                     token_tracker,
+                    chunks_dir=chunks_dir,
                 )
 
         if on_missing == "clean_only":
@@ -811,6 +821,7 @@ class TestSetManager:
                 name=name,
                 llm_preset=llm_preset,
                 token_tracker=token_tracker,
+                chunks_dir=chunks_dir,
             )
 
         logger.info(
@@ -823,6 +834,7 @@ class TestSetManager:
             name=name,
             llm_preset=llm_preset,
             token_tracker=token_tracker,
+            chunks_dir=chunks_dir,
         )
 
     def _clean_machine_test_set(
@@ -834,6 +846,7 @@ class TestSetManager:
         generator: TestSetGenerator | None = None,
         llm_preset: str = "default",
         token_tracker: Any | None = None,
+        chunks_dir: Path | None = None,
     ) -> dict[str, Any]:
         """Clean a machine-generated test set by removing invalid questions
         and supplementing new ones.
@@ -847,6 +860,7 @@ class TestSetManager:
             generator: TestSetGenerator for supplementing questions.
             llm_preset: LLM preset for generation.
             token_tracker: Optional token tracker.
+            chunks_dir: Optional path to chunks directory.
 
         Returns:
             Cleaned test set dictionary.
@@ -884,6 +898,7 @@ class TestSetManager:
                     target_count=original_count,
                     llm_preset=llm_preset,
                     token_tracker=token_tracker,
+                    chunks_dir=chunks_dir,
                 )
                 added_count = len(test_set_data.get("questions", [])) - (original_count - len(invalid_questions))
                 if added_count < 0:
