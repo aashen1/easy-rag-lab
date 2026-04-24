@@ -2,7 +2,7 @@
 
 <!-- status: active -->
 
-> 最后更新：2026-04-24（新增 BUG-023：missing 类型 expect_retrieval 标记错误）
+> 最后更新：2026-04-24（BUG-023 已确认完成）
 
 本文档是项目"卫生情况"的总入口，追踪所有非阻塞性质的待做事项。
 
@@ -12,7 +12,7 @@
 
 | 类型 | 待处理 | 进行中 | 已完成 | 已延期 |
 |------|--------|--------|--------|--------|
-| Bug | 6 | 0 | 16 | 2 |
+| Bug | 5 | 0 | 17 | 2 |
 | Feature | 21 | 0 | 19 | 0 |
 | Refactor | 8 | 0 | 13 | 1 |
 | Optimization | 7 | 0 | 1 | 0 |
@@ -27,7 +27,7 @@
 |----|------|------|------|------|
 | BUG-021 | expected_sources 标注错误（LLM 生成问题涉及文档中提到的其他实体，但 source_files 仅指向生成问题时的源文档） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P6-5) | 📋 待处理 | 需重新设计问题生成策略，使 source_files 反映问题实际涉及的文档 |
 | BUG-022 | `_locate_answer_chunks()` 定位精度不足 | [INV-007 调查](reviews/investigations/inv-007-eval-system-reliability.md) | 📋 待处理 | 使用关键词+子串启发式方法，expected_chunks 可能遗漏或误匹配 |
-| BUG-023 | `missing` 类型 `expect_retrieval` 标记错误导致 FPR 计算异常 | [inbox](inbox/一个关于FPR的bug，及两种修复方案.md) | 📋 待处理 | `missing` 类型应设 `expect_retrieval=True`，当前为 False 导致 FPR 虚高 |
+| BUG-023 | `missing` 类型 `expect_retrieval` 标记错误导致 FPR 计算异常 | [inbox](inbox/一个关于FPR的bug，及两种修复方案.md) | ✅ 已完成 | commit `5e9fa65`：采用方案 A 将 `expect_retrieval` 改为 `True`，同时新增 `expect_no_answer` 跳过 faithfulness |
 
 ### 🟡 已延期
 
@@ -167,6 +167,7 @@
 | BUG-015 | irrelevant/missing 问题类型 source_files 错误 | v0.1.8 合并发现 | 2026-04-20 |
 | BUG-016 | chunker config hash 缺少 strategy/semantic 参数 | v0.1.8 合并发现 | 2026-04-20 |
 | BUG-017 | pytest tmp 目录配置导致 FileExistsError | [TODO.md](../TODO.md) | 2026-04-22 |
+| BUG-023 | missing 类型 expect_retrieval 标记错误导致 FPR 计算异常 | inbox | 2026-04-24 |
 
 ### Feature
 
