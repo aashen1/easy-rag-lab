@@ -17,7 +17,7 @@ cmd = "ruff format src/ eval/ tests/ main.py interactive.py"
 cmd = "ruff check --fix src/ eval/ tests/ main.py interactive.py && ruff format src/ eval/ tests/ main.py interactive.py"
 
 [tasks.pre-commit-install]
-cmd = "pre-commit install"
+cmd = "pre-commit install && pre-commit install --hook-type post-merge"
 
 [tasks.pre-commit-run]
 cmd = "pre-commit run --all-files"
