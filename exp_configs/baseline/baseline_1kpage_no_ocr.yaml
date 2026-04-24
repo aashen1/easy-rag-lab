@@ -1,0 +1,44 @@
+name: "baseline-1kpage-no-ocr"
+description: "1000页PDF性能评估实验 - OCR关闭对比"
+
+data:
+  meal: "1kpage_no_ocr"
+  create_if_missing:
+    sample_pages: 1000
+    seed: 42
+
+test_sets:
+  - name: "baseline_test_1kpage_no_ocr"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 10
+      seed: 42
+
+variants:
+  - name: "baseline"
+    description: "基线配置 (chunk_size: 512, chunk_overlap: 0, OCR关闭)"
+    config_overrides: {}
+
+evaluation:
+  llm_preset: "default"
+  llm_report: false
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+      - "chunk_hit_rate"
+      - "chunk_mrr"
+      - "chunk_ndcg"
+      - "dedup_hit_rate"
+      - "dedup_mrr"
+      - "dedup_ndcg"
+      - "false_positive_rate"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+
+llm:
+  question_generation: "default"
+  answering: "default"

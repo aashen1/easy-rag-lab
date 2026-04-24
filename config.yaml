@@ -164,6 +164,10 @@ generation:
 experiments:
   dir: "data/exp_reports"  # 实验报告存放目录
   configs_dir: "exp_configs"  # 实验配置文件目录
+  profiling:
+    enabled: true  # 是否启用性能分析（设为 false 可完全禁用，零性能开销）
+    monitor_interval: 0.5  # 资源监控采样间隔（秒）
+    generate_charts: true  # 是否生成可视化图表
 
 # ============================================================
 # 数据管理配置

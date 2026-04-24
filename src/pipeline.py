@@ -12,10 +12,11 @@ from src.exceptions import RetrievalError
 from src.generator import Generator
 from src.hybrid_retriever import HybridRetriever
 from src.indexer import VectorIndexer
-from src.parser import parse_all_pdfs
+from src.parser import parse_all_pdfs_unified
 from src.query_rewriter import QueryRewriter
 
 if TYPE_CHECKING:
+    from eval.pipeline_profiler import PipelineProfiler
     from src.meal import MealConfig
 from src.reranker import Reranker
 from src.retriever import Retriever
@@ -32,6 +33,7 @@ class RAGPipeline:
         llm_preset: str = None,
         meal_name: str = None,
         token_tracker: TokenTracker | None = None,
+        profiler: PipelineProfiler | None = None,
     ):
         self.config = load_config(config_path)
         setup_logger(self.config)
@@ -40,6 +42,7 @@ class RAGPipeline:
         self.token_tracker = (
             token_tracker if token_tracker is not None else TokenTracker()
         )
+        self.profiler = profiler
 
         logger.info("Initializing RAG Pipeline")
 
@@ -195,11 +198,10 @@ class RAGPipeline:
             )
 
         logger.info("Step 1: Parsing PDFs...")
-        parse_results = parse_all_pdfs(
+        parse_results = parse_all_pdfs_unified(
             input_dir=parser_config["input_dir"],
-            output_dir=parser_config["output_dir"],
+            artifacts_dir=parser_config["output_dir"],
             force=force_parse,
-            pdf_files=sampled_pdf_files,
             parser_options=parser_config.get("pymupdf4llm"),
         )
 
@@ -280,6 +282,9 @@ class RAGPipeline:
                     )
             logger.info(f"Source filter for indexer: {len(source_filter_jsonl)} files")
 
+        if self.profiler:
+            self.profiler.begin_stage("S3")
+
         logger.info("Step 3: Building vector index...")
         self.indexer.build_index(
             chunks_dir=chunker_config["output_dir"],
@@ -289,15 +294,22 @@ class RAGPipeline:
             source_filter=source_filter_jsonl,
         )
 
+        if self.profiler:
+            self.profiler.end_stage()
+
         if (
             self.retrieval_method in ("bm25", "hybrid")
             and self.bm25_retriever is not None
         ):
+            if self.profiler:
+                self.profiler.begin_stage("S4")
             logger.info("Step 4: Building BM25 index...")
             self.bm25_retriever.build_index_from_chunks(
                 chunks_dir=chunker_config["output_dir"],
                 source_filter=source_filter_jsonl,
             )
+            if self.profiler:
+                self.profiler.end_stage()
 
         logger.success("Index built successfully")
 
@@ -486,6 +498,8 @@ class RAGPipeline:
                     return response
 
             logger.debug("Retrieving relevant contexts...")
+            if self.profiler:
+                self.profiler.begin_stage("S6")
             if self.retrieval_method == "hybrid" and self.hybrid_retriever is not None:
                 results = self.hybrid_retriever.retrieve(retrieval_query)
             elif self.retrieval_method == "bm25" and self.bm25_retriever is not None:
@@ -500,6 +514,8 @@ class RAGPipeline:
                 results = self.reranker.rerank(
                     question, results, top_n=self.reranker_top_n
                 )
+            if self.profiler:
+                self.profiler.end_stage()
 
             contexts = [result["text"] for result in results]
             scores = [result["score"] for result in results]
@@ -509,7 +525,11 @@ class RAGPipeline:
             chunk_ids = [result.get("chunk_id", "") for result in results]
 
             logger.debug("Generating answer...")
+            if self.profiler:
+                self.profiler.begin_stage("S7")
             answer = self.generator.generate(question, contexts, sources=sources)
+            if self.profiler:
+                self.profiler.end_stage()
 
             response = {
                 "question": question,
