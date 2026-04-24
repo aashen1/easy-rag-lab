@@ -231,11 +231,12 @@ class RagasEvaluator(BaseEvaluator):
 
             ragas_samples = []
             for sample in samples:
+                reference = sample.get("ground_truth_excerpt") or sample.get("expected_answer")
                 ragas_sample = SingleTurnSample(
                     user_input=sample.get("question", ""),
                     response=sample.get("answer", ""),
                     retrieved_contexts=sample.get("contexts", []),
-                    reference=sample.get("expected_answer"),
+                    reference=reference,
                 )
                 ragas_samples.append(ragas_sample)
 
