@@ -9,12 +9,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from loguru import logger
-
-if TYPE_CHECKING:
-    from src.token_tracker import TokenTracker
 
 STAGE_NAMES = {
     "S1": "PDF解析",
@@ -41,7 +38,36 @@ class StageMetrics:
     memory_mb_peak: float = 0.0
     input_tokens: int = 0
     output_tokens: int = 0
+    call_count: int = 0
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    def add_duration(self, seconds: float) -> None:
+        self.duration_seconds += seconds
+        self.call_count += 1
+
+    def add_token_usage(self, input_tokens: int, output_tokens: int) -> None:
+        self.input_tokens += input_tokens
+        self.output_tokens += output_tokens
+
+    def merge_resource_stats(
+        self,
+        cpu_avg: float,
+        cpu_peak: float,
+        mem_avg: float,
+        mem_peak: float,
+    ) -> None:
+        if self.call_count <= 1:
+            self.cpu_percent_avg = cpu_avg
+            self.cpu_percent_peak = cpu_peak
+            self.memory_mb_avg = mem_avg
+            self.memory_mb_peak = mem_peak
+        else:
+            total_cpu = self.cpu_percent_avg * (self.call_count - 1) + cpu_avg
+            self.cpu_percent_avg = total_cpu / self.call_count
+            self.cpu_percent_peak = max(self.cpu_percent_peak, cpu_peak)
+            total_mem = self.memory_mb_avg * (self.call_count - 1) + mem_avg
+            self.memory_mb_avg = total_mem / self.call_count
+            self.memory_mb_peak = max(self.memory_mb_peak, mem_peak)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -50,6 +76,7 @@ class StageMetrics:
             "start_time": self.start_time,
             "end_time": self.end_time,
             "duration_seconds": round(self.duration_seconds, 4),
+            "call_count": self.call_count,
             "cpu_percent_avg": round(self.cpu_percent_avg, 2),
             "cpu_percent_peak": round(self.cpu_percent_peak, 2),
             "memory_mb_avg": round(self.memory_mb_avg, 2),
@@ -163,15 +190,8 @@ class PipelineProfiler:
         self._stages: dict[str, StageMetrics] = {}
         self._current_stage_id: str | None = None
         self._stage_start_time: float | None = None
-        self._stage_token_tracker_start: int = 0
 
         self._resource_monitor = ResourceMonitor(interval=monitor_interval)
-        self._stage_samples: dict[str, list[ResourceSample]] = {}
-
-        self._token_tracker: TokenTracker | None = None
-
-    def set_token_tracker(self, tracker: TokenTracker) -> None:
-        self._token_tracker = tracker
 
     def start_profiling(self) -> None:
         self.start_time = time.perf_counter()
@@ -207,13 +227,8 @@ class PipelineProfiler:
         self._current_stage_id = stage_id
         self._stage_start_time = time.perf_counter()
 
-        if self._token_tracker:
-            self._stage_token_tracker_start = self._token_tracker.record_count
-
         stage_name = STAGE_NAMES.get(stage_id, stage_id)
         logger.debug(f"Stage {stage_id} ({stage_name}) started")
-
-        self._stage_samples[stage_id] = []
 
     def end_stage(self) -> StageMetrics:
         if self._current_stage_id is None:
@@ -226,56 +241,53 @@ class PipelineProfiler:
 
         stage_name = STAGE_NAMES.get(stage_id, stage_id)
 
-        samples = self._stage_samples.get(stage_id, [])
-        if samples:
-            cpu_values = [s.cpu_percent for s in samples]
-            mem_values = [s.memory_mb for s in samples]
-            cpu_avg = sum(cpu_values) / len(cpu_values) if cpu_values else 0.0
-            cpu_peak = max(cpu_values) if cpu_values else 0.0
-            mem_avg = sum(mem_values) / len(mem_values) if mem_values else 0.0
-            mem_peak = max(mem_values) if mem_values else 0.0
+        current_stats = self._resource_monitor.get_current_stats()
+        cpu_avg = current_stats["cpu_percent"]
+        cpu_peak = cpu_avg
+        mem_avg = current_stats["memory_mb"]
+        mem_peak = mem_avg
+
+        if stage_id in self._stages:
+            existing = self._stages[stage_id]
+            existing.add_duration(duration)
+            existing.end_time = stage_end_time
+            existing.merge_resource_stats(cpu_avg, cpu_peak, mem_avg, mem_peak)
+            metrics = existing
         else:
-            current_stats = self._resource_monitor.get_current_stats()
-            cpu_avg = current_stats["cpu_percent"]
-            cpu_peak = cpu_avg
-            mem_avg = current_stats["memory_mb"]
-            mem_peak = mem_avg
-
-        input_tokens = 0
-        output_tokens = 0
-        if self._token_tracker and self._stage_token_tracker_start is not None:
-            records = self._token_tracker._records[self._stage_token_tracker_start :]
-            for rec in records:
-                input_tokens += rec.usage.input_tokens
-                output_tokens += rec.usage.output_tokens
-
-        metrics = StageMetrics(
-            stage_id=stage_id,
-            stage_name=stage_name,
-            start_time=self._stage_start_time or 0.0,
-            end_time=stage_end_time,
-            duration_seconds=duration,
-            cpu_percent_avg=cpu_avg,
-            cpu_percent_peak=cpu_peak,
-            memory_mb_avg=mem_avg,
-            memory_mb_peak=mem_peak,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-        )
-
-        self._stages[stage_id] = metrics
+            metrics = StageMetrics(
+                stage_id=stage_id,
+                stage_name=stage_name,
+                start_time=self._stage_start_time or 0.0,
+                end_time=stage_end_time,
+                duration_seconds=duration,
+                cpu_percent_avg=cpu_avg,
+                cpu_percent_peak=cpu_peak,
+                memory_mb_avg=mem_avg,
+                memory_mb_peak=mem_peak,
+                call_count=1,
+            )
+            self._stages[stage_id] = metrics
 
         logger.debug(
-            f"Stage {stage_id} ({stage_name}) ended: {duration:.2f}s, "
-            f"CPU avg={cpu_avg:.1f}%, peak={cpu_peak:.1f}%, "
-            f"Mem avg={mem_avg:.1f}MB, peak={mem_peak:.1f}MB"
+            f"Stage {stage_id} ({stage_name}) ended: {duration:.2f}s "
+            f"(total: {metrics.duration_seconds:.2f}s, calls: {metrics.call_count})"
         )
 
         self._current_stage_id = None
         self._stage_start_time = None
-        self._stage_token_tracker_start = 0
 
         return metrics
+
+    def report_stage_tokens(
+        self, stage_id: str, input_tokens: int, output_tokens: int
+    ) -> None:
+        if stage_id not in self._stages:
+            stage_name = STAGE_NAMES.get(stage_id, stage_id)
+            self._stages[stage_id] = StageMetrics(
+                stage_id=stage_id,
+                stage_name=stage_name,
+            )
+        self._stages[stage_id].add_token_usage(input_tokens, output_tokens)
 
     def get_total_duration(self) -> float:
         if self.start_time is None:
@@ -303,7 +315,9 @@ class PipelineProfiler:
         )
 
         per_page_time = doc_time / self.total_pages if self.total_pages > 0 else 0.0
-        per_question_time = qa_time / self.total_questions if self.total_questions > 0 else 0.0
+        per_question_time = (
+            qa_time / self.total_questions if self.total_questions > 0 else 0.0
+        )
 
         return {
             "total_duration_seconds": round(total_duration, 2),
@@ -324,16 +338,28 @@ class PipelineProfiler:
                 "memory_mb_peak": 0.0,
             }
 
-        all_cpu = [m.cpu_percent_avg for m in self._stages.values() if m.cpu_percent_avg > 0]
+        all_cpu = [
+            m.cpu_percent_avg for m in self._stages.values() if m.cpu_percent_avg > 0
+        ]
         all_cpu_peak = [m.cpu_percent_peak for m in self._stages.values()]
-        all_mem = [m.memory_mb_avg for m in self._stages.values() if m.memory_mb_avg > 0]
+        all_mem = [
+            m.memory_mb_avg for m in self._stages.values() if m.memory_mb_avg > 0
+        ]
         all_mem_peak = [m.memory_mb_peak for m in self._stages.values()]
 
         return {
-            "cpu_percent_avg": round(sum(all_cpu) / len(all_cpu), 2) if all_cpu else 0.0,
-            "cpu_percent_peak": round(max(all_cpu_peak), 2) if all_cpu_peak else 0.0,
-            "memory_mb_avg": round(sum(all_mem) / len(all_mem), 2) if all_mem else 0.0,
-            "memory_mb_peak": round(max(all_mem_peak), 2) if all_mem_peak else 0.0,
+            "cpu_percent_avg": (
+                round(sum(all_cpu) / len(all_cpu), 2) if all_cpu else 0.0
+            ),
+            "cpu_percent_peak": (
+                round(max(all_cpu_peak), 2) if all_cpu_peak else 0.0
+            ),
+            "memory_mb_avg": (
+                round(sum(all_mem) / len(all_mem), 2) if all_mem else 0.0
+            ),
+            "memory_mb_peak": (
+                round(max(all_mem_peak), 2) if all_mem_peak else 0.0
+            ),
         }
 
     def get_token_summary(self) -> dict[str, Any]:
@@ -398,19 +424,27 @@ class PipelineProfiler:
 
         lines.append("## 1. 总体耗时概览")
         lines.append("")
-        lines.append("| 环节 | 名称 | 耗时(s) | 占比 | CPU平均 | 内存峰值(MB) |")
-        lines.append("|------|------|---------|------|---------|-------------|")
+        lines.append(
+            "| 环节 | 名称 | 耗时(s) | 占比 | 调用次数 | CPU平均 | 内存峰值(MB) |"
+        )
+        lines.append(
+            "|------|------|---------|------|---------|---------|-------------|"
+        )
 
         total_duration = self.get_total_duration()
         for stage_id in sorted(self._stages.keys()):
             m = self._stages[stage_id]
-            pct = (m.duration_seconds / total_duration * 100) if total_duration > 0 else 0
+            pct = (
+                (m.duration_seconds / total_duration * 100) if total_duration > 0 else 0
+            )
             lines.append(
                 f"| {stage_id} | {m.stage_name} | {m.duration_seconds:.2f} | "
-                f"{pct:.1f}% | {m.cpu_percent_avg:.1f}% | {m.memory_mb_peak:.1f} |"
+                f"{pct:.1f}% | {m.call_count} | {m.cpu_percent_avg:.1f}% | {m.memory_mb_peak:.1f} |"
             )
 
-        lines.append(f"| **总计** | - | **{total_duration:.2f}** | **100%** | - | - |")
+        lines.append(
+            f"| **总计** | - | **{total_duration:.2f}** | **100%** | - | - | - |"
+        )
         lines.append("")
 
         normalized = self.get_normalized_metrics()
@@ -422,7 +456,9 @@ class PipelineProfiler:
         lines.append("")
 
         lines.append("### 2.2 问答处理归一化")
-        lines.append(f"- 单问题平均耗时: **{normalized['per_question_time_seconds']:.4f}s/问题**")
+        lines.append(
+            f"- 单问题平均耗时: **{normalized['per_question_time_seconds']:.4f}s/问题**"
+        )
         lines.append(f"- 问答处理总耗时: {normalized['qa_processing_time']:.2f}s")
         lines.append("")
 
@@ -462,7 +498,9 @@ class PipelineProfiler:
         lines.append("")
         if self._stages:
             bottleneck = max(self._stages.values(), key=lambda m: m.duration_seconds)
-            lines.append(f"- 最耗时环节: **{bottleneck.stage_id} {bottleneck.stage_name}** ({bottleneck.duration_seconds:.2f}s)")
+            lines.append(
+                f"- 最耗时环节: **{bottleneck.stage_id} {bottleneck.stage_name}** ({bottleneck.duration_seconds:.2f}s)"
+            )
             lines.append("")
 
         lines.append("## 5. 优化建议")
@@ -470,12 +508,38 @@ class PipelineProfiler:
         lines.append("基于性能数据，建议关注以下优化方向：")
         lines.append("")
 
-        if "S1" in self._stages and self._stages["S1"].duration_seconds > total_duration * 0.3:
-            lines.append("1. **PDF解析优化**: 考虑使用并行解析或更快的解析算法")
-        if "S3" in self._stages and self._stages["S3"].duration_seconds > total_duration * 0.3:
-            lines.append("1. **向量嵌入优化**: 考虑增大批处理大小或使用GPU加速")
-        if "S7" in self._stages and self._stages["S7"].duration_seconds > total_duration * 0.3:
-            lines.append("1. **答案生成优化**: 考虑使用更快的LLM或减少上下文长度")
+        suggestions = []
+        if (
+            "S1" in self._stages
+            and self._stages["S1"].duration_seconds > total_duration * 0.3
+        ):
+            suggestions.append(
+                "1. **PDF解析优化**: 考虑使用并行解析或更快的解析算法"
+            )
+        if (
+            "S3" in self._stages
+            and self._stages["S3"].duration_seconds > total_duration * 0.3
+        ):
+            suggestions.append(
+                "1. **向量嵌入优化**: 考虑增大批处理大小或使用GPU加速"
+            )
+        if (
+            "S7" in self._stages
+            and self._stages["S7"].duration_seconds > total_duration * 0.3
+        ):
+            suggestions.append(
+                "1. **答案生成优化**: 考虑使用更快的LLM或减少上下文长度"
+            )
+        if (
+            "S6" in self._stages
+            and self._stages["S6"].duration_seconds > total_duration * 0.3
+        ):
+            suggestions.append(
+                "1. **检索优化**: 检索耗时偏高，检查向量索引规模和检索参数"
+            )
+
+        for i, s in enumerate(suggestions, 1):
+            lines.append(f"{i}. {s[3:]}")
 
         lines.append("")
         lines.append("---")
@@ -484,7 +548,9 @@ class PipelineProfiler:
         return "\n".join(lines)
 
 
-def profile_stage(profiler: PipelineProfiler, stage_id: str, metadata: dict[str, Any] | None = None):
+def profile_stage(
+    profiler: PipelineProfiler, stage_id: str, metadata: dict[str, Any] | None = None
+):
     def decorator(func: Callable) -> Callable:
         def wrapper(*args, **kwargs):
             with profiler.profile_stage(stage_id, metadata):

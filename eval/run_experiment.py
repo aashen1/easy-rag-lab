@@ -1555,8 +1555,12 @@ def run_variant_evaluation(
         if hasattr(pipeline, "indexer") and pipeline.indexer is not None:
             pipeline.indexer.close()
 
+        if profiler:
+            profiler.begin_stage("S3")
         indexer = prepare_index_for_variant(merged_config, meal_config, variant_name)
         pipeline.indexer = indexer
+        if profiler:
+            profiler.end_stage()
 
         pipeline._setup_retrievers()
 
@@ -1576,6 +1580,8 @@ def run_variant_evaluation(
             retrieval_method in ("bm25", "hybrid")
             and pipeline.bm25_retriever is not None
         ):
+            if profiler:
+                profiler.begin_stage("S4")
             from src.meal import ArtifactCache
 
             artifacts_config = merged_config.get("artifacts", {})
@@ -1588,6 +1594,8 @@ def run_variant_evaluation(
                 pipeline.bm25_retriever.build_index_from_chunks(str(chunks_dir))
             else:
                 logger.warning(f"Chunks dir not found for BM25: {chunks_dir}")
+            if profiler:
+                profiler.end_stage()
 
             if retrieval_method == "hybrid" and pipeline.hybrid_retriever is not None:
                 pipeline.hybrid_retriever = HybridRetriever(
@@ -1613,9 +1621,6 @@ def run_variant_evaluation(
 
         llm_config = get_llm_config(merged_config, llm_preset)
 
-        if profiler:
-            profiler.begin_stage("S6")
-
         for test_set in test_sets:
             results = evaluate_test_set(
                 pipeline,
@@ -1626,16 +1631,24 @@ def run_variant_evaluation(
             )
             all_results.extend(results)
 
-        if profiler:
-            profiler.end_stage()
-            profiler.begin_stage("S7")
-
         total_time = time.time() - total_start_time
 
         metrics = compute_aggregate_metrics(all_results)
 
         if profiler:
-            profiler.end_stage()
+            s6_metrics = profiler.get_stage_metrics("S6")
+            s7_metrics = profiler.get_stage_metrics("S7")
+            rag_total = variant_tracker.get_total()
+            if s7_metrics:
+                gen_records = [
+                    r for r in variant_tracker._records if r.category == "rag_qa"
+                ]
+                gen_input = sum(r.usage.input_tokens for r in gen_records)
+                gen_output = sum(r.usage.output_tokens for r in gen_records)
+                profiler.report_stage_tokens("S7", gen_input, gen_output)
+                retr_input = rag_total.input_tokens - gen_input
+                retr_output = rag_total.output_tokens - gen_output
+                profiler.report_stage_tokens("S6", retr_input, retr_output)
 
         token_usage_data = variant_tracker.to_dict()
         if (
@@ -1880,6 +1893,14 @@ def run_experiment(
                 chunks_dir=first_chunks_dir,
             )
 
+        if profiler:
+            test_gen_total = test_generation_tracker.get_total()
+            profiler.report_stage_tokens(
+                "S5",
+                test_gen_total.input_tokens,
+                test_gen_total.output_tokens,
+            )
+
         meal_snapshot = meal_info["config"].to_dict()
 
         test_set_snapshots = []
@@ -1919,8 +1940,6 @@ def run_experiment(
         logger.info("Step 4: Running variant evaluations...")
         all_variant_results = []
         experiment_tracker = TokenTracker()
-        if profiler:
-            profiler.set_token_tracker(experiment_tracker)
 
         for i, variant in enumerate(exp_config.variants, 1):
             variant_name = variant.get("name", f"variant_{i}")

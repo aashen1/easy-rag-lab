@@ -498,6 +498,8 @@ class RAGPipeline:
                     return response
 
             logger.debug("Retrieving relevant contexts...")
+            if self.profiler:
+                self.profiler.begin_stage("S6")
             if self.retrieval_method == "hybrid" and self.hybrid_retriever is not None:
                 results = self.hybrid_retriever.retrieve(retrieval_query)
             elif self.retrieval_method == "bm25" and self.bm25_retriever is not None:
@@ -512,6 +514,8 @@ class RAGPipeline:
                 results = self.reranker.rerank(
                     question, results, top_n=self.reranker_top_n
                 )
+            if self.profiler:
+                self.profiler.end_stage()
 
             contexts = [result["text"] for result in results]
             scores = [result["score"] for result in results]
@@ -521,7 +525,11 @@ class RAGPipeline:
             chunk_ids = [result.get("chunk_id", "") for result in results]
 
             logger.debug("Generating answer...")
+            if self.profiler:
+                self.profiler.begin_stage("S7")
             answer = self.generator.generate(question, contexts, sources=sources)
+            if self.profiler:
+                self.profiler.end_stage()
 
             response = {
                 "question": question,
