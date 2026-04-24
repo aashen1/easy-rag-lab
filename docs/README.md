@@ -33,6 +33,7 @@
 - [RAG 泛超参数使用指南](guides/operations/hyperparameter-guide.md)
 - [RAG 优化实现与测试保障](guides/operations/rag-optimization-implementation.md)
 - [测试集管理](guides/operations/test-set-management.md)
+- [Golden Testset 生成](guides/operations/golden-testset-generation.md)
 
 ### 开发指南
 
@@ -78,6 +79,7 @@ docs/
 │   │   ├── hyperparameter-guide.md
 │   │   ├── rag-optimization-implementation.md
 │   │   ├── test-set-management.md
+│   │   ├── golden-testset-generation.md
 │   │   └── pdf-parsing.md
 │   └── development/           # 开发规范与工具指南
 │       ├── testing.md
