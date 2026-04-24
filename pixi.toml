@@ -8,13 +8,13 @@ version = "0.1.0"
 [tasks]
 
 [tasks.ruff-check]
-cmd = "ruff check src/ eval/ tests/"
+cmd = "ruff check src/ eval/ tests/ main.py interactive.py"
 
 [tasks.ruff-format]
-cmd = "ruff format src/ eval/ tests/"
+cmd = "ruff format src/ eval/ tests/ main.py interactive.py"
 
 [tasks.lint]
-cmd = "ruff check --fix src/ eval/ tests/ && ruff format src/ eval/ tests/"
+cmd = "ruff check --fix src/ eval/ tests/ main.py interactive.py && ruff format src/ eval/ tests/ main.py interactive.py"
 
 [tasks.pre-commit-install]
 cmd = "pre-commit install"
