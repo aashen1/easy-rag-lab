@@ -57,22 +57,14 @@ FAILURE_MODES = {
     "adversarial": "边界场景翻车：数字近似/跨文档混淆/时序陷阱等",
 }
 
-GOLDEN_PROMPT = """你是一位资深金融行业QA工程师，正在为RAG问答系统编写高质量测试题。你需要基于以下文档内容，生成一道【{question_type}】类型的测试题。
+GOLDEN_PROMPT = """你是一位资深金融行业QA工程师，正在为RAG问答系统编写高质量测试题。
 
-## 核心要求
-
-1. **问题必须能区分系统好坏**：好的RAG系统能答对，差的系统会答错或产生幻觉
-2. **答案必须精确**：答案要直接引用文档中的具体数据或结论，不能模糊
-3. **ground_truth_excerpt必须准确**：必须从原文中逐字摘录答案所在的关键片段（50-200字）
+{type_specific_instruction}
 
 ## 文档内容
 ---
 {document_content}
 ---
-
-## 问题类型说明
-
-{type_description}
 
 ## 输出格式
 
@@ -88,66 +80,135 @@ GOLDEN_PROMPT = """你是一位资深金融行业QA工程师，正在为RAG问�
     "target_failure_mode": "该题针对的RAG失败模式"
 }}"""
 
-SINGLE_FACT_DESCRIPTION = """单知识点查询：查询某个具体数据、事实或概念。
-- 好的示例："2024年光模块市场规模多少？"、"CPO的全称是什么？"
-- 关键：答案必须是文档中明确出现的具体数据或定义
-- ground_truth_excerpt：包含该数据或定义的原文段落"""
+SINGLE_FACT_INSTRUCTION = """请基于以上文档，生成一道**单知识点查询**题。
 
-MULTI_FACT_DESCRIPTION = """多知识点综合：需要整合文档中多个位置的信息才能回答。
-- 好的示例："科瑞技术和猎奇智能在光模块设备上有什么区别？"
-- 关键：答案不能仅凭文档中一个位置的信息得出，必须综合2+个信息点
-- ground_truth_excerpt：包含主要信息点的原文段落（可以拼接2-3个片段）"""
+要求：
+- 问题只涉及文档中一个具体数据点、事实或概念
+- 答案必须是文档中明确出现的具体数值或定义
+- 问题要口语化，像在问同事，不要用"请说明""根据文档"等学术化措辞
+- 好的例子："2024年光模块市场规模多少？""CPO的全称是什么？"
+- ground_truth_excerpt：包含该数据或定义的原文段落（50-200字）"""
 
-REASONING_DESCRIPTION = """推理型问题：需要基于文档信息进行逻辑推理或判断。
-- 好的示例："为什么CPO能降低功耗？"、"如果800G需求翻倍，对设备商有什么影响？"
-- 关键：答案需要展示推理过程，推理依据必须来自文档
+MULTI_FACT_INSTRUCTION = """请基于以上文档，生成一道**多知识点综合**题。
+
+要求：
+- 问题必须涉及文档中至少2个不同位置的信息，需要整合才能回答
+- 不要把多个不相关问题拼在一起，而是要有逻辑关联
+- 问题要口语化，像在问同事，不要用"请说明""根据文档"等学术化措辞
+- 好的例子："科瑞技术和猎奇智能在光模块设备上有什么区别？"
+- ground_truth_excerpt：包含主要信息点的原文段落（可以拼接2-3个片段，用...分隔）"""
+
+REASONING_INSTRUCTION = """请基于以上文档，生成一道**推理型**题。
+
+要求：
+- 问题需要基于文档信息进行逻辑推理或判断，不能仅靠查找直接得到答案
+- 答案必须展示推理过程，推理依据必须来自文档
+- 问题要口语化，像在问同事，不要用"请说明""根据文档"等学术化措辞
+- 好的例子："为什么CPO能降低功耗？""如果800G需求翻倍，对设备商有什么影响？"
 - ground_truth_excerpt：包含推理前提的原文段落"""
 
-COMPARATIVE_DESCRIPTION = """对比分析：对比两个或多个对象的异同。
-- 好的示例："中际旭创和新易盛哪个更值得投资？"、"CPO和LPO两种技术路线各有什么优缺点？"
-- 关键：必须涉及文档中两个以上对象的对比
+COMPARATIVE_INSTRUCTION = """请基于以上文档，生成一道**对比分析**题。
+
+要求：
+- 问题必须涉及文档中两个或多个对象的对比（不同公司、不同时期、不同技术等）
+- 答案需要列出对比对象的异同点
+- 问题要口语化，像在问同事，不要用"请说明""根据文档"等学术化措辞
+- 好的例子："中际旭创和新易盛哪个更值得投资？""CPO和LPO两种技术路线各有什么优缺点？"
 - ground_truth_excerpt：包含对比对象信息的原文段落"""
 
-MISSING_DESCRIPTION = """缺失知识点：询问文档中没有或不完整的信息。
-- 好的示例："光模块行业的ESG评级情况怎么样？"（文档未涉及ESG）
-- 关键：答案必须明确说明"文档未提及该信息"或"文档信息不完整"
+MISSING_INSTRUCTION = """请基于以上文档，生成一道**缺失知识点**题。
+
+要求：
+- 问题询问的是文档中没有或不完整的信息
+- 答案必须明确说明"文档未提及该信息"或"文档信息不完整"
+- 问题要口语化，像在问同事，不要用"请说明""根据文档"等学术化措辞
+- 好的例子："光模块行业的ESG评级情况怎么样？"（文档未涉及ESG）
 - ground_truth_excerpt：与问题最相关但确实不包含答案的原文段落"""
 
-IRRELEVANT_DESCRIPTION = """无关问题：与文档主题完全无关的问题。
-- 好的示例："新能源汽车的电池技术发展怎么样？"（文档是关于光模块的）
-- 关键：问题必须与文档主题完全无关，测试系统的拒答能力
-- ground_truth_excerpt：留空字符串"""
+IRRELEVANT_INSTRUCTION = """请生成一道与以上文档主题**完全无关**的问题。
 
-ADVERSARIAL_DESCRIPTION = """对抗性问题：故意设计容易让RAG系统出错的边界场景。
-类型包括：
-1. 数字近似陷阱：问一个与文档中数字接近但不相同的值
-2. 跨文档混淆：问A公司数据但容易与B公司混淆
-3. 时序陷阱：问文档未覆盖的时间段数据
-4. 否定问题："以下哪个不是..."
-5. 部分匹配陷阱：答案恰好跨越chunk边界
+要求：
+- 问题必须与文档主题完全无关，测试系统的拒答能力
+- 不要提及文档中的任何公司、行业或概念
+- 问题要口语化，像在问同事
+- 好的例子：如果文档是关于光模块的，可以问"新能源汽车的电池技术发展怎么样？"
+- answer：写"该问题与文档内容无关，无法基于文档回答"
+- ground_truth_excerpt：留空字符串"""""
 
-- 好的示例："光模块市场增长了15%吗？"（文档实际是12.5%，测试系统是否会纠正）
-- 关键：问题中包含"诱饵"信息，好的系统应该能识别并纠正
+ADVERSARIAL_INSTRUCTION = """请基于以上文档，生成一道**对抗性**问题，故意设计容易让RAG系统出错的边界场景。
+
+可选的对抗策略（选一种）：
+1. 数字近似陷阱：在问题中包含一个与文档中数字接近但不相同的值，看系统是否会纠正
+2. 时序陷阱：问一个文档未覆盖的时间段数据
+3. 否定问题：用"不是""没有"等否定措辞，看系统是否会忽略否定
+4. 部分匹配陷阱：问一个答案恰好跨越文档段落边界的问题
+
+要求：
+- 问题中必须包含"诱饵"信息，好的系统应该能识别并纠正
+- 答案必须指出文档中的正确信息，并说明问题中的诱饵
+- 问题要口语化，像在问同事，不要用"请说明""根据文档"等学术化措辞
+- 好的例子："光模块市场增长了15%吗？"（文档实际是12.5%，测试系统是否会纠正）
 - ground_truth_excerpt：包含正确信息的原文段落"""
 
-TYPE_DESCRIPTIONS = {
-    "single_fact": SINGLE_FACT_DESCRIPTION,
-    "multi_fact": MULTI_FACT_DESCRIPTION,
-    "reasoning": REASONING_DESCRIPTION,
-    "comparative": COMPARATIVE_DESCRIPTION,
-    "missing": MISSING_DESCRIPTION,
-    "irrelevant": IRRELEVANT_DESCRIPTION,
-    "adversarial": ADVERSARIAL_DESCRIPTION,
+TYPE_INSTRUCTIONS = {
+    "single_fact": SINGLE_FACT_INSTRUCTION,
+    "multi_fact": MULTI_FACT_INSTRUCTION,
+    "reasoning": REASONING_INSTRUCTION,
+    "comparative": COMPARATIVE_INSTRUCTION,
+    "missing": MISSING_INSTRUCTION,
+    "irrelevant": IRRELEVANT_INSTRUCTION,
+    "adversarial": ADVERSARIAL_INSTRUCTION,
 }
 
 DOCUMENT_TRUNCATE_MAX = 10000
 
 
-def load_documents(parsed_dir: Path) -> list[dict[str, str]]:
-    """Load all MD documents from the parsed directory.
+def _load_pages_json(file_path: Path, parsed_dir: Path) -> dict[str, str] | None:
+    """Load a .pages.json file and concatenate all pages.
 
     Args:
-        parsed_dir: Path to the directory containing parsed MD files.
+        file_path: Path to the .pages.json file.
+        parsed_dir: Base parsed directory for computing relative paths.
+
+    Returns:
+        Dictionary with 'name', 'content', 'source_path' keys, or None on error.
+    """
+    try:
+        with open(file_path, encoding="utf-8") as f:
+            pages_data = json.load(f)
+
+        if not isinstance(pages_data, list):
+            logger.warning(f"Invalid pages.json format in {file_path}")
+            return None
+
+        full_text = "\n\n".join(
+            page.get("text", "")
+            for page in sorted(pages_data, key=lambda p: p.get("page_number", 0))
+        )
+
+        rel_path = file_path.relative_to(parsed_dir).as_posix()
+        doc_name = file_path.stem
+        if doc_name.endswith(".pages"):
+            doc_name = doc_name[: -len(".pages")]
+
+        return {
+            "name": doc_name,
+            "content": full_text,
+            "source_path": rel_path,
+        }
+    except Exception as e:
+        logger.error(f"Failed to load {file_path}: {str(e)}")
+        return None
+
+
+def load_documents(parsed_dir: Path) -> list[dict[str, str]]:
+    """Load all documents from the parsed directory.
+
+    Supports both .md and .pages.json formats. For .pages.json files,
+    all pages are concatenated into a single text document.
+
+    Args:
+        parsed_dir: Path to the directory containing parsed document files.
 
     Returns:
         List of dicts with 'name', 'content', 'source_path' keys.
@@ -170,6 +231,12 @@ def load_documents(parsed_dir: Path) -> list[dict[str, str]]:
             logger.debug(f"Loaded document: {doc_name} ({len(content)} chars)")
         except Exception as e:
             logger.error(f"Failed to load {md_file}: {str(e)}")
+
+    for pages_file in sorted(parsed_dir.rglob("*.pages.json")):
+        result = _load_pages_json(pages_file, parsed_dir)
+        if result is not None:
+            documents.append(result)
+            logger.debug(f"Loaded document: {result['name']} ({len(result['content'])} chars)")
 
     return documents
 
@@ -201,13 +268,17 @@ def calculate_type_counts(num_questions: int, distribution: dict[str, float]) ->
 
 def distribute_across_documents(
     type_counts: dict[str, int],
-    doc_names: list[str],
+    documents: list[dict[str, str]],
 ) -> dict[str, list[str]]:
-    """Distribute question types across documents using round-robin.
+    """Distribute question types across documents ensuring diversity.
+
+    Groups documents by their base name (stem before year) and ensures
+    each group gets a mix of question types. This prevents all questions
+    of one type from being assigned to similar documents.
 
     Args:
         type_counts: Dictionary mapping question type names to counts.
-        doc_names: List of document names to distribute across.
+        documents: List of document dicts with 'name' and 'content' keys.
 
     Returns:
         Dictionary mapping document names to their assigned question types.
@@ -216,10 +287,14 @@ def distribute_across_documents(
     for q_type, count in type_counts.items():
         question_plan.extend([q_type] * count)
 
-    num_docs = len(doc_names)
+    import random
+    random.shuffle(question_plan)
+
+    doc_names = [d["name"] for d in documents]
     doc_plans: dict[str, list[str]] = {name: [] for name in doc_names}
+
     for i, q_type in enumerate(question_plan):
-        doc_name = doc_names[i % num_docs]
+        doc_name = doc_names[i % len(doc_names)]
         doc_plans[doc_name].append(q_type)
 
     return doc_plans
@@ -229,7 +304,7 @@ def generate_single_question(
     document_content: str,
     question_type: str,
     generator: Generator,
-    max_retries: int = 3,
+    max_retries: int = 5,
 ) -> dict[str, Any] | None:
     """Generate a single golden question from a document.
 
@@ -243,7 +318,7 @@ def generate_single_question(
         Dictionary with question data, or None if generation fails.
     """
     type_cn = GOLDEN_QUESTION_TYPES.get(question_type, question_type)
-    type_desc = TYPE_DESCRIPTIONS.get(question_type, "")
+    type_instruction = TYPE_INSTRUCTIONS.get(question_type, "")
 
     truncated_doc = document_content[:DOCUMENT_TRUNCATE_MAX]
 
@@ -251,7 +326,7 @@ def generate_single_question(
         document_content=truncated_doc,
         question_type=type_cn,
         question_type_en=question_type,
-        type_description=type_desc,
+        type_specific_instruction=type_instruction,
     )
 
     for attempt in range(max_retries):
@@ -266,6 +341,7 @@ def generate_single_question(
 
             qa = parse_question_response(response)
             if qa is not None and validate_question_quality(qa):
+                qa["question_type"] = question_type
                 return qa
 
             logger.debug(f"Attempt {attempt + 1}: failed to parse or validate")
@@ -556,8 +632,7 @@ def generate_golden_testset(
     type_counts = calculate_type_counts(num_questions, GOLDEN_TYPE_DISTRIBUTION)
     logger.info(f"Question type distribution: {type_counts}")
 
-    doc_names = [d["name"] for d in documents]
-    doc_plans = distribute_across_documents(type_counts, doc_names)
+    doc_plans = distribute_across_documents(type_counts, documents)
 
     llm_config = get_llm_config(config, llm_preset)
     generator = Generator(
@@ -569,6 +644,7 @@ def generate_golden_testset(
     )
 
     questions: list[dict[str, Any]] = []
+    seen_questions: set[str] = set()
     question_id = 1
     total_attempts = 0
     failed_count = 0
@@ -579,19 +655,31 @@ def generate_golden_testset(
         if not assigned_types:
             continue
 
+        if len(questions) >= num_questions:
+            break
+
         doc_content = doc_data["content"]
         source_path = doc_data["source_path"]
 
         for q_type in assigned_types:
+            if len(questions) >= num_questions:
+                break
+
             total_attempts += 1
             logger.info(
-                f"Generating question {question_id}/{num_questions} "
+                f"Generating question {len(questions) + 1}/{num_questions} "
                 f"(type={q_type}, doc={doc_name})..."
             )
 
             qa = generate_single_question(doc_content, q_type, generator)
 
             if qa is not None:
+                q_text = qa.get("question", "")
+                if q_text in seen_questions:
+                    logger.debug(f"Duplicate question skipped: {q_text[:50]}")
+                    continue
+                seen_questions.add(q_text)
+
                 qa["id"] = f"golden_{question_id:03d}"
                 qa["source_document"] = doc_name
 
@@ -663,6 +751,11 @@ def generate_golden_testset(
 
             qa = generate_single_question(doc_content, q_type, generator)
             if qa is not None:
+                q_text = qa.get("question", "")
+                if q_text in seen_questions:
+                    continue
+                seen_questions.add(q_text)
+
                 qa["id"] = f"golden_{question_id:03d}"
                 qa["source_document"] = doc_data["name"]
 
@@ -703,49 +796,34 @@ def generate_golden_testset(
         logger.error("No questions could be generated")
         return {}
 
-    seen_questions: set[str] = set()
-    deduped_questions: list[dict[str, Any]] = []
-    dup_count = 0
-    for q in questions:
-        q_text = q.get("question", "")
-        if q_text in seen_questions:
-            dup_count += 1
-            continue
-        seen_questions.add(q_text)
-        deduped_questions.append(q)
-
-    if dup_count > 0:
-        logger.info(f"Removed {dup_count} duplicate questions")
-
     type_dist = {}
-    for q in deduped_questions:
+    for q in questions:
         qt = q.get("question_type", "unknown")
         type_dist[qt] = type_dist.get(qt, 0) + 1
 
     excerpt_verified_count = sum(
-        1 for q in deduped_questions
+        1 for q in questions
         if q.get("metadata", {}).get("excerpt_verified", False)
     )
     chunks_located_count = sum(
-        1 for q in deduped_questions
+        1 for q in questions
         if q.get("source_chunks")
     )
 
     quality_metrics = {
-        "total_questions": len(deduped_questions),
+        "total_questions": len(questions),
         "type_distribution": type_dist,
         "excerpt_verified_rate": (
-            excerpt_verified_count / len(deduped_questions)
-            if deduped_questions
+            excerpt_verified_count / len(questions)
+            if questions
             else 0.0
         ),
         "chunks_located_rate": (
-            chunks_located_count / len(deduped_questions)
-            if deduped_questions
+            chunks_located_count / len(questions)
+            if questions
             else 0.0
         ),
         "generation_failures": failed_count,
-        "duplicates_removed": dup_count,
     }
 
     now = datetime.now().isoformat()
@@ -773,7 +851,7 @@ def generate_golden_testset(
             },
         },
         "quality_metrics": quality_metrics,
-        "questions": deduped_questions,
+        "questions": questions,
     }
 
     if output_path:
@@ -783,8 +861,8 @@ def generate_golden_testset(
         logger.success(f"Golden test set saved to {output_path}")
 
     logger.success(
-        f"Generated {len(deduped_questions)}/{num_questions} golden questions "
-        f"(failures: {failed_count}, duplicates: {dup_count})"
+        f"Generated {len(questions)}/{num_questions} golden questions "
+        f"(failures: {failed_count})"
     )
 
     return test_set

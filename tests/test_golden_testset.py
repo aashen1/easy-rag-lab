@@ -50,22 +50,22 @@ class TestGoldenSchema:
 
 class TestDistributeAcrossDocuments:
     def test_basic_distribution(self):
-        doc_names = ["doc_a", "doc_b", "doc_c"]
+        docs = [{"name": "doc_a", "content": "a"}, {"name": "doc_b", "content": "b"}, {"name": "doc_c", "content": "c"}]
         type_counts = {"single_fact": 6, "reasoning": 3}
-        result = distribute_across_documents(type_counts, doc_names)
+        result = distribute_across_documents(type_counts, docs)
         total = sum(len(v) for v in result.values())
         assert total == 9
 
     def test_single_document(self):
-        doc_names = ["doc_a"]
+        docs = [{"name": "doc_a", "content": "a"}]
         type_counts = {"single_fact": 5}
-        result = distribute_across_documents(type_counts, doc_names)
+        result = distribute_across_documents(type_counts, docs)
         assert len(result["doc_a"]) == 5
 
     def test_more_questions_than_docs(self):
-        doc_names = ["doc_a", "doc_b"]
+        docs = [{"name": "doc_a", "content": "a"}, {"name": "doc_b", "content": "b"}]
         type_counts = {"single_fact": 10}
-        result = distribute_across_documents(type_counts, doc_names)
+        result = distribute_across_documents(type_counts, docs)
         total = sum(len(v) for v in result.values())
         assert total == 10
 
