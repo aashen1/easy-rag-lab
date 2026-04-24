@@ -1,194 +1,224 @@
+from __future__ import annotations
+
 import json
+from datetime import datetime
 from pathlib import Path
 
-import pymupdf4llm
 from loguru import logger
 
 from src.exceptions import ParsingError
-from src.utils import detect_document_category, ensure_dir
+from src.meal import (
+    ArtifactCache,
+    MealFile,
+    compute_data_id,
+    compute_parser_config_hash,
+)
+from src.parsers.registry import ParserRegistry
+from src.utils import detect_document_category
 
 
-def parse_pdf(pdf_path: str, page_chunks: bool = False, **kwargs) -> str | list[dict]:
-    """Parse a single PDF file and convert its content to Markdown text.
+def _collect_pdf_files(raw_dir: Path) -> list[MealFile]:
+    """Collect all PDF files in raw_dir with their metadata.
 
     Args:
-        pdf_path: Path to the PDF file.
-        page_chunks: If True, return a list of page-level dicts instead of
-            a single Markdown string. Each dict contains the page content
-            and metadata (page number, etc.).
-        **kwargs: Additional keyword arguments passed to
-            ``pymupdf4llm.to_markdown``. Common options include
-            ``header``, ``footer``, ``page_separators``,
-            ``ignore_images``, and ``write_images``.
+        raw_dir: Root directory containing PDF files.
 
     Returns:
-        Markdown-formatted string extracted from the PDF when
-        ``page_chunks=False``, or a list of page-level dicts when
-        ``page_chunks=True``.
-
-    Raises:
-        FileNotFoundError: If the PDF file does not exist.
-        ValueError: If the file is not a PDF (wrong extension).
-        Exception: If the PDF parsing fails for any other reason.
+        List of MealFile objects with path, sha256, and size_bytes.
     """
-    pdf_file = Path(pdf_path)
+    all_pdfs = sorted(raw_dir.rglob("*.pdf"))
+    if not all_pdfs:
+        raise ParsingError(f"No PDF files found in {raw_dir}")
 
-    if not pdf_file.exists():
-        error_msg = f"PDF file not found: {pdf_path}"
-        logger.error(error_msg)
-        raise ParsingError(error_msg)
+    pdf_files = []
+    for pdf_path in all_pdfs:
+        try:
+            rel_path = pdf_path.relative_to(raw_dir).as_posix()
+            sha256_hash = _compute_file_sha256(pdf_path)
+            size_bytes = pdf_path.stat().st_size
+            pdf_files.append(
+                MealFile(
+                    path=rel_path,
+                    sha256=sha256_hash,
+                    size_bytes=size_bytes,
+                )
+            )
+        except Exception as e:
+            logger.warning(f"Skipping {pdf_path}: {str(e)}")
 
-    if pdf_file.suffix.lower() != ".pdf":
-        error_msg = f"File is not a PDF: {pdf_path}"
-        logger.error(error_msg)
-        raise ParsingError(error_msg)
+    if not pdf_files:
+        raise ParsingError("No PDF files could be processed")
 
-    try:
-        logger.info(f"Parsing PDF: {pdf_path}")
-        result = pymupdf4llm.to_markdown(str(pdf_file), page_chunks=page_chunks, **kwargs)
-        if page_chunks:
-            logger.success(f"Parsed PDF (page_chunks): {pdf_path} -> {len(result)} pages")
-        else:
-            logger.success(f"Successfully parsed PDF: {pdf_path}")
-        return result
-    except Exception as e:
-        error_msg = f"Failed to parse PDF {pdf_path}: {str(e)}"
-        logger.error(error_msg)
-        raise ParsingError(error_msg) from e
+    return pdf_files
 
 
-def parse_all_pdfs(
+def _compute_file_sha256(file_path: Path, chunk_size: int = 8192) -> str:
+    """Compute SHA-256 hash of a file.
+
+    Args:
+        file_path: Path to the file to hash.
+        chunk_size: Number of bytes to read per iteration.
+
+    Returns:
+        Hexadecimal SHA-256 digest string.
+    """
+    import hashlib
+
+    sha256 = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        while True:
+            chunk = f.read(chunk_size)
+            if not chunk:
+                break
+            sha256.update(chunk)
+    return sha256.hexdigest()
+
+
+def parse_all_pdfs_unified(
     input_dir: str,
-    output_dir: str,
-    category_mapping: dict[str, str] | None = None,
+    artifacts_dir: str,
+    algorithm: str = "pymupdf4llm",
+    parser_options: dict | None = None,
     force: bool = False,
-    pdf_files: list[Path] | None = None,
-    parser_options: dict[str, any] | None = None,
 ) -> list[dict[str, str]]:
-    """Parse all PDF files in a directory and save their Markdown output.
+    """Parse all PDF files using the unified ArtifactCache system.
 
-    Skips files that have already been parsed unless force is True. Each
-    parsed result is categorized based on the file path or the provided
-    category_mapping.
-
-    When ``parser_options`` contains ``"page_chunks": True``, each PDF is
-    parsed into a list of page-level dicts and saved as a ``.pages.json``
-    file instead of a ``.md`` file.
+    Computes full data_id from all PDFs, uses parser_hash to distinguish
+    configurations, and validates cache against source file SHA-256 hashes.
 
     Args:
         input_dir: Directory containing PDF files to parse.
-        output_dir: Directory where parsed Markdown files will be saved.
-        category_mapping: Optional mapping from path substrings to category
-            names. If None, categories are inferred from path keywords.
-        force: If True, re-parse files even if output already exists.
-        pdf_files: Optional explicit list of PDF paths to parse. If None,
-            all PDFs under input_dir are discovered automatically.
-        parser_options: Optional dict of keyword arguments passed to
-            ``pymupdf4llm.to_markdown`` (e.g. header, footer,
-            page_separators, ignore_images, page_chunks).
+        artifacts_dir: Root directory for storing cached artifacts.
+        algorithm: Parser algorithm name (e.g., "pymupdf4llm").
+        parser_options: Options passed to the parser constructor.
+        force: If True, re-parse files even if valid cache exists.
 
     Returns:
-        List of result dictionaries, each containing source, output,
-        category, and status keys (plus error on failure). When
-        ``page_chunks=True``, the result dict also includes
-        ``"format": "pages_json"``.
+        List of result dictionaries with source, output, category, and status.
 
     Raises:
         FileNotFoundError: If input_dir does not exist.
     """
-    input_path = Path(input_dir)
+    raw_dir = Path(input_dir)
+    if not raw_dir.exists():
+        raise ParsingError(f"Input directory not found: {input_dir}")
 
-    if not input_path.exists():
-        error_msg = f"Input directory not found: {input_dir}"
-        logger.error(error_msg)
-        raise ParsingError(error_msg)
+    artifacts_path = Path(artifacts_dir)
+    cache = ArtifactCache(artifacts_path, raw_dir)
 
-    output_path = ensure_dir(output_dir)
+    pdf_files = _collect_pdf_files(raw_dir)
+    data_id = compute_data_id(pdf_files)
 
-    if pdf_files is not None:
-        logger.info(f"Using provided list of {len(pdf_files)} PDF files")
-    else:
-        pdf_files = list(input_path.rglob("*.pdf"))
+    parser_config_for_hash = {"algorithm": algorithm, "options": parser_options or {}}
+    parser_hash = compute_parser_config_hash(parser_config_for_hash)
 
-    if not pdf_files:
-        logger.warning(f"No PDF files found in {input_dir}")
-        return []
-
-    logger.info(f"Found {len(pdf_files)} PDF files to parse")
+    parsed_dir = cache.get_parsed_dir(data_id, parser_hash)
+    parsed_dir.mkdir(parents=True, exist_ok=True)
 
     use_page_chunks = bool(parser_options and parser_options.get("page_chunks", False))
 
+    if not force:
+        manifest = cache.load_manifest(data_id)
+        cache_valid = (
+            manifest is not None
+            and "pdf_inventory" in manifest
+            and cache.is_full_parsed_valid(parser_hash)
+        )
+    else:
+        cache_valid = False
+
+    if cache_valid and not force:
+        logger.info(
+            f"Cache HIT: Valid parsed artifacts exist for data_id={data_id[:12]}"
+        )
+        results = []
+        for meal_file in pdf_files:
+            if use_page_chunks:
+                output_file = parsed_dir / Path(meal_file.path).with_suffix(
+                    ".pages.json"
+                )
+            else:
+                output_file = parsed_dir / Path(meal_file.path).with_suffix(".md")
+
+            results.append(
+                {
+                    "source": meal_file.path,
+                    "output": str(output_file),
+                    "category": detect_document_category(meal_file.path),
+                    "status": "skipped",
+                }
+            )
+
+        logger.info(f"Skipped {len(results)} files (valid cache found)")
+        return results
+
+    parser = ParserRegistry.get(algorithm, parser_options or {})
     results = []
 
-    for pdf_file in pdf_files:
-        try:
-            relative_path = pdf_file.relative_to(input_path)
+    for meal_file in pdf_files:
+        pdf_path = raw_dir / meal_file.path
+        if use_page_chunks:
+            output_file = parsed_dir / Path(meal_file.path).with_suffix(".pages.json")
+        else:
+            output_file = parsed_dir / Path(meal_file.path).with_suffix(".md")
 
-            if use_page_chunks:
-                output_file = output_path / relative_path.with_suffix(".pages.json")
-            else:
-                output_file = output_path / relative_path.with_suffix(".md")
-
-            if not force and output_file.exists():
-                logger.info(f"Skipping (already parsed): {pdf_file.name}")
-                category = detect_document_category(str(pdf_file), category_mapping)
-
+        if (
+            not force
+            and output_file.exists()
+            and manifest
+            and "pdf_inventory" in manifest
+        ):
+            current_sha = _compute_file_sha256(pdf_path)
+            if current_sha == manifest["pdf_inventory"].get(meal_file.path):
+                logger.info(f"Skipping (already parsed): {meal_file.path}")
                 results.append(
                     {
-                        "source": str(pdf_file),
+                        "source": meal_file.path,
                         "output": str(output_file),
-                        "category": category,
+                        "category": detect_document_category(meal_file.path),
                         "status": "skipped",
                     }
                 )
                 continue
 
+        try:
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+            result = parser.parse(str(pdf_path))
+
             if use_page_chunks:
-                filtered_options = {k: v for k, v in (parser_options or {}).items() if k != "page_chunks"}
-                md_text = parse_pdf(str(pdf_file), page_chunks=True, **filtered_options)
-
-                output_file.parent.mkdir(parents=True, exist_ok=True)
-
-                with open(output_file, "w", encoding="utf-8") as f:
-                    json.dump(md_text, f, ensure_ascii=False, indent=2)
-
-                category = detect_document_category(str(pdf_file), category_mapping)
-
-                results.append(
+                pages_data = [
                     {
-                        "source": str(pdf_file),
-                        "output": str(output_file),
-                        "category": category,
-                        "status": "success",
-                        "format": "pages_json",
+                        "page_number": page.page_number,
+                        "text": page.text,
+                        "metadata": page.metadata,
                     }
-                )
+                    for page in result.pages
+                ]
+                with open(output_file, "w", encoding="utf-8") as f:
+                    json.dump(pages_data, f, ensure_ascii=False, indent=2)
             else:
-                md_text = parse_pdf(str(pdf_file), **(parser_options or {}))
-
-                output_file.parent.mkdir(parents=True, exist_ok=True)
-
                 with open(output_file, "w", encoding="utf-8") as f:
-                    f.write(md_text)
+                    for page in result.pages:
+                        f.write(page.text)
+                        f.write("\n\n")
 
-                category = detect_document_category(str(pdf_file), category_mapping)
-
-                results.append(
-                    {
-                        "source": str(pdf_file),
-                        "output": str(output_file),
-                        "category": category,
-                        "status": "success",
-                    }
-                )
-
-            logger.success(f"Parsed and saved: {pdf_file.name} -> {output_file.name}")
-
-        except Exception as e:
-            logger.error(f"Failed to parse {pdf_file}: {str(e)}")
+            category = detect_document_category(meal_file.path)
             results.append(
                 {
-                    "source": str(pdf_file),
+                    "source": meal_file.path,
+                    "output": str(output_file),
+                    "category": category,
+                    "status": "success",
+                    "format": "pages_json" if use_page_chunks else "markdown",
+                }
+            )
+            logger.success(f"Parsed: {meal_file.path} -> {output_file.name}")
+
+        except Exception as e:
+            logger.error(f"Failed to parse {meal_file.path}: {str(e)}")
+            results.append(
+                {
+                    "source": meal_file.path,
                     "output": None,
                     "category": None,
                     "status": "failed",
@@ -200,8 +230,20 @@ def parse_all_pdfs(
     failed_count = sum(1 for r in results if r["status"] == "failed")
     skipped_count = sum(1 for r in results if r["status"] == "skipped")
 
+    artifact_manifest = {
+        "data_id": data_id,
+        "pdf_count": len(pdf_files),
+        "chunk_count": 0,
+        "page_count": 0,
+        "created_at": datetime.now().isoformat(),
+        "config_hashes": {"parser": parser_hash},
+        "pdf_inventory": {f.path: f.sha256 for f in pdf_files},
+    }
+    cache.save_manifest(data_id, artifact_manifest)
+
     logger.info(
-        f"Parsing completed: {success_count} succeeded, {skipped_count} skipped, {failed_count} failed out of {len(pdf_files)} total"
+        f"Parsing completed: {success_count} succeeded, {skipped_count} skipped, "
+        f"{failed_count} failed out of {len(pdf_files)} total"
     )
 
     return results
@@ -214,10 +256,17 @@ if __name__ == "__main__":
     setup_logger(config)
 
     parser_config = config["parser"]
-    results = parse_all_pdfs(
+    algorithm = parser_config.get("algorithm", "pymupdf4llm")
+    parser_options = parser_config.get(algorithm, {})
+
+    artifacts_config = config.get("artifacts", {})
+    artifacts_dir = artifacts_config.get("dir", "data/artifacts")
+
+    results = parse_all_pdfs_unified(
         input_dir=parser_config["input_dir"],
-        output_dir=parser_config["output_dir"],
-        parser_options=parser_config.get("pymupdf4llm"),
+        artifacts_dir=artifacts_dir,
+        algorithm=algorithm,
+        parser_options=parser_options,
     )
 
     for result in results:
