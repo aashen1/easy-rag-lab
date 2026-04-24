@@ -51,6 +51,8 @@ class TestSetMetadata:
 class TestSetManager:
     __test__ = False
 
+    GOLDEN_TESTSET_DIR = "data/golden_testset"
+
     def __init__(self, config: dict[str, Any]):
         """Initialize the TestSetManager with application configuration.
 
@@ -60,6 +62,57 @@ class TestSetManager:
         """
         self.config = config
         self.meal_manager = MealManager(config)
+
+    def _get_golden_testset_dir(self) -> Path:
+        """Get the golden test set directory path.
+
+        Resolves the path using the configured data_dir if available,
+        otherwise falls back to the default GOLDEN_TESTSET_DIR.
+
+        Returns:
+            Path to the golden test set directory.
+        """
+        data_dir = self.config.get("data_dir", "data")
+        return Path(data_dir) / "golden_testset"
+
+    def load_golden_testset(self, name: str = "golden_150") -> dict[str, Any]:
+        """Load a golden test set from the fixed golden_testset directory.
+
+        Golden test sets are project-level assets that are not tied to
+        any specific meal. They are stored in data/golden_testset/ and
+        have user_defined=True with invalid_policy="immutable".
+
+        Args:
+            name: Name of the golden test set (without .json extension).
+
+        Returns:
+            Parsed golden test set dictionary.
+
+        Raises:
+            FileNotFoundError: If the golden test set file does not exist.
+            TestSetError: If the file cannot be loaded or parsed.
+        """
+        golden_dir = self._get_golden_testset_dir()
+        file_path = golden_dir / f"{name}.json"
+
+        if not file_path.exists():
+            raise TestSetError(
+                f"Golden test set '{name}' not found at {file_path}"
+            )
+
+        try:
+            with open(file_path, encoding="utf-8") as f:
+                data = json.load(f)
+            logger.info(f"Loaded golden test set '{name}' from {file_path}")
+            return self._migrate_test_set(data)
+        except json.JSONDecodeError as e:
+            raise TestSetError(
+                f"Failed to parse golden test set '{name}': {str(e)}"
+            ) from e
+        except Exception as e:
+            raise TestSetError(
+                f"Failed to load golden test set '{name}': {str(e)}"
+            ) from e
 
     def get_test_sets_dir(self, meal_name: str) -> Path:
         """Get the test_sets directory path for a meal.
@@ -724,6 +777,11 @@ class TestSetManager:
         - clean_only: Use/clean existing, error if not found
         - strict: Only use valid existing, error otherwise
 
+        If the test set config has ``golden: true``, it loads the test set
+        from the fixed golden_testset directory instead of the meal's
+        test_sets directory. Golden test sets are project-level assets
+        that are not tied to any specific meal.
+
         If the test set name is not specified, it will be auto-derived from
         the generation config (strategy + num_questions) to enable cache
         hitting without explicit naming.
@@ -744,6 +802,10 @@ class TestSetManager:
         Raises:
             ValueError: If resolution fails according to on_missing policy.
         """
+        if test_set_config.get("golden"):
+            golden_name = test_set_config.get("name", "golden_150")
+            return self.load_golden_testset(golden_name)
+
         name = test_set_config.get("name")
         on_missing = test_set_config.get("on_missing", "auto")
         generation_config = test_set_config.get("generation")

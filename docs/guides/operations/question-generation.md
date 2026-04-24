@@ -4,7 +4,7 @@
 
 > ⚠️ **文档状态**：本文档缺少 v0.1.8 新增功能的说明，包括：`source_chunks` 字段（document 级问题生成中标注问题来源 chunk）、增量生成机制（自动补充生成以达到目标数量）、问题有效性检查、以及 irrelevant/missing 类型问题的 `source_files` 正确设置（`[]` 和 `expect_no_answer=True`）。建议补充更新。
 
-> 最后更新: 2026-04-18
+> 最后更新: 2026-04-25（新增 Golden Test Set 章节）
 
 本文档介绍如何使用文档级问题生成功能，生成贴近真实用户场景的测试问题。
 
@@ -328,3 +328,107 @@ test_sets:
 - [实验系统指南](experiment-system.md)
 - [评测指标详解](evaluation-metrics.md)
 - [配置参考](../config-reference.md)
+- [Golden Test Set 构建记录](../../reviews/sessions/golden-testset-150-session.md)
+
+---
+
+## Golden Test Set（高质量人工校验问题集）
+
+### 概述
+
+Golden Test Set 是项目级的高质量测试问题集，与机器生成测试集相比具有以下区别：
+
+| 特性 | 机器生成集 | Golden Test Set |
+|------|-----------|----------------|
+| 答案精确度 | LLM 生成，可能模糊 | 人工校验，精确引用 |
+| ground truth | chunk ID（依赖分块策略） | `ground_truth_excerpt`（策略无关） |
+| 问题类型 | 6 种 | 7 种（含 adversarial） |
+| 审核状态 | 无审核 | 人工审核标记 |
+| 存储位置 | `data/meals/<meal>/test_sets/` | `data/golden_testset/` |
+| 生命周期 | 绑定 meal | 跨 meal 可用 |
+
+### 问题类型（7 种）
+
+在原有 6 种类型基础上，新增：
+
+#### 7. 对抗性问题 (adversarial)
+
+**定义**：故意设计容易让 RAG 系统出错的边界场景问题。
+
+**子类型**：
+
+| 子类型 | 说明 | 示例 |
+|--------|------|------|
+| 数字膨胀陷阱 | 夸大数值看系统是否纠正 | "万科经营性现金流超过100亿吗？"（实际39.1亿） |
+| 百分比膨胀 | 夸大百分比 | "宁德时代市占率超过40%了吗？"（实际36.8%） |
+| 比例反转 | 将高占比说成低占比 | "格力空调收入占比不到50%？"（实际73.7%） |
+| 否定陷阱 | 用否定措辞看系统是否忽略 | "美的没有进行股份回购对吗？"（实际有回购） |
+| 时序陷阱 | 问文档未覆盖的时间段 | "2025年的营收数据怎么样？"（文档只有2023年） |
+
+**默认占比**：10%
+
+### Schema
+
+每条问题包含以下字段：
+
+```json
+{
+    "id": "golden_001",
+    "question": "问题文本",
+    "answer": "精确答案",
+    "question_type": "single_fact|multi_fact|reasoning|comparative|missing|irrelevant|adversarial",
+    "difficulty": "easy|medium|hard",
+    "source_files": ["path/to/document.pages.json"],
+    "source_chunks": ["chunk_001"],
+    "ground_truth_excerpt": "答案所在原文片段（50-200字）",
+    "expect_retrieval": true,
+    "expect_no_answer": false,
+    "metadata": {
+        "author": "human|llm_assisted",
+        "reviewed": true,
+        "review_notes": "审核备注",
+        "target_failure_mode": "该题针对的RAG失败模式",
+        "excerpt_verified": true
+    }
+}
+```
+
+**关键字段说明**：
+- `ground_truth_excerpt`：答案所在原文片段，策略无关的精确定位，比 chunk ID 更可靠
+- `metadata.target_failure_mode`：标注该题针对的 RAG 失败模式
+- `metadata.author`：区分 LLM 辅助生成和人工编写
+
+### 使用方式
+
+#### 生成
+
+```bash
+pixi run python scripts/generate_golden_testset.py --num-questions 150
+```
+
+#### 审核
+
+```bash
+pixi run python scripts/review_golden_testset.py
+pixi run python scripts/review_golden_testset.py --start-from 50
+```
+
+#### 运行评测
+
+```bash
+pixi run python eval/run_experiment.py --config exp_configs/golden_tests/golden_150.yaml
+```
+
+实验配置中使用 `golden: true` 标记：
+
+```yaml
+test_sets:
+  - name: "golden_150"
+    golden: true
+```
+
+### 评测管线集成
+
+- `TestSetManager.resolve_test_set()` 支持 `golden: true` 路由，从固定路径加载
+- `ground_truth_excerpt` 优先于 `expected_answer` 用于 context_precision/context_recall 计算
+- RAGAS 评测器同样优先使用 `ground_truth_excerpt` 作为 reference

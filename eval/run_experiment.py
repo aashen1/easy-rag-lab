@@ -884,6 +884,7 @@ def _collect_rag_samples(
                 "contexts": response.get("contexts", []),
                 "expected_sources": question_data.get("source_files", []),
                 "expected_answer": question_data.get("answer"),
+                "ground_truth_excerpt": question_data.get("ground_truth_excerpt"),
                 "retrieved_sources": response.get("sources", []),
                 "chunk_ids": response.get("chunk_ids", []),
                 "expected_chunks": question_data.get("source_chunks", []),
@@ -912,6 +913,7 @@ def _collect_rag_samples(
                 "contexts": [],
                 "expected_sources": question_data.get("source_files", []),
                 "expected_answer": question_data.get("answer"),
+                "ground_truth_excerpt": question_data.get("ground_truth_excerpt"),
                 "retrieved_sources": [],
                 "chunk_ids": [],
                 "expected_chunks": question_data.get("source_chunks", []),
@@ -968,13 +970,15 @@ def _evaluate_with_builtin(
             results.append(result)
             continue
 
+        expected_answer = sample.get("ground_truth_excerpt") or sample.get("expected_answer")
+
         eval_result = evaluator.evaluate_single(
             question_id=question_id,
             question=sample["question"],
             answer=sample["answer"],
             contexts=sample.get("contexts", []),
             expected_sources=sample.get("expected_sources"),
-            expected_answer=sample.get("expected_answer"),
+            expected_answer=expected_answer,
             llm_config=llm_config,
             retrieval_metrics=retrieval_metrics,
             generation_metrics=generation_metrics,
