@@ -22,6 +22,8 @@ from eval.evaluators.base import BaseEvaluator
 from eval.evaluators.builtin_evaluator import BuiltinEvaluator
 from eval.evaluators.ragas_evaluator import RagasEvaluator
 from eval.experiment_reporter import ExperimentReporter
+from eval.pipeline_profiler import PipelineProfiler
+from eval.visualize_profiler import generate_profiler_charts
 from src.exceptions import ConfigurationError, EvaluationError, TestSetError
 from src.experiment import (
     ExperimentConfig,
@@ -1499,6 +1501,7 @@ def run_variant_evaluation(
     test_sets: list[dict[str, Any]],
     exp_dir: Path,
     test_generation_tracker: TokenTracker | None = None,
+    profiler: PipelineProfiler | None = None,
 ) -> dict[str, Any]:
     """
     Run evaluation for a single variant.
@@ -1511,6 +1514,7 @@ def run_variant_evaluation(
         test_sets: List of test set dictionaries.
         exp_dir: Experiment directory path.
         test_generation_tracker: TokenTracker from test set generation phase.
+        profiler: Optional PipelineProfiler for performance tracking.
 
     Returns:
         Evaluation result dictionary.
@@ -1544,6 +1548,7 @@ def run_variant_evaluation(
             llm_preset=llm_preset,
             meal_name=meal_name,
             token_tracker=variant_tracker,
+            profiler=profiler,
         )
         pipeline.config = merged_config
 
@@ -1608,6 +1613,9 @@ def run_variant_evaluation(
 
         llm_config = get_llm_config(merged_config, llm_preset)
 
+        if profiler:
+            profiler.begin_stage("S6")
+
         for test_set in test_sets:
             results = evaluate_test_set(
                 pipeline,
@@ -1618,9 +1626,16 @@ def run_variant_evaluation(
             )
             all_results.extend(results)
 
+        if profiler:
+            profiler.end_stage()
+            profiler.begin_stage("S7")
+
         total_time = time.time() - total_start_time
 
         metrics = compute_aggregate_metrics(all_results)
+
+        if profiler:
+            profiler.end_stage()
 
         token_usage_data = variant_tracker.to_dict()
         if (
@@ -1814,34 +1829,56 @@ def run_experiment(
 
     logger.info(f"Experiment directory: {exp_dir}")
 
+    profiling_config = system_config.get("experiments", {}).get("profiling", {})
+    profiling_enabled = profiling_config.get("enabled", True)
+
+    if profiling_enabled:
+        profiler = PipelineProfiler(
+            experiment_name=exp_config.name,
+            total_pages=0,
+            total_questions=sum(
+                ts.get("generation", {}).get("num_questions", ts.get("num_questions", 10))
+                for ts in exp_config.test_sets
+            ),
+            monitor_interval=profiling_config.get("monitor_interval", 0.5),
+        )
+        profiler.start_profiling()
+        logger.info("Performance profiling enabled")
+    else:
+        profiler = None
+        logger.info("Performance profiling disabled by config")
+
     try:
         logger.info("Step 1: Preparing meal...")
-        meal_info = prepare_meal(system_config, exp_config, skip_preprocessing)
+        with profiler.profile_stage("S1", {"meal_name": exp_config.data.get("meal")}):
+            meal_info = prepare_meal(system_config, exp_config, skip_preprocessing)
 
         test_generation_tracker = TokenTracker()
 
         logger.info("Step 2: Preparing variant chunks...")
         first_chunks_dir = None
-        for i, variant in enumerate(exp_config.variants, 1):
-            variant_name = variant.get("name", f"variant_{i}")
-            merged_config = merge_config(system_config, exp_config, variant)
-            chunks_dir = prepare_variant_chunks(
-                merged_config,
-                meal_info["config"],
-                variant_name,
-            )
-            if first_chunks_dir is None:
-                first_chunks_dir = chunks_dir
+        with profiler.profile_stage("S2"):
+            for i, variant in enumerate(exp_config.variants, 1):
+                variant_name = variant.get("name", f"variant_{i}")
+                merged_config = merge_config(system_config, exp_config, variant)
+                chunks_dir = prepare_variant_chunks(
+                    merged_config,
+                    meal_info["config"],
+                    variant_name,
+                )
+                if first_chunks_dir is None:
+                    first_chunks_dir = chunks_dir
 
         logger.info("Step 3: Preparing test sets...")
-        test_sets = prepare_test_sets(
-            system_config,
-            exp_config,
-            meal_info,
-            skip_preprocessing,
-            token_tracker=test_generation_tracker,
-            chunks_dir=first_chunks_dir,
-        )
+        with profiler.profile_stage("S5"):
+            test_sets = prepare_test_sets(
+                system_config,
+                exp_config,
+                meal_info,
+                skip_preprocessing,
+                token_tracker=test_generation_tracker,
+                chunks_dir=first_chunks_dir,
+            )
 
         meal_snapshot = meal_info["config"].to_dict()
 
@@ -1882,6 +1919,8 @@ def run_experiment(
         logger.info("Step 4: Running variant evaluations...")
         all_variant_results = []
         experiment_tracker = TokenTracker()
+        if profiler:
+            profiler.set_token_tracker(experiment_tracker)
 
         for i, variant in enumerate(exp_config.variants, 1):
             variant_name = variant.get("name", f"variant_{i}")
@@ -1898,6 +1937,7 @@ def run_experiment(
                     test_sets=test_sets,
                     exp_dir=exp_dir,
                     test_generation_tracker=test_generation_tracker,
+                    profiler=profiler,
                 )
 
                 exp_manager.save_variant_result(exp_dir, variant_name, variant_result)
@@ -1938,42 +1978,66 @@ def run_experiment(
 
         logger.info("Step 4: Generating experiment report...")
 
-        if all_variant_results:
-            llm_preset_name = exp_config.evaluation.get("llm_preset", "default")
-            llm_config = get_llm_config(system_config, llm_preset_name)
+        with profiler.profile_stage("S8"):
+            if all_variant_results:
+                llm_preset_name = exp_config.evaluation.get("llm_preset", "default")
+                llm_config = get_llm_config(system_config, llm_preset_name)
 
-            reporter = ExperimentReporter(
-                llm_api_key=llm_config.get("api_key"),
-                llm_base_url=llm_config.get("base_url"),
-                llm_model_name=llm_config.get("model_name"),
-                token_tracker=experiment_tracker,
-            )
+                reporter = ExperimentReporter(
+                    llm_api_key=llm_config.get("api_key"),
+                    llm_base_url=llm_config.get("base_url"),
+                    llm_model_name=llm_config.get("model_name"),
+                    token_tracker=experiment_tracker,
+                )
 
-            reporter.generate_variant_comparison_report(
-                exp_dir=exp_dir,
-                variant_results=all_variant_results,
-                meal_info=meal_info,
-                config_snapshot=config_snapshot,
-                output_filename="experiment_report.md",
-                use_llm=False,
-            )
+                reporter.generate_variant_comparison_report(
+                    exp_dir=exp_dir,
+                    variant_results=all_variant_results,
+                    meal_info=meal_info,
+                    config_snapshot=config_snapshot,
+                    output_filename="experiment_report.md",
+                    use_llm=False,
+                )
 
-            if use_llm_report or exp_config.evaluation.get("llm_report", False):
-                logger.info("Generating LLM-enhanced report...")
-                try:
-                    reporter.generate_variant_comparison_report(
-                        exp_dir=exp_dir,
-                        variant_results=all_variant_results,
-                        meal_info=meal_info,
-                        config_snapshot=config_snapshot,
-                        output_filename="experiment_report_llm.md",
-                        use_llm=True,
-                    )
-                    logger.success("LLM-enhanced report generated successfully")
-                except Exception as e:
-                    logger.warning(f"Failed to generate LLM report: {str(e)}")
+                if use_llm_report or exp_config.evaluation.get("llm_report", False):
+                    logger.info("Generating LLM-enhanced report...")
+                    try:
+                        reporter.generate_variant_comparison_report(
+                            exp_dir=exp_dir,
+                            variant_results=all_variant_results,
+                            meal_info=meal_info,
+                            config_snapshot=config_snapshot,
+                            output_filename="experiment_report_llm.md",
+                            use_llm=True,
+                        )
+                        logger.success("LLM-enhanced report generated successfully")
+                    except Exception as e:
+                        logger.warning(f"Failed to generate LLM report: {str(e)}")
 
         exp_manager.update_manifest_status(exp_dir, "completed")
+
+        if profiler:
+            profiler.stop_profiling()
+            if meal_info.get("config") and hasattr(meal_info["config"], "stats"):
+                profiler.total_pages = meal_info["config"].stats.get("total_pages", 0)
+
+            profiling_dir = exp_dir / "profiling"
+            profiler.save_report(profiling_dir, "profile_data.json")
+
+            profile_md = profiler.generate_markdown_report()
+            profile_md_path = profiling_dir / "profile_report.md"
+            profile_md_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(profile_md_path, "w", encoding="utf-8") as f:
+                f.write(profile_md)
+            logger.success(f"Performance profile report saved to: {profile_md_path}")
+
+            if profiling_config.get("generate_charts", True):
+                try:
+                    chart_files = generate_profiler_charts(profiler, profiling_dir / "charts")
+                    if chart_files:
+                        logger.success(f"Generated {len(chart_files)} performance charts")
+                except Exception as e:
+                    logger.warning(f"Failed to generate performance charts: {str(e)}")
 
         experiment_tracker.get_total()
         token_cost_config = system_config.get("token_cost", {})
