@@ -118,6 +118,12 @@ huggingface-hub = ">=1.10.2, <2"
 ruff = ">=0.11.0, <0.12"         # Linter + Formatter (replaces flake8/black/isort)
 pre-commit = ">=4.0.0, <5"       # Git hook manager
 
+# ==============================
+# Profiling
+# ==============================
+psutil = ">=7.2.2, <8"
+matplotlib = ">=3.10.9, <4"
+
 
 
 
