@@ -2,7 +2,7 @@
 
 <!-- status: active -->
 
-> 最后更新：2026-04-24（RF-016 标记为已完成，TEST-008/TEST-002 标记为已完成）
+> 最后更新：2026-04-24（INV 类 issue 大规模调查清理：关闭 12 个，新增 6 个 FEAT/BUG/RF）
 
 本文档是项目"卫生情况"的总入口，追踪所有非阻塞性质的待做事项。
 
@@ -12,11 +12,11 @@
 
 | 类型 | 待处理 | 进行中 | 已完成 | 已延期 |
 |------|--------|--------|--------|--------|
-| Bug | 4 | 0 | 16 | 2 |
-| Feature | 14 | 0 | 19 | 0 |
-| Refactor | 6 | 0 | 14 | 1 |
+| Bug | 5 | 0 | 16 | 2 |
+| Feature | 21 | 0 | 19 | 0 |
+| Refactor | 7 | 0 | 14 | 1 |
 | Optimization | 7 | 0 | 1 | 0 |
-| Investigation | 15 | 0 | 5 | 1 |
+| Investigation | 3 | 0 | 17 | 1 |
 | Test | 6 | 0 | 2 | 0 |
 
 ---
@@ -26,6 +26,7 @@
 | ID | 描述 | 来源 | 状态 | 备注 |
 |----|------|------|------|------|
 | BUG-021 | expected_sources 标注错误（LLM 生成问题涉及文档中提到的其他实体，但 source_files 仅指向生成问题时的源文档） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P6-5) | 📋 待处理 | 需重新设计问题生成策略，使 source_files 反映问题实际涉及的文档 |
+| BUG-022 | `_locate_answer_chunks()` 定位精度不足 | [INV-007 调查](reviews/investigations/inv-007-eval-system-reliability.md) | 📋 待处理 | 使用关键词+子串启发式方法，expected_chunks 可能遗漏或误匹配 |
 
 ### 🟡 已延期
 
@@ -69,6 +70,13 @@
 | FEAT-027 | 问题集组合功能 | [TODO.md](../TODO.md) | ✅ 已完成 | 中 | 支持 merge_test_sets，问题去重与有效性验证 |
 | FEAT-028 | 配置验证系统（Pydantic 模型验证 + 必填项校验 + 范围校验） | 深度审查 | 📋 待处理 | 中 | 当前 yaml.safe_load 直接加载无验证，可能导致意外行为 |
 | FEAT-029 | 项目记忆系统 Skill（project-memory） | [TODO.md](../TODO.md) | ✅ 已完成 | 中 | 跨 session 项目记忆读写方法论，替代原"Project Context Skill"概念 |
+| FEAT-030 | 实验报告 sources 字段细化 | [INV-001 调查](reviews/investigations/inv-001-sources-field.md) | 📋 待处理 | 中 | 增加 retrieved_chunks 字段、标题层级信息，改善命中率虚高问题 |
+| FEAT-031 | golden_qa.json 重做与回归测试更新 | [INV-006 调查](reviews/investigations/inv-006-golden-test.md) | 📋 待处理 | 中 | 使用 document-based 策略重做，迁移为 TestSetManager 格式 |
+| FEAT-032 | 评估模型与生成模型分离配置 | [INV-007 调查](reviews/investigations/inv-007-eval-system-reliability.md) | 📋 待处理 | 中 | 解决 faithfulness/answer_relevancy 自评偏差问题 |
+| FEAT-033 | 增强日志系统覆盖率与 pytest 集成 | [INV-003 调查](reviews/investigations/inv-003-logging.md) | 📋 待处理 | 中 | pytest-loguru 集成、配置加载日志、文件写入结构化日志 |
+| FEAT-034 | 开源准备度完善 | [INV-005 调查](reviews/investigations/inv-005-open-source.md) | 📋 待处理 | 中 | CONTRIBUTING.md、README 更新、可选 SECURITY.md |
+| FEAT-035 | 元数据增强（页码+标题层级） | [INV-010 调查](reviews/investigations/inv-010-metadata.md) | 📋 待处理 | 中 | chunk metadata 增加 page_number 和 headings 字段 |
+| FEAT-036 | PDF 表格解析质量提升 | [INV-016 调查](reviews/investigations/inv-016-table-parsing.md) | 📋 待处理 | 中 | fitz_pdfplumber 为推荐解析器、补充 OCR 支持、表格参数调优 |
 
 ---
 
@@ -92,6 +100,7 @@
 | RF-006 | TestSet 独立管理系统重构 | 设计文档 | ✅ 已完成 | 大 | 新增 TestSetManager，重构 prepare_test_sets，支持 on_missing 三种模式 |
 | RF-017 | 自定义异常类型定义（RAGPipelineError、RetrievalError 等） | 深度审查 | ✅ 已完成 | 小 | 新增 src/exceptions.py，9个业务异常类，全项目替换 |
 | RF-018 | Pipeline 类职责拆分（当前 560 行承担全流程） | 深度审查 | 📋 待处理 | 大 | 可拆分为 PipelineOrchestrator + 各阶段 Stage 类 |
+| RF-019 | answer_relevancy 评分稳定性改进 | [INV-007 调查](reviews/investigations/inv-007-eval-system-reliability.md) | 📋 待处理 | 小 | overall_score 由 LLM 自主决定，考虑引入 RAGAS 式伪问题生成作为交叉验证 |
 
 ---
 
@@ -114,26 +123,10 @@
 
 | ID | 描述 | 来源 | 状态 | 备注 |
 |----|------|------|------|------|
-| INV-001 | 实验报告 sources 字段细化到标题头或 chunk | [原 TODO.md](../TODO.md) | 📋 待处理 | FEAT-006 已完成，可独立推进；当前标记一连串 doc 导致命中率虚高 |
 | INV-002 | 验证问题生成策略可扩展性 | [原 TODO.md](../TODO.md) | ⏳ 待定 | 依赖黄金测试集落地 |
-| INV-003 | 日志系统"应记尽记"最佳实践 | [原 TODO.md](../TODO.md) | 📋 待处理 | pytest 日志不完整 |
-| INV-005 | 05-open-source-readiness 核实 | [TODO.md](../TODO.md) | 📋 待处理 | 核实开源准备度检查清单 |
-| INV-006 | golden test 是否基于老策略 | [TODO.md](../TODO.md) | 📋 待处理 | 需确认是否需要重做 |
-| INV-007 | 评测系统可靠性全面审查 | [TODO.md](../TODO.md) | 📋 待处理 | 从一个 PDF 和一个问题开始精调 |
-| INV-008 | LLM 报告假设性问题类型提示词更新 | [TODO.md](../TODO.md) | ✅ 已完成 | 3.1 节提示词仍为旧策略分析方法 |
+| INV-007 | 评测系统可靠性全面审查 | [TODO.md](../TODO.md) | 📋 待处理 | 致命 bug 已修复，系统从"不可信"提升到"部分可信"；产出 FEAT-032/BUG-022/RF-019 三个子条目 |
 | INV-009 | 问题集扩大与指标收敛趋势 | [TODO.md](../TODO.md) | 📋 待处理 | 等 v0.1.9 发版确认数据有效性后推进 |
-| INV-010 | 元数据增强改善 chunk 命中 | [TODO.md](../TODO.md) | 📋 待处理 | PDF 页码 + MD 标题层级，需入库对话记录并实装 |
-| INV-011 | 开源许可证评估（Apache 2.0） | [TODO.md](../TODO.md) | 📋 待处理 | 了解 Apache 2.0 及自动化标记源文件 |
-| INV-012 | 测试体系深度审查（883条是否过多） | [TODO.md](../TODO.md) | ✅ 已完成 | 26个测试文件，913个测试函数；未发现重复或无意义测试 |
-| INV-013 | 自动生成的 Ground Truth 质量有限 | [RAGAS 指南](guides/ragas-evaluation.md#4-已知未修复问题) | 📋 待处理 | LLM 生成 expected_answer 可能幻觉，影响 context_precision/context_recall/answer_correctness 可信度 |
-| INV-014 | RAGAS 指标与 Builtin 指标深度对比分析 | [RAGAS 指南](guides/ragas-evaluation.md#5-后续优化方向) | 📋 待处理 | 差异报告 + 根因分析（prompt 差异 vs 评分逻辑差异）+ 置信区间估计 |
-| INV-015 | tiktoken 与 BGE tokenizer 的 token 数差异量化 | [pipeline-deep-audit.md](pipeline-deep-audit.md#P3-1) | 📋 待处理 | chunk_size=512 tiktoken token 可能超过 BGE 512 token 限制，需实际数据验证截断影响 |
-| INV-016 | PDF 表格解析质量评估与替代方案调研 | [pipeline-deep-audit.md](pipeline-deep-audit.md#P1-1) | 📋 待处理 | pymupdf4llm 对复杂表格转换错乱，金融研报财务数据可能丢失 |
-| INV-017 | 边界条件测试覆盖评估（空输入、极端值等） | 深度审查 | ✅ 已完成 | 详见 [评估报告](reviews/inv-017-boundary-condition-test-coverage.md) |
-| INV-018 | 异常路径测试覆盖评估 | 深度审查 | ✅ 已完成 | 详见 [评估报告](reviews/inv-018-exception-path-test-coverage.md) |
-| INV-019 | 测试并行化可行性评估（pytest-xdist） | 深度审查 | 📋 待处理 | 评估是否可用 pytest-xdist 加速测试 |
-| INV-020 | 大规模数据索引构建性能评估 | 深度审查 | 📋 待处理 | 评估大规模数据时索引构建时间和优化空间 |
-| INV-021 | 文件路径安全检查（防止路径遍历攻击） | 深度审查 | 📋 待处理 | 文件路径处理是否防止 `../` 攻击 |
+| INV-020 | 大规模数据索引构建性能评估 | 深度审查 | 📋 待处理 | ⬇️ 降级优先级；当前规模性能可接受，10万+ chunks 时需流式 embedding |
 
 ---
 
@@ -214,6 +207,20 @@
 | INV-004 | 实验资产包 token summary 记录 → 已实现保存 token_summary.json/txt | [原 TODO.md](../TODO.md) | 2026-04-19 |
 | INV-008 | LLM 报告假设性问题类型提示词更新 → 已更新为 document 策略六类 | [TODO.md](../TODO.md) | 2026-04-21 |
 | INV-012 | 测试体系深度审查（883条是否过多） | [TODO.md](../TODO.md) | 2026-04-21 |
+| INV-017 | 边界条件测试覆盖评估（空输入、极端值等） | 深度审查 | 2026-04-24 |
+| INV-018 | 异常路径测试覆盖评估 | 深度审查 | 2026-04-24 |
+| INV-001 | 实验报告 sources 字段细化 → 转为 FEAT-030 | [原 TODO.md](../TODO.md) | 2026-04-24 |
+| INV-003 | 日志系统最佳实践 → 转为 FEAT-033 | [原 TODO.md](../TODO.md) | 2026-04-24 |
+| INV-005 | 开源准备度核实 → 转为 FEAT-034 | [TODO.md](../TODO.md) | 2026-04-24 |
+| INV-006 | golden test 策略调查 → 转为 FEAT-031 | [TODO.md](../TODO.md) | 2026-04-24 |
+| INV-010 | 元数据增强调查 → 转为 FEAT-035 | [TODO.md](../TODO.md) | 2026-04-24 |
+| INV-011 | 开源许可证评估 → 结论：保持 MIT 不更换 | [TODO.md](../TODO.md) | 2026-04-24 |
+| INV-013 | Ground Truth 质量调查 → 与 FEAT-021 合并 | [RAGAS 指南](guides/ragas-evaluation.md) | 2026-04-24 |
+| INV-014 | RAGAS vs Builtin 指标对比 → 与 OPT-005 合并 | [RAGAS 指南](guides/ragas-evaluation.md) | 2026-04-24 |
+| INV-015 | tiktoken/BGE tokenizer 差异 → 已通过 encoding: "bge" 解决 | [pipeline-deep-audit.md](pipeline-deep-audit.md) | 2026-04-24 |
+| INV-016 | PDF 表格解析质量调研 → 转为 FEAT-036 | [pipeline-deep-audit.md](pipeline-deep-audit.md) | 2026-04-24 |
+| INV-019 | pytest-xdist 可行性评估 → 结论：当前测试规模小，收益有限 | 深度审查 | 2026-04-24 |
+| INV-021 | 路径安全检查 → 结论：CLI 工具无远程攻击面，可关闭 | 深度审查 | 2026-04-24 |
 
 ### Optimization
 
