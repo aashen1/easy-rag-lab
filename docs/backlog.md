@@ -135,13 +135,13 @@
 
 | ID | 描述 | 来源 | 状态 | 优先级 | 备注 |
 |----|------|------|------|--------|------|
-| TEST-001 | 补充 generator 模块边界条件测试 | [INV-017](reviews/inv-017-boundary-condition-test-coverage.md) | 📋 待处理 | 高 | 空输入、None值、极端值测试 |
+| TEST-001 | 补充 generator 模块边界条件测试 | [INV-017](reviews/inv-017-boundary-condition-test-coverage.md) | ✅ 已完成 | 高 | 空输入、None值、极端值测试 |
 | TEST-002 | 补充 test_set_manager 模块边界条件测试 | [INV-017](reviews/inv-017-boundary-condition-test-coverage.md) | ✅ 已完成 | 高 | 文件不存在、无效数据、空列表测试 |
-| TEST-003 | 补充 experiment 模块边界条件测试 | [INV-017](reviews/inv-017-boundary-condition-test-coverage.md) | 📋 待处理 | 高 | 配置缺失、无效配置、空测试集测试 |
-| TEST-004 | 补充 run_experiment 模块边界条件测试 | [INV-017](reviews/inv-017-boundary-condition-test-coverage.md) | 📋 待处理 | 高 | 权限错误、文件不存在、无效配置测试 |
-| TEST-005 | 补充 generator 模块异常路径测试 | [INV-018](reviews/inv-018-exception-path-test-coverage.md) | 📋 待处理 | 高 | API调用失败、超时、速率限制测试 |
-| TEST-006 | 补充 experiment 模块异常路径测试 | [INV-018](reviews/inv-018-exception-path-test-coverage.md) | 📋 待处理 | 高 | 无效配置、权限错误等异常测试 |
-| TEST-007 | 补充 run_experiment 模块异常路径测试 | [INV-018](reviews/inv-018-exception-path-test-coverage.md) | 📋 待处理 | 高 | 文件操作异常测试 |
+| TEST-003 | 补充 experiment 模块边界条件测试 | [INV-017](reviews/inv-017-boundary-condition-test-coverage.md) | ✅ 已完成 | 高 | 配置缺失、无效配置、空测试集测试 |
+| TEST-004 | 补充 run_experiment 模块边界条件测试 | [INV-017](reviews/inv-017-boundary-condition-test-coverage.md) | ✅ 已完成 | 高 | 权限错误、文件不存在、无效配置测试 |
+| TEST-005 | 补充 generator 模块异常路径测试 | [INV-018](reviews/inv-018-exception-path-test-coverage.md) | ✅ 已完成 | 高 | API调用失败、超时、速率限制测试 |
+| TEST-006 | 补充 experiment 模块异常路径测试 | [INV-018](reviews/inv-018-exception-path-test-coverage.md) | ✅ 已完成 | 高 | 无效配置、权限错误等异常测试 |
+| TEST-007 | 补充 run_experiment 模块异常路径测试 | [INV-018](reviews/inv-018-exception-path-test-coverage.md) | ✅ 已完成 | 高 | 文件操作异常测试 |
 | TEST-008 | 补充 indexer 模块异常路径测试 | [INV-018](reviews/inv-018-exception-path-test-coverage.md) | ✅ 已完成 | 高 | 向量索引异常测试 |
 
 ---
