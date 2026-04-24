@@ -76,8 +76,7 @@ class MealConfig:
                 f"Loading legacy manifest with UUID '{data['uuid']}', "
                 "migrating to data_id-based identity"
             )
-            sorted_hashes = sorted(f["sha256"]
-                                   for f in data.get("pdf_files", []))
+            sorted_hashes = sorted(f["sha256"] for f in data.get("pdf_files", []))
             combined = "|".join(sorted_hashes)
             data_id = hashlib.sha256(combined.encode()).hexdigest()
         else:
@@ -169,8 +168,7 @@ def compute_chunker_config_hash(chunker_config: dict) -> str:
     Returns:
         First 8 characters of the SHA-256 hex digest.
     """
-    overlap = chunker_config.get(
-        "chunk_overlap", chunker_config.get("overlap", 0))
+    overlap = chunker_config.get("chunk_overlap", chunker_config.get("overlap", 0))
     relevant = {
         "strategy": chunker_config.get("strategy", "fixed"),
         "chunk_size": chunker_config["chunk_size"],
@@ -242,9 +240,7 @@ def _infer_equivalence_groups(pdf_files: list[str]) -> dict[str, list[str]]:
     Returns:
         Dictionary mapping group keys to lists of POSIX-formatted file paths.
     """
-    suffix_pattern = re.compile(
-        r"(摘要|_摘要|_英文版_|_修订版_)$"
-    )
+    suffix_pattern = re.compile(r"(摘要|_摘要|_英文版_|_修订版_)$")
     groups: dict[str, list[str]] = {}
     for file_path in pdf_files:
         p = Path(file_path)
@@ -268,7 +264,7 @@ def validate_meal_name(name: str) -> bool:
     """
     if not name:
         return False
-    pattern = r'^[a-zA-Z0-9_-]+$'
+    pattern = r"^[a-zA-Z0-9_-]+$"
     return bool(re.match(pattern, name))
 
 
@@ -380,8 +376,7 @@ def build_index_from_chunks(
     )
 
     indexer = VectorIndexer(
-        persist_dir=vector_store_config.get(
-            "persist_dir", "data/vector_store"),
+        persist_dir=vector_store_config.get("persist_dir", "data/vector_store"),
         collection_name=collection_name,
         distance=vector_store_config.get("distance", "Cosine"),
     )
@@ -398,13 +393,53 @@ def build_index_from_chunks(
 
 
 class ArtifactCache:
-    def __init__(self, artifacts_dir: Path):
+    def __init__(self, artifacts_dir: Path, raw_dir: Path | None = None):
         """Initialize the ArtifactCache with a base artifacts directory.
 
         Args:
             artifacts_dir: Root directory for storing cached artifacts.
+            raw_dir: Root directory containing source PDF files. Required for
+                full-mode operations (computing full data_id).
         """
         self.artifacts_dir = artifacts_dir
+        self.raw_dir = raw_dir
+
+    def _compute_full_data_id(self) -> str:
+        """Compute data_id for all PDFs in the raw directory.
+
+        Returns:
+            Deterministic data_id based on SHA-256 hashes of all PDFs.
+
+        Raises:
+            ValueError: If raw_dir is not set or contains no PDFs.
+        """
+        if self.raw_dir is None:
+            raise ValueError("raw_dir must be set to compute full data_id")
+
+        all_pdfs = sorted(self.raw_dir.rglob("*.pdf"))
+        if not all_pdfs:
+            raise ValueError("No PDF files found in raw directory")
+
+        pdf_files = []
+        for pdf_path in all_pdfs:
+            try:
+                rel_path = pdf_path.relative_to(self.raw_dir).as_posix()
+                sha256 = compute_file_sha256(pdf_path)
+                size_bytes = pdf_path.stat().st_size
+                pdf_files.append(
+                    MealFile(
+                        path=rel_path,
+                        sha256=sha256,
+                        size_bytes=size_bytes,
+                    )
+                )
+            except Exception as e:
+                logger.warning(f"Skipping {pdf_path}: {str(e)}")
+
+        if not pdf_files:
+            raise ValueError("No PDF files could be processed")
+
+        return compute_data_id(pdf_files)
 
     def get_artifact_group_dir(self, data_id: str) -> Path:
         """Get the artifact group directory for a given data ID.
@@ -447,7 +482,9 @@ class ArtifactCache:
         group_dir = self.get_artifact_group_dir(data_id)
         return group_dir / f"chunks_{chunker_hash}"
 
-    def parsed_exists(self, data_id: str, expected_files: list[str], parser_hash: str | None = None) -> bool:
+    def parsed_exists(
+        self, data_id: str, expected_files: list[str], parser_hash: str | None = None
+    ) -> bool:
         """Check whether parsed artifacts exist and contain all expected files.
 
         Args:
@@ -464,7 +501,9 @@ class ArtifactCache:
         existing = set(p.name for p in parsed_dir.rglob("*.md"))
         return set(expected_files).issubset(existing)
 
-    def chunks_exist(self, data_id: str, chunker_hash: str, expected_files: list[str]) -> bool:
+    def chunks_exist(
+        self, data_id: str, chunker_hash: str, expected_files: list[str]
+    ) -> bool:
         """Check whether chunked artifacts exist and contain all expected files.
 
         Args:
@@ -481,7 +520,9 @@ class ArtifactCache:
         existing = set(p.name for p in chunks_dir.rglob("*.jsonl"))
         return set(expected_files).issubset(existing)
 
-    def ensure_dirs(self, data_id: str, chunker_hash: str, parser_hash: str | None = None) -> tuple[Path, Path]:
+    def ensure_dirs(
+        self, data_id: str, chunker_hash: str, parser_hash: str | None = None
+    ) -> tuple[Path, Path]:
         """Ensure that artifact directories exist, creating them if necessary.
 
         Args:
@@ -538,6 +579,80 @@ class ArtifactCache:
             logger.error(f"Failed to load manifest for data_id {data_id}: {str(e)}")
             return None
 
+    def get_full_parsed_dir(self, parser_hash: str) -> Path:
+        """Get the parsed directory for full-mode (all PDFs in raw_dir).
+
+        Args:
+            parser_hash: Short hash of the parser configuration.
+
+        Returns:
+            Path to the parsed directory for full data_id.
+        """
+        full_data_id = self._compute_full_data_id()
+        return self.get_parsed_dir(full_data_id, parser_hash)
+
+    def save_full_manifest(self, manifest: dict[str, Any]) -> None:
+        """Save manifest for full-mode parsing results.
+
+        Args:
+            manifest: Dictionary to serialize as the manifest.
+        """
+        full_data_id = self._compute_full_data_id()
+        return self.save_manifest(full_data_id, manifest)
+
+    def load_full_manifest(self) -> dict[str, Any] | None:
+        """Load manifest for full-mode parsing results.
+
+        Returns:
+            Parsed manifest dictionary, or None if not found.
+        """
+        full_data_id = self._compute_full_data_id()
+        return self.load_manifest(full_data_id)
+
+    def is_full_parsed_valid(self, parser_hash: str) -> bool:
+        """Check if full-mode parsed artifacts are valid and cache can be reused.
+
+        Validates that:
+        1. The parsed directory exists with parser_hash
+        2. Manifest exists and contains pdf_inventory
+        3. All source PDFs have matching SHA-256 hashes
+        4. All expected parsed files exist
+
+        Args:
+            parser_hash: Short hash of the parser configuration.
+
+        Returns:
+            True if all validations pass, False otherwise.
+        """
+        try:
+            manifest = self.load_full_manifest()
+            if not manifest or "pdf_inventory" not in manifest:
+                return False
+
+            parsed_dir = self.get_full_parsed_dir(parser_hash)
+            if not parsed_dir.exists():
+                return False
+
+            pdf_inventory = manifest["pdf_inventory"]
+            for rel_path, expected_sha in pdf_inventory.items():
+                pdf_path = self.raw_dir / rel_path
+                if not pdf_path.exists():
+                    return False
+                if compute_file_sha256(pdf_path) != expected_sha:
+                    return False
+
+                if rel_path.endswith(".pages.json"):
+                    parsed_file = parsed_dir / Path(rel_path).with_suffix(".pages.json")
+                else:
+                    parsed_file = parsed_dir / Path(rel_path).with_suffix(".md")
+                if not parsed_file.exists():
+                    return False
+
+            return True
+        except Exception as e:
+            logger.warning(f"Full parsed validation failed: {str(e)}")
+            return False
+
 
 class MealManager:
     def __init__(self, config: dict[str, Any]):
@@ -551,17 +666,19 @@ class MealManager:
         meals_config = config.get("meals", {})
         self.meals_dir = Path(meals_config.get("dir", "data/meals"))
         self.collection_prefix = meals_config.get("collection_prefix", "m_")
-        self.raw_dir = Path(config.get(
-            "parser", {}).get("input_dir", "data/raw"))
-        self.chunks_dir = Path(config.get(
-            "chunker", {}).get("output_dir", "data/chunks"))
+        self.raw_dir = Path(config.get("parser", {}).get("input_dir", "data/raw"))
+        self.chunks_dir = Path(
+            config.get("chunker", {}).get("output_dir", "data/chunks")
+        )
 
         artifacts_config = config.get("artifacts", {})
         artifacts_base = artifacts_config.get("dir", "data/artifacts")
         self.artifacts_dir = Path(artifacts_base)
-        self.cache = ArtifactCache(self.artifacts_dir)
+        self.cache = ArtifactCache(self.artifacts_dir, self.raw_dir)
 
-    def _build_config_snapshot_and_hashes(self) -> tuple[dict[str, Any], dict[str, str]]:
+    def _build_config_snapshot_and_hashes(
+        self,
+    ) -> tuple[dict[str, Any], dict[str, str]]:
         parser_config = self.config.get("parser", {})
         chunker_config = self.config.get("chunker", {})
         embedding_config = self.config.get("embedding", {})
@@ -571,7 +688,9 @@ class MealManager:
             "parser": {
                 "algorithm": parser_config.get("algorithm", "pymupdf4llm"),
                 "input_dir": parser_config.get("input_dir", "data/raw"),
-                "options": parser_config.get(parser_config.get("algorithm", "pymupdf4llm"), {}),
+                "options": parser_config.get(
+                    parser_config.get("algorithm", "pymupdf4llm"), {}
+                ),
             },
             "chunker": {
                 "chunk_size": chunker_config.get("chunk_size", 512),
@@ -589,11 +708,13 @@ class MealManager:
 
         config_hashes = {
             "parser": compute_parser_config_hash(config_snapshot["parser"]),
-            "chunker": compute_chunker_config_hash({
-                "chunk_size": config_snapshot["chunker"]["chunk_size"],
-                "chunk_overlap": config_snapshot["chunker"]["chunk_overlap"],
-                "encoding": config_snapshot["chunker"]["encoding"],
-            }),
+            "chunker": compute_chunker_config_hash(
+                {
+                    "chunk_size": config_snapshot["chunker"]["chunk_size"],
+                    "chunk_overlap": config_snapshot["chunker"]["chunk_overlap"],
+                    "encoding": config_snapshot["chunker"]["encoding"],
+                }
+            ),
             "embedding": compute_embedding_config_hash(config_snapshot["embedding"]),
         }
 
@@ -655,11 +776,13 @@ class MealManager:
                 size_bytes = pdf_path.stat().st_size
                 pages = count_pdf_pages(pdf_path)
                 total_pages += pages
-                meal_files.append(MealFile(
-                    path=rel_path,
-                    sha256=sha256,
-                    size_bytes=size_bytes,
-                ))
+                meal_files.append(
+                    MealFile(
+                        path=rel_path,
+                        sha256=sha256,
+                        size_bytes=size_bytes,
+                    )
+                )
             except Exception as e:
                 logger.warning(f"Skipping {pdf_path}: {str(e)}")
 
@@ -669,8 +792,7 @@ class MealManager:
         data_id = compute_data_id(meal_files)
         config_snapshot, config_hashes = self._build_config_snapshot_and_hashes()
         index_key = compute_index_key(data_id, config_hashes)
-        collection_name = generate_collection_name(
-            index_key, self.collection_prefix)
+        collection_name = generate_collection_name(index_key, self.collection_prefix)
 
         chunker_hash = config_hashes["chunker"]
         parser_hash = config_hashes["parser"]
@@ -692,21 +814,42 @@ class MealManager:
                 Path(f.path).with_suffix(".md").name for f in meal_files
             ]
 
-        parsed_dir, chunks_dir = self.cache.ensure_dirs(data_id, chunker_hash, parser_hash)
-
+        parsed_dir, chunks_dir = self.cache.ensure_dirs(
+            data_id, chunker_hash, parser_hash
+        )
 
         cache_hit_parse = False
         cache_hit_chunk = False
 
-        if not force_parse and self.cache.parsed_exists(data_id, expected_md_names, parser_hash):
-            logger.info(
-                f"Cache HIT: Parsed artifacts exist for data_id={data_id[:12]}")
+        full_parsed_dir = None
+        if not force_parse:
+            try:
+                if self.cache.is_full_parsed_valid(parser_hash):
+                    full_parsed_dir = self.cache.get_full_parsed_dir(parser_hash)
+                    logger.info(
+                        f"Found full parsed artifacts, reusing for meal '{name}'"
+                    )
+            except Exception as e:
+                logger.debug(f"Full parsed check failed: {str(e)}")
+
+        if full_parsed_dir is not None:
+            self._reuse_full_parsed(
+                meal_files, full_parsed_dir, parsed_dir, use_page_chunks
+            )
+            cache_hit_parse = True
+        elif not force_parse and self.cache.parsed_exists(
+            data_id, expected_md_names, parser_hash
+        ):
+            logger.info(f"Cache HIT: Parsed artifacts exist for data_id={data_id[:12]}")
             cache_hit_parse = True
         else:
             logger.info(
-                f"Step 1: Parsing {len(sampled_pdfs)} PDFs for meal '{name}'...")
+                f"Step 1: Parsing {len(sampled_pdfs)} PDFs for meal '{name}'..."
+            )
             self._parse_pdfs_with_registry(
-                parser_config, sampled_pdfs, parsed_dir,
+                parser_config,
+                sampled_pdfs,
+                parsed_dir,
             )
 
         expected_jsonl_names = []
@@ -719,17 +862,21 @@ class MealManager:
 
         if self.cache.chunks_exist(data_id, chunker_hash, expected_jsonl_names):
             logger.info(
-                f"Cache HIT: Chunked artifacts exist for chunker_hash={chunker_hash}")
+                f"Cache HIT: Chunked artifacts exist for chunker_hash={chunker_hash}"
+            )
             cache_hit_chunk = True
         else:
             logger.info(f"Step 2: Chunking files for meal '{name}'...")
             build_chunks_if_needed(
-                parsed_dir, chunks_dir, chunker_config,
+                parsed_dir,
+                chunks_dir,
+                chunker_config,
                 model_name=embedding_config.get("model_name"),
             )
 
         logger.info(
-            f"Step 3: Building vector index for meal '{name}' (collection: {collection_name})...")
+            f"Step 3: Building vector index for meal '{name}' (collection: {collection_name})..."
+        )
 
         build_index_from_chunks(
             chunks_dir=chunks_dir,
@@ -760,12 +907,11 @@ class MealManager:
             "chunk_count": total_chunks,
             "created_at": datetime.now().isoformat(),
             "config_hashes": config_hashes,
+            "pdf_inventory": {f.path: f.sha256 for f in meal_files},
         }
         self.cache.save_manifest(data_id, artifact_manifest)
 
-        equivalence_groups = _infer_equivalence_groups(
-            [f.path for f in meal_files]
-        )
+        equivalence_groups = _infer_equivalence_groups([f.path for f in meal_files])
 
         meal_config = MealConfig(
             data_id=data_id,
@@ -832,8 +978,7 @@ class MealManager:
         manifest_path = meal_dir / "manifest.json"
 
         if not manifest_path.exists():
-            raise MealError(
-                f"Meal '{name}' not found (manifest missing)")
+            raise MealError(f"Meal '{name}' not found (manifest missing)")
 
         try:
             with open(manifest_path, encoding="utf-8") as f:
@@ -876,8 +1021,7 @@ class MealManager:
                             data = json.load(f)
                         meals.append(MealConfig.from_dict(data))
                     except Exception as e:
-                        logger.warning(
-                            f"Failed to load meal from {item}: {str(e)}")
+                        logger.warning(f"Failed to load meal from {item}: {str(e)}")
         return meals
 
     def delete_meal(self, name: str) -> None:
@@ -898,17 +1042,19 @@ class MealManager:
         try:
             indexer = VectorIndexer(
                 persist_dir=self.config.get("vector_store", {}).get(
-                    "persist_dir", "data/vector_store"),
+                    "persist_dir", "data/vector_store"
+                ),
                 collection_name=meal_config.collection_name,
-                distance=self.config.get("vector_store", {}).get(
-                    "distance", "Cosine"),
+                distance=self.config.get("vector_store", {}).get("distance", "Cosine"),
             )
             shared = self._is_collection_shared(
-                meal_config.collection_name, exclude_name=name)
+                meal_config.collection_name, exclude_name=name
+            )
             if not shared:
                 indexer.delete_collection()
                 logger.info(
-                    f"Deleted Qdrant collection '{meal_config.collection_name}'")
+                    f"Deleted Qdrant collection '{meal_config.collection_name}'"
+                )
             else:
                 logger.info(
                     f"Collection '{meal_config.collection_name}' is shared with other meals, skipping deletion"
@@ -953,11 +1099,14 @@ class MealManager:
             with open(manifest_path, "w", encoding="utf-8") as f:
                 json.dump(meal_config.to_dict(), f, ensure_ascii=False, indent=2)
         except Exception as e:
-            logger.error(f"Failed to write manifest after renaming meal from '{old_name}' to '{new_name}': {str(e)}")
+            logger.error(
+                f"Failed to write manifest after renaming meal from '{old_name}' to '{new_name}': {str(e)}"
+            )
             raise
 
         logger.success(
-            f"Meal renamed from '{old_name}' to '{new_name}' (data_id unchanged: {meal_config.data_id[:12]})")
+            f"Meal renamed from '{old_name}' to '{new_name}' (data_id unchanged: {meal_config.data_id[:12]})"
+        )
         return meal_config
 
     def copy_meal(self, source_name: str, target_name: str) -> MealConfig:
@@ -1008,7 +1157,9 @@ class MealManager:
             with open(manifest_path, "w", encoding="utf-8") as f:
                 json.dump(new_config.to_dict(), f, ensure_ascii=False, indent=2)
         except Exception as e:
-            logger.error(f"Failed to write manifest for copied meal '{target_name}': {str(e)}")
+            logger.error(
+                f"Failed to write manifest for copied meal '{target_name}': {str(e)}"
+            )
             raise
 
         logger.success(
@@ -1068,10 +1219,12 @@ class MealManager:
                     seen_paths.add(meal_file.path)
                     merged_pdf_files.append(meal_file)
             pdf_added = len(merged_pdf_files) - pdf_count_before
-            source_info.append({
-                "meal": source_config.name,
-                "pdf_count": pdf_added,
-            })
+            source_info.append(
+                {
+                    "meal": source_config.name,
+                    "pdf_count": pdf_added,
+                }
+            )
 
         if not merged_pdf_files:
             raise MealError("No PDF files found in source meals")
@@ -1099,7 +1252,9 @@ class MealManager:
         parser_options = parser_config.get(algorithm, {})
         use_page_chunks = bool(parser_options.get("page_chunks", False))
 
-        parsed_dir, chunks_dir = self.cache.ensure_dirs(new_data_id, chunker_hash, parser_hash)
+        parsed_dir, chunks_dir = self.cache.ensure_dirs(
+            new_data_id, chunker_hash, parser_hash
+        )
 
         pdfs_to_parse: list[Path] = []
         for meal_file in merged_pdf_files:
@@ -1136,7 +1291,9 @@ class MealManager:
         if not all_chunks_exist:
             logger.info("Building chunks for merged meal...")
             build_chunks_if_needed(
-                parsed_dir, chunks_dir, chunker_config,
+                parsed_dir,
+                chunks_dir,
+                chunker_config,
                 model_name=embedding_config.get("model_name"),
             )
         else:
@@ -1183,6 +1340,7 @@ class MealManager:
             "chunk_count": total_chunks,
             "created_at": datetime.now().isoformat(),
             "config_hashes": config_hashes,
+            "pdf_inventory": {f.path: f.sha256 for f in merged_pdf_files},
         }
         self.cache.save_manifest(new_data_id, artifact_manifest)
 
@@ -1315,16 +1473,18 @@ class MealManager:
                 if new_abs_path.exists():
                     new_sha256 = compute_file_sha256(new_abs_path)
                     new_size = new_abs_path.stat().st_size
-                    new_pdf_files.append(MealFile(
-                        path=new_rel_path,
-                        sha256=new_sha256,
-                        size_bytes=new_size,
-                    ))
-                    logger.info(
-                        f"Replaced: {meal_file.path} -> {new_rel_path}")
+                    new_pdf_files.append(
+                        MealFile(
+                            path=new_rel_path,
+                            sha256=new_sha256,
+                            size_bytes=new_size,
+                        )
+                    )
+                    logger.info(f"Replaced: {meal_file.path} -> {new_rel_path}")
                 else:
                     logger.warning(
-                        f"Replacement file not found: {new_rel_path}, keeping original")
+                        f"Replacement file not found: {new_rel_path}, keeping original"
+                    )
                     new_pdf_files.append(meal_file)
             else:
                 file_path = self.raw_dir / meal_file.path
@@ -1334,10 +1494,12 @@ class MealManager:
                         new_pdf_files.append(meal_file)
                     else:
                         logger.warning(
-                            f"File changed but no replacement specified: {meal_file.path}, skipping")
+                            f"File changed but no replacement specified: {meal_file.path}, skipping"
+                        )
                 else:
                     logger.warning(
-                        f"File missing and no replacement specified: {meal_file.path}, skipping")
+                        f"File missing and no replacement specified: {meal_file.path}, skipping"
+                    )
 
         if not new_pdf_files:
             raise MealError("No valid PDF files remain after repair")
@@ -1346,7 +1508,8 @@ class MealManager:
         config_snapshot, config_hashes = self._build_config_snapshot_and_hashes()
         index_key = compute_index_key(new_data_id, config_hashes)
         new_collection_name = generate_collection_name(
-            index_key, self.collection_prefix)
+            index_key, self.collection_prefix
+        )
 
         if create_new:
             target_name = new_name or f"{name}_repaired"
@@ -1366,17 +1529,22 @@ class MealManager:
         chunker_hash = config_hashes["chunker"]
         parser_hash = config_hashes["parser"]
         parsed_dir, chunks_dir = self.cache.ensure_dirs(
-            new_data_id, chunker_hash, parser_hash)
+            new_data_id, chunker_hash, parser_hash
+        )
 
         sampled_pdfs = [self.raw_dir / f.path for f in new_pdf_files]
 
         logger.info(f"Rebuilding index for repaired meal '{target_name}'...")
         self._parse_pdfs_with_registry(
-            parser_config, sampled_pdfs, parsed_dir,
+            parser_config,
+            sampled_pdfs,
+            parsed_dir,
         )
 
         build_chunks_if_needed(
-            parsed_dir, chunks_dir, chunker_config,
+            parsed_dir,
+            chunks_dir,
+            chunker_config,
             model_name=embedding_config.get("model_name"),
         )
 
@@ -1413,6 +1581,7 @@ class MealManager:
             "chunk_count": total_chunks,
             "created_at": datetime.now().isoformat(),
             "config_hashes": config_hashes,
+            "pdf_inventory": {f.path: f.sha256 for f in new_pdf_files},
         }
         self.cache.save_manifest(new_data_id, artifact_manifest)
 
@@ -1444,15 +1613,19 @@ class MealManager:
         else:
             try:
                 from src.indexer import VectorIndexer
+
                 old_indexer = VectorIndexer(
                     persist_dir=self.config.get("vector_store", {}).get(
-                        "persist_dir", "data/vector_store"),
+                        "persist_dir", "data/vector_store"
+                    ),
                     collection_name=meal_config.collection_name,
                     distance=self.config.get("vector_store", {}).get(
-                        "distance", "Cosine"),
+                        "distance", "Cosine"
+                    ),
                 )
                 shared = self._is_collection_shared(
-                    meal_config.collection_name, exclude_name=name)
+                    meal_config.collection_name, exclude_name=name
+                )
                 if not shared:
                     old_indexer.delete_collection()
             except Exception as e:
@@ -1464,7 +1637,9 @@ class MealManager:
             with open(manifest_path, "w", encoding="utf-8") as f:
                 json.dump(new_config.to_dict(), f, ensure_ascii=False, indent=2)
         except Exception as e:
-            logger.error(f"Failed to write manifest for repaired meal '{target_name}': {str(e)}")
+            logger.error(
+                f"Failed to write manifest for repaired meal '{target_name}': {str(e)}"
+            )
             raise
 
         logger.success(
@@ -1496,7 +1671,9 @@ class MealManager:
         """
         return self.meals_dir / name
 
-    def _is_collection_shared(self, collection_name: str, exclude_name: str | None = None) -> bool:
+    def _is_collection_shared(
+        self, collection_name: str, exclude_name: str | None = None
+    ) -> bool:
         for meal in self.list_meals():
             if meal.name == exclude_name:
                 continue
@@ -1587,11 +1764,13 @@ class MealManager:
         all_meal_files = list(source_config.pdf_files)
         for pdf_path, rel_path, size_bytes in valid_new_pdfs:
             sha256 = compute_file_sha256(pdf_path)
-            all_meal_files.append(MealFile(
-                path=rel_path,
-                sha256=sha256,
-                size_bytes=size_bytes,
-            ))
+            all_meal_files.append(
+                MealFile(
+                    path=rel_path,
+                    sha256=sha256,
+                    size_bytes=size_bytes,
+                )
+            )
 
         new_data_id = compute_data_id(all_meal_files)
         config_snapshot, config_hashes = self._build_config_snapshot_and_hashes()
@@ -1654,7 +1833,9 @@ class MealManager:
 
         logger.info(f"Step 2: Chunking new files for extended meal '{name}'...")
         build_chunks_if_needed(
-            new_parsed_dir, new_chunks_dir, chunker_config,
+            new_parsed_dir,
+            new_chunks_dir,
+            chunker_config,
             model_name=embedding_config.get("model_name"),
         )
 
@@ -1693,12 +1874,11 @@ class MealManager:
             "chunk_count": total_chunks,
             "created_at": datetime.now().isoformat(),
             "config_hashes": config_hashes,
+            "pdf_inventory": {f.path: f.sha256 for f in all_meal_files},
         }
         self.cache.save_manifest(new_data_id, artifact_manifest)
 
-        equivalence_groups = _infer_equivalence_groups(
-            [f.path for f in all_meal_files]
-        )
+        equivalence_groups = _infer_equivalence_groups([f.path for f in all_meal_files])
 
         composition = {
             "type": "extended",
@@ -1786,6 +1966,7 @@ class MealManager:
 
                 if use_page_chunks:
                     import json
+
                     pages_data = [
                         {
                             "page_number": page.page_number,
@@ -1805,3 +1986,47 @@ class MealManager:
                 logger.success(f"Parsed: {pdf_file.name} -> {output_file.name}")
             except Exception as e:
                 logger.error(f"Failed to parse {pdf_file}: {str(e)}")
+
+    def _reuse_full_parsed(
+        self,
+        meal_files: list[MealFile],
+        full_parsed_dir: Path,
+        meal_parsed_dir: Path,
+        use_page_chunks: bool,
+    ) -> None:
+        """Copy relevant parsed files from full-mode artifacts to meal artifacts.
+
+        Only copies files that belong to this meal (subset of full raw_dir).
+
+        Args:
+            meal_files: List of MealFile objects for this meal.
+            full_parsed_dir: Source directory with full-mode parsed results.
+            meal_parsed_dir: Destination directory for this meal's artifacts.
+            use_page_chunks: Whether to look for .pages.json or .md files.
+        """
+        copied = 0
+        for meal_file in meal_files:
+            if use_page_chunks:
+                src_name = Path(meal_file.path).with_suffix(".pages.json")
+            else:
+                src_name = Path(meal_file.path).with_suffix(".md")
+
+            src = full_parsed_dir / src_name
+            dst = meal_parsed_dir / src_name
+
+            if not src.exists():
+                logger.warning(
+                    f"Full parsed file not found: {src}, will parse separately"
+                )
+                continue
+
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.copy2(src, dst)
+                copied += 1
+            except Exception as e:
+                logger.error(f"Failed to copy {src} to {dst}: {str(e)}")
+
+        logger.info(
+            f"Reused {copied}/{len(meal_files)} parsed files from full-mode cache"
+        )
