@@ -26,12 +26,20 @@ from src.utils import get_llm_config, load_config, setup_logger
 
 
 class RAGPipeline:
-    def __init__(self, config_path: str = "config.yaml", llm_preset: str = None, meal_name: str = None, token_tracker: TokenTracker | None = None):
+    def __init__(
+        self,
+        config_path: str = "config.yaml",
+        llm_preset: str = None,
+        meal_name: str = None,
+        token_tracker: TokenTracker | None = None,
+    ):
         self.config = load_config(config_path)
         setup_logger(self.config)
         self.meal_name = meal_name
         self.meal_config = None
-        self.token_tracker = token_tracker if token_tracker is not None else TokenTracker()
+        self.token_tracker = (
+            token_tracker if token_tracker is not None else TokenTracker()
+        )
 
         logger.info("Initializing RAG Pipeline")
 
@@ -47,11 +55,13 @@ class RAGPipeline:
 
         if meal_name is not None:
             from src.meal import MealManager
+
             meal_manager = MealManager(self.config)
             self.meal_config = meal_manager.load_meal(meal_name)
             collection_name = self.meal_config.collection_name
             logger.info(
-                f"Using meal '{meal_name}' (data_id: {self.meal_config.data_id[:12]}, collection: {collection_name})")
+                f"Using meal '{meal_name}' (data_id: {self.meal_config.data_id[:12]}, collection: {collection_name})"
+            )
 
         self.indexer = VectorIndexer(
             persist_dir=vector_store_config["persist_dir"],
@@ -70,7 +80,9 @@ class RAGPipeline:
             max_tokens=llm_config["max_tokens"],
             token_tracker=self.token_tracker,
             system_prompt=self.config.get("generation", {}).get("system_prompt"),
-            max_context_tokens=self.config.get("generation", {}).get("max_context_tokens"),
+            max_context_tokens=self.config.get("generation", {}).get(
+                "max_context_tokens"
+            ),
         )
 
         logger.success("RAG Pipeline initialized successfully")
@@ -179,7 +191,8 @@ class RAGPipeline:
             all_pdfs = list(input_path.rglob("*.pdf"))
             sampled_pdf_files = determine_sample(all_pdfs, sampling_config)
             logger.info(
-                f"Sampled {len(sampled_pdf_files)} PDFs from {len(all_pdfs)} total")
+                f"Sampled {len(sampled_pdf_files)} PDFs from {len(all_pdfs)} total"
+            )
 
         logger.info("Step 1: Parsing PDFs...")
         parse_results = parse_all_pdfs(
@@ -197,10 +210,8 @@ class RAGPipeline:
                 if r.get("output"):
                     output_path = Path(r["output"])
                     parsed_dir = Path(parser_config["output_dir"])
-                    source_filter_md.add(
-                        output_path.relative_to(parsed_dir).as_posix())
-            logger.info(
-                f"Source filter for chunker: {len(source_filter_md)} files")
+                    source_filter_md.add(output_path.relative_to(parsed_dir).as_posix())
+            logger.info(f"Source filter for chunker: {len(source_filter_md)} files")
 
         parser_options = parser_config.get("pymupdf4llm", {})
         use_page_chunks = bool(parser_options.get("page_chunks", False))
@@ -221,7 +232,8 @@ class RAGPipeline:
                         output_path = Path(r["output"])
                         parsed_dir = Path(parser_config["output_dir"])
                         source_filter_pages.add(
-                            output_path.relative_to(parsed_dir).as_posix())
+                            output_path.relative_to(parsed_dir).as_posix()
+                        )
 
             chunk_results = process_parsed_files_page_aware(
                 input_dir=chunker_config["input_dir"],
@@ -264,9 +276,9 @@ class RAGPipeline:
                     output_path = Path(r["output"])
                     chunks_dir = Path(chunker_config["output_dir"])
                     source_filter_jsonl.add(
-                        output_path.relative_to(chunks_dir).as_posix())
-            logger.info(
-                f"Source filter for indexer: {len(source_filter_jsonl)} files")
+                        output_path.relative_to(chunks_dir).as_posix()
+                    )
+            logger.info(f"Source filter for indexer: {len(source_filter_jsonl)} files")
 
         logger.info("Step 3: Building vector index...")
         self.indexer.build_index(
@@ -277,7 +289,10 @@ class RAGPipeline:
             source_filter=source_filter_jsonl,
         )
 
-        if self.retrieval_method in ("bm25", "hybrid") and self.bm25_retriever is not None:
+        if (
+            self.retrieval_method in ("bm25", "hybrid")
+            and self.bm25_retriever is not None
+        ):
             logger.info("Step 4: Building BM25 index...")
             self.bm25_retriever.build_index_from_chunks(
                 chunks_dir=chunker_config["output_dir"],
@@ -292,7 +307,7 @@ class RAGPipeline:
         Closes the Qdrant client held by the indexer to prevent
         resource leaks (file handles, WAL locks, etc.).
         """
-        if hasattr(self, 'indexer') and self.indexer is not None:
+        if hasattr(self, "indexer") and self.indexer is not None:
             self.indexer.close()
             logger.info("RAGPipeline indexer closed")
 
@@ -321,7 +336,7 @@ class RAGPipeline:
         """
         from src.meal import MealManager
 
-        if hasattr(self, 'indexer') and self.indexer is not None:
+        if hasattr(self, "indexer") and self.indexer is not None:
             self.indexer.close()
 
         meal_manager = MealManager(self.config)
@@ -337,11 +352,16 @@ class RAGPipeline:
 
         self._setup_retrievers()
 
-        if self.retrieval_method in ("bm25", "hybrid") and self.bm25_retriever is not None:
+        if (
+            self.retrieval_method in ("bm25", "hybrid")
+            and self.bm25_retriever is not None
+        ):
             from src.meal import ArtifactCache
+
             artifacts_config = self.config.get("artifacts", {})
             artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
-            cache = ArtifactCache(artifacts_dir)
+            raw_dir = Path(self.config.get("parser", {}).get("input_dir", "data/raw"))
+            cache = ArtifactCache(artifacts_dir, raw_dir)
             chunker_hash = self.meal_config.config_hashes.get("chunker", "")
             chunks_dir = cache.get_chunks_dir(self.meal_config.data_id, chunker_hash)
             if chunks_dir.exists():
@@ -353,20 +373,25 @@ class RAGPipeline:
                 self.hybrid_retriever = HybridRetriever(
                     vector_retriever=self.retriever,
                     bm25_retriever=self.bm25_retriever,
-                    fusion_method=self.config["retrieval"].get("hybrid", {}).get("fusion", "rrf"),
+                    fusion_method=self.config["retrieval"]
+                    .get("hybrid", {})
+                    .get("fusion", "rrf"),
                     rrf_k=self.config["retrieval"].get("hybrid", {}).get("rrf_k", 60),
-                    vector_weight=self.config["retrieval"].get("hybrid", {}).get("vector_weight", 0.7),
-                    bm25_weight=self.config["retrieval"].get("hybrid", {}).get("bm25_weight", 0.3),
+                    vector_weight=self.config["retrieval"]
+                    .get("hybrid", {})
+                    .get("vector_weight", 0.7),
+                    bm25_weight=self.config["retrieval"]
+                    .get("hybrid", {})
+                    .get("bm25_weight", 0.3),
                     top_k=self.config["retrieval"]["top_k"],
                 )
 
         logger.info(
-            f"Switched to meal '{meal_name}' (data_id: {self.meal_config.data_id[:12]}, collection: {self.meal_config.collection_name})")
+            f"Switched to meal '{meal_name}' (data_id: {self.meal_config.data_id[:12]}, collection: {self.meal_config.collection_name})"
+        )
         return self.meal_config
 
-    def query(
-        self, question: str, return_contexts: bool = True
-    ) -> dict[str, Any]:
+    def query(self, question: str, return_contexts: bool = True) -> dict[str, Any]:
         """Execute a RAG query: retrieve relevant contexts and generate an answer.
 
         Args:
@@ -403,9 +428,15 @@ class RAGPipeline:
                     all_results = []
                     seen_ids = set()
                     for sub_query in rewrite_result["rewritten"]:
-                        if self.retrieval_method == "hybrid" and self.hybrid_retriever is not None:
+                        if (
+                            self.retrieval_method == "hybrid"
+                            and self.hybrid_retriever is not None
+                        ):
                             sub_results = self.hybrid_retriever.retrieve(sub_query)
-                        elif self.retrieval_method == "bm25" and self.bm25_retriever is not None:
+                        elif (
+                            self.retrieval_method == "bm25"
+                            and self.bm25_retriever is not None
+                        ):
                             sub_results = self.bm25_retriever.retrieve(
                                 sub_query, top_k=self.config["retrieval"]["top_k"]
                             )
@@ -417,7 +448,7 @@ class RAGPipeline:
                                 all_results.append(r)
 
                     all_results.sort(key=lambda x: x.get("score", 0), reverse=True)
-                    results = all_results[:self.config["retrieval"]["top_k"]]
+                    results = all_results[: self.config["retrieval"]["top_k"]]
 
                     if self.reranker is not None and results:
                         logger.debug("Reranking multi-query results...")
@@ -426,12 +457,19 @@ class RAGPipeline:
                         )
 
                     contexts = [r["text"] for r in results]
-                    scores = [r.get("rerank_score", r["score"]) if "rerank_score" in r else r["score"] for r in results]
+                    scores = [
+                        r.get("rerank_score", r["score"])
+                        if "rerank_score" in r
+                        else r["score"]
+                        for r in results
+                    ]
                     sources = [r["metadata"].get("source", "Unknown") for r in results]
                     chunk_ids = [r.get("chunk_id", "") for r in results]
 
                     logger.debug("Generating answer...")
-                    answer = self.generator.generate(question, contexts, sources=sources)
+                    answer = self.generator.generate(
+                        question, contexts, sources=sources
+                    )
 
                     response = {"question": question, "answer": answer}
                     if return_contexts:
@@ -440,7 +478,9 @@ class RAGPipeline:
                         response["sources"] = sources
                         response["chunk_ids"] = chunk_ids
                     if self.generator.last_token_usage is not None:
-                        response["token_usage"] = self.generator.last_token_usage.to_dict()
+                        response["token_usage"] = (
+                            self.generator.last_token_usage.to_dict()
+                        )
 
                     logger.success("Query processed successfully (multi-query)")
                     return response
@@ -500,8 +540,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="RAG Pipeline CLI")
     parser.add_argument("--query", type=str, help="Query question")
-    parser.add_argument("--build-index", action="store_true",
-                        help="Build vector index")
+    parser.add_argument("--build-index", action="store_true", help="Build vector index")
     parser.add_argument(
         "--rebuild", action="store_true", help="Rebuild index from scratch"
     )
@@ -510,9 +549,7 @@ if __name__ == "__main__":
         action="store_true",
         help="Force re-parse PDFs even if output exists",
     )
-    parser.add_argument(
-        "--sample-count", type=int, help="Sample N PDFs for testing"
-    )
+    parser.add_argument("--sample-count", type=int, help="Sample N PDFs for testing")
     parser.add_argument(
         "--sample-pages", type=int, help="Sample PDFs until total pages reach N"
     )

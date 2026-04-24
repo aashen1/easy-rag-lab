@@ -431,7 +431,9 @@ class TestArtifactCache:
     def cache(self, tmp_path):
         artifacts_dir = tmp_path / "artifacts"
         artifacts_dir.mkdir()
-        return ArtifactCache(artifacts_dir)
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        return ArtifactCache(artifacts_dir, raw_dir)
 
     def test_get_parsed_dir(self, cache):
         data_id = "abc123" + "0" * 58

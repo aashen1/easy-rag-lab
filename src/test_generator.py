@@ -243,14 +243,13 @@ class TestSetGenerator:
         self.max_retries = tg_config.get("max_retries", 3)
         self.default_strategy = tg_config.get("default_strategy", "factual")
         self.default_num_questions = tg_config.get("default_num_questions", 20)
-        self.test_gen_model_name = tg_config.get(
-            "model_name", "LongCat-Flash-Lite")
+        self.test_gen_model_name = tg_config.get("model_name", "LongCat-Flash-Lite")
         self.test_gen_temperature = tg_config.get("temperature", 0.7)
         self.test_gen_max_tokens = tg_config.get("max_tokens", 1024)
-        self.test_gen_initial_max_tokens = tg_config.get(
-            "initial_max_tokens", 512)
+        self.test_gen_initial_max_tokens = tg_config.get("initial_max_tokens", 512)
         self.test_gen_supplement_max_tokens = tg_config.get(
-            "supplement_max_tokens", 1024)
+            "supplement_max_tokens", 1024
+        )
         self._doc_truncate_cache: dict[str, str] = {}
 
     def generate_test_set(
@@ -315,13 +314,12 @@ class TestSetGenerator:
             raise TestSetError(f"No chunks found for meal '{meal_name}'")
 
         grouped = self._group_chunks_by_source(chunks)
-        logger.info(
-            f"Loaded {len(chunks)} chunks from {len(grouped)} source files"
-        )
+        logger.info(f"Loaded {len(chunks)} chunks from {len(grouped)} source files")
 
         chunk_groups = self._select_chunks(grouped, strategy, num_questions)
         logger.info(
-            f"Selected {len(chunk_groups)} chunk groups for question generation")
+            f"Selected {len(chunk_groups)} chunk groups for question generation"
+        )
 
         llm_config = get_llm_config(self.config, llm_preset)
         generator = Generator(
@@ -336,23 +334,22 @@ class TestSetGenerator:
         questions = []
         for i, chunk_group in enumerate(chunk_groups):
             logger.info(f"Generating question {i + 1}/{len(chunk_groups)}...")
-            qa = self._generate_question_with_llm(
-                chunk_group, strategy, generator)
+            qa = self._generate_question_with_llm(chunk_group, strategy, generator)
             if qa is not None:
-                source_files = list({
-                    c.get("metadata", {}).get("source", "unknown")
-                    for c in chunk_group
-                })
-                source_chunks = [
-                    c.get("chunk_id", f"chunk_{i}") for c in chunk_group]
+                source_files = list(
+                    {
+                        c.get("metadata", {}).get("source", "unknown")
+                        for c in chunk_group
+                    }
+                )
+                source_chunks = [c.get("chunk_id", f"chunk_{i}") for c in chunk_group]
                 qa["id"] = f"q{i + 1:03d}"
                 qa["source_chunks"] = source_chunks
                 qa["source_files"] = source_files
                 qa["category"] = strategy
                 questions.append(qa)
             else:
-                logger.warning(
-                    f"Failed to generate question {i + 1}, skipping")
+                logger.warning(f"Failed to generate question {i + 1}, skipping")
 
         if not questions:
             raise TestSetError("No questions could be generated")
@@ -396,21 +393,19 @@ class TestSetGenerator:
             parser_hash = meal_config.config_hashes.get("parser", "")
             if parser_hash:
                 artifacts_config = self.config.get("artifacts", {})
-                artifacts_dir = Path(
-                    artifacts_config.get("dir", "data/artifacts"))
-                cache = ArtifactCache(artifacts_dir)
-                parsed_dir = cache.get_parsed_dir(
-                    meal_config.data_id, parser_hash)
+                artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
+                raw_dir = Path(
+                    self.config.get("parser", {}).get("input_dir", "data/raw")
+                )
+                cache = ArtifactCache(artifacts_dir, raw_dir)
+                parsed_dir = cache.get_parsed_dir(meal_config.data_id, parser_hash)
                 if parsed_dir.exists():
-                    logger.debug(
-                        f"Resolved parsed dir via ArtifactCache: {parsed_dir}")
+                    logger.debug(f"Resolved parsed dir via ArtifactCache: {parsed_dir}")
                     return parsed_dir
 
-        fallback = Path(self.config.get("parser", {}).get(
-            "output_dir", "data/parsed"))
+        fallback = Path(self.config.get("parser", {}).get("output_dir", "data/parsed"))
         if fallback.exists():
-            logger.debug(
-                f"Resolved parsed dir via config fallback: {fallback}")
+            logger.debug(f"Resolved parsed dir via config fallback: {fallback}")
             return fallback
 
         return None
@@ -432,21 +427,19 @@ class TestSetGenerator:
             chunker_hash = meal_config.config_hashes.get("chunker", "")
             if chunker_hash:
                 artifacts_config = self.config.get("artifacts", {})
-                artifacts_dir = Path(
-                    artifacts_config.get("dir", "data/artifacts"))
-                cache = ArtifactCache(artifacts_dir)
-                chunks_dir = cache.get_chunks_dir(
-                    meal_config.data_id, chunker_hash)
+                artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
+                raw_dir = Path(
+                    self.config.get("parser", {}).get("input_dir", "data/raw")
+                )
+                cache = ArtifactCache(artifacts_dir, raw_dir)
+                chunks_dir = cache.get_chunks_dir(meal_config.data_id, chunker_hash)
                 if chunks_dir.exists():
-                    logger.debug(
-                        f"Resolved chunks dir via ArtifactCache: {chunks_dir}")
+                    logger.debug(f"Resolved chunks dir via ArtifactCache: {chunks_dir}")
                     return chunks_dir
 
-        fallback = Path(self.config.get("chunker", {}).get(
-            "output_dir", "data/chunks"))
+        fallback = Path(self.config.get("chunker", {}).get("output_dir", "data/chunks"))
         if fallback.exists():
-            logger.debug(
-                f"Resolved chunks dir via config fallback: {fallback}")
+            logger.debug(f"Resolved chunks dir via config fallback: {fallback}")
             return fallback
 
         return None
@@ -478,8 +471,7 @@ class TestSetGenerator:
 
         for jsonl_file in jsonl_files:
             try:
-                rel_path = jsonl_file.relative_to(
-                    chunks_dir).as_posix()
+                rel_path = jsonl_file.relative_to(chunks_dir).as_posix()
                 jsonl_md_path = rel_path.rsplit(".", 1)[0] + ".md"
 
                 if source_filter and jsonl_md_path not in source_filter:
@@ -497,9 +489,7 @@ class TestSetGenerator:
 
         return all_chunks
 
-    def _group_chunks_by_source(
-        self, chunks: list[dict]
-    ) -> dict[str, list[dict]]:
+    def _group_chunks_by_source(self, chunks: list[dict]) -> dict[str, list[dict]]:
         """Group chunks by their source file metadata.
 
         Chunks within each group are sorted by chunk_index in ascending order.
@@ -576,9 +566,7 @@ class TestSetGenerator:
         if not all_chunks:
             return []
 
-        selected = random.sample(
-            all_chunks, min(num_questions, len(all_chunks))
-        )
+        selected = random.sample(all_chunks, min(num_questions, len(all_chunks)))
         return [[c] for c in selected]
 
     def _select_chunks_for_boundary(
@@ -597,14 +585,12 @@ class TestSetGenerator:
         for _source, chunks in grouped_chunks.items():
             for i in range(len(chunks) - 1):
                 idx_i = chunks[i].get("metadata", {}).get("chunk_index", i)
-                idx_next = chunks[i + 1].get("metadata",
-                                             {}).get("chunk_index", i + 1)
+                idx_next = chunks[i + 1].get("metadata", {}).get("chunk_index", i + 1)
                 if idx_next == idx_i + 1:
                     pairs.append([chunks[i], chunks[i + 1]])
 
         if not pairs:
-            logger.warning(
-                "No adjacent chunk pairs found for boundary strategy")
+            logger.warning("No adjacent chunk pairs found for boundary strategy")
             return []
 
         return random.sample(pairs, min(num_questions, len(pairs)))
@@ -630,8 +616,7 @@ class TestSetGenerator:
                         groups.append([chunks[i], chunks[j]])
 
         if not groups:
-            logger.warning(
-                "No non-adjacent chunk groups found for multi_hop strategy")
+            logger.warning("No non-adjacent chunk groups found for multi_hop strategy")
             return []
 
         return random.sample(groups, min(num_questions, len(groups)))
@@ -662,18 +647,15 @@ class TestSetGenerator:
         """
         normalized_strategy = strategy.replace("-", "_")
         if normalized_strategy == "factual":
-            prompt = FACTUAL_PROMPT.format(
-                chunk_text=chunks[0].get("text", ""))
+            prompt = FACTUAL_PROMPT.format(chunk_text=chunks[0].get("text", ""))
         elif normalized_strategy == "boundary":
             prompt = BOUNDARY_PROMPT.format(
                 chunk1_text=chunks[0].get("text", ""),
-                chunk2_text=chunks[1].get(
-                    "text", "") if len(chunks) > 1 else "",
+                chunk2_text=chunks[1].get("text", "") if len(chunks) > 1 else "",
             )
         elif normalized_strategy == "multi_hop":
             chunk_texts = "\n\n---\n\n".join(
-                f"片段{i + 1}:\n{c.get('text', '')}"
-                for i, c in enumerate(chunks)
+                f"片段{i + 1}:\n{c.get('text', '')}" for i, c in enumerate(chunks)
             )
             prompt = MULTI_HOP_PROMPT.format(chunk_texts=chunk_texts)
         else:
@@ -693,8 +675,7 @@ class TestSetGenerator:
                 if qa is not None:
                     return qa
 
-                logger.debug(
-                    f"Attempt {attempt + 1}: failed to parse LLM response")
+                logger.debug(f"Attempt {attempt + 1}: failed to parse LLM response")
             except Exception as e:
                 logger.warning(f"Attempt {attempt + 1} failed: {str(e)}")
 
@@ -884,7 +865,9 @@ class TestSetGenerator:
                         qa["source_files"] = [source_path]
                         answer_text = qa.get("answer", "")
                         qa["source_chunks"] = self._locate_answer_chunks(
-                            answer_text, source_path, meal_config=meal_config,
+                            answer_text,
+                            source_path,
+                            meal_config=meal_config,
                             chunks_dir=chunks_dir,
                         )
 
@@ -943,7 +926,9 @@ class TestSetGenerator:
                         qa["source_files"] = [source_path]
                         answer_text = qa.get("answer", "")
                         qa["source_chunks"] = self._locate_answer_chunks(
-                            answer_text, source_path, meal_config=meal_config,
+                            answer_text,
+                            source_path,
+                            meal_config=meal_config,
                             chunks_dir=chunks_dir,
                         )
 
@@ -952,8 +937,7 @@ class TestSetGenerator:
                 else:
                     failed_count += 1
                     logger.warning(
-                        f"Supplemental question failed, total failures: "
-                        f"{failed_count}"
+                        f"Supplemental question failed, total failures: {failed_count}"
                     )
 
         if not questions:
@@ -1078,9 +1062,7 @@ class TestSetGenerator:
                 f"(type={q_type}, doc={doc_name})..."
             )
 
-            qa = self._generate_single_document_question(
-                doc_content, q_type, generator
-            )
+            qa = self._generate_single_document_question(doc_content, q_type, generator)
 
             if qa is not None:
                 qa["id"] = f"q{question_id:03d}"
@@ -1100,7 +1082,9 @@ class TestSetGenerator:
                     qa["source_files"] = [source_path]
                     answer_text = qa.get("answer", "")
                     qa["source_chunks"] = self._locate_answer_chunks(
-                        answer_text, source_path, meal_config=meal_config,
+                        answer_text,
+                        source_path,
+                        meal_config=meal_config,
                         chunks_dir=chunks_dir,
                     )
 
@@ -1124,24 +1108,27 @@ class TestSetGenerator:
         existing_test_set["quality_metrics"] = quality_metrics
 
         if "metadata" in existing_test_set:
-            existing_test_set["metadata"]["updated_at"] = datetime.now(
-            ).isoformat()
+            existing_test_set["metadata"]["updated_at"] = datetime.now().isoformat()
             if "generation" in existing_test_set["metadata"]:
-                existing_test_set["metadata"]["generation"]["num_questions"] = target_count
+                existing_test_set["metadata"]["generation"]["num_questions"] = (
+                    target_count
+                )
             audit_entry = {
                 "event": "supplemented",
                 "added_count": len(new_questions),
                 "timestamp": datetime.now().isoformat(),
             }
-            existing_test_set["metadata"].setdefault(
-                "audit_log", []).append(audit_entry)
+            existing_test_set["metadata"].setdefault("audit_log", []).append(
+                audit_entry
+            )
             test_set_name = existing_test_set["metadata"]["name"]
         else:
             if "generation_config" not in existing_test_set:
                 existing_test_set["generation_config"] = {}
             existing_test_set["generation_config"]["num_questions"] = target_count
             test_set_name = existing_test_set.get(
-                "name", f"document_level_n{target_count}")
+                "name", f"document_level_n{target_count}"
+            )
 
         self._save_test_set(meal_name, existing_test_set, test_set_name)
 
@@ -1210,9 +1197,7 @@ class TestSetGenerator:
                     "content": doc.content,
                     "source_path": rel_path,
                 }
-                logger.debug(
-                    f"Loaded document: {doc_name} ({len(doc.content)} chars)"
-                )
+                logger.debug(f"Loaded document: {doc_name} ({len(doc.content)} chars)")
             except Exception as e:
                 logger.error(f"Failed to load document '{doc_name}': {str(e)}")
                 continue
@@ -1233,8 +1218,7 @@ class TestSetGenerator:
         """
         source_filter = set()
         for mf in meal_config.pdf_files:
-            pages_rel = Path(mf.path).with_suffix(
-                ".pages.json").as_posix()
+            pages_rel = Path(mf.path).with_suffix(".pages.json").as_posix()
             source_filter.add(pages_rel)
 
         documents = {}
@@ -1242,8 +1226,7 @@ class TestSetGenerator:
 
         for pages_file in pages_files:
             try:
-                rel_path = pages_file.relative_to(
-                    parsed_dir).as_posix()
+                rel_path = pages_file.relative_to(parsed_dir).as_posix()
                 if source_filter and rel_path not in source_filter:
                     continue
 
@@ -1252,7 +1235,9 @@ class TestSetGenerator:
 
                 full_text = "\n\n".join(
                     page.get("text", "")
-                    for page in sorted(pages_data, key=lambda p: p.get("page_number", 0))
+                    for page in sorted(
+                        pages_data, key=lambda p: p.get("page_number", 0)
+                    )
                 )
 
                 doc_name = pages_file.stem.replace(".pages", "")
@@ -1260,8 +1245,7 @@ class TestSetGenerator:
                     "content": full_text,
                     "source_path": rel_path,
                 }
-                logger.debug(
-                    f"Loaded document: {doc_name} ({len(full_text)} chars)")
+                logger.debug(f"Loaded document: {doc_name} ({len(full_text)} chars)")
             except Exception as e:
                 logger.error(f"Failed to load {pages_file}: {str(e)}")
 
@@ -1289,8 +1273,7 @@ class TestSetGenerator:
 
         for md_file in md_files:
             try:
-                rel_path = md_file.relative_to(
-                    parsed_dir).as_posix()
+                rel_path = md_file.relative_to(parsed_dir).as_posix()
                 if source_filter and rel_path not in source_filter:
                     continue
 
@@ -1302,8 +1285,7 @@ class TestSetGenerator:
                     "content": content,
                     "source_path": rel_path,
                 }
-                logger.debug(
-                    f"Loaded document: {doc_name} ({len(content)} chars)")
+                logger.debug(f"Loaded document: {doc_name} ({len(content)} chars)")
             except Exception as e:
                 logger.error(f"Failed to load {md_file}: {str(e)}")
 
@@ -1327,9 +1309,7 @@ class TestSetGenerator:
         remaining = num_questions
 
         sorted_types = sorted(
-            type_distribution.items(),
-            key=lambda x: x[1],
-            reverse=True
+            type_distribution.items(), key=lambda x: x[1], reverse=True
         )
 
         for i, (q_type, proportion) in enumerate(sorted_types):
@@ -1366,9 +1346,7 @@ class TestSetGenerator:
             question_plan.extend([q_type] * count)
 
         num_docs = len(doc_names)
-        doc_question_plans: dict[str, list[str]] = {
-            name: [] for name in doc_names
-        }
+        doc_question_plans: dict[str, list[str]] = {name: [] for name in doc_names}
         for i, q_type in enumerate(question_plan):
             doc_name = doc_names[i % num_docs]
             doc_question_plans[doc_name].append(q_type)
@@ -1400,12 +1378,11 @@ class TestSetGenerator:
         if doc_key in self._doc_truncate_cache:
             truncated_doc = self._doc_truncate_cache[doc_key]
         else:
-            truncated_doc = document_content[:self.DOCUMENT_TRUNCATE_MAX]
+            truncated_doc = document_content[: self.DOCUMENT_TRUNCATE_MAX]
             self._doc_truncate_cache[doc_key] = truncated_doc
 
         prompt = DOCUMENT_LEVEL_PROMPT.format(
-            document_content=truncated_doc,
-            question_type=q_type_cn
+            document_content=truncated_doc, question_type=q_type_cn
         )
 
         if supplement:
@@ -1434,9 +1411,7 @@ class TestSetGenerator:
 
         return None
 
-    def _parse_document_question_response(
-        self, response: str
-    ) -> dict[str, Any] | None:
+    def _parse_document_question_response(self, response: str) -> dict[str, Any] | None:
         """Parse an LLM response for document-based question generation.
 
         Args:
@@ -1491,8 +1466,7 @@ class TestSetGenerator:
         authenticity = self._check_authenticity_rules(question)
         if authenticity["has_issues"]:
             logger.debug(
-                f"Question failed authenticity check: "
-                f"{authenticity['issues']}"
+                f"Question failed authenticity check: {authenticity['issues']}"
             )
             return False
 
@@ -1546,12 +1520,10 @@ class TestSetGenerator:
         return {
             "has_issues": len(issues) > 0,
             "issues": issues,
-            "is_authentic": len(issues) == 0
+            "is_authentic": len(issues) == 0,
         }
 
-    def _calculate_quality_metrics(
-        self, questions: list[dict]
-    ) -> dict[str, Any]:
+    def _calculate_quality_metrics(self, questions: list[dict]) -> dict[str, Any]:
         """Calculate quality metrics for generated questions.
 
         Args:
@@ -1574,7 +1546,8 @@ class TestSetGenerator:
 
         total = len(questions)
         authenticity_passed = sum(
-            1 for q in questions
+            1
+            for q in questions
             if self._check_authenticity_rules(q.get("question", ""))["is_authentic"]
         )
 
@@ -1665,14 +1638,10 @@ class TestSetGenerator:
                 continue
 
         if not doc_chunks:
-            logger.debug(
-                f"No chunks found for source_path: {source_path}"
-            )
+            logger.debug(f"No chunks found for source_path: {source_path}")
             return []
 
-        doc_chunks.sort(
-            key=lambda c: c.get("metadata", {}).get("chunk_index", 0)
-        )
+        doc_chunks.sort(key=lambda c: c.get("metadata", {}).get("chunk_index", 0))
 
         key_sentences = self._extract_key_sentences(answer)
         key_terms = self._extract_key_terms(answer)
@@ -1680,15 +1649,11 @@ class TestSetGenerator:
         matched_indices: set = set()
         for i, chunk in enumerate(doc_chunks):
             chunk_text = chunk.get("text", "")
-            if self._chunk_matches_answer(
-                chunk_text, key_sentences, key_terms
-            ):
+            if self._chunk_matches_answer(chunk_text, key_sentences, key_terms):
                 matched_indices.add(i)
 
         if not matched_indices:
-            logger.debug(
-                f"No chunks matched for answer in source: {source_path}"
-            )
+            logger.debug(f"No chunks matched for answer in source: {source_path}")
             return []
 
         expanded_indices: set = set()
@@ -1700,8 +1665,7 @@ class TestSetGenerator:
 
         expanded_indices.discard(-1)
 
-        result = [doc_chunks[i].get("chunk_id", "")
-                  for i in sorted(expanded_indices)]
+        result = [doc_chunks[i].get("chunk_id", "") for i in sorted(expanded_indices)]
         result = [cid for cid in result if cid]
 
         return result
@@ -1720,18 +1684,32 @@ class TestSetGenerator:
             List of key sentences that likely contain answer-specific
             information.
         """
-        sentences = re.split(r'[。！？\n]', answer)
+        sentences = re.split(r"[。！？\n]", answer)
         sentences = [s.strip() for s in sentences if len(s.strip()) > 4]
 
         key_sentences = []
         for sent in sentences:
-            has_number = bool(re.search(r'\d', sent))
-            has_percentage = '%' in sent
+            has_number = bool(re.search(r"\d", sent))
+            has_percentage = "%" in sent
             has_domain_terms = any(
                 kw in sent
-                for kw in ['增长', '下降', '上升', '减少', '增加',
-                           '收入', '利润', '营收', '市值', '占比',
-                           '规模', '产量', '销量', '价格', '成本']
+                for kw in [
+                    "增长",
+                    "下降",
+                    "上升",
+                    "减少",
+                    "增加",
+                    "收入",
+                    "利润",
+                    "营收",
+                    "市值",
+                    "占比",
+                    "规模",
+                    "产量",
+                    "销量",
+                    "价格",
+                    "成本",
+                ]
             )
             if has_number or has_percentage or has_domain_terms:
                 key_sentences.append(sent)
@@ -1755,20 +1733,43 @@ class TestSetGenerator:
         """
         terms: list[str] = []
 
-        number_patterns = re.findall(
-            r'\d+\.?\d*[万亿千百%％]?', answer
-        )
+        number_patterns = re.findall(r"\d+\.?\d*[万亿千百%％]?", answer)
         terms.extend(number_patterns)
 
         proper_nouns = re.findall(
-            r'[\u4e00-\u9fff]{2,8}(?:股份|集团|公司|行业|市场|技术|产品|业务|报告|年度)', answer)
+            r"[\u4e00-\u9fff]{2,8}(?:股份|集团|公司|行业|市场|技术|产品|业务|报告|年度)",
+            answer,
+        )
         terms.extend(proper_nouns)
 
         domain_keywords = [
-            '增长', '下降', '上升', '减少', '增加', '收入', '利润',
-            '营收', '市值', '占比', '规模', '产量', '销量', '价格',
-            '成本', '投资', '融资', '估值', '盈利', '亏损', '负债',
-            '资产', '现金流', '毛利率', '净利率', 'ROE', 'ROA',
+            "增长",
+            "下降",
+            "上升",
+            "减少",
+            "增加",
+            "收入",
+            "利润",
+            "营收",
+            "市值",
+            "占比",
+            "规模",
+            "产量",
+            "销量",
+            "价格",
+            "成本",
+            "投资",
+            "融资",
+            "估值",
+            "盈利",
+            "亏损",
+            "负债",
+            "资产",
+            "现金流",
+            "毛利率",
+            "净利率",
+            "ROE",
+            "ROA",
         ]
         for kw in domain_keywords:
             if kw in answer:
@@ -1816,7 +1817,7 @@ class TestSetGenerator:
             overlap_chars = 0
             window_size = min(len(sentence), len(chunk_text))
             for start in range(0, len(chunk_text) - window_size + 1):
-                substring = chunk_text[start:start + len(sentence)]
+                substring = chunk_text[start : start + len(sentence)]
                 common = sum(
                     1 for a, b in zip(sentence, substring, strict=False) if a == b
                 )

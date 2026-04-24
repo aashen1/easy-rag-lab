@@ -70,6 +70,7 @@ class AssetVerificationResult:
     Returns:
         AssetVerificationResult instance.
     """
+
     valid: bool
     missing_files: list[str] = field(default_factory=list)
     invalid_files: list[str] = field(default_factory=list)
@@ -106,6 +107,7 @@ def sanitize_config(config: dict[str, Any]) -> dict[str, Any]:
         Deep-copied configuration with api_key values replaced by '***'.
     """
     import copy
+
     result = copy.deepcopy(config)
     llm_presets = result.get("llm_presets", {})
     for _preset_name, preset_config in llm_presets.items():
@@ -167,6 +169,7 @@ def verify_experiment_assets(
                             logger.warning(f"Invalid {filename}: missing 'name' field")
                 elif filename == "config_snapshot.yaml":
                     import yaml
+
                     with open(file_path, encoding="utf-8") as f:
                         data = yaml.safe_load(f)
                         if not data:
@@ -177,7 +180,9 @@ def verify_experiment_assets(
                         data = json.load(f)
                         if "pdf_files" not in data:
                             invalid_files.append(filename)
-                            logger.warning(f"Invalid {filename}: missing 'pdf_files' field")
+                            logger.warning(
+                                f"Invalid {filename}: missing 'pdf_files' field"
+                            )
             except json.JSONDecodeError as e:
                 invalid_files.append(filename)
                 logger.warning(f"Invalid {filename}: JSON decode error - {str(e)}")
@@ -218,13 +223,17 @@ def verify_experiment_assets(
                     try:
                         actual_sha256 = compute_file_sha256(full_pdf_path)
                         if actual_sha256 != expected_sha256:
-                            pdf_issues[pdf_path] = f"SHA256 mismatch (expected: {expected_sha256[:12]}..., got: {actual_sha256[:12]}...)"
+                            pdf_issues[pdf_path] = (
+                                f"SHA256 mismatch (expected: {expected_sha256[:12]}..., got: {actual_sha256[:12]}...)"
+                            )
                             logger.warning(f"PDF SHA256 mismatch: {pdf_path}")
                         else:
                             logger.debug(f"PDF verified: {pdf_path}")
                     except Exception as e:
                         pdf_issues[pdf_path] = f"Hash computation error: {str(e)}"
-                        logger.warning(f"Failed to compute SHA256 for {pdf_path}: {str(e)}")
+                        logger.warning(
+                            f"Failed to compute SHA256 for {pdf_path}: {str(e)}"
+                        )
         except json.JSONDecodeError as e:
             logger.warning(f"Failed to parse meal_snapshot.json: {str(e)}")
         except Exception as e:
@@ -264,6 +273,7 @@ def collect_environment_info() -> dict[str, Any]:
 
     try:
         import platform
+
         env_info["os"] = platform.platform()
         env_info["python_version"] = platform.python_version()
     except Exception:
@@ -271,10 +281,18 @@ def collect_environment_info() -> dict[str, Any]:
 
     try:
         import pkg_resources
+
         key_packages = [
-            "torch", "transformers", "qdrant-client", "langchain",
-            "langchain-community", "pymupdf", "pymupdf4llllm",
-            "sentence-transformers", "rank-bm25", "loguru",
+            "torch",
+            "transformers",
+            "qdrant-client",
+            "langchain",
+            "langchain-community",
+            "pymupdf",
+            "pymupdf4llllm",
+            "sentence-transformers",
+            "rank-bm25",
+            "loguru",
         ]
         installed = {}
         for pkg in pkg_resources.working_set:
@@ -315,7 +333,9 @@ def prepare_meal(
     meal_name = exp_config.data.get("meal")
 
     if not meal_name:
-        raise ConfigurationError("Experiment configuration must specify a meal name in data.meal field")
+        raise ConfigurationError(
+            "Experiment configuration must specify a meal name in data.meal field"
+        )
 
     if meal_manager.meal_exists(meal_name):
         logger.info(f"Meal '{meal_name}' found, loading...")
@@ -372,7 +392,9 @@ def prepare_meal(
     else:
         sample_mode = "ratio"
         sample_value = 1.0
-        logger.warning("No sampling configuration found, using full dataset (ratio=1.0)")
+        logger.warning(
+            "No sampling configuration found, using full dataset (ratio=1.0)"
+        )
 
     sampling_config = SamplingConfig(mode=sample_mode, value=sample_value)
     seed = create_config.get("seed")
@@ -480,10 +502,14 @@ def _prepare_legacy_test_set(
 
                     if test_set_data is not None:
                         final_count = len(test_set_data.get("questions", []))
-                        logger.success(f"Test set '{filename}' supplemented ({final_count} questions)")
+                        logger.success(
+                            f"Test set '{filename}' supplemented ({final_count} questions)"
+                        )
                         return test_set_data
                 except Exception as e:
-                    logger.error(f"Failed to supplement test set '{filename}': {str(e)}")
+                    logger.error(
+                        f"Failed to supplement test set '{filename}': {str(e)}"
+                    )
                     logger.warning("Falling back to full regeneration")
                     test_set_path.unlink()
             elif existing_count > num_questions:
@@ -493,15 +519,21 @@ def _prepare_legacy_test_set(
                     f"{num_questions}."
                 )
                 test_set_data["questions"] = test_set_data["questions"][:num_questions]
-                logger.success(f"Test set '{filename}' truncated ({num_questions} questions)")
+                logger.success(
+                    f"Test set '{filename}' truncated ({num_questions} questions)"
+                )
                 return test_set_data
             else:
-                logger.success(f"Test set '{filename}' loaded ({existing_count} questions)")
+                logger.success(
+                    f"Test set '{filename}' loaded ({existing_count} questions)"
+                )
                 return test_set_data
         except FileNotFoundError:
             raise
         except Exception as e:
-            logger.warning(f"Failed to load test set '{filename}': {str(e)}, will regenerate")
+            logger.warning(
+                f"Failed to load test set '{filename}': {str(e)}, will regenerate"
+            )
 
     if skip_preprocessing:
         raise TestSetError(
@@ -509,7 +541,9 @@ def _prepare_legacy_test_set(
             "Cannot generate test set in skip_preprocessing mode."
         )
 
-    logger.info(f"Generating test set '{filename}' ({strategy}, {num_questions} questions)...")
+    logger.info(
+        f"Generating test set '{filename}' ({strategy}, {num_questions} questions)..."
+    )
 
     try:
         if strategy == "document":
@@ -530,7 +564,9 @@ def _prepare_legacy_test_set(
                 token_tracker=token_tracker,
             )
 
-        logger.success(f"Test set '{filename}' generated ({len(test_set_data.get('questions', []))} questions)")
+        logger.success(
+            f"Test set '{filename}' generated ({len(test_set_data.get('questions', []))} questions)"
+        )
         return test_set_data
     except Exception as e:
         logger.error(f"Failed to generate test set '{filename}': {str(e)}")
@@ -608,12 +644,13 @@ def prepare_test_sets(
                 "test_sets uses deprecated configuration format. "
                 "The experiment will run normally, but please consider migrating to the new format:\n"
                 "  test_sets:\n"
-                "    - name: \"<custom_name>\"\n"
-                "      on_missing: \"auto\"\n"
+                '    - name: "<custom_name>"\n'
+                '      on_missing: "auto"\n'
                 "      generation:\n"
-                "        strategy: \"document\"\n"
+                '        strategy: "document"\n'
                 "        num_questions: 10",
-                DeprecationWarning, stacklevel=2,
+                DeprecationWarning,
+                stacklevel=2,
             )
             test_set_data = _prepare_legacy_test_set(
                 system_config=system_config,
@@ -655,7 +692,8 @@ def prepare_variant_chunks(
 
     artifacts_config = merged_config.get("artifacts") or {}
     artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
-    cache = ArtifactCache(artifacts_dir)
+    raw_dir = Path(merged_config.get("parser", {}).get("input_dir", "data/raw"))
+    cache = ArtifactCache(artifacts_dir, raw_dir)
 
     parsed_dir = cache.get_parsed_dir(
         meal_config.data_id,
@@ -664,8 +702,11 @@ def prepare_variant_chunks(
     chunks_dir = cache.get_chunks_dir(meal_config.data_id, chunker_hash)
 
     build_chunks_if_needed(
-        parsed_dir, chunks_dir, chunker_config,
-        model_name=chunker_config.get("model_name") or embedding_config.get("model_name"),
+        parsed_dir,
+        chunks_dir,
+        chunker_config,
+        model_name=chunker_config.get("model_name")
+        or embedding_config.get("model_name"),
     )
 
     logger.info(f"Chunks ready for variant '{variant_name}': {chunks_dir}")
@@ -718,7 +759,9 @@ def prepare_index_for_variant(
     )
 
     collection_info = indexer.get_collection_info()
-    index_exists = collection_info is not None and collection_info.get("points_count", 0) > 0
+    index_exists = (
+        collection_info is not None and collection_info.get("points_count", 0) > 0
+    )
 
     if not index_exists:
         logger.info(f"Building index for variant '{variant_name}'...")
@@ -727,7 +770,8 @@ def prepare_index_for_variant(
 
         artifacts_config = merged_config.get("artifacts") or {}
         artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
-        cache = ArtifactCache(artifacts_dir)
+        raw_dir = Path(merged_config.get("parser", {}).get("input_dir", "data/raw"))
+        cache = ArtifactCache(artifacts_dir, raw_dir)
 
         parsed_dir = cache.get_parsed_dir(
             meal_config.data_id,
@@ -736,8 +780,11 @@ def prepare_index_for_variant(
         chunks_dir = cache.get_chunks_dir(meal_config.data_id, chunker_hash)
 
         build_chunks_if_needed(
-            parsed_dir, chunks_dir, chunker_config,
-            model_name=chunker_config.get("model_name") or embedding_config.get("model_name"),
+            parsed_dir,
+            chunks_dir,
+            chunker_config,
+            model_name=chunker_config.get("model_name")
+            or embedding_config.get("model_name"),
         )
 
         indexer = build_index_from_chunks(
@@ -779,7 +826,9 @@ def _create_evaluators(
             evaluators["builtin"] = BuiltinEvaluator(config=system_config)
         elif backend == "ragas":
             ragas_config = system_config.get("evaluation", {}).get("ragas", {})
-            evaluators["ragas"] = RagasEvaluator(config={**system_config, "ragas": ragas_config})
+            evaluators["ragas"] = RagasEvaluator(
+                config={**system_config, "ragas": ragas_config}
+            )
         else:
             logger.warning(f"Unknown evaluation backend: {backend}")
 
@@ -803,10 +852,14 @@ def _collect_rag_samples(
     Returns:
         List of sample dictionaries with query results.
     """
-    test_set_name = test_set.get("name") or test_set.get("metadata", {}).get("name", "unknown")
+    test_set_name = test_set.get("name") or test_set.get("metadata", {}).get(
+        "name", "unknown"
+    )
     questions = test_set.get("questions", [])
 
-    logger.info(f"Collecting results for test set '{test_set_name}' ({len(questions)} questions)...")
+    logger.info(
+        f"Collecting results for test set '{test_set_name}' ({len(questions)} questions)..."
+    )
 
     samples = []
     for i, question_data in enumerate(questions, 1):
@@ -1019,13 +1072,14 @@ def _evaluate_with_ragas(
         return []
 
     ragas_from_retrieval = [
-        m for m in (retrieval_metrics or [])
+        m
+        for m in (retrieval_metrics or [])
         if m in evaluator.supported_generation_metrics
     ]
 
-    all_ragas_metrics = list(dict.fromkeys(
-        (generation_metrics or []) + ragas_from_retrieval
-    ))
+    all_ragas_metrics = list(
+        dict.fromkeys((generation_metrics or []) + ragas_from_retrieval)
+    )
 
     if not all_ragas_metrics:
         return []
@@ -1082,7 +1136,9 @@ def _evaluate_with_ragas(
                 metric_parts.append(f"{k}={v:.4f}")
         metric_str = ", ".join(metric_parts) if metric_parts else "no metrics"
         if not expect_retrieval:
-            logger.success(f"Question {sample['question_id']} (RAGAS): {metric_str} (expect_retrieval=False, skipped LLM retrieval)")
+            logger.success(
+                f"Question {sample['question_id']} (RAGAS): {metric_str} (expect_retrieval=False, skipped LLM retrieval)"
+            )
         else:
             logger.success(f"Question {sample['question_id']} (RAGAS): {metric_str}")
 
@@ -1133,7 +1189,9 @@ def evaluate_test_set(
     llm_config = get_llm_config(system_config, llm_preset)
 
     equivalence_groups = meal_info.get("equivalence_groups") if meal_info else None
-    samples = _collect_rag_samples(pipeline, test_set, equivalence_groups=equivalence_groups)
+    samples = _collect_rag_samples(
+        pipeline, test_set, equivalence_groups=equivalence_groups
+    )
 
     all_results: dict[str, dict[str, Any]] = {}
 
@@ -1143,7 +1201,8 @@ def evaluate_test_set(
         builtin_generation_metrics = generation_metrics
         if builtin_generation_metrics:
             builtin_generation_metrics = [
-                m for m in builtin_generation_metrics
+                m
+                for m in builtin_generation_metrics
                 if m in evaluators["builtin"].supported_generation_metrics
             ]
         builtin_results = _evaluate_with_builtin(
@@ -1162,14 +1221,18 @@ def evaluate_test_set(
 
     if "ragas" in backends and "ragas" in evaluators:
         ragas_from_generation = [
-            m for m in (generation_metrics or [])
+            m
+            for m in (generation_metrics or [])
             if m in evaluators["ragas"].supported_generation_metrics
         ]
         ragas_from_retrieval = [
-            m for m in (retrieval_metrics or [])
+            m
+            for m in (retrieval_metrics or [])
             if m in evaluators["ragas"].supported_generation_metrics
         ]
-        ragas_only_metrics = list(dict.fromkeys(ragas_from_generation + ragas_from_retrieval))
+        ragas_only_metrics = list(
+            dict.fromkeys(ragas_from_generation + ragas_from_retrieval)
+        )
         if ragas_only_metrics:
             ragas_results = _evaluate_with_ragas(
                 samples=samples,
@@ -1224,13 +1287,16 @@ def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
 
     metrics: dict[str, Any] = {}
 
-    valid_retrieval = [r for r in results if r.get("retrieval", {}).get("hit_rate") is not None]
+    valid_retrieval = [
+        r for r in results if r.get("retrieval", {}).get("hit_rate") is not None
+    ]
     if valid_retrieval:
         for metric_name in ["hit_rate", "mrr", "ndcg"]:
             values = [
                 r["retrieval"][metric_name]
                 for r in valid_retrieval
-                if metric_name in r["retrieval"] and r["retrieval"][metric_name] is not None
+                if metric_name in r["retrieval"]
+                and r["retrieval"][metric_name] is not None
             ]
             if values:
                 metrics[f"avg_{metric_name}"] = sum(values) / len(values)
@@ -1255,7 +1321,8 @@ def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
             values = [
                 r["generation"][metric_name]
                 for r in valid_generation
-                if metric_name in r["generation"] and r["generation"][metric_name] is not None
+                if metric_name in r["generation"]
+                and r["generation"][metric_name] is not None
             ]
             if values:
                 generation_aggregate[f"avg_{metric_name}"] = sum(values) / len(values)
@@ -1263,21 +1330,41 @@ def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
         if generation_aggregate:
             metrics["generation_metrics"] = generation_aggregate
 
-    chunk_results = [r for r in results if r.get("chunk_retrieval") is not None and r["chunk_retrieval"]]
+    chunk_results = [
+        r
+        for r in results
+        if r.get("chunk_retrieval") is not None and r["chunk_retrieval"]
+    ]
     if chunk_results:
-        avg_chunk_hit_rate = sum(r["chunk_retrieval"].get("hit_rate", 0) for r in chunk_results) / len(chunk_results)
-        avg_chunk_mrr = sum(r["chunk_retrieval"].get("mrr", 0) for r in chunk_results) / len(chunk_results)
-        avg_chunk_ndcg = sum(r["chunk_retrieval"].get("ndcg", 0) for r in chunk_results) / len(chunk_results)
+        avg_chunk_hit_rate = sum(
+            r["chunk_retrieval"].get("hit_rate", 0) for r in chunk_results
+        ) / len(chunk_results)
+        avg_chunk_mrr = sum(
+            r["chunk_retrieval"].get("mrr", 0) for r in chunk_results
+        ) / len(chunk_results)
+        avg_chunk_ndcg = sum(
+            r["chunk_retrieval"].get("ndcg", 0) for r in chunk_results
+        ) / len(chunk_results)
     else:
         avg_chunk_hit_rate = None
         avg_chunk_mrr = None
         avg_chunk_ndcg = None
 
-    dedup_results = [r for r in results if r.get("dedup_retrieval") is not None and r["dedup_retrieval"]]
+    dedup_results = [
+        r
+        for r in results
+        if r.get("dedup_retrieval") is not None and r["dedup_retrieval"]
+    ]
     if dedup_results:
-        avg_dedup_hit_rate = sum(r["dedup_retrieval"].get("hit_rate", 0) for r in dedup_results) / len(dedup_results)
-        avg_dedup_mrr = sum(r["dedup_retrieval"].get("mrr", 0) for r in dedup_results) / len(dedup_results)
-        avg_dedup_ndcg = sum(r["dedup_retrieval"].get("ndcg", 0) for r in dedup_results) / len(dedup_results)
+        avg_dedup_hit_rate = sum(
+            r["dedup_retrieval"].get("hit_rate", 0) for r in dedup_results
+        ) / len(dedup_results)
+        avg_dedup_mrr = sum(
+            r["dedup_retrieval"].get("mrr", 0) for r in dedup_results
+        ) / len(dedup_results)
+        avg_dedup_ndcg = sum(
+            r["dedup_retrieval"].get("ndcg", 0) for r in dedup_results
+        ) / len(dedup_results)
     else:
         avg_dedup_hit_rate = None
         avg_dedup_mrr = None
@@ -1286,7 +1373,8 @@ def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
     fpr_results = [r for r in results if r.get("false_positive_rate") is not None]
     avg_false_positive_rate = (
         sum(r["false_positive_rate"] for r in fpr_results) / len(fpr_results)
-        if fpr_results else None
+        if fpr_results
+        else None
     )
 
     metrics["chunk_level_metrics"] = {
@@ -1306,16 +1394,24 @@ def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
     diversity_values = [
         r["retrieval"]["retrieval_diversity"]
         for r in valid_retrieval
-        if "retrieval_diversity" in r.get("retrieval", {}) and r["retrieval"]["retrieval_diversity"] is not None
+        if "retrieval_diversity" in r.get("retrieval", {})
+        and r["retrieval"]["retrieval_diversity"] is not None
     ]
-    metrics["avg_retrieval_diversity"] = sum(diversity_values) / len(diversity_values) if diversity_values else None
+    metrics["avg_retrieval_diversity"] = (
+        sum(diversity_values) / len(diversity_values) if diversity_values else None
+    )
 
     faithfulness_values = [
         r["generation"]["faithfulness"]
         for r in valid_generation
-        if "faithfulness" in r.get("generation", {}) and r["generation"]["faithfulness"] is not None
+        if "faithfulness" in r.get("generation", {})
+        and r["generation"]["faithfulness"] is not None
     ]
-    metrics["hallucination_rate"] = calculate_hallucination_rate(faithfulness_values) if faithfulness_values else None
+    metrics["hallucination_rate"] = (
+        calculate_hallucination_rate(faithfulness_values)
+        if faithfulness_values
+        else None
+    )
 
     type_groups: dict[str, list[dict[str, Any]]] = {}
     for r in results:
@@ -1328,7 +1424,9 @@ def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
     for qtype, group in type_groups.items():
         type_entry: dict[str, Any] = {"count": len(group)}
 
-        type_valid_retrieval = [r for r in group if r.get("retrieval", {}).get("hit_rate") is not None]
+        type_valid_retrieval = [
+            r for r in group if r.get("retrieval", {}).get("hit_rate") is not None
+        ]
         for mn in ["hit_rate", "mrr", "ndcg", "retrieval_diversity"]:
             vals = [
                 r["retrieval"][mn]
@@ -1353,13 +1451,18 @@ def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
     if type_metrics:
         metrics["by_question_type"] = type_metrics
 
-    llm_retrieval_results = [r for r in results if "llm_retrieval" in r and r["llm_retrieval"]]
+    llm_retrieval_results = [
+        r for r in results if "llm_retrieval" in r and r["llm_retrieval"]
+    ]
     llm_retrieval_from_generation = []
     for r in results:
         if "generation" in r and r["generation"]:
             gen = r["generation"]
-            llm_keys = {k: v for k, v in gen.items()
-                        if k in {"context_precision", "context_recall"} and v is not None}
+            llm_keys = {
+                k: v
+                for k, v in gen.items()
+                if k in {"context_precision", "context_recall"} and v is not None
+            }
             if llm_keys:
                 llm_retrieval_from_generation.append(llm_keys)
 
@@ -1444,7 +1547,7 @@ def run_variant_evaluation(
         )
         pipeline.config = merged_config
 
-        if hasattr(pipeline, 'indexer') and pipeline.indexer is not None:
+        if hasattr(pipeline, "indexer") and pipeline.indexer is not None:
             pipeline.indexer.close()
 
         indexer = prepare_index_for_variant(merged_config, meal_config, variant_name)
@@ -1464,11 +1567,16 @@ def run_variant_evaluation(
         )
 
         retrieval_method = merged_config.get("retrieval", {}).get("method", "vector")
-        if retrieval_method in ("bm25", "hybrid") and pipeline.bm25_retriever is not None:
+        if (
+            retrieval_method in ("bm25", "hybrid")
+            and pipeline.bm25_retriever is not None
+        ):
             from src.meal import ArtifactCache
+
             artifacts_config = merged_config.get("artifacts", {})
             artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
-            cache = ArtifactCache(artifacts_dir)
+            raw_dir = Path(merged_config.get("parser", {}).get("input_dir", "data/raw"))
+            cache = ArtifactCache(artifacts_dir, raw_dir)
             chunker_hash = meal_config.config_hashes.get("chunker", "")
             chunks_dir = cache.get_chunks_dir(meal_config.data_id, chunker_hash)
             if chunks_dir.exists():
@@ -1480,10 +1588,18 @@ def run_variant_evaluation(
                 pipeline.hybrid_retriever = HybridRetriever(
                     vector_retriever=pipeline.retriever,
                     bm25_retriever=pipeline.bm25_retriever,
-                    fusion_method=merged_config.get("retrieval", {}).get("hybrid", {}).get("fusion", "rrf"),
-                    rrf_k=merged_config.get("retrieval", {}).get("hybrid", {}).get("rrf_k", 60),
-                    vector_weight=merged_config.get("retrieval", {}).get("hybrid", {}).get("vector_weight", 0.7),
-                    bm25_weight=merged_config.get("retrieval", {}).get("hybrid", {}).get("bm25_weight", 0.3),
+                    fusion_method=merged_config.get("retrieval", {})
+                    .get("hybrid", {})
+                    .get("fusion", "rrf"),
+                    rrf_k=merged_config.get("retrieval", {})
+                    .get("hybrid", {})
+                    .get("rrf_k", 60),
+                    vector_weight=merged_config.get("retrieval", {})
+                    .get("hybrid", {})
+                    .get("vector_weight", 0.7),
+                    bm25_weight=merged_config.get("retrieval", {})
+                    .get("hybrid", {})
+                    .get("bm25_weight", 0.3),
                     top_k=merged_config.get("retrieval", {}).get("top_k", 5),
                 )
 
@@ -1494,7 +1610,8 @@ def run_variant_evaluation(
 
         for test_set in test_sets:
             results = evaluate_test_set(
-                pipeline, test_set,
+                pipeline,
+                test_set,
                 exp_config=exp_config,
                 system_config=system_config,
                 meal_info=meal_info,
@@ -1506,7 +1623,10 @@ def run_variant_evaluation(
         metrics = compute_aggregate_metrics(all_results)
 
         token_usage_data = variant_tracker.to_dict()
-        if test_generation_tracker is not None and test_generation_tracker.record_count > 0:
+        if (
+            test_generation_tracker is not None
+            and test_generation_tracker.record_count > 0
+        ):
             token_usage_data["test_generation"] = test_generation_tracker.to_dict()
 
         variant_result = {
@@ -1515,8 +1635,12 @@ def run_variant_evaluation(
             "timestamp": datetime.now().isoformat(),
             "total_questions": len(all_results),
             "total_time_seconds": total_time,
-            "avg_time_per_question": total_time / len(all_results) if all_results else 0,
-            "retrieval_metrics": {k: v for k, v in metrics.items() if k != "generation_metrics"},
+            "avg_time_per_question": total_time / len(all_results)
+            if all_results
+            else 0,
+            "retrieval_metrics": {
+                k: v for k, v in metrics.items() if k != "generation_metrics"
+            },
             "config_snapshot": config_snapshot,
             "results": all_results,
             "token_usage": token_usage_data,
@@ -1540,8 +1664,7 @@ def run_variant_evaluation(
             log_parts.append(f"CR={metrics['avg_context_recall']:.4f}")
 
         logger.success(
-            f"Variant '{variant_name}' evaluation completed: "
-            + ", ".join(log_parts)
+            f"Variant '{variant_name}' evaluation completed: " + ", ".join(log_parts)
         )
 
         token_total = variant_tracker.get_total()
@@ -1557,13 +1680,15 @@ def run_variant_evaluation(
 
     except Exception as e:
         logger.error(f"Failed to evaluate variant '{variant_name}': {str(e)}")
-        if 'pipeline' in locals():
+        if "pipeline" in locals():
             with contextlib.suppress(Exception):
                 pipeline.close()
         raise
 
 
-def generate_llm_report_only(exp_dir: str, system_config_path: str = "config.yaml") -> None:
+def generate_llm_report_only(
+    exp_dir: str, system_config_path: str = "config.yaml"
+) -> None:
     """Generate LLM report for an already-completed experiment.
 
     Loads the experiment results from the given directory and generates
@@ -1701,14 +1826,19 @@ def run_experiment(
             variant_name = variant.get("name", f"variant_{i}")
             merged_config = merge_config(system_config, exp_config, variant)
             chunks_dir = prepare_variant_chunks(
-                merged_config, meal_info["config"], variant_name,
+                merged_config,
+                meal_info["config"],
+                variant_name,
             )
             if first_chunks_dir is None:
                 first_chunks_dir = chunks_dir
 
         logger.info("Step 3: Preparing test sets...")
         test_sets = prepare_test_sets(
-            system_config, exp_config, meal_info, skip_preprocessing,
+            system_config,
+            exp_config,
+            meal_info,
+            skip_preprocessing,
             token_tracker=test_generation_tracker,
             chunks_dir=first_chunks_dir,
         )
@@ -1719,14 +1849,18 @@ def run_experiment(
         for test_set in test_sets:
             metadata = test_set.get("metadata", {})
             generation = metadata.get("generation", {})
-            test_set_snapshots.append({
-                "name": test_set.get("name") or metadata.get("name"),
-                "strategy": test_set.get("strategy") or generation.get("strategy"),
-                "num_questions": len(test_set.get("questions", [])),
-                "created_at": test_set.get("created_at") or metadata.get("created_at"),
-                "meal_data_id": test_set.get("meal_data_id") or metadata.get("meal_id"),
-                "questions": test_set.get("questions", []),
-            })
+            test_set_snapshots.append(
+                {
+                    "name": test_set.get("name") or metadata.get("name"),
+                    "strategy": test_set.get("strategy") or generation.get("strategy"),
+                    "num_questions": len(test_set.get("questions", [])),
+                    "created_at": test_set.get("created_at")
+                    or metadata.get("created_at"),
+                    "meal_data_id": test_set.get("meal_data_id")
+                    or metadata.get("meal_id"),
+                    "questions": test_set.get("questions", []),
+                }
+            )
 
         config_snapshot = {
             "data": exp_config.data,
@@ -1751,7 +1885,9 @@ def run_experiment(
 
         for i, variant in enumerate(exp_config.variants, 1):
             variant_name = variant.get("name", f"variant_{i}")
-            logger.info(f"Evaluating variant {i}/{len(exp_config.variants)}: {variant_name}")
+            logger.info(
+                f"Evaluating variant {i}/{len(exp_config.variants)}: {variant_name}"
+            )
 
             try:
                 variant_result = run_variant_evaluation(
@@ -1771,10 +1907,13 @@ def run_experiment(
                     variant_tracker = TokenTracker()
                     for rec_data in variant_result["token_usage"].get("records", []):
                         from src.token_tracker import DetailedTokenUsage
+
                         usage = DetailedTokenUsage(
                             input_tokens=rec_data["usage"]["input_tokens"],
                             output_tokens=rec_data["usage"]["output_tokens"],
-                            system_prompt_tokens=rec_data["usage"].get("system_prompt_tokens", 0),
+                            system_prompt_tokens=rec_data["usage"].get(
+                                "system_prompt_tokens", 0
+                            ),
                             contexts_tokens=rec_data["usage"].get("contexts_tokens", 0),
                             query_tokens=rec_data["usage"].get("query_tokens", 0),
                         )
@@ -1945,24 +2084,28 @@ def show_experiment_info(exp_id: str, system_config_path: str = "config.yaml") -
         print(f"Created: {info['created_at']}")
         print(f"Status: {info['status']}")
 
-        if info.get('meal_snapshot'):
+        if info.get("meal_snapshot"):
             print(f"\nMeal: {info['meal_snapshot'].get('name', 'N/A')}")
             print(f"Data ID: {info['meal_snapshot'].get('data_id', 'N/A')[:12]}...")
 
-        if info.get('test_set_snapshots'):
+        if info.get("test_set_snapshots"):
             print(f"\nTest Sets ({len(info['test_set_snapshots'])}):")
-            for ts in info['test_set_snapshots']:
-                print(f"  - {ts.get('strategy', 'unknown')}: {ts.get('num_questions', 0)} questions")
+            for ts in info["test_set_snapshots"]:
+                print(
+                    f"  - {ts.get('strategy', 'unknown')}: {ts.get('num_questions', 0)} questions"
+                )
 
-        if info.get('variant_results'):
+        if info.get("variant_results"):
             print(f"\nVariant Results ({len(info['variant_results'])}):")
-            for vr in info['variant_results']:
-                name = vr.get('variant_name', 'unknown')
-                if 'retrieval_metrics' in vr:
-                    metrics = vr['retrieval_metrics']
-                    print(f"  - {name}: HR={metrics.get('avg_hit_rate', 0):.4f}, "
-                          f"MRR={metrics.get('avg_mrr', 0):.4f}, "
-                          f"NDCG={metrics.get('avg_ndcg', 0):.4f}")
+            for vr in info["variant_results"]:
+                name = vr.get("variant_name", "unknown")
+                if "retrieval_metrics" in vr:
+                    metrics = vr["retrieval_metrics"]
+                    print(
+                        f"  - {name}: HR={metrics.get('avg_hit_rate', 0):.4f}, "
+                        f"MRR={metrics.get('avg_mrr', 0):.4f}, "
+                        f"NDCG={metrics.get('avg_ndcg', 0):.4f}"
+                    )
                 else:
                     print(f"  - {name}: {vr.get('error', 'No metrics')}")
 
@@ -2030,7 +2173,9 @@ def compare_experiments(
         if report_path:
             report_file = Path(report_path)
         else:
-            exp_dir = Path(system_config.get("experiments", {}).get("dir", "data/exp_reports"))
+            exp_dir = Path(
+                system_config.get("experiments", {}).get("dir", "data/exp_reports")
+            )
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             report_file = exp_dir / f"comparison_{timestamp}.md"
 
@@ -2074,7 +2219,9 @@ def _build_comparison_data(results: list[dict[str, Any]]) -> dict[str, Any]:
             meal = info["meal_snapshot"]
             exp_data["meal_info"] = {
                 "name": meal.get("name", "N/A"),
-                "data_id": meal.get("data_id", "N/A")[:12] if meal.get("data_id") else "N/A",
+                "data_id": meal.get("data_id", "N/A")[:12]
+                if meal.get("data_id")
+                else "N/A",
                 "pdf_count": meal.get("stats", {}).get("total_pdfs", 0),
                 "page_count": meal.get("stats", {}).get("total_pages", 0),
                 "chunk_count": meal.get("stats", {}).get("total_chunks", 0),
@@ -2082,10 +2229,12 @@ def _build_comparison_data(results: list[dict[str, Any]]) -> dict[str, Any]:
 
         if info.get("test_set_snapshots"):
             for ts in info["test_set_snapshots"]:
-                exp_data["test_sets"].append({
-                    "strategy": ts.get("strategy", "unknown"),
-                    "num_questions": ts.get("num_questions", 0),
-                })
+                exp_data["test_sets"].append(
+                    {
+                        "strategy": ts.get("strategy", "unknown"),
+                        "num_questions": ts.get("num_questions", 0),
+                    }
+                )
 
         if info.get("variant_results"):
             for vr in info["variant_results"]:
@@ -2117,9 +2266,15 @@ def _build_comparison_data(results: list[dict[str, Any]]) -> dict[str, Any]:
                     if "merged" in config:
                         merged = config["merged"]
                         variant_data["config"] = {
-                            "chunk_size": merged.get("chunker", {}).get("chunk_size", "N/A"),
-                            "chunk_overlap": merged.get("chunker", {}).get("chunk_overlap", "N/A"),
-                            "embedding_model": merged.get("embedding", {}).get("model_name", "N/A"),
+                            "chunk_size": merged.get("chunker", {}).get(
+                                "chunk_size", "N/A"
+                            ),
+                            "chunk_overlap": merged.get("chunker", {}).get(
+                                "chunk_overlap", "N/A"
+                            ),
+                            "embedding_model": merged.get("embedding", {}).get(
+                                "model_name", "N/A"
+                            ),
                             "top_k": merged.get("retrieval", {}).get("top_k", "N/A"),
                         }
 
@@ -2140,11 +2295,13 @@ def _build_comparison_data(results: list[dict[str, Any]]) -> dict[str, Any]:
                 best_hr = v["metrics"]["hit_rate"]
                 best_variant = v
         if best_variant:
-            best_variants.append({
-                "experiment_name": exp["name"],
-                "variant_name": best_variant["name"],
-                "metrics": best_variant["metrics"],
-            })
+            best_variants.append(
+                {
+                    "experiment_name": exp["name"],
+                    "variant_name": best_variant["name"],
+                    "metrics": best_variant["metrics"],
+                }
+            )
 
     if best_variants:
         best_variants.sort(key=lambda x: x["metrics"]["hit_rate"], reverse=True)
@@ -2159,7 +2316,9 @@ def _build_comparison_data(results: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _extract_category_metrics(variant_result: dict[str, Any]) -> dict[str, dict[str, float]]:
+def _extract_category_metrics(
+    variant_result: dict[str, Any],
+) -> dict[str, dict[str, float]]:
     """
     Extract metrics grouped by question category from variant results.
 
@@ -2181,9 +2340,13 @@ def _extract_category_metrics(variant_result: dict[str, Any]) -> dict[str, dict[
             }
 
         if "retrieval" in result:
-            category_metrics[category]["hit_rates"].append(result["retrieval"].get("hit_rate", 0))
+            category_metrics[category]["hit_rates"].append(
+                result["retrieval"].get("hit_rate", 0)
+            )
             category_metrics[category]["mrrs"].append(result["retrieval"].get("mrr", 0))
-            category_metrics[category]["ndcgs"].append(result["retrieval"].get("ndcg", 0))
+            category_metrics[category]["ndcgs"].append(
+                result["retrieval"].get("ndcg", 0)
+            )
 
     averaged_metrics = {}
     for category, values in category_metrics.items():
@@ -2214,18 +2377,24 @@ def _print_comparison_table(
     print("=" * 120)
 
     if not_found:
-        print(f"\nWarning: The following experiments were not found: {', '.join(not_found)}")
+        print(
+            f"\nWarning: The following experiments were not found: {', '.join(not_found)}"
+        )
 
     print("\n" + "-" * 120)
     print("SUMMARY: BEST VARIANT PER EXPERIMENT")
     print("-" * 120)
-    print(f"{'Experiment':<35} {'Variant':<25} {'Hit Rate':>10} {'MRR':>10} {'NDCG':>10}")
+    print(
+        f"{'Experiment':<35} {'Variant':<25} {'Hit Rate':>10} {'MRR':>10} {'NDCG':>10}"
+    )
     print("-" * 120)
 
     for bv in comparison_data["best_variants"]:
-        print(f"{bv['experiment_name'][:33]:<35} {bv['variant_name'][:23]:<25} "
-              f"{bv['metrics']['hit_rate']:>10.4f} {bv['metrics']['mrr']:>10.4f} "
-              f"{bv['metrics']['ndcg']:>10.4f}")
+        print(
+            f"{bv['experiment_name'][:33]:<35} {bv['variant_name'][:23]:<25} "
+            f"{bv['metrics']['hit_rate']:>10.4f} {bv['metrics']['mrr']:>10.4f} "
+            f"{bv['metrics']['ndcg']:>10.4f}"
+        )
 
     print("-" * 120)
 
@@ -2238,8 +2407,10 @@ def _print_comparison_table(
         print(f"Status: {exp['status']} | Created: {exp['created_at']}")
 
         if exp["meal_info"]:
-            print(f"Meal: {exp['meal_info']['name']} ({exp['meal_info']['pdf_count']} PDFs, "
-                  f"{exp['meal_info']['page_count']} pages)")
+            print(
+                f"Meal: {exp['meal_info']['name']} ({exp['meal_info']['pdf_count']} PDFs, "
+                f"{exp['meal_info']['page_count']} pages)"
+            )
 
         if exp["test_sets"]:
             test_set_str = ", ".join(
@@ -2247,13 +2418,21 @@ def _print_comparison_table(
             )
             print(f"Test Sets: {test_set_str}")
 
-        print(f"\n{'Variant':<30} {'Hit Rate':>10} {'MRR':>10} {'NDCG':>10} {'Time':>10}")
+        print(
+            f"\n{'Variant':<30} {'Hit Rate':>10} {'MRR':>10} {'NDCG':>10} {'Time':>10}"
+        )
         print("-" * 80)
 
         for v in exp["variants"]:
-            time_str = f"{v['avg_time_per_question']:.2f}s" if v.get("avg_time_per_question") else "N/A"
-            print(f"{v['name'][:28]:<30} {v['metrics']['hit_rate']:>10.4f} "
-                  f"{v['metrics']['mrr']:>10.4f} {v['metrics']['ndcg']:>10.4f} {time_str:>10}")
+            time_str = (
+                f"{v['avg_time_per_question']:.2f}s"
+                if v.get("avg_time_per_question")
+                else "N/A"
+            )
+            print(
+                f"{v['name'][:28]:<30} {v['metrics']['hit_rate']:>10.4f} "
+                f"{v['metrics']['mrr']:>10.4f} {v['metrics']['ndcg']:>10.4f} {time_str:>10}"
+            )
 
             if "error" in v:
                 print(f"  Error: {v['error']}")
@@ -2261,8 +2440,10 @@ def _print_comparison_table(
             if "category_metrics" in v:
                 print("  By Category:")
                 for cat, metrics in v["category_metrics"].items():
-                    print(f"    {cat}: HR={metrics['hit_rate']:.4f}, "
-                          f"MRR={metrics['mrr']:.4f}, NDCG={metrics['ndcg']:.4f} ({metrics['count']} questions)")
+                    print(
+                        f"    {cat}: HR={metrics['hit_rate']:.4f}, "
+                        f"MRR={metrics['mrr']:.4f}, NDCG={metrics['ndcg']:.4f} ({metrics['count']} questions)"
+                    )
 
     print("\n" + "=" * 120 + "\n")
 
@@ -2285,14 +2466,18 @@ def _generate_comparison_report(
     lines.append("# Experiment Comparison Report")
     lines.append("")
     lines.append(f"**Generated**: {datetime.now().isoformat()}")
-    lines.append(f"**Experiments Compared**: {comparison_data['summary']['total_experiments']}")
+    lines.append(
+        f"**Experiments Compared**: {comparison_data['summary']['total_experiments']}"
+    )
     lines.append(f"**Total Variants**: {comparison_data['summary']['total_variants']}")
     lines.append("")
 
     if not_found:
         lines.append("## Warnings")
         lines.append("")
-        lines.append(f"The following experiments were not found: {', '.join(not_found)}")
+        lines.append(
+            f"The following experiments were not found: {', '.join(not_found)}"
+        )
         lines.append("")
 
     lines.append("## Summary: Best Variants")
@@ -2339,7 +2524,11 @@ def _generate_comparison_report(
         lines.append("|---------|----------|-----|------|----------|")
 
         for v in exp["variants"]:
-            time_str = f"{v['avg_time_per_question']:.2f}s" if v.get("avg_time_per_question") else "N/A"
+            time_str = (
+                f"{v['avg_time_per_question']:.2f}s"
+                if v.get("avg_time_per_question")
+                else "N/A"
+            )
             lines.append(
                 f"| {v['name']} | {v['metrics']['hit_rate']:.4f} | "
                 f"{v['metrics']['mrr']:.4f} | {v['metrics']['ndcg']:.4f} | {time_str} |"
@@ -2458,18 +2647,31 @@ def reproduce_experiment(
     if original_variants:
         variants = []
         for v_name in original_variants:
-            result_path = exp_path / "results" / f"{v_name.lower().replace(' ', '_').replace('-', '_')}.json"
+            result_path = (
+                exp_path
+                / "results"
+                / f"{v_name.lower().replace(' ', '_').replace('-', '_')}.json"
+            )
             variant_config = {"name": v_name, "config_overrides": {}}
 
             if result_path.exists():
                 try:
                     with open(result_path, encoding="utf-8") as f:
                         result_data = json.load(f)
-                    if "config_snapshot" in result_data and "variant" in result_data["config_snapshot"]:
-                        variant_config["config_overrides"] = result_data["config_snapshot"]["variant"].get("config_overrides", {})
-                        variant_config["description"] = result_data["config_snapshot"]["variant"].get("description", "")
+                    if (
+                        "config_snapshot" in result_data
+                        and "variant" in result_data["config_snapshot"]
+                    ):
+                        variant_config["config_overrides"] = result_data[
+                            "config_snapshot"
+                        ]["variant"].get("config_overrides", {})
+                        variant_config["description"] = result_data["config_snapshot"][
+                            "variant"
+                        ].get("description", "")
                 except Exception as e:
-                    logger.warning(f"Failed to load variant config from {result_path}: {str(e)}")
+                    logger.warning(
+                        f"Failed to load variant config from {result_path}: {str(e)}"
+                    )
 
             variants.append(variant_config)
     else:
