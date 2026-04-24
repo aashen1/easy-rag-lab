@@ -125,9 +125,11 @@ Found 982 errors.
 
 ## 3. pre-commit 是什么？
 
-**一句话**：pre-commit 是 Git 钩子管理器，在你 `git commit` 之前自动运行检查。
+**一句话**：pre-commit 是 Git 钩子管理器，在你 `git commit` 之前和 `git merge` 之后自动运行检查。
 
 ### 工作流程
+
+#### commit 前检查（防止坏代码提交）
 
 ```
 你执行 git commit
@@ -147,9 +149,32 @@ commit   commit 被阻止
           再次 git commit
 ```
 
+#### merge 后检查（确认合并没闯祸）
+
+```
+你在 dev/main 分支执行 git merge feature-xxx
+       ↓
+   合并成功完成
+       ↓
+post-merge 钩子自动触发
+       ↓
+   运行 pytest 单元测试
+       ↓
+  ┌────┴────┐
+  ↓         ↓
+通过      不通过
+  ↓         ↓
+一切正常   打印失败信息
+继续工作    提示 git reset --hard ORIG_HEAD 回滚
+```
+
+**为什么合并后需要单独跑测试？** 两个功能分支各自测试都通过，但合到一起可能出问题——比如分支 A 改了某个函数的接口，分支 B 还在用旧接口调用。commit 前的 lint/format 检查抓不到这种问题，只有跑测试才能发现。
+
 ### 本项目配置的钩子
 
 配置文件：`.pre-commit-config.yaml`
+
+#### commit 前钩子（`git commit` 时自动触发）
 
 | 钩子 | 做什么 | 为什么需要 |
 |------|--------|-----------|
@@ -160,14 +185,26 @@ commit   commit 被阻止
 | check-yaml | 验证 YAML 语法 | 防止配置文件写错 |
 | check-merge-conflict | 检测未解决的合并冲突 | 防止冲突标记入库 |
 
+#### merge 后钩子（`git merge` 完成后自动触发）
+
+| 钩子 | 做什么 | 为什么需要 |
+|------|--------|-----------|
+| post-merge-test | 跑 pytest 单元测试（跳过 integration 测试） | 确认合并后的代码整体没闯祸 |
+
 ### 日常使用
 
 ```bash
-# 首次安装（只需一次，以后 commit 自动触发）
+# 首次安装（只需一次，以后 commit 和 merge 自动触发）
 pixi run pre-commit-install
 
 # 手动运行所有钩子（不 commit 也能检查）
 pixi run pre-commit-run
+
+# 手动跑单元测试（跳过需要外部 API 的 integration 测试）
+pixi run test
+
+# 手动跑全部测试（包括 integration）
+pixi run test-all
 
 # 紧急跳过钩子（只在紧急情况使用！）
 git commit --no-verify -m "emergency fix"
@@ -176,6 +213,8 @@ git commit --no-verify -m "emergency fix"
 ---
 
 ## 4. 两者配合的效果
+
+### commit 前：格式与语法防线
 
 ```
 写代码 → git add → git commit
@@ -201,7 +240,26 @@ git commit --no-verify -m "emergency fix"
               重新add再提交
 ```
 
-**核心价值**：代码库中永远不会有明显错误和风格不统一的代码。
+### merge 后：功能正确性防线
+
+```
+功能分支各自开发、各自测试通过
+                ↓
+     git merge 合并到 dev/main
+                ↓
+        post-merge 钩子自动触发
+                ↓
+          运行 pytest 单元测试
+                ↓
+         ┌──────┴──────┐
+         ↓             ↓
+       通过          不通过
+         ↓             ↓
+     一切正常     提示回滚命令
+     继续工作     git reset --hard ORIG_HEAD
+```
+
+**核心价值**：commit 前管格式和语法，merge 后管功能正确性，两层防线各管一段。
 
 ---
 
