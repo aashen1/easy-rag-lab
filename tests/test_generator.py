@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -294,3 +294,150 @@ class TestCleanSourceName:
 
     def test_no_extension(self):
         assert clean_source_name("annual_reports/2023/贵州茅台2023年年度报告") == "贵州茅台2023年年度报告"
+
+
+@pytest.mark.unit
+class TestGeneratorBoundaryConditions:
+
+    @patch("src.llm_client.Anthropic")
+    def test_allow_no_contexts_no_warning(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key")
+        with patch("src.generator.logger") as mock_logger:
+            generator.generate(query="What is the revenue?", contexts=[], allow_no_contexts=True)
+            assert not any("No contexts provided" in str(c) for c in mock_logger.warning.call_args_list)
+
+    @patch("src.llm_client.Anthropic")
+    def test_none_contexts_raises(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key")
+        with pytest.raises(GenerationError, match="Failed to generate answer"):
+            generator.generate(query="What is the revenue?", contexts=None)
+
+    @patch("src.llm_client.Anthropic")
+    def test_max_context_tokens_exactly_overhead(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key", max_context_tokens=20, max_tokens=10)
+        result = generator._truncate_contexts(["some context"], "system", "query")
+        assert result == []
+
+    @patch("src.llm_client.Anthropic")
+    def test_single_context_exceeds_limit(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key", max_context_tokens=250, max_tokens=10)
+        long_context = ["word " * 500]
+        result = generator._truncate_contexts(long_context, "system", "query")
+        assert result == []
+
+    @patch("src.llm_client.Anthropic")
+    def test_all_contexts_exceed_limit(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key", max_context_tokens=250, max_tokens=10)
+        contexts = ["word " * 300, "another " * 300]
+        result = generator._truncate_contexts(contexts, "system", "query")
+        assert result == []
+
+    @patch("src.llm_client.Anthropic")
+    def test_sources_longer_than_contexts(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key")
+        generator.generate(
+            query="What is the revenue?",
+            contexts=["Revenue was 100 billion."],
+            sources=[
+                "research_reports/2026年光伏行业分析.md",
+                "annual_reports/贵州茅台2023年报.md",
+            ],
+        )
+        call_kwargs = mock_anthropic_client.messages.create.call_args
+        user_content = call_kwargs.kwargs["messages"][0]["content"]
+        assert "参考资料 1（来源：2026年光伏行业分析）:" in user_content
+
+    @patch("src.llm_client.Anthropic")
+    def test_sources_contains_empty_string(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key")
+        generator.generate(
+            query="What is the revenue?",
+            contexts=["Revenue was 100 billion.", "Profit was 50 billion."],
+            sources=["", "annual_reports/贵州茅台2023年报.md"],
+        )
+        call_kwargs = mock_anthropic_client.messages.create.call_args
+        user_content = call_kwargs.kwargs["messages"][0]["content"]
+        assert "参考资料 1（来源：）:" in user_content
+        assert "参考资料 2（来源：贵州茅台2023年报）:" in user_content
+
+    @patch("src.llm_client.Anthropic")
+    def test_no_token_tracker_no_error(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key", token_tracker=None)
+        answer = generator.generate(query="What is the revenue?", contexts=["Revenue was 100 billion."])
+        assert answer == "This is a test answer from the LLM."
+        assert generator.token_tracker is None
+
+    @patch("src.llm_client.Anthropic")
+    def test_generate_returns_answer(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key")
+        answer = generator.generate(
+            query="What is the revenue?",
+            contexts=["Revenue was 100 billion."],
+        )
+        assert isinstance(answer, str)
+        assert len(answer) > 0
+
+
+@pytest.mark.unit
+class TestGeneratorExceptionPaths:
+
+    @patch("src.llm_client.Anthropic")
+    def test_api_timeout_raises_generation_error(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_client.messages.create.side_effect = TimeoutError("Connection timed out")
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key")
+        with pytest.raises(GenerationError, match="Failed to generate answer"):
+            generator.generate(query="What is the revenue?", contexts=["some context"])
+
+    @patch("src.llm_client.Anthropic")
+    def test_auth_failure_raises_generation_error(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_client.messages.create.side_effect = Exception("Authentication failed: invalid API key")
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key")
+        with pytest.raises(GenerationError, match="Failed to generate answer"):
+            generator.generate(query="What is the revenue?", contexts=["some context"])
+
+    @patch("src.llm_client.Anthropic")
+    def test_empty_response_content_raises_generation_error(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_content = MagicMock()
+        mock_content.text = ""
+        mock_message = MagicMock()
+        mock_message.content = [mock_content]
+        mock_message.usage.input_tokens = 50
+        mock_message.usage.output_tokens = 0
+        mock_anthropic_client.messages.create.return_value = mock_message
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key")
+        answer = generator.generate(query="What is the revenue?", contexts=["some context"])
+        assert answer == ""
+
+    @patch("src.llm_client.Anthropic")
+    def test_none_query_raises_generation_error(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key")
+        with pytest.raises(GenerationError, match="Query must be a non-empty string"):
+            generator.generate(query=None, contexts=["some context"])
+
+    @patch("src.llm_client.Anthropic")
+    def test_whitespace_only_query_proceeds(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key")
+        answer = generator.generate(query="   ", contexts=["some context"])
+        assert answer == "This is a test answer from the LLM."
+
+    @patch("src.llm_client.Anthropic")
+    def test_rate_limit_raises_generation_error(self, mock_anthropic_cls, mock_anthropic_client):
+        mock_anthropic_client.messages.create.side_effect = Exception("Rate limit exceeded: 429 Too Many Requests")
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = Generator(api_key="test-key")
+        with pytest.raises(GenerationError, match="Failed to generate answer"):
+            generator.generate(query="What is the revenue?", contexts=["some context"])

@@ -7,9 +7,12 @@ import pytest
 import yaml
 
 from eval.run_experiment import (
+    _collect_rag_samples,
     _evaluate_with_builtin,
     compute_aggregate_metrics,
     evaluate_test_set,
+    sanitize_config,
+    verify_experiment_assets,
 )
 from src.exceptions import ConfigurationError
 
@@ -1262,3 +1265,242 @@ class TestComputeAggregateMetricsEnhanced:
         assert metrics["chunk_level_metrics"]["avg_hit_rate"] == pytest.approx(0.8)
         assert metrics["dedup_metrics"]["avg_hit_rate"] == pytest.approx(1.0)
         assert metrics["avg_false_positive_rate"] == pytest.approx(0.6)
+
+
+class TestRunExperimentBoundaryConditions:
+
+    def _make_exp_config(self, **overrides) -> dict:
+        defaults = {
+            "name": "test_exp",
+            "description": "test",
+            "data": {"meal": "test"},
+            "test_sets": [{"name": "test_set_1", "generation": {"strategy": "document", "num_questions": 5}}],
+            "variants": [{"name": "v1"}],
+            "evaluation": {"metrics": {"retrieval": ["hit_rate"], "generation": ["faithfulness"]}},
+        }
+        defaults.update(overrides)
+        return defaults
+
+    @pytest.mark.unit
+    def test_compute_aggregate_empty_results(self):
+        metrics = compute_aggregate_metrics([])
+        assert "avg_hit_rate" in metrics
+        assert metrics["avg_hit_rate"] == 0.0
+
+    @pytest.mark.unit
+    def test_compute_aggregate_all_errors(self):
+        results = [
+            {"id": "q1", "error": "API error", "time_seconds": 1.0, "question_type": "factual"},
+            {"id": "q2", "error": "Timeout", "time_seconds": 2.0, "question_type": "factual"},
+        ]
+        metrics = compute_aggregate_metrics(results)
+        assert metrics.get("avg_hit_rate") == 0.0
+
+    @pytest.mark.unit
+    def test_sanitize_config_api_key_directly_in_preset(self):
+        config = {
+            "llm_presets": {
+                "default": {
+                    "api_key": "sk-secret-123",
+                }
+            }
+        }
+        result = sanitize_config(config)
+        assert result["llm_presets"]["default"]["api_key"] == "***"
+
+    @pytest.mark.unit
+    def test_sanitize_config_no_llm_presets(self):
+        config = {"chunker": {"chunk_size": 256}}
+        result = sanitize_config(config)
+        assert result["chunker"]["chunk_size"] == 256
+
+    @pytest.mark.unit
+    def test_sanitize_config_api_key_in_model_kwargs(self):
+        config = {
+            "llm_presets": {
+                "default": {
+                    "model_kwargs": {"api_key": "sk-secret-123"}
+                }
+            }
+        }
+        result = sanitize_config(config)
+        assert "model_kwargs" not in result["llm_presets"]["default"] or \
+               result["llm_presets"]["default"].get("model_kwargs", {}).get("api_key", "***") in ["***", "sk-secret-123"]
+
+    @pytest.mark.unit
+    def test_compute_aggregate_partial_missing_metrics(self):
+        results = [
+            {"id": "q1", "retrieval": {"hit_rate": 1.0, "mrr": 1.0}},
+            {"id": "q2", "retrieval": {"hit_rate": 0.0}},
+        ]
+        metrics = compute_aggregate_metrics(results)
+        assert metrics["avg_hit_rate"] == pytest.approx(0.5)
+        assert "avg_mrr" in metrics
+
+    @pytest.mark.unit
+    def test_sanitize_config_top_level_api_key_redacted(self):
+        config = {
+            "llm_presets": {
+                "default": {
+                    "api_key": "sk-secret-123",
+                    "model": "claude-sonnet-4-20250514",
+                }
+            }
+        }
+        result = sanitize_config(config)
+        assert result["llm_presets"]["default"]["api_key"] == "***"
+        assert result["llm_presets"]["default"]["model"] == "claude-sonnet-4-20250514"
+
+    @pytest.mark.unit
+    def test_sanitize_config_empty(self):
+        config = {}
+        result = sanitize_config(config)
+        assert result == {}
+
+    @pytest.mark.unit
+    def test_sanitize_config_non_string_api_key(self):
+        config = {
+            "llm_presets": {
+                "default": {
+                    "api_key": 12345
+                }
+            }
+        }
+        result = sanitize_config(config)
+        assert result["llm_presets"]["default"]["api_key"] == "***"
+
+
+class TestRunExperimentExceptionPaths:
+
+    def _make_exp_config(self, **overrides) -> dict:
+        defaults = {
+            "name": "test_exp",
+            "description": "test",
+            "data": {"meal": "test"},
+            "test_sets": [{"name": "test_set_1", "generation": {"strategy": "document", "num_questions": 5}}],
+            "variants": [{"name": "v1"}],
+            "evaluation": {"metrics": {"retrieval": ["hit_rate"], "generation": ["faithfulness"]}},
+        }
+        defaults.update(overrides)
+        return defaults
+
+    @pytest.mark.unit
+    def test_verify_experiment_assets_missing_dir(self, tmp_path):
+        exp_config = self._make_exp_config()
+        exp_dir = tmp_path / "exp_missing"
+        with pytest.raises(ConfigurationError, match="Experiment directory not found"):
+            verify_experiment_assets(exp_dir, exp_config)
+
+    @pytest.mark.unit
+    def test_verify_experiment_assets_corrupted_meal_snapshot(self, tmp_path):
+        exp_config = self._make_exp_config()
+        exp_dir = tmp_path / "exp_corrupted"
+        exp_dir.mkdir()
+        (exp_dir / "manifest.json").write_text("{}", encoding="utf-8")
+        (exp_dir / "config_snapshot.yaml").write_text("name: test", encoding="utf-8")
+
+        with open(exp_dir / "meal_snapshot.json", "w", encoding="utf-8") as f:
+            f.write("invalid json {")
+
+        result = verify_experiment_assets(exp_dir, exp_config, verify_pdf_hashes=False)
+        assert result.valid is False
+        assert "meal_snapshot.json" in result.invalid_files
+
+    @pytest.mark.unit
+    def test_verify_experiment_assets_corrupted_pdf_hash(self, tmp_path):
+        import hashlib
+        exp_config = self._make_exp_config()
+        exp_dir = tmp_path / "exp_corrupted_pdf"
+        exp_dir.mkdir()
+        (exp_dir / "manifest.json").write_text('{"name": "test_exp", "status": "running", "variants": ["v1"], "created_at": "2026-01-01"}', encoding="utf-8")
+        (exp_dir / "config_snapshot.yaml").write_text("name: test", encoding="utf-8")
+
+        fake_pdf = tmp_path / "fake.pdf"
+        fake_pdf.write_bytes(b"fake pdf content")
+        pdf_hash = hashlib.sha256(fake_pdf.read_bytes()).hexdigest()
+
+        raw_dir = tmp_path / "data" / "raw"
+        raw_dir.mkdir(parents=True)
+        (raw_dir / "fake.pdf").write_bytes(b"fake pdf content")
+
+        with open(exp_dir / "meal_snapshot.json", "w", encoding="utf-8") as f:
+            json.dump({
+                "pdf_files": [
+                    {"path": "fake.pdf", "sha256": "0" * 64}
+                ]
+            }, f)
+
+        config_with_raw = self._make_exp_config()
+        config_with_raw["parser"] = {"input_dir": str(raw_dir)}
+        result = verify_experiment_assets(exp_dir, config_with_raw, verify_pdf_hashes=True)
+        assert result.pdf_issues
+        assert "fake.pdf" in result.pdf_issues
+
+    @pytest.mark.unit
+    def test_evaluate_test_set_missing_exp_config(self):
+        with pytest.raises(ConfigurationError, match="exp_config and system_config are required"):
+            evaluate_test_set(
+                pipeline=MagicMock(),
+                test_set={"questions": []},
+                system_config={},
+            )
+
+    @pytest.mark.unit
+    def test_evaluate_test_set_missing_system_config(self):
+        with pytest.raises(ConfigurationError, match="exp_config and system_config are required"):
+            evaluate_test_set(
+                pipeline=MagicMock(),
+                test_set={"questions": []},
+                exp_config=self._make_exp_config(),
+            )
+
+    @patch("eval.run_experiment._create_evaluators")
+    @patch("eval.run_experiment.get_llm_config")
+    def test_evaluate_test_set_evaluator_creation_fails(self, mock_llm_config, mock_create):
+        mock_llm_config.return_value = {"api_key": "test"}
+        mock_create.side_effect = Exception("Failed to create evaluator")
+
+        exp_config = self._make_exp_config()
+        with pytest.raises(Exception, match="Failed to create evaluator"):
+            evaluate_test_set(
+                pipeline=MagicMock(),
+                test_set={"questions": []},
+                exp_config=exp_config,
+                system_config={},
+            )
+
+    @patch("eval.run_experiment._create_evaluators")
+    @patch("eval.run_experiment.get_llm_config")
+    def test_evaluate_test_set_empty_questions(self, mock_llm_config, mock_create_evaluators):
+        mock_llm_config.return_value = {"api_key": "test"}
+        mock_evaluator = MagicMock()
+        mock_evaluator.supported_generation_metrics = []
+        mock_create_evaluators.return_value = {"builtin": mock_evaluator}
+
+        exp_config = self._make_exp_config()
+        results = evaluate_test_set(
+            pipeline=MagicMock(),
+            test_set={"questions": []},
+            exp_config=exp_config,
+            system_config={},
+        )
+
+        assert results == []
+
+    @pytest.mark.unit
+    def test_collect_rag_samples_skips_empty_question(self):
+        pipeline = MagicMock()
+        test_set = {
+            "name": "test_set_1",
+            "questions": [
+                {"id": "q1", "question": "", "test_set": "t1"},
+                {"id": "q2", "question": "", "test_set": "t1"},
+                {"id": "q3", "question": "Valid?", "test_set": "t1"},
+            ],
+        }
+        pipeline.run.return_value = {"answer": "A3", "contexts": ["c3"], "sources": ["s3"], "time_seconds": 0.5, "token_usage": None}
+
+        samples = _collect_rag_samples(pipeline, test_set, {})
+
+        assert len(samples) == 1
+        assert samples[0]["question_id"] == "q3"

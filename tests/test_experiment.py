@@ -2,6 +2,7 @@ import json
 import tempfile
 import warnings
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 import yaml
@@ -1265,6 +1266,303 @@ class TestNewFormatValidation:
             errors = config.validate()
             test_set_errors = [e for e in errors if "on_missing" in e]
             assert test_set_errors == [], f"Unexpected error for on_missing='{on_missing_val}'"
+
+
+class TestOldFormatDeprecation:
+    def _make_config_dict(self, **overrides) -> dict:
+        defaults = {
+            "name": "test_experiment",
+            "description": "Test experiment description",
+            "data": {"meal": "meal_baseline"},
+            "test_sets": [{"strategy": "factual", "num_questions": 20}],
+            "variants": [{"name": "v1"}],
+            "evaluation": {"metrics": {"retrieval": ["hit_rate"]}},
+        }
+        defaults.update(overrides)
+        return defaults
+
+    @pytest.mark.unit
+    def test_old_format_emits_deprecation_warning(self):
+        data = self._make_config_dict()
+        config = ExperimentConfig.from_dict(data)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            config.validate()
+            deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
+            assert len(deprecation_warnings) == 1
+
+
+class TestExperimentBoundaryConditions:
+
+    def _make_config_dict(self, **overrides) -> dict:
+        defaults = {
+            "name": "test_experiment",
+            "description": "Test experiment description",
+            "data": {"meal": "meal_baseline"},
+            "test_sets": [{"strategy": "factual", "num_questions": 20}],
+            "variants": [{"name": "v1"}],
+            "evaluation": {"metrics": {"retrieval": ["hit_rate"]}},
+        }
+        defaults.update(overrides)
+        return defaults
+
+    @pytest.mark.unit
+    def test_empty_test_sets_errors(self):
+        data = self._make_config_dict(test_sets=[])
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        assert "At least one test set must be defined" in errors
+
+    @pytest.mark.unit
+    def test_empty_variants_errors(self):
+        data = self._make_config_dict(variants=[])
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        assert "At least one variant must be defined" in errors
+
+    @pytest.mark.unit
+    def test_empty_metrics_dict_errors(self):
+        data = self._make_config_dict()
+        data["evaluation"]["metrics"] = {}
+        config = ExperimentConfig.from_dict(data)
+        errors = config.validate()
+        assert "Evaluation metrics must include 'retrieval' field" in errors
+
+    @pytest.mark.unit
+    def test_deep_merge_none_value_overwrites(self):
+        base = {"a": 1, "b": {"c": 2}}
+        override = {"a": None}
+        result = deep_merge(base, override)
+        assert result["a"] is None
+        assert result["b"] == {"c": 2}
+
+    @pytest.mark.unit
+    def test_deep_merge_list_replaced_not_merged(self):
+        base = {"items": [1, 2, 3]}
+        override = {"items": [4, 5]}
+        result = deep_merge(base, override)
+        assert result["items"] == [4, 5]
+
+    @pytest.mark.unit
+    def test_experiment_manager_list_experiments_corrupted_manifest(self, temp_project_dir):
+        exp_dir = temp_project_dir / "data" / "exp_reports" / "exp_test_corrupted"
+        exp_dir.mkdir(parents=True)
+        with open(exp_dir / "manifest.json", "w", encoding="utf-8") as f:
+            f.write("invalid json content [")
+
+        system_config = {"experiments": {"dir": str(temp_project_dir / "data" / "exp_reports")}}
+        manager = ExperimentManager(system_config)
+        experiments = manager.list_experiments()
+
+        assert len(experiments) == 1
+        assert experiments[0]["status"] == "corrupted"
+
+    @pytest.mark.unit
+    def test_experiment_manager_load_missing_meal_snapshot(self, temp_project_dir):
+        exp_dir = temp_project_dir / "data" / "exp_reports" / "exp_partial"
+        exp_dir.mkdir(parents=True)
+
+        manifest = {
+            "experiment_id": "exp_partial",
+            "name": "partial_exp",
+            "description": "Test",
+            "created_at": "2026-01-01T00:00:00",
+            "status": "running",
+            "variants": ["v1"],
+            "test_sets": ["factual"],
+        }
+        with open(exp_dir / "manifest.json", "w", encoding="utf-8") as f:
+            json.dump(manifest, f)
+
+        config_snapshot = {
+            "data": {"meal": "test"},
+            "evaluation": {"metrics": {"retrieval": ["hit_rate"]}},
+        }
+        with open(exp_dir / "config_snapshot.yaml", "w", encoding="utf-8") as f:
+            yaml.dump(config_snapshot, f)
+
+        manager = ExperimentManager({})
+        result = manager.load_experiment_result(exp_dir)
+
+        assert result.name == "partial_exp"
+        assert result.meal_snapshot == {}
+
+    @pytest.mark.unit
+    def test_experiment_manager_load_corrupted_meal_snapshot(self, temp_project_dir):
+        exp_dir = temp_project_dir / "data" / "exp_reports" / "exp_bad_meal"
+        exp_dir.mkdir(parents=True)
+
+        manifest = {
+            "experiment_id": "exp_bad_meal",
+            "name": "bad_meal_exp",
+            "description": "Test",
+            "created_at": "2026-01-01T00:00:00",
+            "status": "running",
+            "variants": ["v1"],
+            "test_sets": ["factual"],
+        }
+        with open(exp_dir / "manifest.json", "w", encoding="utf-8") as f:
+            json.dump(manifest, f)
+
+        with open(exp_dir / "meal_snapshot.json", "w", encoding="utf-8") as f:
+            f.write("invalid json")
+
+        with open(exp_dir / "config_snapshot.yaml", "w", encoding="utf-8") as f:
+            yaml.dump({"data": {"meal": "test"}, "evaluation": {"metrics": {"retrieval": ["hit_rate"]}}}, f)
+
+        manager = ExperimentManager({})
+        result = manager.load_experiment_result(exp_dir)
+
+        assert result.name == "bad_meal_exp"
+        assert result.meal_snapshot == {}
+
+    @pytest.mark.unit
+    def test_experiment_result_from_dict_missing_field(self):
+        data = {
+            "experiment_id": "exp_1",
+            "name": "test",
+            "created_at": "2026-01-01",
+            "status": "running",
+            "config": {
+                "name": "test",
+                "description": "test",
+                "data": {"meal": "test"},
+                "test_sets": [{"strategy": "factual", "num_questions": 10}],
+                "variants": [{"name": "v1"}],
+                "evaluation": {"metrics": {"retrieval": ["hit_rate"]}},
+            },
+        }
+        with pytest.raises(ConfigurationError, match="Missing required fields"):
+            ExperimentResult.from_dict(data)
+
+    @pytest.mark.unit
+    def test_get_variant_config_returns_first_match(self):
+        config = ExperimentConfig(
+            name="test",
+            description="test",
+            data={"meal": "test"},
+            test_sets=[{"strategy": "factual", "num_questions": 10}],
+            variants=[
+                {"name": "v1", "config_overrides": {"chunker": {"chunk_size": 256}}},
+                {"name": "v1", "config_overrides": {"chunker": {"chunk_size": 512}}},
+            ],
+            evaluation={"metrics": {"retrieval": ["hit_rate"]}},
+        )
+        system_config = {"chunker": {"chunk_size": 128}}
+        result = get_variant_config(system_config, config, "v1")
+        assert result["chunker"]["chunk_size"] == 256
+
+
+class TestExperimentExceptionPaths:
+
+    @pytest.mark.unit
+    def test_load_experiment_config_not_dict(self):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+            yaml.dump(["item1", "item2", "item3"], f)
+            temp_path = f.name
+
+        try:
+            with pytest.raises(ConfigurationError, match="must be a dictionary"):
+                load_experiment_config(temp_path)
+        finally:
+            Path(temp_path).unlink()
+
+    @pytest.mark.unit
+    def test_load_experiment_config_with_validation_error(self):
+        config_data = {
+            "name": "",
+            "description": "Test",
+            "data": {"meal": "test"},
+            "test_sets": [{"strategy": "factual", "num_questions": 10}],
+            "variants": [{"name": "v1"}],
+            "evaluation": {"metrics": {"retrieval": ["hit_rate"]}},
+        }
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+            yaml.dump(config_data, f)
+            temp_path = f.name
+
+        try:
+            with pytest.raises(ConfigurationError, match="validation failed"):
+                load_experiment_config(temp_path)
+        finally:
+            Path(temp_path).unlink()
+
+    @pytest.mark.unit
+    def test_experiment_manager_create_dir_os_error(self, temp_project_dir):
+        config = ExperimentConfig(
+            name="test",
+            description="test",
+            data={"meal": "test"},
+            test_sets=[{"strategy": "factual", "num_questions": 10}],
+            variants=[{"name": "v1"}],
+            evaluation={"metrics": {"retrieval": ["hit_rate"]}},
+        )
+
+        manager = ExperimentManager(
+            {"experiments": {"dir": str(temp_project_dir / "data" / "exp_reports")}}
+        )
+
+        with patch.object(Path, "mkdir", side_effect=OSError("Permission denied")):
+            with pytest.raises(OSError, match="Permission denied"):
+                manager.create_experiment_dir(config)
+
+    @pytest.mark.unit
+    def test_experiment_manager_save_snapshots_os_error(self, temp_project_dir):
+        exp_dir = temp_project_dir / "data" / "exp_reports" / "exp_test"
+        exp_dir.mkdir(parents=True)
+        (exp_dir / "test_sets").mkdir()
+        (exp_dir / "results").mkdir()
+
+        config = ExperimentConfig(
+            name="test",
+            description="test",
+            data={"meal": "test"},
+            test_sets=[{"strategy": "factual", "num_questions": 10}],
+            variants=[{"name": "v1"}],
+            evaluation={"metrics": {"retrieval": ["hit_rate"]}},
+        )
+
+        with patch("builtins.open", side_effect=OSError("Disk full")):
+            with pytest.raises(OSError, match="Disk full"):
+                manager = ExperimentManager({})
+                manager.save_snapshots(exp_dir, config, {}, [], {})
+
+    @pytest.mark.unit
+    def test_experiment_manager_save_variant_result_os_error(self, temp_project_dir):
+        exp_dir = temp_project_dir / "data" / "exp_reports" / "exp_test"
+        exp_dir.mkdir(parents=True)
+        results_dir = exp_dir / "results"
+        results_dir.mkdir()
+
+        with patch("builtins.open", side_effect=OSError("Permission denied")):
+            with pytest.raises(OSError, match="Permission denied"):
+                manager = ExperimentManager({})
+                manager.save_variant_result(exp_dir, "v1", {"metrics": {}})
+
+    @pytest.mark.unit
+    def test_experiment_manager_update_manifest_json_error(self, temp_project_dir):
+        exp_dir = temp_project_dir / "exp_test"
+        exp_dir.mkdir(parents=True)
+
+        with open(exp_dir / "manifest.json", "w", encoding="utf-8") as f:
+            f.write("invalid json")
+
+        manager = ExperimentManager({})
+        with pytest.raises(Exception):
+            manager.update_manifest_status(exp_dir, "completed")
+
+    @pytest.mark.unit
+    def test_load_experiment_config_malformed_yaml(self):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+            f.write(": :\n  - [\ninvalid: yaml: [")
+            temp_path = f.name
+
+        try:
+            with pytest.raises(yaml.YAMLError):
+                load_experiment_config(temp_path)
+        finally:
+            Path(temp_path).unlink()
 
 
 class TestOldFormatDeprecation:
