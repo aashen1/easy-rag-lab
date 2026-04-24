@@ -48,7 +48,10 @@ def calculate_chunk_hit_rate(
         for exp_stem, exp_index in expected_parsed:
             if exp_index == -1:
                 continue
-            if ret_stem == exp_stem and abs(ret_index - exp_index) <= adjacent_tolerance:
+            if (
+                ret_stem == exp_stem
+                and abs(ret_index - exp_index) <= adjacent_tolerance
+            ):
                 return 1.0
 
     return 0.0
@@ -93,7 +96,10 @@ def calculate_chunk_mrr(
         for exp_stem, exp_index in expected_parsed:
             if exp_index == -1:
                 continue
-            if ret_stem == exp_stem and abs(ret_index - exp_index) <= adjacent_tolerance:
+            if (
+                ret_stem == exp_stem
+                and abs(ret_index - exp_index) <= adjacent_tolerance
+            ):
                 return 1.0 / (i + 1)
 
     return 0.0
@@ -151,7 +157,10 @@ def calculate_chunk_ndcg(
         for exp_stem, exp_index in expected_parsed:
             if exp_index == -1:
                 continue
-            if ret_stem == exp_stem and abs(ret_index - exp_index) <= adjacent_tolerance:
+            if (
+                ret_stem == exp_stem
+                and abs(ret_index - exp_index) <= adjacent_tolerance
+            ):
                 return 1
         return 0
 

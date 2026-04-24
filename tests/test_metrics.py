@@ -32,12 +32,16 @@ from src.exceptions import EvaluationError
 
 @pytest.mark.unit
 class TestNormalizeSource:
-
     def test_md_path_with_directory(self):
-        assert normalize_source("annual_report/贵州茅台2023年年度报告.md") == "贵州茅台2023年年度报告"
+        assert (
+            normalize_source("annual_report/贵州茅台2023年年度报告.md")
+            == "贵州茅台2023年年度报告"
+        )
 
     def test_pdf_filename(self):
-        assert normalize_source("贵州茅台2023年年度报告.pdf") == "贵州茅台2023年年度报告"
+        assert (
+            normalize_source("贵州茅台2023年年度报告.pdf") == "贵州茅台2023年年度报告"
+        )
 
     def test_plain_name_no_extension(self):
         assert normalize_source("贵州茅台2023年年度报告") == "贵州茅台2023年年度报告"
@@ -46,7 +50,10 @@ class TestNormalizeSource:
         assert normalize_source("a/b/c/report.md") == "report"
 
     def test_dot_in_stem(self):
-        assert normalize_source("贵州茅台2023年年度报告_英文版_.pdf") == "贵州茅台2023年年度报告_英文版_"
+        assert (
+            normalize_source("贵州茅台2023年年度报告_英文版_.pdf")
+            == "贵州茅台2023年年度报告_英文版_"
+        )
 
     def test_both_formats_produce_same_stem(self):
         md_result = normalize_source("annual_report/贵州茅台2023年年度报告.md")
@@ -54,10 +61,16 @@ class TestNormalizeSource:
         assert md_result == pdf_result
 
     def test_path_with_parent_include_parent(self):
-        assert normalize_source("annual_reports/2025/贵州茅台.md", include_parent=True) == "2025/贵州茅台"
+        assert (
+            normalize_source("annual_reports/2025/贵州茅台.md", include_parent=True)
+            == "2025/贵州茅台"
+        )
 
     def test_path_with_parent_exclude_parent(self):
-        assert normalize_source("annual_reports/2025/贵州茅台.md", include_parent=False) == "贵州茅台"
+        assert (
+            normalize_source("annual_reports/2025/贵州茅台.md", include_parent=False)
+            == "贵州茅台"
+        )
 
     def test_no_parent_include_parent(self):
         assert normalize_source("贵州茅台.md", include_parent=True) == "贵州茅台"
@@ -69,10 +82,17 @@ class TestNormalizeSource:
         assert normalize_source("a/b/c/report.md", include_parent=True) == "c/report"
 
     def test_windows_backslash_normalizes_to_posix(self):
-        assert normalize_source("some\\path\\file.pdf") == normalize_source("some/path/file.pdf")
+        assert normalize_source("some\\path\\file.pdf") == normalize_source(
+            "some/path/file.pdf"
+        )
 
     def test_windows_backslash_include_parent(self):
-        assert normalize_source("annual_report\\贵州茅台2023年年度报告.md", include_parent=True) == "annual_report/贵州茅台2023年年度报告"
+        assert (
+            normalize_source(
+                "annual_report\\贵州茅台2023年年度报告.md", include_parent=True
+            )
+            == "annual_report/贵州茅台2023年年度报告"
+        )
 
     def test_mixed_separators_normalize_consistently(self):
         result_backslash = normalize_source("a\\b\\c\\report.md", include_parent=True)
@@ -168,7 +188,9 @@ class TestCalculateHitRateRecall:
     def test_partial_hit(self):
         retrieved = ["doc1", "doc2", "doc4"]
         expected = ["doc1", "doc2", "doc3"]
-        assert calculate_hit_rate(retrieved, expected, mode="recall") == pytest.approx(2 / 3)
+        assert calculate_hit_rate(retrieved, expected, mode="recall") == pytest.approx(
+            2 / 3
+        )
 
     def test_no_hit(self):
         retrieved = ["doc4", "doc5"]
@@ -188,7 +210,9 @@ class TestCalculateHitRateRecall:
     def test_duplicate_sources(self):
         retrieved = ["doc1", "doc1", "doc2", "doc2"]
         expected = ["doc1", "doc2", "doc3"]
-        assert calculate_hit_rate(retrieved, expected, mode="recall") == pytest.approx(2 / 3)
+        assert calculate_hit_rate(retrieved, expected, mode="recall") == pytest.approx(
+            2 / 3
+        )
 
     def test_cross_format_hit(self):
         retrieved = ["annual_report/贵州茅台2023年年度报告.md"]
@@ -203,9 +227,15 @@ class TestCalculateHitRateRecall:
     def test_recall_respects_k(self):
         retrieved = ["doc1", "doc3", "doc4", "doc2", "doc5"]
         expected = ["doc1", "doc2", "doc6"]
-        assert calculate_hit_rate(retrieved, expected, k=3, mode="recall") == pytest.approx(1 / 3)
-        assert calculate_hit_rate(retrieved, expected, k=5, mode="recall") == pytest.approx(2 / 3)
-        assert calculate_hit_rate(retrieved, expected, k=10, mode="recall") == pytest.approx(2 / 3)
+        assert calculate_hit_rate(
+            retrieved, expected, k=3, mode="recall"
+        ) == pytest.approx(1 / 3)
+        assert calculate_hit_rate(
+            retrieved, expected, k=5, mode="recall"
+        ) == pytest.approx(2 / 3)
+        assert calculate_hit_rate(
+            retrieved, expected, k=10, mode="recall"
+        ) == pytest.approx(2 / 3)
 
 
 @pytest.mark.unit
@@ -215,13 +245,14 @@ class TestCalculateHitRateValidation:
     def test_invalid_mode_raises_error(self):
         retrieved = ["doc1"]
         expected = ["doc1"]
-        with pytest.raises(EvaluationError, match="mode must be 'standard' or 'recall'"):
+        with pytest.raises(
+            EvaluationError, match="mode must be 'standard' or 'recall'"
+        ):
             calculate_hit_rate(retrieved, expected, mode="invalid")
 
 
 @pytest.mark.unit
 class TestCalculateMRR:
-
     def test_first_position_hit(self):
         retrieved = ["doc1", "doc2", "doc3"]
         expected = ["doc1"]
@@ -306,7 +337,6 @@ class TestCalculateMRR:
 
 @pytest.mark.unit
 class TestCalculateNDCG:
-
     def test_perfect_ranking(self):
         retrieved = ["doc1", "doc2", "doc3"]
         expected = ["doc1", "doc2", "doc3"]
@@ -324,7 +354,11 @@ class TestCalculateNDCG:
         expected = ["doc1", "doc2", "doc3"]
         score = calculate_ndcg(retrieved, expected)
         dcg = (2**1 - 1) / math.log2(2) + (2**1 - 1) / math.log2(4)
-        ideal_dcg = (2**1 - 1) / math.log2(2) + (2**1 - 1) / math.log2(3) + (2**1 - 1) / math.log2(4)
+        ideal_dcg = (
+            (2**1 - 1) / math.log2(2)
+            + (2**1 - 1) / math.log2(3)
+            + (2**1 - 1) / math.log2(4)
+        )
         assert score == pytest.approx(dcg / ideal_dcg)
 
     def test_k_truncation(self):
@@ -427,7 +461,6 @@ class TestCalculateNDCGDeduplication:
 
 @pytest.mark.unit
 class TestCalculateNDCGMultilevel:
-
     def test_binary_relevance_backward_compatibility(self):
         retrieved = ["doc1", "doc2", "doc3"]
         expected = ["doc1", "doc2", "doc3"]
@@ -455,7 +488,11 @@ class TestCalculateNDCGMultilevel:
         rel_scores = {"doc1": 3, "doc2": 2, "doc3": 1}
         score = calculate_ndcg(retrieved, expected, relevance_scores=rel_scores)
         dcg = (2**3 - 1) / math.log2(2) + (2**2 - 1) / math.log2(4)
-        ideal_dcg = (2**3 - 1) / math.log2(2) + (2**2 - 1) / math.log2(3) + (2**1 - 1) / math.log2(4)
+        ideal_dcg = (
+            (2**3 - 1) / math.log2(2)
+            + (2**2 - 1) / math.log2(3)
+            + (2**1 - 1) / math.log2(4)
+        )
         assert score == pytest.approx(dcg / ideal_dcg)
 
     def test_multilevel_zero_relevance(self):
@@ -528,30 +565,36 @@ class TestParseRelevancyResponse:
         assert result["overall_score"] == 0.85
 
     def test_parse_json_with_surrounding_text(self):
-        response_text = '这是一些额外的文本 {"direct_relevance": 3, "overall_score": 0.5} 更多文本'
+        response_text = (
+            '这是一些额外的文本 {"direct_relevance": 3, "overall_score": 0.5} 更多文本'
+        )
         result = _parse_relevancy_response(response_text)
         assert result["direct_relevance"] == 3
         assert result["overall_score"] == 0.5
 
     def test_parse_json_with_newlines(self):
-        response_text = '''{
+        response_text = """{
             "direct_relevance": 4,
             "information_sufficiency": 4,
             "conciseness": 3,
             "overall_score": 0.7
-        }'''
+        }"""
         result = _parse_relevancy_response(response_text)
         assert result["direct_relevance"] == 4
         assert result["overall_score"] == 0.7
 
     def test_parse_invalid_json_raises_error(self):
         response_text = "这不是有效的JSON"
-        with pytest.raises(EvaluationError, match="Failed to parse LLM response as JSON"):
+        with pytest.raises(
+            EvaluationError, match="Failed to parse LLM response as JSON"
+        ):
             _parse_relevancy_response(response_text)
 
     def test_parse_partial_json(self):
         response_text = '{"direct_relevance": 5, "information_sufficiency": 5'
-        with pytest.raises(EvaluationError, match="Failed to parse LLM response as JSON"):
+        with pytest.raises(
+            EvaluationError, match="Failed to parse LLM response as JSON"
+        ):
             _parse_relevancy_response(response_text)
 
 
@@ -560,35 +603,31 @@ class TestCalculateAnswerRelevancy:
     """Tests for calculate_answer_relevancy function."""
 
     def test_empty_question_raises_error(self):
-        with pytest.raises(EvaluationError, match="Question must be a non-empty string"):
+        with pytest.raises(
+            EvaluationError, match="Question must be a non-empty string"
+        ):
             calculate_answer_relevancy(
-                question="",
-                answer="这是一个回答",
-                api_key="test-key"
+                question="", answer="这是一个回答", api_key="test-key"
             )
 
     def test_empty_answer_raises_error(self):
         with pytest.raises(EvaluationError, match="Answer must be a non-empty string"):
             calculate_answer_relevancy(
-                question="这是一个问题",
-                answer="",
-                api_key="test-key"
+                question="这是一个问题", answer="", api_key="test-key"
             )
 
     def test_none_question_raises_error(self):
-        with pytest.raises(EvaluationError, match="Question must be a non-empty string"):
+        with pytest.raises(
+            EvaluationError, match="Question must be a non-empty string"
+        ):
             calculate_answer_relevancy(
-                question=None,
-                answer="这是一个回答",
-                api_key="test-key"
+                question=None, answer="这是一个回答", api_key="test-key"
             )
 
     def test_none_answer_raises_error(self):
         with pytest.raises(EvaluationError, match="Answer must be a non-empty string"):
             calculate_answer_relevancy(
-                question="这是一个问题",
-                answer=None,
-                api_key="test-key"
+                question="这是一个问题", answer=None, api_key="test-key"
             )
 
     @patch("eval.metrics.generation._create_llm_client")
@@ -598,13 +637,15 @@ class TestCalculateAnswerRelevancy:
 
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
-        mock_message.content[0].text = '{"direct_relevance": 5, "information_sufficiency": 5, "conciseness": 5, "overall_score": 1.0}'
+        mock_message.content[
+            0
+        ].text = '{"direct_relevance": 5, "information_sufficiency": 5, "conciseness": 5, "overall_score": 1.0}'
         mock_client.messages.create.return_value = mock_message
 
         score = calculate_answer_relevancy(
             question="贵州茅台2023年营收是多少？",
             answer="贵州茅台2023年实现营业收入1505.60亿元，同比增长18.04%。",
-            api_key="test-api-key"
+            api_key="test-api-key",
         )
 
         assert score == 1.0
@@ -617,13 +658,15 @@ class TestCalculateAnswerRelevancy:
 
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
-        mock_message.content[0].text = '{"direct_relevance": 1, "information_sufficiency": 1, "conciseness": 2, "overall_score": 0.1}'
+        mock_message.content[
+            0
+        ].text = '{"direct_relevance": 1, "information_sufficiency": 1, "conciseness": 2, "overall_score": 0.1}'
         mock_client.messages.create.return_value = mock_message
 
         score = calculate_answer_relevancy(
             question="贵州茅台2023年营收是多少？",
             answer="今天天气很好，适合出去玩。",
-            api_key="test-api-key"
+            api_key="test-api-key",
         )
 
         assert score == 0.1
@@ -635,13 +678,17 @@ class TestCalculateAnswerRelevancy:
 
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
-        mock_message.content[0].text = '{"direct_relevance": 4, "information_sufficiency": 4, "conciseness": 3}'
+        mock_message.content[
+            0
+        ].text = (
+            '{"direct_relevance": 4, "information_sufficiency": 4, "conciseness": 3}'
+        )
         mock_client.messages.create.return_value = mock_message
 
         score = calculate_answer_relevancy(
             question="贵州茅台2023年营收是多少？",
             answer="贵州茅台2023年营收约1500亿元左右。",
-            api_key="test-api-key"
+            api_key="test-api-key",
         )
 
         expected_score = (4 + 4 + 3) / 15.0
@@ -654,13 +701,13 @@ class TestCalculateAnswerRelevancy:
 
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
-        mock_message.content[0].text = '{"direct_relevance": 5, "information_sufficiency": 5, "conciseness": 5, "overall_score": 1.5}'
+        mock_message.content[
+            0
+        ].text = '{"direct_relevance": 5, "information_sufficiency": 5, "conciseness": 5, "overall_score": 1.5}'
         mock_client.messages.create.return_value = mock_message
 
         score = calculate_answer_relevancy(
-            question="问题",
-            answer="回答",
-            api_key="test-api-key"
+            question="问题", answer="回答", api_key="test-api-key"
         )
 
         assert score == 1.0
@@ -672,13 +719,13 @@ class TestCalculateAnswerRelevancy:
 
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
-        mock_message.content[0].text = '{"direct_relevance": 1, "information_sufficiency": 1, "conciseness": 1, "overall_score": -0.5}'
+        mock_message.content[
+            0
+        ].text = '{"direct_relevance": 1, "information_sufficiency": 1, "conciseness": 1, "overall_score": -0.5}'
         mock_client.messages.create.return_value = mock_message
 
         score = calculate_answer_relevancy(
-            question="问题",
-            answer="回答",
-            api_key="test-api-key"
+            question="问题", answer="回答", api_key="test-api-key"
         )
 
         assert score == 0.0
@@ -689,11 +736,11 @@ class TestCalculateAnswerRelevancy:
         mock_create_client.return_value = mock_client
         mock_client.messages.create.side_effect = Exception("API Error")
 
-        with pytest.raises(EvaluationError, match="Failed to calculate answer relevancy"):
+        with pytest.raises(
+            EvaluationError, match="Failed to calculate answer relevancy"
+        ):
             calculate_answer_relevancy(
-                question="问题",
-                answer="回答",
-                api_key="test-api-key"
+                question="问题", answer="回答", api_key="test-api-key"
             )
 
     @patch("eval.metrics.generation._create_llm_client")
@@ -703,7 +750,9 @@ class TestCalculateAnswerRelevancy:
 
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
-        mock_message.content[0].text = '{"direct_relevance": 5, "information_sufficiency": 5, "conciseness": 5, "overall_score": 1.0}'
+        mock_message.content[
+            0
+        ].text = '{"direct_relevance": 5, "information_sufficiency": 5, "conciseness": 5, "overall_score": 1.0}'
         mock_client.messages.create.return_value = mock_message
 
         calculate_answer_relevancy(
@@ -713,7 +762,7 @@ class TestCalculateAnswerRelevancy:
             base_url="https://custom.api.url/anthropic",
             model_name="custom-model",
             max_tokens=1024,
-            temperature=0.5
+            temperature=0.5,
         )
 
         call_kwargs = mock_client.messages.create.call_args[1]
@@ -732,8 +781,7 @@ class TestCreateLLMClient:
         mock_create_llm_client.return_value = mock_client
 
         client = _create_llm_client(
-            api_key="test-api-key",
-            base_url="https://api.test.com/anthropic"
+            api_key="test-api-key", base_url="https://api.test.com/anthropic"
         )
 
         assert client == mock_client
@@ -744,10 +792,7 @@ class TestCreateLLMClient:
         mock_client = MagicMock()
         mock_create_llm_client.return_value = mock_client
 
-        _create_llm_client(
-            api_key="test-key",
-            base_url="https://custom.url/api"
-        )
+        _create_llm_client(api_key="test-key", base_url="https://custom.url/api")
 
         mock_create_llm_client.assert_called_once()
         call_kwargs = mock_create_llm_client.call_args[1]
@@ -766,9 +811,7 @@ class TestExtractStatements:
         mock_client.messages.create.return_value = mock_message
 
         statements = _extract_statements(
-            client=mock_client,
-            answer="这是一个测试回答",
-            model_name="test-model"
+            client=mock_client, answer="这是一个测试回答", model_name="test-model"
         )
 
         assert len(statements) == 3
@@ -784,9 +827,7 @@ class TestExtractStatements:
         mock_client.messages.create.return_value = mock_message
 
         statements = _extract_statements(
-            client=mock_client,
-            answer="这是一个测试回答",
-            model_name="test-model"
+            client=mock_client, answer="这是一个测试回答", model_name="test-model"
         )
 
         assert len(statements) == 0
@@ -799,9 +840,7 @@ class TestExtractStatements:
         mock_client.messages.create.return_value = mock_message
 
         statements = _extract_statements(
-            client=mock_client,
-            answer="测试回答",
-            model_name="test-model"
+            client=mock_client, answer="测试回答", model_name="test-model"
         )
 
         assert len(statements) == 1
@@ -815,9 +854,7 @@ class TestExtractStatements:
         mock_client.messages.create.return_value = mock_message
 
         statements = _extract_statements(
-            client=mock_client,
-            answer="测试回答",
-            model_name="test-model"
+            client=mock_client, answer="测试回答", model_name="test-model"
         )
 
         assert statements == []
@@ -828,9 +865,7 @@ class TestExtractStatements:
 
         with pytest.raises(EvaluationError, match="Failed to extract statements"):
             _extract_statements(
-                client=mock_client,
-                answer="测试回答",
-                model_name="test-model"
+                client=mock_client, answer="测试回答", model_name="test-model"
             )
 
 
@@ -842,19 +877,19 @@ class TestVerifyStatements:
         mock_client = MagicMock()
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
-        mock_message.content[0].text = '''{
+        mock_message.content[0].text = """{
             "verdict": [
                 {"statement": "陈述1", "verdict": 1},
                 {"statement": "陈述2", "verdict": 1}
             ]
-        }'''
+        }"""
         mock_client.messages.create.return_value = mock_message
 
         verdicts = _verify_statements(
             client=mock_client,
             statements=["陈述1", "陈述2"],
             contexts=["上下文1", "上下文2"],
-            model_name="test-model"
+            model_name="test-model",
         )
 
         assert len(verdicts) == 2
@@ -865,19 +900,19 @@ class TestVerifyStatements:
         mock_client = MagicMock()
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
-        mock_message.content[0].text = '''{
+        mock_message.content[0].text = """{
             "verdict": [
                 {"statement": "陈述1", "verdict": 1},
                 {"statement": "陈述2", "verdict": 0}
             ]
-        }'''
+        }"""
         mock_client.messages.create.return_value = mock_message
 
         verdicts = _verify_statements(
             client=mock_client,
             statements=["陈述1", "陈述2"],
             contexts=["上下文1"],
-            model_name="test-model"
+            model_name="test-model",
         )
 
         assert len(verdicts) == 2
@@ -888,19 +923,19 @@ class TestVerifyStatements:
         mock_client = MagicMock()
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
-        mock_message.content[0].text = '''{
+        mock_message.content[0].text = """{
             "verdict": [
                 {"statement": "陈述1", "verdict": 0},
                 {"statement": "陈述2", "verdict": 0}
             ]
-        }'''
+        }"""
         mock_client.messages.create.return_value = mock_message
 
         verdicts = _verify_statements(
             client=mock_client,
             statements=["陈述1", "陈述2"],
             contexts=["无关上下文"],
-            model_name="test-model"
+            model_name="test-model",
         )
 
         assert len(verdicts) == 2
@@ -917,7 +952,7 @@ class TestVerifyStatements:
             client=mock_client,
             statements=["陈述1"],
             contexts=["上下文1"],
-            model_name="test-model"
+            model_name="test-model",
         )
 
         assert verdicts == []
@@ -931,7 +966,7 @@ class TestVerifyStatements:
                 client=mock_client,
                 statements=["陈述1"],
                 contexts=["上下文1"],
-                model_name="test-model"
+                model_name="test-model",
             )
 
 
@@ -941,35 +976,23 @@ class TestCalculateFaithfulness:
 
     def test_empty_answer_raises_error(self):
         with pytest.raises(EvaluationError, match="Answer must be a non-empty string"):
-            calculate_faithfulness(
-                answer="",
-                contexts=["上下文"],
-                api_key="test-key"
-            )
+            calculate_faithfulness(answer="", contexts=["上下文"], api_key="test-key")
 
     def test_none_answer_raises_error(self):
         with pytest.raises(EvaluationError, match="Answer must be a non-empty string"):
-            calculate_faithfulness(
-                answer=None,
-                contexts=["上下文"],
-                api_key="test-key"
-            )
+            calculate_faithfulness(answer=None, contexts=["上下文"], api_key="test-key")
 
     def test_empty_contexts_returns_zero(self):
-        with patch("eval.metrics.generation._create_llm_client") as mock_create_client:
+        with patch("eval.metrics.generation._create_llm_client"):
             score = calculate_faithfulness(
-                answer="这是一个回答",
-                contexts=[],
-                api_key="test-key"
+                answer="这是一个回答", contexts=[], api_key="test-key"
             )
             assert score == 0.0
 
     def test_whitespace_only_answer_returns_zero(self):
-        with patch("eval.metrics.generation._create_llm_client") as mock_create_client:
+        with patch("eval.metrics.generation._create_llm_client"):
             score = calculate_faithfulness(
-                answer="   \n\t  ",
-                contexts=["上下文"],
-                api_key="test-key"
+                answer="   \n\t  ", contexts=["上下文"], api_key="test-key"
             )
             assert score == 0.0
 
@@ -989,8 +1012,10 @@ class TestCalculateFaithfulness:
 
         score = calculate_faithfulness(
             answer="贵州茅台2023年营业收入为1505.60亿元，同比增长18.04%。",
-            contexts=["贵州茅台2023年年度报告显示，公司实现营业收入1505.60亿元，同比增长18.04%。"],
-            api_key="test-api-key"
+            contexts=[
+                "贵州茅台2023年年度报告显示，公司实现营业收入1505.60亿元，同比增长18.04%。"
+            ],
+            api_key="test-api-key",
         )
 
         assert score == 1.0
@@ -1012,7 +1037,7 @@ class TestCalculateFaithfulness:
         score = calculate_faithfulness(
             answer="回答包含部分幻觉内容。",
             contexts=["上下文信息"],
-            api_key="test-api-key"
+            api_key="test-api-key",
         )
 
         assert score == pytest.approx(2 / 3)
@@ -1033,7 +1058,7 @@ class TestCalculateFaithfulness:
         score = calculate_faithfulness(
             answer="完全编造的回答内容。",
             contexts=["无关的上下文信息。"],
-            api_key="test-api-key"
+            api_key="test-api-key",
         )
 
         assert score == 0.0
@@ -1047,9 +1072,7 @@ class TestCalculateFaithfulness:
         mock_extract.return_value = []
 
         score = calculate_faithfulness(
-            answer="问候语",
-            contexts=["上下文"],
-            api_key="test-api-key"
+            answer="问候语", contexts=["上下文"], api_key="test-api-key"
         )
 
         assert score == 0.0
@@ -1065,9 +1088,7 @@ class TestCalculateFaithfulness:
         mock_verify.return_value = []
 
         score = calculate_faithfulness(
-            answer="回答",
-            contexts=["上下文"],
-            api_key="test-api-key"
+            answer="回答", contexts=["上下文"], api_key="test-api-key"
         )
 
         assert score == 0.0
@@ -1078,9 +1099,7 @@ class TestCalculateFaithfulness:
 
         with pytest.raises(EvaluationError, match="Failed to calculate faithfulness"):
             calculate_faithfulness(
-                answer="回答",
-                contexts=["上下文"],
-                api_key="test-api-key"
+                answer="回答", contexts=["上下文"], api_key="test-api-key"
             )
 
     @patch("eval.metrics.generation._create_llm_client")
@@ -1099,16 +1118,18 @@ class TestCalculateFaithfulness:
             contexts=["上下文"],
             api_key="test-api-key",
             base_url="https://custom.api.url/anthropic",
-            model_name="custom-model"
+            model_name="custom-model",
         )
 
         mock_create_client.assert_called_once_with(
-            api_key="test-api-key",
-            base_url="https://custom.api.url/anthropic"
+            api_key="test-api-key", base_url="https://custom.api.url/anthropic"
         )
         mock_extract.assert_called_once_with(
-            mock_client, "回答", "custom-model",
-            max_tokens=1024, temperature=0.0,
+            mock_client,
+            "回答",
+            "custom-model",
+            max_tokens=1024,
+            temperature=0.0,
         )
 
     @patch("eval.metrics.generation._create_llm_client")
@@ -1125,9 +1146,7 @@ class TestCalculateFaithfulness:
         ]
 
         score = calculate_faithfulness(
-            answer="回答",
-            contexts=["上下文"],
-            api_key="test-api-key"
+            answer="回答", contexts=["上下文"], api_key="test-api-key"
         )
 
         assert score == 0.5
@@ -1139,6 +1158,7 @@ class TestSplitIntoSentences:
 
     def test_chinese_sentences(self):
         from eval.metrics import _split_into_sentences
+
         text = "这是第一句。这是第二句！这是第三句？"
         sentences = _split_into_sentences(text)
         assert len(sentences) == 3
@@ -1148,23 +1168,27 @@ class TestSplitIntoSentences:
 
     def test_english_sentences(self):
         from eval.metrics import _split_into_sentences
+
         text = "First sentence. Second sentence! Third sentence?"
         sentences = _split_into_sentences(text)
         assert len(sentences) == 3
 
     def test_mixed_sentences(self):
         from eval.metrics import _split_into_sentences
+
         text = "中文句子。English sentence. 混合内容！"
         sentences = _split_into_sentences(text)
         assert len(sentences) == 3
 
     def test_empty_text(self):
         from eval.metrics import _split_into_sentences
+
         sentences = _split_into_sentences("")
         assert sentences == []
 
     def test_no_punctuation(self):
         from eval.metrics import _split_into_sentences
+
         text = "没有标点的文本"
         sentences = _split_into_sentences(text)
         assert len(sentences) == 1
@@ -1186,13 +1210,14 @@ class TestJudgeContextRelevance:
         mock_client.messages.create.return_value = mock_message
 
         from eval.metrics import _judge_context_relevance
+
         result = _judge_context_relevance(
             question="营收是多少？",
             expected_output="营收是100万元",
             context="公司2023年营收为100万元",
             api_key="test-key",
             base_url="https://api.test.com",
-            model_name="test-model"
+            model_name="test-model",
         )
 
         assert result is True
@@ -1208,13 +1233,14 @@ class TestJudgeContextRelevance:
         mock_client.messages.create.return_value = mock_message
 
         from eval.metrics import _judge_context_relevance
+
         result = _judge_context_relevance(
             question="营收是多少？",
             expected_output="营收是100万元",
             context="今天天气很好",
             api_key="test-key",
             base_url="https://api.test.com",
-            model_name="test-model"
+            model_name="test-model",
         )
 
         assert result is False
@@ -1226,13 +1252,14 @@ class TestJudgeContextRelevance:
         mock_client.messages.create.side_effect = Exception("API Error")
 
         from eval.metrics import _judge_context_relevance
+
         result = _judge_context_relevance(
             question="问题",
             expected_output="答案",
             context="上下文",
             api_key="test-key",
             base_url="https://api.test.com",
-            model_name="test-model"
+            model_name="test-model",
         )
 
         assert result is False
@@ -1244,11 +1271,12 @@ class TestCalculateContextPrecision:
 
     def test_empty_context_returns_zero(self):
         from eval.metrics import calculate_context_precision
+
         score = calculate_context_precision(
             question="问题",
             expected_output="答案",
             retrieval_context=[],
-            api_key="test-key"
+            api_key="test-key",
         )
         assert score == 0.0
 
@@ -1257,11 +1285,12 @@ class TestCalculateContextPrecision:
         mock_judge.return_value = True
 
         from eval.metrics import calculate_context_precision
+
         score = calculate_context_precision(
             question="问题",
             expected_output="答案",
             retrieval_context=["上下文1", "上下文2", "上下文3"],
-            api_key="test-key"
+            api_key="test-key",
         )
 
         assert score == 1.0
@@ -1272,11 +1301,12 @@ class TestCalculateContextPrecision:
         mock_judge.return_value = False
 
         from eval.metrics import calculate_context_precision
+
         score = calculate_context_precision(
             question="问题",
             expected_output="答案",
             retrieval_context=["上下文1", "上下文2", "上下文3"],
-            api_key="test-key"
+            api_key="test-key",
         )
 
         assert score == 0.0
@@ -1286,11 +1316,12 @@ class TestCalculateContextPrecision:
         mock_judge.side_effect = [True, False, True]
 
         from eval.metrics import calculate_context_precision
+
         score = calculate_context_precision(
             question="问题",
             expected_output="答案",
             retrieval_context=["上下文1", "上下文2", "上下文3"],
-            api_key="test-key"
+            api_key="test-key",
         )
 
         assert 0.0 < score < 1.0
@@ -1300,14 +1331,15 @@ class TestCalculateContextPrecision:
         mock_judge.side_effect = [True, False, True]
 
         from eval.metrics import calculate_context_precision
+
         score = calculate_context_precision(
             question="问题",
             expected_output="答案",
             retrieval_context=["上下文1", "上下文2", "上下文3"],
-            api_key="test-key"
+            api_key="test-key",
         )
 
-        wcp_sum = (1/1) + (2/3)
+        wcp_sum = (1 / 1) + (2 / 3)
         expected = wcp_sum / 2
         assert score == pytest.approx(expected)
 
@@ -1327,12 +1359,13 @@ class TestCanInferFromContext:
         mock_client.messages.create.return_value = mock_message
 
         from eval.metrics import _can_infer_from_context
+
         result = _can_infer_from_context(
             sentence="营收是100万元",
             context="公司2023年营收为100万元",
             api_key="test-key",
             base_url="https://api.test.com",
-            model_name="test-model"
+            model_name="test-model",
         )
 
         assert result is True
@@ -1348,12 +1381,13 @@ class TestCanInferFromContext:
         mock_client.messages.create.return_value = mock_message
 
         from eval.metrics import _can_infer_from_context
+
         result = _can_infer_from_context(
             sentence="利润是50万元",
             context="营收是100万元",
             api_key="test-key",
             base_url="https://api.test.com",
-            model_name="test-model"
+            model_name="test-model",
         )
 
         assert result is False
@@ -1365,21 +1399,23 @@ class TestCalculateContextRecall:
 
     def test_empty_ground_truth_returns_zero(self):
         from eval.metrics import calculate_context_recall
+
         score = calculate_context_recall(
             question="问题",
             ground_truth="",
             retrieval_context=["上下文"],
-            api_key="test-key"
+            api_key="test-key",
         )
         assert score == 0.0
 
     def test_empty_context_returns_zero(self):
         from eval.metrics import calculate_context_recall
+
         score = calculate_context_recall(
             question="问题",
             ground_truth="答案",
             retrieval_context=[],
-            api_key="test-key"
+            api_key="test-key",
         )
         assert score == 0.0
 
@@ -1390,11 +1426,12 @@ class TestCalculateContextRecall:
         mock_infer.return_value = True
 
         from eval.metrics import calculate_context_recall
+
         score = calculate_context_recall(
             question="问题",
             ground_truth="句子1。句子2。句子3。",
             retrieval_context=["上下文"],
-            api_key="test-key"
+            api_key="test-key",
         )
 
         assert score == 1.0
@@ -1407,11 +1444,12 @@ class TestCalculateContextRecall:
         mock_infer.return_value = False
 
         from eval.metrics import calculate_context_recall
+
         score = calculate_context_recall(
             question="问题",
             ground_truth="句子1。句子2。",
             retrieval_context=["上下文"],
-            api_key="test-key"
+            api_key="test-key",
         )
 
         assert score == 0.0
@@ -1423,19 +1461,19 @@ class TestCalculateContextRecall:
         mock_infer.side_effect = [True, False, True]
 
         from eval.metrics import calculate_context_recall
+
         score = calculate_context_recall(
             question="问题",
             ground_truth="句子1。句子2。句子3。",
             retrieval_context=["上下文"],
-            api_key="test-key"
+            api_key="test-key",
         )
 
-        assert score == pytest.approx(2/3)
+        assert score == pytest.approx(2 / 3)
 
 
 @pytest.mark.unit
 class TestChunkHitRate:
-
     def test_exact_match(self):
         retrieved = ["doc1::chunk::000", "doc1::chunk::001"]
         expected = ["doc1::chunk::000"]
@@ -1444,12 +1482,16 @@ class TestChunkHitRate:
     def test_adjacent_match(self):
         retrieved = ["doc1::chunk::001"]
         expected = ["doc1::chunk::000"]
-        assert calculate_chunk_hit_rate(retrieved, expected, adjacent_tolerance=1) == 1.0
+        assert (
+            calculate_chunk_hit_rate(retrieved, expected, adjacent_tolerance=1) == 1.0
+        )
 
     def test_no_match(self):
         retrieved = ["doc1::chunk::005"]
         expected = ["doc1::chunk::000"]
-        assert calculate_chunk_hit_rate(retrieved, expected, adjacent_tolerance=1) == 0.0
+        assert (
+            calculate_chunk_hit_rate(retrieved, expected, adjacent_tolerance=1) == 0.0
+        )
 
     def test_different_document(self):
         retrieved = ["doc2::chunk::000"]
@@ -1469,7 +1511,9 @@ class TestChunkHitRate:
     def test_multiple_expected_one_adjacent_match(self):
         retrieved = ["doc1::chunk::001"]
         expected = ["doc1::chunk::000", "doc1::chunk::005"]
-        assert calculate_chunk_hit_rate(retrieved, expected, adjacent_tolerance=1) == 1.0
+        assert (
+            calculate_chunk_hit_rate(retrieved, expected, adjacent_tolerance=1) == 1.0
+        )
 
     def test_k_parameter(self):
         retrieved = ["doc1::chunk::010", "doc1::chunk::000"]
@@ -1479,12 +1523,13 @@ class TestChunkHitRate:
     def test_zero_tolerance(self):
         retrieved = ["doc1::chunk::001"]
         expected = ["doc1::chunk::000"]
-        assert calculate_chunk_hit_rate(retrieved, expected, adjacent_tolerance=0) == 0.0
+        assert (
+            calculate_chunk_hit_rate(retrieved, expected, adjacent_tolerance=0) == 0.0
+        )
 
 
 @pytest.mark.unit
 class TestChunkMRR:
-
     def test_exact_match_at_position_1(self):
         retrieved = ["doc1::chunk::000", "doc2::chunk::000"]
         expected = ["doc1::chunk::000"]
@@ -1508,20 +1553,23 @@ class TestChunkMRR:
 
 @pytest.mark.unit
 class TestChunkNDCG:
-
     def test_exact_match_relevance_2(self):
         retrieved = ["doc1::chunk::000", "doc2::chunk::000"]
         expected = ["doc1::chunk::000"]
         dcg = (2**2 - 1) / math.log2(2)
         ideal_dcg = (2**2 - 1) / math.log2(2)
-        assert calculate_chunk_ndcg(retrieved, expected) == pytest.approx(dcg / ideal_dcg)
+        assert calculate_chunk_ndcg(retrieved, expected) == pytest.approx(
+            dcg / ideal_dcg
+        )
 
     def test_adjacent_match_relevance_1(self):
         retrieved = ["doc1::chunk::001"]
         expected = ["doc1::chunk::000"]
         dcg = (2**1 - 1) / math.log2(2)
         ideal_dcg = (2**2 - 1) / math.log2(2)
-        assert calculate_chunk_ndcg(retrieved, expected) == pytest.approx(dcg / ideal_dcg)
+        assert calculate_chunk_ndcg(retrieved, expected) == pytest.approx(
+            dcg / ideal_dcg
+        )
 
     def test_no_match(self):
         retrieved = ["doc2::chunk::000", "doc2::chunk::001"]
@@ -1533,12 +1581,13 @@ class TestChunkNDCG:
         expected = ["doc1::chunk::000"]
         dcg = (2**2 - 1) / math.log2(2) + (2**1 - 1) / math.log2(3)
         ideal_dcg = (2**2 - 1) / math.log2(2)
-        assert calculate_chunk_ndcg(retrieved, expected) == pytest.approx(min(1.0, dcg / ideal_dcg))
+        assert calculate_chunk_ndcg(retrieved, expected) == pytest.approx(
+            min(1.0, dcg / ideal_dcg)
+        )
 
 
 @pytest.mark.unit
 class TestFalsePositiveRate:
-
     def test_all_slots_filled(self):
         retrieved = ["doc1.md", "doc2.md", "doc3.md", "doc4.md", "doc5.md"]
         assert calculate_false_positive_rate(retrieved, k=5) == 1.0
@@ -1552,13 +1601,20 @@ class TestFalsePositiveRate:
         assert calculate_false_positive_rate(retrieved, k=5) == 0.0
 
     def test_more_results_than_k(self):
-        retrieved = ["doc1.md", "doc2.md", "doc3.md", "doc4.md", "doc5.md", "doc6.md", "doc7.md"]
+        retrieved = [
+            "doc1.md",
+            "doc2.md",
+            "doc3.md",
+            "doc4.md",
+            "doc5.md",
+            "doc6.md",
+            "doc7.md",
+        ]
         assert calculate_false_positive_rate(retrieved, k=5) == 1.0
 
 
 @pytest.mark.unit
 class TestDeduplicateByDocument:
-
     def test_all_same_document(self):
         sources = ["doc1.md", "doc1.md", "doc1.md"]
         assert deduplicate_by_document(sources) == [0]
@@ -1578,7 +1634,6 @@ class TestDeduplicateByDocument:
 
 @pytest.mark.unit
 class TestDedupMetrics:
-
     def test_dedup_hit_rate_same_doc_repeated(self):
         sources = ["doc1.md", "doc1.md", "doc1.md", "doc1.md", "doc1.md"]
         expected = ["doc1.md"]
@@ -1627,7 +1682,6 @@ class TestDedupMetrics:
 
 @pytest.mark.unit
 class TestNormalizeSourceWithEquivalence:
-
     def test_no_equivalence_groups_returns_stem(self):
         result = normalize_source_with_equivalence(
             "annual_report/贵州茅台2023年年度报告.md"
@@ -1771,7 +1825,6 @@ class TestNormalizeSourceWithEquivalence:
 
 @pytest.mark.unit
 class TestEquivalenceGroupDocumentMatching:
-
     def test_annual_report_vs_summary_hit_rate(self):
         groups = {
             "中国建筑2023年年度报告": [
@@ -1850,7 +1903,6 @@ class TestEquivalenceGroupDocumentMatching:
 
 @pytest.mark.unit
 class TestRetrievalDiversity:
-
     def test_all_same_document(self):
         sources = [
             "reports/doc_a.pdf",
@@ -1903,7 +1955,6 @@ class TestRetrievalDiversity:
 
 @pytest.mark.unit
 class TestHallucinationRate:
-
     def test_no_hallucination(self):
         scores = [1.0, 0.9, 0.8, 0.7, 0.6]
         assert calculate_hallucination_rate(scores) == pytest.approx(0.0)
@@ -1918,7 +1969,9 @@ class TestHallucinationRate:
 
     def test_custom_threshold(self):
         scores = [0.9, 0.7, 0.6]
-        assert calculate_hallucination_rate(scores, threshold=0.8) == pytest.approx(2 / 3)
+        assert calculate_hallucination_rate(scores, threshold=0.8) == pytest.approx(
+            2 / 3
+        )
 
     def test_empty_scores(self):
         assert calculate_hallucination_rate([]) == 0.0
@@ -1951,12 +2004,14 @@ class TestHallucinationRate:
 
 @pytest.mark.unit
 class TestParseChunkId:
-
     def test_new_format_parsing(self):
         assert _parse_chunk_id("doc1::chunk::003") == ("doc1", 3)
 
     def test_new_format_with_underscores_in_name(self):
-        assert _parse_chunk_id("贵州茅台_英文版_::chunk::005") == ("贵州茅台_英文版_", 5)
+        assert _parse_chunk_id("贵州茅台_英文版_::chunk::005") == (
+            "贵州茅台_英文版_",
+            5,
+        )
 
     def test_old_format_backward_compat(self):
         assert _parse_chunk_id("doc1_003") == ("doc1", 3)
@@ -1973,7 +2028,6 @@ class TestParseChunkId:
 
 @pytest.mark.unit
 class TestEquivalenceGroupExactMatchPriority:
-
     def test_exact_match_still_works_with_equivalence_groups(self):
         groups = {
             "中国建筑2023年年度报告": [
@@ -2034,6 +2088,3 @@ class TestEquivalenceGroupExactMatchPriority:
             for s in ["贵州茅台2023年年度报告.pdf"]
         ]
         assert calculate_hit_rate(retrieved, expected) == 0.0
-
-
-

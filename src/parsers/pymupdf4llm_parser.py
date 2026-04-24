@@ -28,8 +28,7 @@ class PyMuPDF4LLMParser(BaseParser):
         """
         self._config = config or {}
         self._options = {
-            k: v for k, v in self._config.items()
-            if k not in ("page_chunks",)
+            k: v for k, v in self._config.items() if k not in ("page_chunks",)
         }
 
     @property
@@ -71,29 +70,43 @@ class PyMuPDF4LLMParser(BaseParser):
         try:
             logger.info(f"Parsing PDF with pymupdf4llm: {pdf_path}")
             if page_chunks:
-                result = pymupdf4llm.to_markdown(str(pdf_file), page_chunks=True, **self._options)
+                result = pymupdf4llm.to_markdown(
+                    str(pdf_file), page_chunks=True, **self._options
+                )
                 pages = []
                 for page_data in result:
                     metadata = page_data.get("metadata", {})
                     page_number = metadata.get("page_number", len(pages) + 1)
-                    pages.append(ParsedPage(
-                        page_number=page_number,
-                        text=page_data.get("text", ""),
-                        metadata=metadata,
-                    ))
+                    pages.append(
+                        ParsedPage(
+                            page_number=page_number,
+                            text=page_data.get("text", ""),
+                            metadata=metadata,
+                        )
+                    )
                 return ParseResult(
                     pages=pages,
-                    metadata={"source": Path(pdf_path).as_posix(), "parser": self.name, "page_count": len(pages)},
+                    metadata={
+                        "source": Path(pdf_path).as_posix(),
+                        "parser": self.name,
+                        "page_count": len(pages),
+                    },
                 )
             else:
                 md_text = pymupdf4llm.to_markdown(str(pdf_file), **self._options)
                 return ParseResult(
-                    pages=[ParsedPage(
-                        page_number=1,
-                        text=md_text,
-                        metadata={"source": Path(pdf_path).as_posix()},
-                    )],
-                    metadata={"source": Path(pdf_path).as_posix(), "parser": self.name, "page_count": 1},
+                    pages=[
+                        ParsedPage(
+                            page_number=1,
+                            text=md_text,
+                            metadata={"source": Path(pdf_path).as_posix()},
+                        )
+                    ],
+                    metadata={
+                        "source": Path(pdf_path).as_posix(),
+                        "parser": self.name,
+                        "page_count": 1,
+                    },
                 )
         except Exception as e:
             error_msg = f"Failed to parse PDF {pdf_path}: {str(e)}"

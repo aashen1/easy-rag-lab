@@ -74,7 +74,9 @@ class TestHybridRetriever:
 
     def test_zero_weights_raises(self):
         vector_ret, bm25_ret = self._make_mock_retrievers()
-        with pytest.raises(RetrievalError, match="vector_weight.*bm25_weight.*must not be zero"):
+        with pytest.raises(
+            RetrievalError, match="vector_weight.*bm25_weight.*must not be zero"
+        ):
             HybridRetriever(
                 vector_retriever=vector_ret,
                 bm25_retriever=bm25_ret,

@@ -1,4 +1,3 @@
-
 from typing import Any
 
 import numpy as np
@@ -109,7 +108,11 @@ class Embedder:
         return cls._tokenizer_cache[model_name]
 
     def _encode_batch(
-        self, texts: list[str], batch_size: int, max_length: int = 512, show_progress: bool = False
+        self,
+        texts: list[str],
+        batch_size: int,
+        max_length: int = 512,
+        show_progress: bool = False,
     ) -> np.ndarray:
         """Encode a list of texts into normalized CLS embeddings in batches.
 
@@ -189,7 +192,9 @@ class Embedder:
         try:
             logger.info(f"Embedding {len(texts)} texts with batch size {batch_size}")
 
-            embeddings = self._encode_batch(texts, batch_size, show_progress=show_progress)
+            embeddings = self._encode_batch(
+                texts, batch_size, show_progress=show_progress
+            )
 
             logger.success(f"Successfully embedded {len(texts)} texts")
 

@@ -50,7 +50,11 @@ class TestGoldenSchema:
 
 class TestDistributeAcrossDocuments:
     def test_basic_distribution(self):
-        docs = [{"name": "doc_a", "content": "a"}, {"name": "doc_b", "content": "b"}, {"name": "doc_c", "content": "c"}]
+        docs = [
+            {"name": "doc_a", "content": "a"},
+            {"name": "doc_b", "content": "b"},
+            {"name": "doc_c", "content": "c"},
+        ]
         type_counts = {"single_fact": 6, "reasoning": 3}
         result = distribute_across_documents(type_counts, docs)
         total = sum(len(v) for v in result.values())
@@ -113,23 +117,48 @@ class TestValidateQuestionQuality:
         assert validate_question_quality(q) is True
 
     def test_too_short_question(self):
-        q = {"question": "啥", "answer": "100亿", "ground_truth_excerpt": "xxx", "question_type": "single_fact"}
+        q = {
+            "question": "啥",
+            "answer": "100亿",
+            "ground_truth_excerpt": "xxx",
+            "question_type": "single_fact",
+        }
         assert validate_question_quality(q) is False
 
     def test_too_long_question(self):
-        q = {"question": "x" * 201, "answer": "100亿", "ground_truth_excerpt": "xxx", "question_type": "single_fact"}
+        q = {
+            "question": "x" * 201,
+            "answer": "100亿",
+            "ground_truth_excerpt": "xxx",
+            "question_type": "single_fact",
+        }
         assert validate_question_quality(q) is False
 
     def test_academic_pattern_rejected(self):
-        q = {"question": "根据文档，营收多少？", "answer": "100亿", "ground_truth_excerpt": "xxx", "question_type": "single_fact"}
+        q = {
+            "question": "根据文档，营收多少？",
+            "answer": "100亿",
+            "ground_truth_excerpt": "xxx",
+            "question_type": "single_fact",
+        }
         assert validate_question_quality(q) is False
 
     def test_irrelevant_without_excerpt_ok(self):
-        q = {"question": "新能源汽车怎么样？", "answer": "无关", "ground_truth_excerpt": "", "question_type": "irrelevant"}
+        q = {
+            "question": "新能源汽车怎么样？",
+            "answer": "无关",
+            "ground_truth_excerpt": "",
+            "question_type": "irrelevant",
+        }
         assert validate_question_quality(q) is True
 
     def test_non_irrelevant_without_excerpt_rejected(self):
-        q = {"question": "营收多少？", "answer": "100亿", "ground_truth_excerpt": "", "question_type": "single_fact"}
+        q = {
+            "question": "营收多少？",
+            "answer": "100亿",
+            "ground_truth_excerpt": "",
+            "question_type": "single_fact",
+        }
         assert validate_question_quality(q) is False
 
 
@@ -202,30 +231,44 @@ class TestLocateSourceChunks:
         assert result == []
 
     def test_matching_chunk_found(self, tmp_path):
-        jsonl_content = json.dumps({
-            "chunk_id": "chunk_001",
-            "text": "公司2024年营收达到100亿元，同比增长15%。",
-            "metadata": {"source": "reports/doc.md", "chunk_index": 0},
-        }) + "\n"
+        jsonl_content = (
+            json.dumps(
+                {
+                    "chunk_id": "chunk_001",
+                    "text": "公司2024年营收达到100亿元，同比增长15%。",
+                    "metadata": {"source": "reports/doc.md", "chunk_index": 0},
+                }
+            )
+            + "\n"
+        )
         jsonl_file = tmp_path / "doc.jsonl"
         jsonl_file.write_text(jsonl_content, encoding="utf-8")
 
         result = locate_source_chunks(
-            "营收达到100亿元", "reports/doc.md", tmp_path,
+            "营收达到100亿元",
+            "reports/doc.md",
+            tmp_path,
         )
         assert "chunk_001" in result
 
     def test_no_matching_chunk(self, tmp_path):
-        jsonl_content = json.dumps({
-            "chunk_id": "chunk_001",
-            "text": "公司利润达到50亿元。",
-            "metadata": {"source": "reports/doc.md", "chunk_index": 0},
-        }) + "\n"
+        jsonl_content = (
+            json.dumps(
+                {
+                    "chunk_id": "chunk_001",
+                    "text": "公司利润达到50亿元。",
+                    "metadata": {"source": "reports/doc.md", "chunk_index": 0},
+                }
+            )
+            + "\n"
+        )
         jsonl_file = tmp_path / "doc.jsonl"
         jsonl_file.write_text(jsonl_content, encoding="utf-8")
 
         result = locate_source_chunks(
-            "营收达到100亿元同比增长15%", "reports/doc.md", tmp_path,
+            "营收达到100亿元同比增长15%",
+            "reports/doc.md",
+            tmp_path,
         )
         assert result == []
 
@@ -267,7 +310,9 @@ class TestTestSetManagerGolden:
                 },
             ],
         }
-        golden_file.write_text(json.dumps(test_set, ensure_ascii=False), encoding="utf-8")
+        golden_file.write_text(
+            json.dumps(test_set, ensure_ascii=False), encoding="utf-8"
+        )
 
         config = {"data_dir": str(tmp_path)}
         manager = TestSetManager(config)
@@ -296,7 +341,9 @@ class TestTestSetManagerGolden:
             "quality_metrics": {},
             "questions": [],
         }
-        golden_file.write_text(json.dumps(test_set, ensure_ascii=False), encoding="utf-8")
+        golden_file.write_text(
+            json.dumps(test_set, ensure_ascii=False), encoding="utf-8"
+        )
 
         config = {"data_dir": str(tmp_path)}
         manager = TestSetManager(config)
@@ -332,7 +379,9 @@ class TestTestSetManagerGolden:
             "quality_metrics": {},
             "questions": [],
         }
-        golden_file.write_text(json.dumps(test_set, ensure_ascii=False), encoding="utf-8")
+        golden_file.write_text(
+            json.dumps(test_set, ensure_ascii=False), encoding="utf-8"
+        )
 
         config = {"data_dir": str(tmp_path)}
         manager = TestSetManager(config)

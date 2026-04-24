@@ -148,7 +148,7 @@ def _extract_statements(
 
         response_text = message.content[0].text.strip()
 
-        json_match = re.search(r'\{[\s\S]*\}', response_text)
+        json_match = re.search(r"\{[\s\S]*\}", response_text)
         if json_match:
             result = json.loads(json_match.group())
             return result.get("statements", [])
@@ -215,8 +215,10 @@ def _verify_statements(
     Raises:
         Exception: If LLM call fails or response parsing fails.
     """
-    context_text = "\n\n".join([f"上下文 {i+1}:\n{ctx}" for i, ctx in enumerate(contexts)])
-    statements_text = "\n".join([f"{i+1}. {s}" for i, s in enumerate(statements)])
+    context_text = "\n\n".join(
+        [f"上下文 {i + 1}:\n{ctx}" for i, ctx in enumerate(contexts)]
+    )
+    statements_text = "\n".join([f"{i + 1}. {s}" for i, s in enumerate(statements)])
 
     prompt = FAITHFULNESS_VERIFICATION_PROMPT.format(
         contexts=context_text,
@@ -233,7 +235,7 @@ def _verify_statements(
 
         response_text = message.content[0].text.strip()
 
-        json_match = re.search(r'\{[\s\S]*\}', response_text)
+        json_match = re.search(r"\{[\s\S]*\}", response_text)
         if json_match:
             result = json.loads(json_match.group())
             return result.get("verdict", [])
@@ -313,17 +315,25 @@ def calculate_faithfulness(
 
     eval_cfg = _get_eval_config(config)
     base_url = base_url or eval_cfg.get("base_url", DEFAULT_EVAL_CONFIG["base_url"])
-    model_name = model_name or eval_cfg.get("model_name", DEFAULT_EVAL_CONFIG["model_name"])
+    model_name = model_name or eval_cfg.get(
+        "model_name", DEFAULT_EVAL_CONFIG["model_name"]
+    )
 
-    extract_cfg = eval_cfg.get("extract_statements", DEFAULT_EVAL_CONFIG["extract_statements"])
-    verify_cfg = eval_cfg.get("verify_statements", DEFAULT_EVAL_CONFIG["verify_statements"])
+    extract_cfg = eval_cfg.get(
+        "extract_statements", DEFAULT_EVAL_CONFIG["extract_statements"]
+    )
+    verify_cfg = eval_cfg.get(
+        "verify_statements", DEFAULT_EVAL_CONFIG["verify_statements"]
+    )
 
     try:
         client = _create_llm_client(api_key=api_key, base_url=base_url)
 
         logger.info("Extracting statements from answer")
         statements = _extract_statements(
-            client, answer, model_name,
+            client,
+            answer,
+            model_name,
             max_tokens=extract_cfg.get("max_tokens", 1024),
             temperature=extract_cfg.get("temperature", 0.0),
         )
@@ -332,9 +342,14 @@ def calculate_faithfulness(
             logger.warning("No statements extracted from answer")
             return 0.0
 
-        logger.info(f"Extracted {len(statements)} statements, verifying against contexts")
+        logger.info(
+            f"Extracted {len(statements)} statements, verifying against contexts"
+        )
         verdicts = _verify_statements(
-            client, statements, contexts, model_name,
+            client,
+            statements,
+            contexts,
+            model_name,
             max_tokens=verify_cfg.get("max_tokens", 1024),
             temperature=verify_cfg.get("temperature", 0.0),
         )
@@ -375,7 +390,7 @@ def _parse_relevancy_response(response_text: str) -> dict[str, Any]:
     Raises:
         ValueError: If response cannot be parsed as JSON.
     """
-    json_match = re.search(r'\{[^{}]*\}', response_text, re.DOTALL)
+    json_match = re.search(r"\{[^{}]*\}", response_text, re.DOTALL)
     if json_match:
         try:
             return json.loads(json_match.group())
@@ -445,18 +460,25 @@ def calculate_answer_relevancy(
 
     eval_cfg = _get_eval_config(config)
     base_url = base_url or eval_cfg.get("base_url", DEFAULT_EVAL_CONFIG["base_url"])
-    model_name = model_name or eval_cfg.get("model_name", DEFAULT_EVAL_CONFIG["model_name"])
-    relevancy_cfg = eval_cfg.get("answer_relevancy", DEFAULT_EVAL_CONFIG["answer_relevancy"])
-    max_tokens = max_tokens if max_tokens is not None else relevancy_cfg.get("max_tokens", 512)
-    temperature = temperature if temperature is not None else relevancy_cfg.get("temperature", 0.0)
+    model_name = model_name or eval_cfg.get(
+        "model_name", DEFAULT_EVAL_CONFIG["model_name"]
+    )
+    relevancy_cfg = eval_cfg.get(
+        "answer_relevancy", DEFAULT_EVAL_CONFIG["answer_relevancy"]
+    )
+    max_tokens = (
+        max_tokens if max_tokens is not None else relevancy_cfg.get("max_tokens", 512)
+    )
+    temperature = (
+        temperature
+        if temperature is not None
+        else relevancy_cfg.get("temperature", 0.0)
+    )
 
     try:
         client = _create_llm_client(api_key=api_key, base_url=base_url)
 
-        prompt = ANSWER_RELEVANCY_PROMPT.format(
-            question=question,
-            answer=answer
-        )
+        prompt = ANSWER_RELEVANCY_PROMPT.format(question=question, answer=answer)
 
         logger.info(f"Evaluating answer relevancy for question: {question[:50]}...")
 

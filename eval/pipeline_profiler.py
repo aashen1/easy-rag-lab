@@ -196,7 +196,9 @@ class PipelineProfiler:
     def start_profiling(self) -> None:
         self.start_time = time.perf_counter()
         self._resource_monitor.start()
-        logger.info(f"Pipeline profiling started for experiment: {self.experiment_name}")
+        logger.info(
+            f"Pipeline profiling started for experiment: {self.experiment_name}"
+        )
 
     def stop_profiling(self) -> None:
         self.end_time = time.perf_counter()
@@ -217,7 +219,9 @@ class PipelineProfiler:
         finally:
             self.end_stage()
 
-    def begin_stage(self, stage_id: str, metadata: dict[str, Any] | None = None) -> None:
+    def begin_stage(
+        self, stage_id: str, metadata: dict[str, Any] | None = None
+    ) -> None:
         if self._current_stage_id is not None:
             logger.warning(
                 f"Stage {self._current_stage_id} not ended before starting {stage_id}"
@@ -351,15 +355,11 @@ class PipelineProfiler:
             "cpu_percent_avg": (
                 round(sum(all_cpu) / len(all_cpu), 2) if all_cpu else 0.0
             ),
-            "cpu_percent_peak": (
-                round(max(all_cpu_peak), 2) if all_cpu_peak else 0.0
-            ),
+            "cpu_percent_peak": (round(max(all_cpu_peak), 2) if all_cpu_peak else 0.0),
             "memory_mb_avg": (
                 round(sum(all_mem) / len(all_mem), 2) if all_mem else 0.0
             ),
-            "memory_mb_peak": (
-                round(max(all_mem_peak), 2) if all_mem_peak else 0.0
-            ),
+            "memory_mb_peak": (round(max(all_mem_peak), 2) if all_mem_peak else 0.0),
         }
 
     def get_token_summary(self) -> dict[str, Any]:
@@ -419,7 +419,9 @@ class PipelineProfiler:
         lines.append("")
         lines.append(f"**实验**: {self.experiment_name}")
         lines.append(f"**评估时间**: {datetime.now().isoformat()}")
-        lines.append(f"**数据规模**: {self.total_pages} 页, {self.total_questions} 个问题")
+        lines.append(
+            f"**数据规模**: {self.total_pages} 页, {self.total_questions} 个问题"
+        )
         lines.append("")
 
         lines.append("## 1. 总体耗时概览")
@@ -451,7 +453,9 @@ class PipelineProfiler:
         lines.append("## 2. 归一化分析")
         lines.append("")
         lines.append("### 2.1 文档处理归一化")
-        lines.append(f"- 单页平均耗时: **{normalized['per_page_time_seconds']:.4f}s/页**")
+        lines.append(
+            f"- 单页平均耗时: **{normalized['per_page_time_seconds']:.4f}s/页**"
+        )
         lines.append(f"- 文档处理总耗时: {normalized['document_processing_time']:.2f}s")
         lines.append("")
 
@@ -513,23 +517,17 @@ class PipelineProfiler:
             "S1" in self._stages
             and self._stages["S1"].duration_seconds > total_duration * 0.3
         ):
-            suggestions.append(
-                "1. **PDF解析优化**: 考虑使用并行解析或更快的解析算法"
-            )
+            suggestions.append("1. **PDF解析优化**: 考虑使用并行解析或更快的解析算法")
         if (
             "S3" in self._stages
             and self._stages["S3"].duration_seconds > total_duration * 0.3
         ):
-            suggestions.append(
-                "1. **向量嵌入优化**: 考虑增大批处理大小或使用GPU加速"
-            )
+            suggestions.append("1. **向量嵌入优化**: 考虑增大批处理大小或使用GPU加速")
         if (
             "S7" in self._stages
             and self._stages["S7"].duration_seconds > total_duration * 0.3
         ):
-            suggestions.append(
-                "1. **答案生成优化**: 考虑使用更快的LLM或减少上下文长度"
-            )
+            suggestions.append("1. **答案生成优化**: 考虑使用更快的LLM或减少上下文长度")
         if (
             "S6" in self._stages
             and self._stages["S6"].duration_seconds > total_duration * 0.3

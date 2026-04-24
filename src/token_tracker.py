@@ -135,7 +135,9 @@ def estimate_tokens_tiktoken(text: str, encoding_name: str = "cl100k_base") -> i
         encoding = tiktoken.get_encoding(encoding_name)
         return len(encoding.encode(text))
     except Exception as e:
-        logger.warning(f"tiktoken estimation failed, falling back to char-based: {str(e)}")
+        logger.warning(
+            f"tiktoken estimation failed, falling back to char-based: {str(e)}"
+        )
         return max(1, len(text) // 4)
 
 
@@ -164,9 +166,13 @@ def compute_detailed_usage(
     Returns:
         DetailedTokenUsage with proportionally-scaled breakdown.
     """
-    system_prompt_est = estimate_tokens_tiktoken(system_prompt, encoding_name) if system_prompt else 0
+    system_prompt_est = (
+        estimate_tokens_tiktoken(system_prompt, encoding_name) if system_prompt else 0
+    )
     contexts_text = "\n\n".join(contexts) if contexts else ""
-    contexts_est = estimate_tokens_tiktoken(contexts_text, encoding_name) if contexts_text else 0
+    contexts_est = (
+        estimate_tokens_tiktoken(contexts_text, encoding_name) if contexts_text else 0
+    )
     query_est = estimate_tokens_tiktoken(query, encoding_name) if query else 0
 
     total_est = system_prompt_est + contexts_est + query_est
@@ -267,7 +273,8 @@ class TokenTracker:
             summary[rec.category] = DetailedTokenUsage(
                 input_tokens=existing.input_tokens + rec.usage.input_tokens,
                 output_tokens=existing.output_tokens + rec.usage.output_tokens,
-                system_prompt_tokens=existing.system_prompt_tokens + rec.usage.system_prompt_tokens,
+                system_prompt_tokens=existing.system_prompt_tokens
+                + rec.usage.system_prompt_tokens,
                 contexts_tokens=existing.contexts_tokens + rec.usage.contexts_tokens,
                 query_tokens=existing.query_tokens + rec.usage.query_tokens,
             )
@@ -386,15 +393,19 @@ class TokenTracker:
         if has_detailed:
             lines.append("")
             lines.append("Detailed Breakdown (input side):")
-            lines.append(
-                f"  {'Component':<22} | {'Tokens':>10}"
-            )
+            lines.append(f"  {'Component':<22} | {'Tokens':>10}")
             lines.append("  " + "-" * 40)
             for cat, usage in detailed_summary.items():
                 if usage.system_prompt_tokens > 0 or usage.contexts_tokens > 0:
-                    lines.append(f"  {cat + ' - System Prompt':<22} | {usage.system_prompt_tokens:>10,}")
-                    lines.append(f"  {cat + ' - Contexts':<22} | {usage.contexts_tokens:>10,}")
-                    lines.append(f"  {cat + ' - Query':<22} | {usage.query_tokens:>10,}")
+                    lines.append(
+                        f"  {cat + ' - System Prompt':<22} | {usage.system_prompt_tokens:>10,}"
+                    )
+                    lines.append(
+                        f"  {cat + ' - Contexts':<22} | {usage.contexts_tokens:>10,}"
+                    )
+                    lines.append(
+                        f"  {cat + ' - Query':<22} | {usage.query_tokens:>10,}"
+                    )
 
         lines.append("=" * 72)
         return "\n".join(lines)
@@ -412,7 +423,9 @@ class TokenTracker:
         return {
             "total": total.to_dict(),
             "by_category": {k: v.to_dict() for k, v in category_summary.items()},
-            "by_category_detailed": {k: v.to_dict() for k, v in detailed_summary.items()},
+            "by_category_detailed": {
+                k: v.to_dict() for k, v in detailed_summary.items()
+            },
             "records": [r.to_dict() for r in self._records],
         }
 

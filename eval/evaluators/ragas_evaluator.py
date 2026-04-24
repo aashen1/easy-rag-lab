@@ -20,7 +20,12 @@ from loguru import logger
 from eval.evaluators.base import BaseEvaluator, EvaluationResult
 from src.exceptions import EvaluationError
 
-REFERENCE_REQUIRED_METRICS = {"context_precision", "context_recall", "answer_correctness", "semantic_similarity"}
+REFERENCE_REQUIRED_METRICS = {
+    "context_precision",
+    "context_recall",
+    "answer_correctness",
+    "semantic_similarity",
+}
 
 
 class RagasEvaluator(BaseEvaluator):
@@ -64,9 +69,7 @@ class RagasEvaluator(BaseEvaluator):
             self.config.get("ragas", {}) if self.config else {}
         )
         self._run_config: dict[str, Any] = self._ragas_config.get("run_config", {})
-        self._embedding_config: dict[str, Any] = self._ragas_config.get(
-            "embedding", {}
-        )
+        self._embedding_config: dict[str, Any] = self._ragas_config.get("embedding", {})
 
     def _create_llm(self, llm_config: dict[str, str]) -> Any:
         """
@@ -98,7 +101,9 @@ class RagasEvaluator(BaseEvaluator):
                 "max_tokens": max_tokens,
             }
 
-            return create_llm_client(llm_config=llm_config_with_tokens, mode="langchain")
+            return create_llm_client(
+                llm_config=llm_config_with_tokens, mode="langchain"
+            )
         except ImportError as e:
             error_msg = f"Failed to create LLM client: {str(e)}"
             logger.error(error_msg)
@@ -128,13 +133,11 @@ class RagasEvaluator(BaseEvaluator):
 
             fallback_config = config.get("embedding", {})
             embedding_config = self._embedding_config or fallback_config
-            model_name = (
-                self._ragas_config.get("embedding_model")
-                or embedding_config.get("model_name", "BAAI/bge-large-zh-v1.5")
-            )
-            device = (
-                self._ragas_config.get("device")
-                or embedding_config.get("device", "cuda")
+            model_name = self._ragas_config.get(
+                "embedding_model"
+            ) or embedding_config.get("model_name", "BAAI/bge-large-zh-v1.5")
+            device = self._ragas_config.get("device") or embedding_config.get(
+                "device", "cuda"
             )
 
             embeddings = RagasHuggingFaceEmbeddings(
@@ -186,9 +189,7 @@ class RagasEvaluator(BaseEvaluator):
         except ImportError as e:
             error_msg = f"Failed to import RAGAS embeddings: {str(e)}"
             logger.error(error_msg)
-            raise EvaluationError(
-                f"{error_msg}. Please install ragas properly."
-            ) from e
+            raise EvaluationError(f"{error_msg}. Please install ragas properly.") from e
 
     def _build_run_config(self) -> Any | None:
         """
@@ -209,9 +210,7 @@ class RagasEvaluator(BaseEvaluator):
             logger.debug("RunConfig not available in this ragas version, skipping")
             return None
 
-    def _build_ragas_dataset(
-        self, samples: list[dict[str, Any]]
-    ) -> Any:
+    def _build_ragas_dataset(self, samples: list[dict[str, Any]]) -> Any:
         """
         Build RAGAS EvaluationDataset from sample dictionaries.
 
@@ -231,7 +230,9 @@ class RagasEvaluator(BaseEvaluator):
 
             ragas_samples = []
             for sample in samples:
-                reference = sample.get("ground_truth_excerpt") or sample.get("expected_answer")
+                reference = sample.get("ground_truth_excerpt") or sample.get(
+                    "expected_answer"
+                )
                 ragas_sample = SingleTurnSample(
                     user_input=sample.get("question", ""),
                     response=sample.get("answer", ""),
@@ -275,6 +276,7 @@ class RagasEvaluator(BaseEvaluator):
                     Faithfulness,
                     SemanticSimilarity,
                 )
+
                 metric_map = {
                     "faithfulness": Faithfulness,
                     "answer_relevancy": AnswerRelevancy,
@@ -302,6 +304,7 @@ class RagasEvaluator(BaseEvaluator):
                 from ragas.metrics import (
                     _SemanticSimilarity as SemanticSimilarity,
                 )
+
                 metric_map = {
                     "faithfulness": Faithfulness,
                     "answer_relevancy": AnswerRelevancy,
@@ -316,9 +319,17 @@ class RagasEvaluator(BaseEvaluator):
                 if name in metric_map:
                     metric_cls = metric_map[name]
                     if name == "semantic_similarity":
-                        metric = metric_cls(embeddings=embeddings) if embeddings else metric_cls()
+                        metric = (
+                            metric_cls(embeddings=embeddings)
+                            if embeddings
+                            else metric_cls()
+                        )
                     elif name in ("answer_relevancy", "answer_correctness"):
-                        metric = metric_cls(llm=llm, embeddings=embeddings) if llm else metric_cls()
+                        metric = (
+                            metric_cls(llm=llm, embeddings=embeddings)
+                            if llm
+                            else metric_cls()
+                        )
                     else:
                         metric = metric_cls(llm=llm) if llm else metric_cls()
                     metrics.append(metric)
@@ -400,13 +411,17 @@ class RagasEvaluator(BaseEvaluator):
             generation_metrics = self._generation_metrics
 
         if expected_answer is None:
-            ref_required = [m for m in generation_metrics if m in REFERENCE_REQUIRED_METRICS]
+            ref_required = [
+                m for m in generation_metrics if m in REFERENCE_REQUIRED_METRICS
+            ]
             if ref_required:
                 logger.warning(
                     f"Metrics {ref_required} require reference (expected_answer) "
                     f"but none provided for {question_id}. Skipping these metrics."
                 )
-                generation_metrics = [m for m in generation_metrics if m not in REFERENCE_REQUIRED_METRICS]
+                generation_metrics = [
+                    m for m in generation_metrics if m not in REFERENCE_REQUIRED_METRICS
+                ]
 
         if not generation_metrics:
             return EvaluationResult(
@@ -458,14 +473,20 @@ class RagasEvaluator(BaseEvaluator):
             )
 
             if hasattr(result, "scores") and result.scores:
-                score_dict = result.scores[0] if isinstance(result.scores, list) else result.scores
+                score_dict = (
+                    result.scores[0]
+                    if isinstance(result.scores, list)
+                    else result.scores
+                )
                 if isinstance(score_dict, dict):
                     for metric_name, score in score_dict.items():
                         if score is not None:
                             try:
                                 generation_results[metric_name] = float(score)
                             except (TypeError, ValueError):
-                                logger.warning(f"Could not convert score for {metric_name}: {score}")
+                                logger.warning(
+                                    f"Could not convert score for {metric_name}: {score}"
+                                )
 
         except Exception as e:
             error = str(e)
@@ -503,12 +524,11 @@ class RagasEvaluator(BaseEvaluator):
         if generation_metrics is None:
             generation_metrics = self._generation_metrics
 
-        samples_without_ref = [
-            s for s in samples
-            if s.get("expected_answer") is None
-        ]
+        samples_without_ref = [s for s in samples if s.get("expected_answer") is None]
         if samples_without_ref:
-            ref_required = [m for m in generation_metrics if m in REFERENCE_REQUIRED_METRICS]
+            ref_required = [
+                m for m in generation_metrics if m in REFERENCE_REQUIRED_METRICS
+            ]
             if ref_required:
                 logger.warning(
                     f"Metrics {ref_required} require reference (expected_answer) "
@@ -553,11 +573,18 @@ class RagasEvaluator(BaseEvaluator):
                     generation_results = {}
                     if isinstance(score_dict, dict):
                         for metric_name in generation_metrics:
-                            if metric_name in score_dict and score_dict[metric_name] is not None:
+                            if (
+                                metric_name in score_dict
+                                and score_dict[metric_name] is not None
+                            ):
                                 try:
-                                    generation_results[metric_name] = float(score_dict[metric_name])
+                                    generation_results[metric_name] = float(
+                                        score_dict[metric_name]
+                                    )
                                 except (TypeError, ValueError):
-                                    logger.warning(f"Could not convert score for {metric_name}: {score_dict[metric_name]}")
+                                    logger.warning(
+                                        f"Could not convert score for {metric_name}: {score_dict[metric_name]}"
+                                    )
 
                     results.append(
                         EvaluationResult(
@@ -576,9 +603,13 @@ class RagasEvaluator(BaseEvaluator):
                     for metric_name in generation_metrics:
                         if metric_name in row and row[metric_name] is not None:
                             try:
-                                generation_results[metric_name] = float(row[metric_name])
+                                generation_results[metric_name] = float(
+                                    row[metric_name]
+                                )
                             except (TypeError, ValueError):
-                                logger.warning(f"Could not convert score for {metric_name}: {row[metric_name]}")
+                                logger.warning(
+                                    f"Could not convert score for {metric_name}: {row[metric_name]}"
+                                )
 
                     results.append(
                         EvaluationResult(

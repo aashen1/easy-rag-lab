@@ -275,31 +275,43 @@ class TestEndToEndExperiment:
 
         variant_result1 = {
             "variant_name": "variant_a",
-            "retrieval_metrics": {"avg_hit_rate": 0.85, "avg_mrr": 0.72, "avg_ndcg": 0.78},
+            "retrieval_metrics": {
+                "avg_hit_rate": 0.85,
+                "avg_mrr": 0.72,
+                "avg_ndcg": 0.78,
+            },
         }
         manager.save_variant_result(exp_dir1, "variant_a", variant_result1)
 
-        exp_config2 = ExperimentConfig.from_dict({
-            **test_experiment_config,
-            "name": "test_experiment_2",
-        })
+        exp_config2 = ExperimentConfig.from_dict(
+            {
+                **test_experiment_config,
+                "name": "test_experiment_2",
+            }
+        )
         exp_dir2 = manager.create_experiment_dir(exp_config2)
         meal_snapshot2 = {"meal_id": "test_id_2", "name": "meal_2", "pdf_files": []}
         manager.save_snapshots(exp_dir2, exp_config2, meal_snapshot2, [], {})
 
         variant_result2 = {
             "variant_name": "variant_b",
-            "retrieval_metrics": {"avg_hit_rate": 0.90, "avg_mrr": 0.85, "avg_ndcg": 0.88},
+            "retrieval_metrics": {
+                "avg_hit_rate": 0.90,
+                "avg_mrr": 0.85,
+                "avg_ndcg": 0.88,
+            },
         }
         manager.save_variant_result(exp_dir2, "variant_b", variant_result2)
 
         result1 = manager.load_experiment_result(exp_dir1)
         result2 = manager.load_experiment_result(exp_dir2)
 
-        comparison_data = _build_comparison_data([
-            result1.to_dict(),
-            result2.to_dict(),
-        ])
+        comparison_data = _build_comparison_data(
+            [
+                result1.to_dict(),
+                result2.to_dict(),
+            ]
+        )
 
         assert len(comparison_data["experiments"]) == 2
         assert comparison_data["summary"]["total_experiments"] == 2
@@ -323,14 +335,16 @@ class TestAssetVerificationExtended:
         from eval.run_experiment import verify_experiment_assets
         from src.experiment import ExperimentConfig, ExperimentManager
 
-        exp_config = ExperimentConfig.from_dict({
-            "name": "test",
-            "description": "Test",
-            "data": {"meal": "test"},
-            "test_sets": [{"strategy": "factual", "num_questions": 10}],
-            "variants": [{"name": "v1"}],
-            "evaluation": {"metrics": {"retrieval": ["hit_rate"]}},
-        })
+        exp_config = ExperimentConfig.from_dict(
+            {
+                "name": "test",
+                "description": "Test",
+                "data": {"meal": "test"},
+                "test_sets": [{"strategy": "factual", "num_questions": 10}],
+                "variants": [{"name": "v1"}],
+                "evaluation": {"metrics": {"retrieval": ["hit_rate"]}},
+            }
+        )
 
         manager = ExperimentManager(test_system_config)
         exp_dir = manager.create_experiment_dir(exp_config)
@@ -366,14 +380,16 @@ class TestAssetVerificationExtended:
         from eval.run_experiment import verify_experiment_assets
         from src.experiment import ExperimentConfig, ExperimentManager
 
-        exp_config = ExperimentConfig.from_dict({
-            "name": "test",
-            "description": "Test",
-            "data": {"meal": "test"},
-            "test_sets": [{"strategy": "factual", "num_questions": 10}],
-            "variants": [{"name": "v1"}],
-            "evaluation": {"metrics": {"retrieval": ["hit_rate"]}},
-        })
+        exp_config = ExperimentConfig.from_dict(
+            {
+                "name": "test",
+                "description": "Test",
+                "data": {"meal": "test"},
+                "test_sets": [{"strategy": "factual", "num_questions": 10}],
+                "variants": [{"name": "v1"}],
+                "evaluation": {"metrics": {"retrieval": ["hit_rate"]}},
+            }
+        )
 
         manager = ExperimentManager(test_system_config)
         exp_dir = manager.create_experiment_dir(exp_config)
@@ -415,7 +431,9 @@ class TestExperimentComparisonExtended:
 
         comparison_data = _build_comparison_data([])
 
-        report = _generate_comparison_report(comparison_data, ["exp_missing_1", "exp_missing_2"])
+        report = _generate_comparison_report(
+            comparison_data, ["exp_missing_1", "exp_missing_2"]
+        )
 
         assert "Warnings" in report
         assert "exp_missing_1" in report
@@ -443,7 +461,11 @@ class TestExperimentComparisonExtended:
                 "variant_results": [
                     {
                         "variant_name": "v1",
-                        "retrieval_metrics": {"avg_hit_rate": 0.8, "avg_mrr": 0.7, "avg_ndcg": 0.75},
+                        "retrieval_metrics": {
+                            "avg_hit_rate": 0.8,
+                            "avg_mrr": 0.7,
+                            "avg_ndcg": 0.75,
+                        },
                         "total_questions": 35,
                     }
                 ],
@@ -460,7 +482,11 @@ class TestExperimentComparisonExtended:
                 "variant_results": [
                     {
                         "variant_name": "v1",
-                        "retrieval_metrics": {"avg_hit_rate": 0.85, "avg_mrr": 0.75, "avg_ndcg": 0.80},
+                        "retrieval_metrics": {
+                            "avg_hit_rate": 0.85,
+                            "avg_mrr": 0.75,
+                            "avg_ndcg": 0.80,
+                        },
                         "total_questions": 30,
                     }
                 ],
@@ -564,8 +590,10 @@ class TestEndToEndEvaluationFlow:
             },
         ]
 
-        with patch("eval.run_eval.calculate_faithfulness") as mock_faithfulness, \
-             patch("eval.run_eval.calculate_answer_relevancy") as mock_relevancy:
+        with (
+            patch("eval.run_eval.calculate_faithfulness") as mock_faithfulness,
+            patch("eval.run_eval.calculate_answer_relevancy") as mock_relevancy,
+        ):
             mock_faithfulness.return_value = 0.85
             mock_relevancy.return_value = 0.92
 
@@ -635,17 +663,23 @@ class TestEndToEndEvaluationFlow:
             {
                 "answer": "2024年光模块市场规模约为100亿美元。",
                 "sources": ["report_a.pdf"],
-                "contexts": ["根据市场研究报告，2024年全球光模块市场规模约为100亿美元。"],
+                "contexts": [
+                    "根据市场研究报告，2024年全球光模块市场规模约为100亿美元。"
+                ],
             },
             {
                 "answer": "CPO能降低功耗主要是因为减少了信号传输距离。",
                 "sources": ["report_b.pdf"],
-                "contexts": ["CPO技术通过将光引擎与芯片封装在一起，大幅减少了信号传输距离，从而降低功耗。"],
+                "contexts": [
+                    "CPO技术通过将光引擎与芯片封装在一起，大幅减少了信号传输距离，从而降低功耗。"
+                ],
             },
         ]
 
-        with patch("eval.run_eval.calculate_faithfulness") as mock_faithfulness, \
-             patch("eval.run_eval.calculate_answer_relevancy") as mock_relevancy:
+        with (
+            patch("eval.run_eval.calculate_faithfulness") as mock_faithfulness,
+            patch("eval.run_eval.calculate_answer_relevancy") as mock_relevancy,
+        ):
             mock_faithfulness.return_value = 0.90
             mock_relevancy.return_value = 0.95
 
@@ -896,7 +930,11 @@ class TestBackwardCompatibility:
         legacy_data = {
             "variant_name": "baseline",
             "variant_description": "Baseline configuration",
-            "retrieval_metrics": {"avg_hit_rate": 0.75, "avg_mrr": 0.55, "avg_ndcg": 0.65},
+            "retrieval_metrics": {
+                "avg_hit_rate": 0.75,
+                "avg_mrr": 0.55,
+                "avg_ndcg": 0.65,
+            },
             "total_questions": 15,
             "total_time_seconds": 25.0,
         }

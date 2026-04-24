@@ -35,12 +35,16 @@ class SamplingConfig:
                 f"Invalid sampling mode '{self.mode}', must be one of {valid_modes}"
             )
 
-        if self.mode in ("count", "pages") and (not isinstance(self.value, int) or self.value <= 0):
+        if self.mode in ("count", "pages") and (
+            not isinstance(self.value, int) or self.value <= 0
+        ):
             raise ConfigurationError(
                 f"Value for mode '{self.mode}' must be a positive integer, got {self.value}"
             )
 
-        if self.mode == "ratio" and (not isinstance(self.value, int | float) or not (0.0 < self.value <= 1.0)):
+        if self.mode == "ratio" and (
+            not isinstance(self.value, int | float) or not (0.0 < self.value <= 1.0)
+        ):
             raise ConfigurationError(
                 f"Value for mode 'ratio' must be a float in (0.0, 1.0], got {self.value}"
             )
@@ -69,9 +73,7 @@ def count_pdf_pages(pdf_path: Path) -> int:
         raise ParsingError(error_msg) from e
 
 
-def determine_sample(
-    pdf_files: list[Path], config: SamplingConfig
-) -> list[Path]:
+def determine_sample(pdf_files: list[Path], config: SamplingConfig) -> list[Path]:
     """Determine which PDF files to sample based on the sampling configuration.
 
     Args:
@@ -88,7 +90,9 @@ def determine_sample(
         raise ConfigurationError("Cannot sample from an empty list of PDF files")
 
     total = len(pdf_files)
-    logger.info(f"Sampling from {total} PDF files (mode={config.mode}, value={config.value})")
+    logger.info(
+        f"Sampling from {total} PDF files (mode={config.mode}, value={config.value})"
+    )
 
     if config.mode == "count":
         count = min(config.value, total)

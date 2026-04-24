@@ -100,7 +100,9 @@ class BM25Retriever:
         if source_filter is not None:
             original_count = len(jsonl_files)
             jsonl_files = [
-                f for f in jsonl_files if f.relative_to(chunks_path).as_posix() in source_filter
+                f
+                for f in jsonl_files
+                if f.relative_to(chunks_path).as_posix() in source_filter
             ]
             logger.info(
                 f"Source filter applied: {len(jsonl_files)}/{original_count} files matched"
@@ -123,7 +125,9 @@ class BM25Retriever:
 
         logger.info(f"Building BM25 index from {len(all_chunks)} chunks...")
         self.build_index(all_chunks)
-        logger.success(f"BM25 index built: {self._corpus_size} documents, avgdl={self._avgdl:.1f}")
+        logger.success(
+            f"BM25 index built: {self._corpus_size} documents, avgdl={self._avgdl:.1f}"
+        )
 
     def build_index(self, chunks: list[dict[str, Any]]) -> None:
         """Build BM25 index from a list of chunk dictionaries.
@@ -151,18 +155,22 @@ class BM25Retriever:
 
             self._corpus_tokens.append(tokens)
             self._doc_lens.append(len(tokens))
-            self._doc_data.append({
-                "chunk_id": chunk.get("chunk_id", ""),
-                "text": text,
-                "metadata": chunk.get("metadata", {}),
-            })
+            self._doc_data.append(
+                {
+                    "chunk_id": chunk.get("chunk_id", ""),
+                    "text": text,
+                    "metadata": chunk.get("metadata", {}),
+                }
+            )
 
             token_set = set(tokens)
             for token in token_set:
                 self._doc_freqs[token] += 1
 
         self._corpus_size = len(chunks)
-        self._avgdl = sum(self._doc_lens) / self._corpus_size if self._corpus_size > 0 else 0.0
+        self._avgdl = (
+            sum(self._doc_lens) / self._corpus_size if self._corpus_size > 0 else 0.0
+        )
 
         self._compute_idf()
         self._is_indexed = True
@@ -225,7 +233,9 @@ class BM25Retriever:
             query_tokens = self.tokenize(query)
 
             if not query_tokens:
-                logger.warning(f"Query produced no tokens after tokenization: {query[:50]}")
+                logger.warning(
+                    f"Query produced no tokens after tokenization: {query[:50]}"
+                )
                 return []
 
             scores = self._score(query_tokens)
@@ -240,14 +250,18 @@ class BM25Retriever:
                 if score <= 0:
                     continue
                 doc = self._doc_data[doc_idx]
-                results.append({
-                    "chunk_id": doc["chunk_id"],
-                    "text": doc["text"],
-                    "metadata": doc["metadata"],
-                    "score": float(score),
-                })
+                results.append(
+                    {
+                        "chunk_id": doc["chunk_id"],
+                        "text": doc["text"],
+                        "metadata": doc["metadata"],
+                        "score": float(score),
+                    }
+                )
 
-            logger.success(f"BM25 retrieved {len(results)} results for query: {query[:50]}...")
+            logger.success(
+                f"BM25 retrieved {len(results)} results for query: {query[:50]}..."
+            )
             return results
 
         except Exception as e:

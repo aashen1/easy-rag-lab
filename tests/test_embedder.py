@@ -10,10 +10,11 @@ from src.exceptions import ConfigurationError, IndexingError
 
 @pytest.fixture
 def embedder_setup():
-    with patch("src.embedder.AutoTokenizer") as mock_auto_tokenizer, \
-         patch("src.embedder.AutoModel") as mock_auto_model, \
-         patch("src.embedder.torch.cuda.is_available") as mock_cuda_available:
-
+    with (
+        patch("src.embedder.AutoTokenizer") as mock_auto_tokenizer,
+        patch("src.embedder.AutoModel") as mock_auto_model,
+        patch("src.embedder.torch.cuda.is_available") as mock_cuda_available,
+    ):
         mock_cuda_available.return_value = True
 
         mock_model = MagicMock()
@@ -51,7 +52,9 @@ class TestEmbedder:
 
     @pytest.mark.unit
     def test_embedder_init_failure(self, embedder_setup):
-        embedder_setup.mock_auto_model.from_pretrained.side_effect = Exception("Model load error")
+        embedder_setup.mock_auto_model.from_pretrained.side_effect = Exception(
+            "Model load error"
+        )
         with pytest.raises(IndexingError) as exc_info:
             Embedder(model_name="test-model")
         assert "Failed to load embedding model" in str(exc_info.value)
@@ -157,7 +160,9 @@ class TestEmbedder:
         embedder_setup.embedder._tokenizer = mock_tokenizer
 
         texts = ["text1", "text2", "text3"]
-        embeddings = embedder_setup.embedder.embed_texts(texts, batch_size=32, show_progress=True)
+        embeddings = embedder_setup.embedder.embed_texts(
+            texts, batch_size=32, show_progress=True
+        )
         assert embeddings.shape == (3, 1024)
 
     @pytest.mark.unit
@@ -167,10 +172,11 @@ class TestEmbedder:
 
 
 def _make_embedder(model_name: str = "test-model", query_instruction=None) -> Embedder:
-    with patch("src.embedder.AutoTokenizer") as mock_auto_tokenizer, \
-         patch("src.embedder.AutoModel") as mock_auto_model, \
-         patch("src.embedder.torch.cuda.is_available") as mock_cuda_available:
-
+    with (
+        patch("src.embedder.AutoTokenizer") as mock_auto_tokenizer,
+        patch("src.embedder.AutoModel") as mock_auto_model,
+        patch("src.embedder.torch.cuda.is_available") as mock_cuda_available,
+    ):
         mock_cuda_available.return_value = True
 
         mock_model = MagicMock()
@@ -386,7 +392,8 @@ class TestGetTokenizer:
             mock_tokenizer_a = MagicMock()
             mock_tokenizer_b = MagicMock()
             mock_auto_tokenizer.from_pretrained.side_effect = [
-                mock_tokenizer_a, mock_tokenizer_b
+                mock_tokenizer_a,
+                mock_tokenizer_b,
             ]
 
             Embedder._tokenizer_cache.clear()
@@ -408,10 +415,11 @@ class TestGetTokenizer:
 
     @pytest.mark.unit
     def test_embedder_init_registers_tokenizer_in_cache(self):
-        with patch("src.embedder.AutoTokenizer") as mock_auto_tokenizer, \
-             patch("src.embedder.AutoModel") as mock_auto_model, \
-             patch("src.embedder.torch.cuda.is_available") as mock_cuda:
-
+        with (
+            patch("src.embedder.AutoTokenizer") as mock_auto_tokenizer,
+            patch("src.embedder.AutoModel") as mock_auto_model,
+            patch("src.embedder.torch.cuda.is_available") as mock_cuda,
+        ):
             mock_cuda.return_value = False
             mock_tokenizer = MagicMock()
             mock_auto_tokenizer.from_pretrained.return_value = mock_tokenizer

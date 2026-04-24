@@ -38,7 +38,6 @@ def _make_llm_config():
 
 @pytest.mark.unit
 class TestRAGPipeline:
-
     @patch("src.pipeline.Generator")
     @patch("src.pipeline.Retriever")
     @patch("src.pipeline.VectorIndexer")
@@ -116,9 +115,7 @@ class TestRAGPipeline:
             mock_meal_mgr = mock_meal_mgr_cls.return_value
             mock_meal_mgr.load_meal.return_value = mock_meal_config
 
-            pipeline = RAGPipeline(
-                config_path="dummy.yaml", meal_name="test_meal"
-            )
+            pipeline = RAGPipeline(config_path="dummy.yaml", meal_name="test_meal")
 
             mock_meal_mgr.load_meal.assert_called_once_with("test_meal")
 
@@ -171,9 +168,7 @@ class TestRAGPipeline:
         pipeline = RAGPipeline(config_path="dummy.yaml")
         result = pipeline.query("What is the revenue?")
 
-        mock_retriever_instance.retrieve.assert_called_once_with(
-            "What is the revenue?"
-        )
+        mock_retriever_instance.retrieve.assert_called_once_with("What is the revenue?")
         mock_generator_instance.generate.assert_called_once_with(
             "What is the revenue?",
             ["Revenue was 100 billion.", "Profit increased by 10%."],
@@ -313,7 +308,7 @@ class TestRAGPipeline:
         mock_load_config.return_value = _make_config()
         mock_get_llm_config.return_value = _make_llm_config()
 
-        with RAGPipeline(config_path="dummy.yaml") as pipeline:
+        with RAGPipeline(config_path="dummy.yaml"):
             pass
 
         mock_indexer.return_value.close.assert_called_once()
@@ -389,9 +384,10 @@ class TestRAGPipeline:
 
         pipeline = RAGPipeline(config_path="dummy.yaml")
 
-        with patch("src.pipeline.parse_all_pdfs") as mock_parse, patch(
-            "src.chunker.process_parsed_files_page_aware"
-        ) as mock_page_aware:
+        with (
+            patch("src.pipeline.parse_all_pdfs") as mock_parse,
+            patch("src.chunker.process_parsed_files_page_aware") as mock_page_aware,
+        ):
             mock_parse.return_value = []
             mock_page_aware.return_value = []
             pipeline.build_index()
@@ -449,9 +445,10 @@ class TestRAGPipeline:
 
         pipeline = RAGPipeline(config_path="dummy.yaml")
 
-        with patch("src.pipeline.parse_all_pdfs") as mock_parse, patch(
-            "src.pipeline.process_parsed_files"
-        ) as mock_chunk:
+        with (
+            patch("src.pipeline.parse_all_pdfs") as mock_parse,
+            patch("src.pipeline.process_parsed_files") as mock_chunk,
+        ):
             mock_parse.return_value = []
             mock_chunk.return_value = []
             pipeline.build_index()
@@ -505,11 +502,11 @@ class TestRAGPipeline:
             {"output": "/tmp/parser_out/report_2024.pages.json", "status": "ok"},
         ]
 
-        with patch("src.pipeline.parse_all_pdfs") as mock_parse, patch(
-            "src.chunker.process_parsed_files_page_aware"
-        ) as mock_page_aware, patch(
-            "src.pipeline.process_parsed_files"
-        ) as mock_chunk:
+        with (
+            patch("src.pipeline.parse_all_pdfs") as mock_parse,
+            patch("src.chunker.process_parsed_files_page_aware") as mock_page_aware,
+            patch("src.pipeline.process_parsed_files") as mock_chunk,
+        ):
             mock_parse.return_value = parse_results
             mock_page_aware.return_value = [
                 {"output": "/tmp/chunker_out/report_2023.jsonl", "status": "ok"},
@@ -565,9 +562,10 @@ class TestRAGPipeline:
 
         pipeline = RAGPipeline(config_path="dummy.yaml")
 
-        with patch("src.pipeline.parse_all_pdfs") as mock_parse, patch(
-            "src.pipeline.process_parsed_files"
-        ) as mock_chunk:
+        with (
+            patch("src.pipeline.parse_all_pdfs") as mock_parse,
+            patch("src.pipeline.process_parsed_files") as mock_chunk,
+        ):
             mock_parse.return_value = []
             mock_chunk.return_value = []
             pipeline.build_index()

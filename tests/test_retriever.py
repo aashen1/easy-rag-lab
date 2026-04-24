@@ -60,7 +60,9 @@ class TestRetriever:
         with pytest.raises(RetrievalError, match="Failed to retrieve results"):
             retriever.retrieve("test query")
 
-    def test_retrieve_result_payload_extraction(self, mock_embedder, mock_qdrant_client):
+    def test_retrieve_result_payload_extraction(
+        self, mock_embedder, mock_qdrant_client
+    ):
         indexer = self._make_mock_indexer(mock_qdrant_client)
 
         point1 = MagicMock()
@@ -112,7 +114,9 @@ class TestRetriever:
         assert results[0]["text"] == ""
         assert results[0]["metadata"] == {}
 
-    def test_score_threshold_zero_does_not_filter(self, mock_embedder, mock_qdrant_client):
+    def test_score_threshold_zero_does_not_filter(
+        self, mock_embedder, mock_qdrant_client
+    ):
         indexer = self._make_mock_indexer(mock_qdrant_client)
 
         point1 = MagicMock()
@@ -134,7 +138,9 @@ class TestRetriever:
 
         assert len(results) == 2
 
-    def test_score_threshold_filters_low_scores(self, mock_embedder, mock_qdrant_client):
+    def test_score_threshold_filters_low_scores(
+        self, mock_embedder, mock_qdrant_client
+    ):
         indexer = self._make_mock_indexer(mock_qdrant_client)
 
         point1 = MagicMock()
@@ -162,7 +168,9 @@ class TestRetriever:
         assert results[0]["chunk_id"] == "c1"
         assert results[0]["score"] == 0.8
 
-    def test_score_threshold_filters_all_results(self, mock_embedder, mock_qdrant_client):
+    def test_score_threshold_filters_all_results(
+        self, mock_embedder, mock_qdrant_client
+    ):
         indexer = self._make_mock_indexer(mock_qdrant_client)
 
         point1 = MagicMock()
@@ -184,7 +192,9 @@ class TestRetriever:
 
         assert len(results) == 0
 
-    def test_score_threshold_boundary_inclusive(self, mock_embedder, mock_qdrant_client):
+    def test_score_threshold_boundary_inclusive(
+        self, mock_embedder, mock_qdrant_client
+    ):
         indexer = self._make_mock_indexer(mock_qdrant_client)
 
         point1 = MagicMock()

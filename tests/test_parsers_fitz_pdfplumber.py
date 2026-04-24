@@ -18,11 +18,13 @@ def parser() -> FitzPdfPlumberParser:
 
 @pytest.fixture
 def parser_no_filters() -> FitzPdfPlumberParser:
-    return FitzPdfPlumberParser(config={
-        "header_filter": False,
-        "footer_filter": False,
-        "noise_patterns": [],
-    })
+    return FitzPdfPlumberParser(
+        config={
+            "header_filter": False,
+            "footer_filter": False,
+            "noise_patterns": [],
+        }
+    )
 
 
 class TestNameProperty:
@@ -31,23 +33,31 @@ class TestNameProperty:
 
 
 class TestIsNoise:
-    def test_header_zone_short_text_filtered(self, parser: FitzPdfPlumberParser) -> None:
+    def test_header_zone_short_text_filtered(
+        self, parser: FitzPdfPlumberParser
+    ) -> None:
         bbox = (0, 5, 100, 20)
         result = parser._is_noise("Header text", bbox, page_height=800)
         assert result is True
 
-    def test_header_zone_long_text_not_filtered(self, parser: FitzPdfPlumberParser) -> None:
+    def test_header_zone_long_text_not_filtered(
+        self, parser: FitzPdfPlumberParser
+    ) -> None:
         long_text = "A" * 81
         bbox = (0, 5, 100, 20)
         result = parser._is_noise(long_text, bbox, page_height=800)
         assert result is False
 
-    def test_footer_zone_short_text_filtered(self, parser: FitzPdfPlumberParser) -> None:
+    def test_footer_zone_short_text_filtered(
+        self, parser: FitzPdfPlumberParser
+    ) -> None:
         bbox = (0, 740, 100, 790)
         result = parser._is_noise("Footer text", bbox, page_height=800)
         assert result is True
 
-    def test_footer_zone_long_text_not_filtered(self, parser: FitzPdfPlumberParser) -> None:
+    def test_footer_zone_long_text_not_filtered(
+        self, parser: FitzPdfPlumberParser
+    ) -> None:
         long_text = "A" * 81
         bbox = (0, 740, 100, 790)
         result = parser._is_noise(long_text, bbox, page_height=800)
@@ -199,16 +209,24 @@ class TestBboxOverlap:
 class TestBlocksToMarkdown:
     def test_text_blocks(self, parser: FitzPdfPlumberParser) -> None:
         blocks = [
-            _TextBlock(page_number=1, block_type="text", content="Hello", bbox=(0, 0, 100, 10)),
-            _TextBlock(page_number=1, block_type="text", content="World", bbox=(0, 20, 100, 30)),
+            _TextBlock(
+                page_number=1, block_type="text", content="Hello", bbox=(0, 0, 100, 10)
+            ),
+            _TextBlock(
+                page_number=1, block_type="text", content="World", bbox=(0, 20, 100, 30)
+            ),
         ]
         result = parser._blocks_to_markdown(blocks)
         assert result == "Hello\n\nWorld"
 
     def test_heading_detection_h1(self, parser: FitzPdfPlumberParser) -> None:
         block = _TextBlock(
-            page_number=1, block_type="text", content="Title",
-            bbox=(0, 0, 100, 10), font_size=18, is_bold=True,
+            page_number=1,
+            block_type="text",
+            content="Title",
+            bbox=(0, 0, 100, 10),
+            font_size=18,
+            is_bold=True,
         )
         blocks = [block]
         result = parser._blocks_to_markdown(blocks)
@@ -216,46 +234,72 @@ class TestBlocksToMarkdown:
 
     def test_heading_detection_h2(self, parser: FitzPdfPlumberParser) -> None:
         block = _TextBlock(
-            page_number=1, block_type="text", content="Section",
-            bbox=(0, 0, 100, 10), font_size=15, is_bold=True,
+            page_number=1,
+            block_type="text",
+            content="Section",
+            bbox=(0, 0, 100, 10),
+            font_size=15,
+            is_bold=True,
         )
         result = parser._blocks_to_markdown([block])
         assert result == "## Section"
 
     def test_heading_detection_h3(self, parser: FitzPdfPlumberParser) -> None:
         block = _TextBlock(
-            page_number=1, block_type="text", content="Subsection",
-            bbox=(0, 0, 100, 10), font_size=13, is_bold=True,
+            page_number=1,
+            block_type="text",
+            content="Subsection",
+            bbox=(0, 0, 100, 10),
+            font_size=13,
+            is_bold=True,
         )
         result = parser._blocks_to_markdown([block])
         assert result == "### Subsection"
 
     def test_heading_detection_h4(self, parser: FitzPdfPlumberParser) -> None:
         block = _TextBlock(
-            page_number=1, block_type="text", content="Sub-sub",
-            bbox=(0, 0, 100, 10), font_size=11.5, is_bold=True,
+            page_number=1,
+            block_type="text",
+            content="Sub-sub",
+            bbox=(0, 0, 100, 10),
+            font_size=11.5,
+            is_bold=True,
         )
         result = parser._blocks_to_markdown([block])
         assert result == "#### Sub-sub"
 
     def test_no_heading_for_non_bold(self, parser: FitzPdfPlumberParser) -> None:
         block = _TextBlock(
-            page_number=1, block_type="text", content="Not heading",
-            bbox=(0, 0, 100, 10), font_size=18, is_bold=False,
+            page_number=1,
+            block_type="text",
+            content="Not heading",
+            bbox=(0, 0, 100, 10),
+            font_size=18,
+            is_bold=False,
         )
         result = parser._blocks_to_markdown([block])
         assert result == "Not heading"
 
     def test_table_block(self, parser: FitzPdfPlumberParser) -> None:
         blocks = [
-            _TextBlock(page_number=1, block_type="table", content="| A | B |\n|---|---|\n| 1 | 2 |", bbox=(0, 0, 100, 50)),
+            _TextBlock(
+                page_number=1,
+                block_type="table",
+                content="| A | B |\n|---|---|\n| 1 | 2 |",
+                bbox=(0, 0, 100, 50),
+            ),
         ]
         result = parser._blocks_to_markdown(blocks)
         assert "| A | B |" in result
 
     def test_image_block(self, parser: FitzPdfPlumberParser) -> None:
         blocks = [
-            _TextBlock(page_number=1, block_type="image", content="[图片: 页1]", bbox=(0, 0, 100, 50)),
+            _TextBlock(
+                page_number=1,
+                block_type="image",
+                content="[图片: 页1]",
+                bbox=(0, 0, 100, 50),
+            ),
         ]
         result = parser._blocks_to_markdown(blocks)
         assert "[图片: 页1]" in result
@@ -268,18 +312,37 @@ class TestBlocksToMarkdown:
 class TestMergeTextAndTables:
     def test_no_table_blocks(self, parser: FitzPdfPlumberParser) -> None:
         text_blocks = [
-            _TextBlock(page_number=1, block_type="text", content="A", bbox=(0, 0, 100, 10)),
+            _TextBlock(
+                page_number=1, block_type="text", content="A", bbox=(0, 0, 100, 10)
+            ),
         ]
         result = parser._merge_text_and_tables(text_blocks, [])
         assert result == text_blocks
 
-    def test_table_replaces_overlapping_text(self, parser: FitzPdfPlumberParser) -> None:
+    def test_table_replaces_overlapping_text(
+        self, parser: FitzPdfPlumberParser
+    ) -> None:
         text_blocks = [
-            _TextBlock(page_number=1, block_type="text", content="Text in table area", bbox=(50, 50, 200, 150)),
-            _TextBlock(page_number=1, block_type="text", content="Text outside", bbox=(50, 200, 200, 250)),
+            _TextBlock(
+                page_number=1,
+                block_type="text",
+                content="Text in table area",
+                bbox=(50, 50, 200, 150),
+            ),
+            _TextBlock(
+                page_number=1,
+                block_type="text",
+                content="Text outside",
+                bbox=(50, 200, 200, 250),
+            ),
         ]
         table_blocks = [
-            _TextBlock(page_number=1, block_type="table", content="| A |", bbox=(50, 50, 200, 150)),
+            _TextBlock(
+                page_number=1,
+                block_type="table",
+                content="| A |",
+                bbox=(50, 50, 200, 150),
+            ),
         ]
         result = parser._merge_text_and_tables(text_blocks, table_blocks)
         contents = [b.content for b in result]
@@ -289,20 +352,37 @@ class TestMergeTextAndTables:
 
     def test_no_overlap_keeps_both(self, parser: FitzPdfPlumberParser) -> None:
         text_blocks = [
-            _TextBlock(page_number=1, block_type="text", content="Text", bbox=(0, 0, 100, 10)),
+            _TextBlock(
+                page_number=1, block_type="text", content="Text", bbox=(0, 0, 100, 10)
+            ),
         ]
         table_blocks = [
-            _TextBlock(page_number=1, block_type="table", content="| A |", bbox=(0, 200, 100, 250)),
+            _TextBlock(
+                page_number=1,
+                block_type="table",
+                content="| A |",
+                bbox=(0, 200, 100, 250),
+            ),
         ]
         result = parser._merge_text_and_tables(text_blocks, table_blocks)
         assert len(result) == 2
 
     def test_sorted_by_y_position(self, parser: FitzPdfPlumberParser) -> None:
         text_blocks = [
-            _TextBlock(page_number=1, block_type="text", content="Below", bbox=(0, 300, 100, 310)),
+            _TextBlock(
+                page_number=1,
+                block_type="text",
+                content="Below",
+                bbox=(0, 300, 100, 310),
+            ),
         ]
         table_blocks = [
-            _TextBlock(page_number=1, block_type="table", content="| A |", bbox=(0, 100, 100, 150)),
+            _TextBlock(
+                page_number=1,
+                block_type="table",
+                content="| A |",
+                bbox=(0, 100, 100, 150),
+            ),
         ]
         result = parser._merge_text_and_tables(text_blocks, table_blocks)
         assert result[0].content == "| A |"

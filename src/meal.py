@@ -1724,10 +1724,7 @@ class MealManager:
         skipped_files: list[str] = []
 
         for pdf_input in new_pdfs:
-            if isinstance(pdf_input, Path):
-                pdf_path = pdf_input
-            else:
-                pdf_path = Path(pdf_input)
+            pdf_path = pdf_input if isinstance(pdf_input, Path) else Path(pdf_input)
 
             if not pdf_path.is_absolute():
                 pdf_path = self.raw_dir / pdf_path

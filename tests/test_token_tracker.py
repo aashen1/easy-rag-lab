@@ -64,7 +64,10 @@ class TestDetailedTokenUsage:
             query_tokens=200,
         )
         assert usage.total_tokens == 1300
-        assert usage.system_prompt_tokens + usage.contexts_tokens + usage.query_tokens == 1000
+        assert (
+            usage.system_prompt_tokens + usage.contexts_tokens + usage.query_tokens
+            == 1000
+        )
 
     def test_to_dict(self):
         usage = DetailedTokenUsage(
@@ -242,8 +245,12 @@ class TestTokenTracker:
 
     def test_multiple_records_same_category(self):
         tracker = TokenTracker()
-        tracker.record("rag_qa", "model-a", DetailedTokenUsage(input_tokens=100, output_tokens=50))
-        tracker.record("rag_qa", "model-a", DetailedTokenUsage(input_tokens=200, output_tokens=80))
+        tracker.record(
+            "rag_qa", "model-a", DetailedTokenUsage(input_tokens=100, output_tokens=50)
+        )
+        tracker.record(
+            "rag_qa", "model-a", DetailedTokenUsage(input_tokens=200, output_tokens=80)
+        )
 
         assert tracker.record_count == 2
         total = tracker.get_total()
@@ -256,9 +263,19 @@ class TestTokenTracker:
 
     def test_multiple_categories(self):
         tracker = TokenTracker()
-        tracker.record("rag_qa", "model-a", DetailedTokenUsage(input_tokens=100, output_tokens=50))
-        tracker.record("test_generation", "model-a", DetailedTokenUsage(input_tokens=80, output_tokens=30))
-        tracker.record("report_generation", "model-a", DetailedTokenUsage(input_tokens=50, output_tokens=20))
+        tracker.record(
+            "rag_qa", "model-a", DetailedTokenUsage(input_tokens=100, output_tokens=50)
+        )
+        tracker.record(
+            "test_generation",
+            "model-a",
+            DetailedTokenUsage(input_tokens=80, output_tokens=30),
+        )
+        tracker.record(
+            "report_generation",
+            "model-a",
+            DetailedTokenUsage(input_tokens=50, output_tokens=20),
+        )
 
         summary = tracker.get_summary_by_category()
         assert len(summary) == 3
@@ -305,9 +322,17 @@ class TestTokenTracker:
 
     def test_get_records_by_category(self):
         tracker = TokenTracker()
-        tracker.record("rag_qa", "model-a", DetailedTokenUsage(input_tokens=100, output_tokens=50))
-        tracker.record("test_generation", "model-a", DetailedTokenUsage(input_tokens=80, output_tokens=30))
-        tracker.record("rag_qa", "model-a", DetailedTokenUsage(input_tokens=200, output_tokens=80))
+        tracker.record(
+            "rag_qa", "model-a", DetailedTokenUsage(input_tokens=100, output_tokens=50)
+        )
+        tracker.record(
+            "test_generation",
+            "model-a",
+            DetailedTokenUsage(input_tokens=80, output_tokens=30),
+        )
+        tracker.record(
+            "rag_qa", "model-a", DetailedTokenUsage(input_tokens=200, output_tokens=80)
+        )
 
         rag_records = tracker.get_records_by_category("rag_qa")
         assert len(rag_records) == 2
@@ -316,7 +341,11 @@ class TestTokenTracker:
 
     def test_estimate_cost(self):
         tracker = TokenTracker()
-        tracker.record("rag_qa", "LongCat-Flash-Lite", DetailedTokenUsage(input_tokens=10000, output_tokens=5000))
+        tracker.record(
+            "rag_qa",
+            "LongCat-Flash-Lite",
+            DetailedTokenUsage(input_tokens=10000, output_tokens=5000),
+        )
 
         cost_config = {
             "models": {
@@ -342,8 +371,16 @@ class TestTokenTracker:
 
     def test_estimate_cost_by_category(self):
         tracker = TokenTracker()
-        tracker.record("rag_qa", "LongCat-Flash-Lite", DetailedTokenUsage(input_tokens=10000, output_tokens=5000))
-        tracker.record("test_generation", "LongCat-Flash-Lite", DetailedTokenUsage(input_tokens=5000, output_tokens=2000))
+        tracker.record(
+            "rag_qa",
+            "LongCat-Flash-Lite",
+            DetailedTokenUsage(input_tokens=10000, output_tokens=5000),
+        )
+        tracker.record(
+            "test_generation",
+            "LongCat-Flash-Lite",
+            DetailedTokenUsage(input_tokens=5000, output_tokens=2000),
+        )
 
         cost_config = {
             "models": {
@@ -359,14 +396,22 @@ class TestTokenTracker:
         assert "rag_qa" in cost["by_category"]
         assert "test_generation" in cost["by_category"]
         assert cost["by_category"]["rag_qa"]["total_cost"] == pytest.approx(0.02)
-        assert cost["by_category"]["test_generation"]["total_cost"] == pytest.approx(0.009)
+        assert cost["by_category"]["test_generation"]["total_cost"] == pytest.approx(
+            0.009
+        )
 
     def test_merge(self):
         tracker1 = TokenTracker()
-        tracker1.record("rag_qa", "model-a", DetailedTokenUsage(input_tokens=100, output_tokens=50))
+        tracker1.record(
+            "rag_qa", "model-a", DetailedTokenUsage(input_tokens=100, output_tokens=50)
+        )
 
         tracker2 = TokenTracker()
-        tracker2.record("test_generation", "model-b", DetailedTokenUsage(input_tokens=80, output_tokens=30))
+        tracker2.record(
+            "test_generation",
+            "model-b",
+            DetailedTokenUsage(input_tokens=80, output_tokens=30),
+        )
 
         tracker1.merge(tracker2)
         assert tracker1.record_count == 2
@@ -375,7 +420,9 @@ class TestTokenTracker:
 
     def test_reset(self):
         tracker = TokenTracker()
-        tracker.record("rag_qa", "model-a", DetailedTokenUsage(input_tokens=100, output_tokens=50))
+        tracker.record(
+            "rag_qa", "model-a", DetailedTokenUsage(input_tokens=100, output_tokens=50)
+        )
         assert tracker.record_count == 1
 
         tracker.reset()

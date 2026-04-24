@@ -7,17 +7,17 @@ warnings.warn(
     stacklevel=2,
 )
 
-import json
-import random
-import sys
-import time
-from datetime import datetime
-from pathlib import Path
-from typing import Any
+import json  # noqa: E402
+import random  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
+from datetime import datetime  # noqa: E402
+from pathlib import Path  # noqa: E402
+from typing import Any  # noqa: E402
 
-from loguru import logger
+from loguru import logger  # noqa: E402
 
-from eval.metrics import (
+from eval.metrics import (  # noqa: E402
     calculate_answer_relevancy,
     calculate_context_precision,
     calculate_context_recall,
@@ -26,17 +26,17 @@ from eval.metrics import (
     calculate_mrr,
     calculate_ndcg,
 )
-from src.experiment import (
+from src.experiment import (  # noqa: E402
     ExperimentConfig,
     is_new_format,
     load_experiment_config,
     merge_config,
 )
-from src.meal import MealManager, MealStatus
-from src.pipeline import RAGPipeline
-from src.sampler import SamplingConfig
-from src.test_set_manager import TestSetManager
-from src.utils import get_llm_config, load_config, setup_logger
+from src.meal import MealManager, MealStatus  # noqa: E402
+from src.pipeline import RAGPipeline  # noqa: E402
+from src.sampler import SamplingConfig  # noqa: E402
+from src.test_set_manager import TestSetManager  # noqa: E402
+from src.utils import get_llm_config, load_config, setup_logger  # noqa: E402
 
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
@@ -109,8 +109,7 @@ def run_evaluation(
     total_start_time = time.time()
 
     for i, test_case in enumerate(test_cases, 1):
-        logger.info(
-            f"Processing test case {i}/{len(test_cases)}: {test_case['id']}")
+        logger.info(f"Processing test case {i}/{len(test_cases)}: {test_case['id']}")
 
         case_start_time = time.time()
         try:
@@ -128,11 +127,17 @@ def run_evaluation(
             retrieval = {}
             if expect_retrieval and expected_sources:
                 if "hit_rate" in metrics_config:
-                    retrieval["hit_rate"] = calculate_hit_rate(retrieved_sources, expected_sources)
+                    retrieval["hit_rate"] = calculate_hit_rate(
+                        retrieved_sources, expected_sources
+                    )
                 if "mrr" in metrics_config:
-                    retrieval["mrr"] = calculate_mrr(retrieved_sources, expected_sources)
+                    retrieval["mrr"] = calculate_mrr(
+                        retrieved_sources, expected_sources
+                    )
                 if "ndcg" in metrics_config:
-                    retrieval["ndcg"] = calculate_ndcg(retrieved_sources, expected_sources, k=5)
+                    retrieval["ndcg"] = calculate_ndcg(
+                        retrieved_sources, expected_sources, k=5
+                    )
 
             contexts = response.get("contexts", [])
             answer = response.get("answer", "")
@@ -141,10 +146,11 @@ def run_evaluation(
 
             generation = {}
             if generation_metrics_config and llm_config:
-
                 if "faithfulness" in generation_metrics_config:
                     try:
-                        logger.info(f"Calculating faithfulness for test case {test_case['id']}")
+                        logger.info(
+                            f"Calculating faithfulness for test case {test_case['id']}"
+                        )
                         faithfulness_score = calculate_faithfulness(
                             answer=answer,
                             contexts=contexts,
@@ -159,7 +165,9 @@ def run_evaluation(
 
                 if "answer_relevancy" in generation_metrics_config:
                     try:
-                        logger.info(f"Calculating answer relevancy for test case {test_case['id']}")
+                        logger.info(
+                            f"Calculating answer relevancy for test case {test_case['id']}"
+                        )
                         relevancy_score = calculate_answer_relevancy(
                             question=question,
                             answer=answer,
@@ -185,7 +193,9 @@ def run_evaluation(
 
                     if "context_precision" in llm_retrieval_metrics_config:
                         try:
-                            logger.info(f"Calculating context precision for test case {test_case['id']}")
+                            logger.info(
+                                f"Calculating context precision for test case {test_case['id']}"
+                            )
                             cp_score = calculate_context_precision(
                                 question=question,
                                 expected_output=ground_truth,
@@ -196,12 +206,16 @@ def run_evaluation(
                             )
                             llm_retrieval["context_precision"] = cp_score
                         except Exception as e:
-                            logger.error(f"Failed to calculate context precision: {str(e)}")
+                            logger.error(
+                                f"Failed to calculate context precision: {str(e)}"
+                            )
                             llm_retrieval["context_precision"] = None
 
                     if "context_recall" in llm_retrieval_metrics_config:
                         try:
-                            logger.info(f"Calculating context recall for test case {test_case['id']}")
+                            logger.info(
+                                f"Calculating context recall for test case {test_case['id']}"
+                            )
                             cr_score = calculate_context_recall(
                                 question=question,
                                 ground_truth=ground_truth,
@@ -212,7 +226,9 @@ def run_evaluation(
                             )
                             llm_retrieval["context_recall"] = cr_score
                         except Exception as e:
-                            logger.error(f"Failed to calculate context recall: {str(e)}")
+                            logger.error(
+                                f"Failed to calculate context recall: {str(e)}"
+                            )
                             llm_retrieval["context_recall"] = None
 
             result = {
@@ -238,14 +254,26 @@ def run_evaluation(
             if "ndcg" in retrieval:
                 metric_parts.append(f"NDCG={retrieval['ndcg']:.2f}")
             if generation:
-                if "faithfulness" in generation and generation["faithfulness"] is not None:
+                if (
+                    "faithfulness" in generation
+                    and generation["faithfulness"] is not None
+                ):
                     metric_parts.append(f"FA={generation['faithfulness']:.2f}")
-                if "answer_relevancy" in generation and generation["answer_relevancy"] is not None:
+                if (
+                    "answer_relevancy" in generation
+                    and generation["answer_relevancy"] is not None
+                ):
                     metric_parts.append(f"AR={generation['answer_relevancy']:.2f}")
             if llm_retrieval:
-                if "context_precision" in llm_retrieval and llm_retrieval["context_precision"] is not None:
+                if (
+                    "context_precision" in llm_retrieval
+                    and llm_retrieval["context_precision"] is not None
+                ):
                     metric_parts.append(f"CP={llm_retrieval['context_precision']:.2f}")
-                if "context_recall" in llm_retrieval and llm_retrieval["context_recall"] is not None:
+                if (
+                    "context_recall" in llm_retrieval
+                    and llm_retrieval["context_recall"] is not None
+                ):
                     metric_parts.append(f"CR={llm_retrieval['context_recall']:.2f}")
             metric_str = ", ".join(metric_parts)
             logger.success(
@@ -271,32 +299,42 @@ def run_evaluation(
     valid_results = [r for r in results if "retrieval" in r and r["retrieval"]]
     if valid_results:
         for metric_name in metrics_config:
-            values = [r["retrieval"][metric_name] for r in valid_results if metric_name in r["retrieval"]]
+            values = [
+                r["retrieval"][metric_name]
+                for r in valid_results
+                if metric_name in r["retrieval"]
+            ]
             if values:
                 retrieval_metrics[f"avg_{metric_name}"] = sum(values) / len(values)
             else:
                 retrieval_metrics[f"avg_{metric_name}"] = 0
 
     generation_metrics = {}
-    valid_generation_results = [r for r in results if "generation" in r and r["generation"]]
+    valid_generation_results = [
+        r for r in results if "generation" in r and r["generation"]
+    ]
     if valid_generation_results:
         for metric_name in generation_metrics_config:
             values = [
                 r["generation"][metric_name]
                 for r in valid_generation_results
-                if metric_name in r["generation"] and r["generation"][metric_name] is not None
+                if metric_name in r["generation"]
+                and r["generation"][metric_name] is not None
             ]
             if values:
                 generation_metrics[f"avg_{metric_name}"] = sum(values) / len(values)
 
     llm_retrieval_metrics = {}
-    valid_llm_retrieval_results = [r for r in results if "llm_retrieval" in r and r["llm_retrieval"]]
+    valid_llm_retrieval_results = [
+        r for r in results if "llm_retrieval" in r and r["llm_retrieval"]
+    ]
     if valid_llm_retrieval_results:
         for metric_name in llm_retrieval_metrics_config:
             values = [
                 r["llm_retrieval"][metric_name]
                 for r in valid_llm_retrieval_results
-                if metric_name in r["llm_retrieval"] and r["llm_retrieval"][metric_name] is not None
+                if metric_name in r["llm_retrieval"]
+                and r["llm_retrieval"][metric_name] is not None
             ]
             if values:
                 llm_retrieval_metrics[f"avg_{metric_name}"] = sum(values) / len(values)
@@ -390,9 +428,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output-dir", type=str, default="data/eval", help="Output directory"
     )
-    parser.add_argument(
-        "--sample-count", type=int, help="Sample N PDFs for testing"
-    )
+    parser.add_argument("--sample-count", type=int, help="Sample N PDFs for testing")
     parser.add_argument(
         "--sample-pages", type=int, help="Sample PDFs until total pages reach N"
     )
@@ -411,22 +447,23 @@ if __name__ == "__main__":
     parser.add_argument(
         "--llm-preset", type=str, help="LLM preset name (default, opus, sonnet, haiku)"
     )
+    parser.add_argument("--meal", type=str, help="Use specified meal for evaluation")
     parser.add_argument(
-        "--meal", type=str, help="Use specified meal for evaluation"
+        "--test-set",
+        type=str,
+        help="Test set name within the meal (without .json extension)",
     )
     parser.add_argument(
-        "--test-set", type=str,
-        help="Test set name within the meal (without .json extension)"
-    )
-    parser.add_argument(
-        "--exp-config", type=str,
+        "--exp-config",
+        type=str,
         help="Path to experiment configuration YAML file. If specified, "
-             "meal and test-set parameters will be loaded from the experiment config."
+        "meal and test-set parameters will be loaded from the experiment config.",
     )
     parser.add_argument(
-        "--variant", type=str,
+        "--variant",
+        type=str,
         help="Variant name to use from experiment config (only valid with --exp-config). "
-             "If not specified, uses the first variant."
+        "If not specified, uses the first variant.",
     )
 
     args = parser.parse_args()
@@ -453,7 +490,8 @@ if __name__ == "__main__":
         meal_name = exp_config.data.get("meal")
         if not meal_name:
             logger.error(
-                "Experiment configuration must specify a meal name in data.meal field")
+                "Experiment configuration must specify a meal name in data.meal field"
+            )
             sys.exit(1)
 
         if args.variant:
@@ -463,8 +501,7 @@ if __name__ == "__main__":
                     variant_config = v
                     break
             if variant_config is None:
-                available_variants = [v.get("name")
-                                      for v in exp_config.variants]
+                available_variants = [v.get("name") for v in exp_config.variants]
                 logger.error(
                     f"Variant '{args.variant}' not found. "
                     f"Available variants: {available_variants}"
@@ -473,8 +510,7 @@ if __name__ == "__main__":
         else:
             variant_config = exp_config.variants[0] if exp_config.variants else None
             if variant_config:
-                logger.info(
-                    f"Using first variant: {variant_config.get('name')}")
+                logger.info(f"Using first variant: {variant_config.get('name')}")
 
         config = merge_config(config, exp_config, variant_config)
 
@@ -499,11 +535,16 @@ if __name__ == "__main__":
                 test_set_name = first_test_set.get("name")
                 test_set_data = test_set_manager.find_by_name(meal_name, test_set_name)
                 if test_set_data is None:
-                    test_set_files = sorted(test_sets_dir.glob("*.json")) if test_sets_dir.exists() else []
+                    test_set_files = (
+                        sorted(test_sets_dir.glob("*.json"))
+                        if test_sets_dir.exists()
+                        else []
+                    )
                     if test_set_files:
                         test_set_path = test_set_files[0]
                         logger.warning(
-                            f"Test set '{test_set_name}' not found, using: {test_set_path.stem}")
+                            f"Test set '{test_set_name}' not found, using: {test_set_path.stem}"
+                        )
                     else:
                         logger.error(
                             f"No test sets found for meal '{meal_name}'. "
@@ -519,11 +560,16 @@ if __name__ == "__main__":
                 test_set_path = test_sets_dir / f"auto_{strategy}_n{num_questions}.json"
 
                 if not test_set_path.exists():
-                    test_set_files = sorted(test_sets_dir.glob("*.json")) if test_sets_dir.exists() else []
+                    test_set_files = (
+                        sorted(test_sets_dir.glob("*.json"))
+                        if test_sets_dir.exists()
+                        else []
+                    )
                     if test_set_files:
                         test_set_path = test_set_files[0]
                         logger.info(
-                            f"Specified test set not found, using: {test_set_path.stem}")
+                            f"Specified test set not found, using: {test_set_path.stem}"
+                        )
                     else:
                         logger.error(
                             f"No test sets found for meal '{meal_name}'. "
@@ -531,7 +577,9 @@ if __name__ == "__main__":
                         )
                         sys.exit(1)
         else:
-            test_set_files = sorted(test_sets_dir.glob("*.json")) if test_sets_dir.exists() else []
+            test_set_files = (
+                sorted(test_sets_dir.glob("*.json")) if test_sets_dir.exists() else []
+            )
             if not test_set_files:
                 logger.error(
                     f"No test sets found for meal '{meal_name}'. "
@@ -562,8 +610,11 @@ if __name__ == "__main__":
             if args.test_set:
                 test_set_path = test_sets_dir / f"{args.test_set}.json"
             else:
-                test_set_files = sorted(test_sets_dir.glob(
-                    "*.json")) if test_sets_dir.exists() else []
+                test_set_files = (
+                    sorted(test_sets_dir.glob("*.json"))
+                    if test_sets_dir.exists()
+                    else []
+                )
                 if not test_set_files:
                     logger.error(
                         f"No test sets found for meal '{args.meal}'. "
@@ -612,8 +663,9 @@ if __name__ == "__main__":
 
     if not meal_name_for_pipeline:
         collection_info = pipeline.indexer.get_collection_info()
-        index_exists = collection_info is not None and collection_info.get(
-            "points_count", 0) > 0
+        index_exists = (
+            collection_info is not None and collection_info.get("points_count", 0) > 0
+        )
 
         if args.rebuild:
             logger.info("Rebuilding index from scratch...")
@@ -622,7 +674,8 @@ if __name__ == "__main__":
         elif args.build_index or not index_exists:
             if not index_exists:
                 logger.warning(
-                    "Vector index is empty or does not exist. Building index automatically...")
+                    "Vector index is empty or does not exist. Building index automatically..."
+                )
             pipeline.build_index(sampling_config=sampling_config)
             logger.success("Index built successfully")
 
@@ -632,7 +685,9 @@ if __name__ == "__main__":
 
     if args.exp_config and exp_config:
         metrics_config = exp_config.evaluation.get("metrics", {}).get("retrieval")
-        generation_metrics_config = exp_config.evaluation.get("metrics", {}).get("generation")
+        generation_metrics_config = exp_config.evaluation.get("metrics", {}).get(
+            "generation"
+        )
 
         if generation_metrics_config:
             preset_name = exp_config.evaluation.get("llm_preset", args.llm_preset)

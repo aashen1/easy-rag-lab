@@ -137,11 +137,13 @@ class TestPyMuPDF4LLMParserOptionsPassthrough:
         pdf_file = tmp_path / "test.pdf"
         pdf_file.write_bytes(b"%PDF-1.4\ntest")
 
-        parser = PyMuPDF4LLMParser(config={
-            "page_chunks": True,
-            "ignore_images": True,
-            "table_strategy": "lines",
-        })
+        parser = PyMuPDF4LLMParser(
+            config={
+                "page_chunks": True,
+                "ignore_images": True,
+                "table_strategy": "lines",
+            }
+        )
         parser.parse(str(pdf_file))
 
         mock_to_markdown.assert_called_once_with(

@@ -9,7 +9,23 @@ from loguru import logger
 
 from src.exceptions import ConfigurationError
 
-VALID_RETRIEVAL_METRICS = {"hit_rate", "mrr", "ndcg", "chunk_hit_rate", "chunk_mrr", "chunk_ndcg", "dedup_hit_rate", "dedup_mrr", "dedup_ndcg", "false_positive_rate", "context_precision", "context_recall", "recall_3", "recall_5", "recall_10"}
+VALID_RETRIEVAL_METRICS = {
+    "hit_rate",
+    "mrr",
+    "ndcg",
+    "chunk_hit_rate",
+    "chunk_mrr",
+    "chunk_ndcg",
+    "dedup_hit_rate",
+    "dedup_mrr",
+    "dedup_ndcg",
+    "false_positive_rate",
+    "context_precision",
+    "context_recall",
+    "recall_3",
+    "recall_5",
+    "recall_10",
+}
 VALID_GENERATION_METRICS = {"faithfulness", "answer_relevancy"}
 VALID_ON_MISSING_VALUES = {"auto", "clean_only", "strict"}
 VALID_EVALUATION_BACKENDS = {"builtin", "ragas"}
@@ -21,7 +37,9 @@ VALID_RAGAS_METRICS = {
     "answer_correctness",
     "semantic_similarity",
 }
-RAGAS_EXCLUSIVE_METRICS = VALID_RAGAS_METRICS - VALID_GENERATION_METRICS - VALID_RETRIEVAL_METRICS
+RAGAS_EXCLUSIVE_METRICS = (
+    VALID_RAGAS_METRICS - VALID_GENERATION_METRICS - VALID_RETRIEVAL_METRICS
+)
 
 
 def is_new_format(test_set_config: dict[str, Any]) -> bool:
@@ -80,6 +98,7 @@ class ExperimentConfig:
     Raises:
         ValueError: If required fields are missing or invalid.
     """
+
     name: str
     description: str
     data: dict[str, Any]
@@ -119,7 +138,14 @@ class ExperimentConfig:
         Raises:
             ValueError: If required fields are missing.
         """
-        required_fields = ["name", "description", "data", "test_sets", "variants", "evaluation"]
+        required_fields = [
+            "name",
+            "description",
+            "data",
+            "test_sets",
+            "variants",
+            "evaluation",
+        ]
         missing_fields = [f for f in required_fields if f not in data]
         if missing_fields:
             raise ConfigurationError(f"Missing required fields: {missing_fields}")
@@ -164,16 +190,24 @@ class ExperimentConfig:
                 if is_new_format(test_set):
                     name = test_set.get("name")
                     if name is not None and not isinstance(name, str):
-                        errors.append(f"Test set {i} 'name' must be a string if provided")
+                        errors.append(
+                            f"Test set {i} 'name' must be a string if provided"
+                        )
                     if "generation" in test_set:
                         generation = test_set["generation"]
                         if not isinstance(generation, dict):
-                            errors.append(f"Test set {i} 'generation' must be a dictionary")
+                            errors.append(
+                                f"Test set {i} 'generation' must be a dictionary"
+                            )
                         else:
                             if "strategy" not in generation:
-                                errors.append(f"Test set {i} 'generation' missing 'strategy' field")
+                                errors.append(
+                                    f"Test set {i} 'generation' missing 'strategy' field"
+                                )
                             if "num_questions" not in generation:
-                                errors.append(f"Test set {i} 'generation' missing 'num_questions' field")
+                                errors.append(
+                                    f"Test set {i} 'generation' missing 'num_questions' field"
+                                )
                     if "on_missing" in test_set:
                         on_missing = test_set["on_missing"]
                         if on_missing not in VALID_ON_MISSING_VALUES:
@@ -191,10 +225,10 @@ class ExperimentConfig:
                 warnings.warn(
                     "test_sets uses deprecated configuration format. The experiment will run normally, but please consider migrating to the new format:\n"
                     "  test_sets:\n"
-                    "    - name: \"<custom_name>\"\n"
-                    "      on_missing: \"auto\"\n"
+                    '    - name: "<custom_name>"\n'
+                    '      on_missing: "auto"\n'
                     "      generation:\n"
-                    "        strategy: \"document\"\n"
+                    '        strategy: "document"\n'
                     "        num_questions: 10",
                     DeprecationWarning,
                     stacklevel=2,
@@ -235,7 +269,8 @@ class ExperimentConfig:
                         errors.append("Retrieval metrics must be a list")
                     else:
                         invalid_retrieval = [
-                            m for m in retrieval_metrics
+                            m
+                            for m in retrieval_metrics
                             if m not in VALID_RETRIEVAL_METRICS
                         ]
                         if invalid_retrieval:
@@ -245,10 +280,15 @@ class ExperimentConfig:
                             )
 
                         llm_retrieval_in_retrieval = [
-                            m for m in retrieval_metrics
+                            m
+                            for m in retrieval_metrics
                             if m in {"context_precision", "context_recall"}
                         ]
-                        if llm_retrieval_in_retrieval and "ragas" not in backends and "builtin" not in backends:
+                        if (
+                            llm_retrieval_in_retrieval
+                            and "ragas" not in backends
+                            and "builtin" not in backends
+                        ):
                             errors.append(
                                 f"LLM-based retrieval metrics {llm_retrieval_in_retrieval} require "
                                 f"'builtin' or 'ragas' in evaluation.backends"
@@ -259,9 +299,12 @@ class ExperimentConfig:
                     if not isinstance(generation_metrics, list):
                         errors.append("Generation metrics must be a list")
                     else:
-                        all_valid_generation = VALID_GENERATION_METRICS | VALID_RAGAS_METRICS
+                        all_valid_generation = (
+                            VALID_GENERATION_METRICS | VALID_RAGAS_METRICS
+                        )
                         invalid_generation = [
-                            m for m in generation_metrics
+                            m
+                            for m in generation_metrics
                             if m not in all_valid_generation
                         ]
                         if invalid_generation:
@@ -271,7 +314,8 @@ class ExperimentConfig:
                             )
 
                         non_builtin_generation = [
-                            m for m in generation_metrics
+                            m
+                            for m in generation_metrics
                             if m not in VALID_GENERATION_METRICS
                         ]
                         if non_builtin_generation and "ragas" not in backends:
@@ -320,7 +364,7 @@ def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]
 def merge_config(
     system_config: dict[str, Any],
     experiment_config: ExperimentConfig,
-    variant: dict[str, Any] | None = None
+    variant: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Merge system configuration with experiment configuration.
@@ -365,7 +409,9 @@ def load_experiment_config(config_path: str) -> ExperimentConfig:
     path = Path(config_path)
 
     if not path.exists():
-        raise ConfigurationError(f"Experiment configuration file not found: {config_path}")
+        raise ConfigurationError(
+            f"Experiment configuration file not found: {config_path}"
+        )
 
     try:
         with open(path, encoding="utf-8") as f:
@@ -378,7 +424,9 @@ def load_experiment_config(config_path: str) -> ExperimentConfig:
         raise ConfigurationError(f"Empty configuration file: {config_path}")
 
     if not isinstance(data, dict):
-        raise ConfigurationError(f"Configuration must be a dictionary, got {type(data).__name__}")
+        raise ConfigurationError(
+            f"Configuration must be a dictionary, got {type(data).__name__}"
+        )
 
     try:
         config = ExperimentConfig.from_dict(data)
@@ -399,7 +447,7 @@ def load_experiment_config(config_path: str) -> ExperimentConfig:
 def get_variant_config(
     system_config: dict[str, Any],
     experiment_config: ExperimentConfig,
-    variant_name: str
+    variant_name: str,
 ) -> dict[str, Any]:
     """
     Get merged configuration for a specific variant.
@@ -422,7 +470,9 @@ def get_variant_config(
             break
 
     if variant is None:
-        raise ConfigurationError(f"Variant '{variant_name}' not found in experiment configuration")
+        raise ConfigurationError(
+            f"Variant '{variant_name}' not found in experiment configuration"
+        )
 
     return merge_config(system_config, experiment_config, variant)
 
@@ -441,8 +491,7 @@ def list_variants(experiment_config: ExperimentConfig) -> list[str]:
 
 
 def get_test_set_config(
-    experiment_config: ExperimentConfig,
-    index: int = 0
+    experiment_config: ExperimentConfig, index: int = 0
 ) -> dict[str, Any]:
     """
     Get test set configuration by index.
@@ -489,6 +538,7 @@ class ExperimentResult:
     Raises:
         ValueError: If required fields are missing or invalid.
     """
+
     experiment_id: str
     name: str
     description: str
@@ -534,7 +584,14 @@ class ExperimentResult:
         Raises:
             ValueError: If required fields are missing.
         """
-        required_fields = ["experiment_id", "name", "description", "created_at", "status", "config"]
+        required_fields = [
+            "experiment_id",
+            "name",
+            "description",
+            "created_at",
+            "status",
+            "config",
+        ]
         missing_fields = [f for f in required_fields if f not in data]
         if missing_fields:
             raise ConfigurationError(f"Missing required fields: {missing_fields}")
@@ -652,7 +709,7 @@ class ExperimentManager:
         config: ExperimentConfig,
         meal_snapshot: dict[str, Any],
         test_set_snapshots: list[dict[str, Any]],
-        config_snapshot: dict[str, Any]
+        config_snapshot: dict[str, Any],
     ) -> None:
         """
         Save configuration and test set snapshots to the experiment directory.
@@ -670,12 +727,15 @@ class ExperimentManager:
         try:
             config_snapshot_path = exp_dir / "config_snapshot.yaml"
             with open(config_snapshot_path, "w", encoding="utf-8") as f:
-                yaml.dump(config_snapshot, f, default_flow_style=False, allow_unicode=True)
+                yaml.dump(
+                    config_snapshot, f, default_flow_style=False, allow_unicode=True
+                )
             logger.info(f"Saved config snapshot to {config_snapshot_path}")
 
             meal_snapshot_path = exp_dir / "meal_snapshot.json"
             with open(meal_snapshot_path, "w", encoding="utf-8") as f:
                 import json
+
                 json.dump(meal_snapshot, f, ensure_ascii=False, indent=2)
             logger.info(f"Saved meal snapshot to {meal_snapshot_path}")
 
@@ -685,6 +745,7 @@ class ExperimentManager:
                 snapshot_path = test_sets_dir / f"{strategy}.json"
                 with open(snapshot_path, "w", encoding="utf-8") as f:
                     import json
+
                     json.dump(snapshot, f, ensure_ascii=False, indent=2)
                 logger.info(f"Saved test set snapshot to {snapshot_path}")
 
@@ -692,6 +753,7 @@ class ExperimentManager:
             manifest_path = exp_dir / "manifest.json"
             with open(manifest_path, "w", encoding="utf-8") as f:
                 import json
+
                 json.dump(manifest, f, ensure_ascii=False, indent=2)
             logger.info(f"Saved manifest to {manifest_path}")
 
@@ -703,7 +765,7 @@ class ExperimentManager:
         self,
         exp_dir: Path,
         config: ExperimentConfig,
-        test_set_snapshots: list[dict[str, Any]]
+        test_set_snapshots: list[dict[str, Any]],
     ) -> dict[str, Any]:
         """
         Create manifest dictionary for the experiment.
@@ -719,8 +781,12 @@ class ExperimentManager:
         from datetime import datetime
 
         exp_id = exp_dir.name
-        test_set_strategies = [s.get("strategy", f"test_set_{i}") for i, s in enumerate(test_set_snapshots)]
-        variant_names = [v.get("name", f"variant_{i}") for i, v in enumerate(config.variants)]
+        test_set_strategies = [
+            s.get("strategy", f"test_set_{i}") for i, s in enumerate(test_set_snapshots)
+        ]
+        variant_names = [
+            v.get("name", f"variant_{i}") for i, v in enumerate(config.variants)
+        ]
 
         return {
             "experiment_id": exp_id,
@@ -785,7 +851,9 @@ class ExperimentManager:
                     with open(snapshot_file, encoding="utf-8") as f:
                         test_set_snapshots.append(json.load(f))
                 except json.JSONDecodeError as e:
-                    logger.warning(f"Failed to load test set snapshot {snapshot_file}: {str(e)}")
+                    logger.warning(
+                        f"Failed to load test set snapshot {snapshot_file}: {str(e)}"
+                    )
 
         results_dir = exp_dir / "results"
         variant_results = []
@@ -795,14 +863,18 @@ class ExperimentManager:
                     with open(result_file, encoding="utf-8") as f:
                         variant_results.append(json.load(f))
                 except json.JSONDecodeError as e:
-                    logger.warning(f"Failed to load variant result {result_file}: {str(e)}")
+                    logger.warning(
+                        f"Failed to load variant result {result_file}: {str(e)}"
+                    )
 
         config_dict = {
             "name": manifest.get("name", "unknown"),
             "description": manifest.get("description", ""),
             "data": config_snapshot.get("data", {"meal": "unknown"}),
-            "test_sets": [s for s in test_set_snapshots if "strategy" in s] or [{"strategy": "unknown", "num_questions": 0}],
-            "variants": [{"name": v} for v in manifest.get("variants", [])] or [{"name": "unknown"}],
+            "test_sets": [s for s in test_set_snapshots if "strategy" in s]
+            or [{"strategy": "unknown", "num_questions": 0}],
+            "variants": [{"name": v} for v in manifest.get("variants", [])]
+            or [{"name": "unknown"}],
             "evaluation": config_snapshot.get("evaluation", {"metrics": {}}),
         }
 
@@ -835,7 +907,9 @@ class ExperimentManager:
         if not self._exp_dir.exists():
             return experiments
 
-        for exp_path in sorted(self._exp_dir.iterdir(), key=lambda p: p.name, reverse=True):
+        for exp_path in sorted(
+            self._exp_dir.iterdir(), key=lambda p: p.name, reverse=True
+        ):
             if not exp_path.is_dir():
                 continue
 
@@ -844,30 +918,38 @@ class ExperimentManager:
                 try:
                     with open(manifest_path, encoding="utf-8") as f:
                         manifest = json.load(f)
-                    experiments.append({
-                        "experiment_id": manifest.get("experiment_id", exp_path.name),
-                        "name": manifest.get("name", "unknown"),
-                        "created_at": manifest.get("created_at", ""),
-                        "status": manifest.get("status", "unknown"),
-                        "path": str(exp_path),
-                    })
+                    experiments.append(
+                        {
+                            "experiment_id": manifest.get(
+                                "experiment_id", exp_path.name
+                            ),
+                            "name": manifest.get("name", "unknown"),
+                            "created_at": manifest.get("created_at", ""),
+                            "status": manifest.get("status", "unknown"),
+                            "path": str(exp_path),
+                        }
+                    )
                 except (json.JSONDecodeError, OSError) as e:
                     logger.warning(f"Failed to read manifest for {exp_path}: {str(e)}")
-                    experiments.append({
+                    experiments.append(
+                        {
+                            "experiment_id": exp_path.name,
+                            "name": "unknown",
+                            "created_at": "",
+                            "status": "corrupted",
+                            "path": str(exp_path),
+                        }
+                    )
+            else:
+                experiments.append(
+                    {
                         "experiment_id": exp_path.name,
                         "name": "unknown",
                         "created_at": "",
-                        "status": "corrupted",
+                        "status": "incomplete",
                         "path": str(exp_path),
-                    })
-            else:
-                experiments.append({
-                    "experiment_id": exp_path.name,
-                    "name": "unknown",
-                    "created_at": "",
-                    "status": "incomplete",
-                    "path": str(exp_path),
-                })
+                    }
+                )
 
         return experiments
 
@@ -906,7 +988,9 @@ class ExperimentManager:
 
         manifest_path = exp_dir / "manifest.json"
         if not manifest_path.exists():
-            logger.warning(f"Manifest file not found: {manifest_path}, skipping status update")
+            logger.warning(
+                f"Manifest file not found: {manifest_path}, skipping status update"
+            )
             return
 
         try:
@@ -924,10 +1008,7 @@ class ExperimentManager:
             raise
 
     def save_variant_result(
-        self,
-        exp_dir: Path,
-        variant_name: str,
-        result: dict[str, Any]
+        self, exp_dir: Path, variant_name: str, result: dict[str, Any]
     ) -> Path:
         """
         Save evaluation result for a specific variant.

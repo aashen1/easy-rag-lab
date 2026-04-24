@@ -246,7 +246,7 @@ class TestRunEvalExpConfig:
     def test_backward_compatibility_meal_arg(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            meal_dir = self._create_meal_structure(temp_path, "legacy_meal")
+            self._create_meal_structure(temp_path, "legacy_meal")
 
             from src.meal import MealManager
 
@@ -494,7 +494,10 @@ class TestGenerationMetrics:
             {
                 "answer": "Revenue is 100M.",
                 "sources": ["report_a.pdf", "report_c.pdf"],
-                "contexts": ["Revenue for 2023 was 100 million.", "Total revenue grew by 10%."],
+                "contexts": [
+                    "Revenue for 2023 was 100 million.",
+                    "Total revenue grew by 10%.",
+                ],
             },
             {
                 "answer": "Profit is 50M.",
@@ -544,7 +547,11 @@ class TestGenerationMetrics:
                 output_dir=str(output_dir),
                 metrics_config=["hit_rate"],
                 generation_metrics_config=[],
-                llm_config={"api_key": "test", "base_url": "test", "model_name": "test"},
+                llm_config={
+                    "api_key": "test",
+                    "base_url": "test",
+                    "model_name": "test",
+                },
             )
 
             for result in summary["results"]:
@@ -584,8 +591,10 @@ class TestGenerationMetrics:
             output_dir = temp_path / "output"
             pipeline = self._create_mock_pipeline_with_contexts()
 
-            with patch("eval.run_eval.calculate_faithfulness") as mock_faithfulness, \
-                 patch("eval.run_eval.calculate_answer_relevancy") as mock_relevancy:
+            with (
+                patch("eval.run_eval.calculate_faithfulness") as mock_faithfulness,
+                patch("eval.run_eval.calculate_answer_relevancy") as mock_relevancy,
+            ):
                 mock_faithfulness.return_value = 0.85
                 mock_relevancy.return_value = 0.92
 
@@ -661,8 +670,10 @@ class TestGenerationMetrics:
             output_dir = temp_path / "output"
             pipeline = self._create_mock_pipeline_with_contexts()
 
-            with patch("eval.run_eval.calculate_faithfulness") as mock_faithfulness, \
-                 patch("eval.run_eval.calculate_answer_relevancy") as mock_relevancy:
+            with (
+                patch("eval.run_eval.calculate_faithfulness") as mock_faithfulness,
+                patch("eval.run_eval.calculate_answer_relevancy") as mock_relevancy,
+            ):
                 mock_faithfulness.side_effect = Exception("LLM API error")
                 mock_relevancy.return_value = 0.90
 
@@ -698,14 +709,16 @@ class TestGenerationMetrics:
             output_dir = temp_path / "output"
             pipeline = self._create_mock_pipeline_with_contexts()
 
-            with patch("eval.run_eval.calculate_faithfulness") as mock_faithfulness, \
-                 patch("eval.run_eval.calculate_answer_relevancy") as mock_relevancy:
+            with (
+                patch("eval.run_eval.calculate_faithfulness") as mock_faithfulness,
+                patch("eval.run_eval.calculate_answer_relevancy") as mock_relevancy,
+            ):
                 mock_faithfulness.return_value = 0.80
                 mock_relevancy.return_value = 0.95
 
                 from eval.run_eval import run_evaluation
 
-                summary = run_evaluation(
+                run_evaluation(
                     pipeline=pipeline,
                     test_data_path=str(test_data_path),
                     output_dir=str(output_dir),
@@ -761,8 +774,12 @@ class TestGenerationMetrics:
 
             exp_config = load_experiment_config(str(config_path))
 
-            retrieval_metrics = exp_config.evaluation.get("metrics", {}).get("retrieval")
-            generation_metrics = exp_config.evaluation.get("metrics", {}).get("generation")
+            retrieval_metrics = exp_config.evaluation.get("metrics", {}).get(
+                "retrieval"
+            )
+            generation_metrics = exp_config.evaluation.get("metrics", {}).get(
+                "generation"
+            )
 
             assert retrieval_metrics == ["hit_rate", "mrr"]
             assert generation_metrics == ["faithfulness", "answer_relevancy"]

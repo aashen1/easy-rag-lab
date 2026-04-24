@@ -127,8 +127,6 @@ class TestSemanticChunker:
         embedder = self._make_mock_embedder(similarities=[0.1, 0.1, 0.1])
         text = "短句。短句。短句。这是较长的一句话关于茅台公司的营业收入情况。"
 
-        chunks = chunk_text_semantic(
-            text, embedder, chunk_size=512, min_chunk_size=5
-        )
+        chunks = chunk_text_semantic(text, embedder, chunk_size=512, min_chunk_size=5)
 
         assert len(chunks) >= 1

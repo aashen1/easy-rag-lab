@@ -197,7 +197,9 @@ class TestParseAllPdfs:
         assert mock_to_markdown.call_count == 1
 
     @patch("src.parser.pymupdf4llm.to_markdown")
-    def test_parse_all_pdfs_preserves_directory_structure(self, mock_to_markdown, tmp_path):
+    def test_parse_all_pdfs_preserves_directory_structure(
+        self, mock_to_markdown, tmp_path
+    ):
         mock_to_markdown.return_value = "# Test Document\n\nThis is test content."
 
         input_dir = tmp_path / "input"
@@ -214,7 +216,9 @@ class TestParseAllPdfs:
         assert len(results) == 1
         assert results[0]["status"] == "success"
 
-        expected_output = output_dir / "annual_reports" / "2023" / "五粮液" / "2023年度报告_英文_.md"
+        expected_output = (
+            output_dir / "annual_reports" / "2023" / "五粮液" / "2023年度报告_英文_.md"
+        )
         actual_output = Path(results[0]["output"])
 
         assert actual_output == expected_output
@@ -238,9 +242,7 @@ class TestParseAllPdfs:
         assert isinstance(result, list)
         assert len(result) == 2
         assert result[0]["text"] == "Page 1 content"
-        mock_to_markdown.assert_called_once_with(
-            str(pdf_file), page_chunks=True
-        )
+        mock_to_markdown.assert_called_once_with(str(pdf_file), page_chunks=True)
 
     @patch("src.parser.pymupdf4llm.to_markdown")
     def test_parse_pdf_page_chunks_false(self, mock_to_markdown, tmp_path):
@@ -252,9 +254,7 @@ class TestParseAllPdfs:
         result = parse_pdf(str(pdf_file), page_chunks=False)
         assert isinstance(result, str)
         assert "Test Document" in result
-        mock_to_markdown.assert_called_once_with(
-            str(pdf_file), page_chunks=False
-        )
+        mock_to_markdown.assert_called_once_with(str(pdf_file), page_chunks=False)
 
     @patch("src.parser.pymupdf4llm.to_markdown")
     def test_parse_all_pdfs_page_chunks_output(self, mock_to_markdown, tmp_path):
@@ -306,7 +306,10 @@ class TestParseAllPdfs:
         output_file.write_text('[{"page": 1, "text": "existing"}]')
 
         results = parse_all_pdfs(
-            str(input_dir), str(output_dir), force=False, parser_options={"page_chunks": True}
+            str(input_dir),
+            str(output_dir),
+            force=False,
+            parser_options={"page_chunks": True},
         )
 
         assert len(results) == 1
@@ -331,7 +334,10 @@ class TestParseAllPdfs:
         output_file.write_text('[{"page": 1, "text": "existing"}]')
 
         results = parse_all_pdfs(
-            str(input_dir), str(output_dir), force=True, parser_options={"page_chunks": True}
+            str(input_dir),
+            str(output_dir),
+            force=True,
+            parser_options={"page_chunks": True},
         )
 
         assert len(results) == 1

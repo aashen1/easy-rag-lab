@@ -108,7 +108,7 @@ def _judge_context_relevance(
 
         response_text = message.content[0].text.strip()
 
-        json_match = re.search(r'\{[\s\S]*\}', response_text)
+        json_match = re.search(r"\{[\s\S]*\}", response_text)
         if json_match:
             result = json.loads(json_match.group())
             verdict = result.get("verdict", "否")
@@ -175,7 +175,9 @@ def calculate_context_precision(
 
     eval_cfg = _get_eval_config(config)
     base_url = base_url or eval_cfg.get("base_url", DEFAULT_EVAL_CONFIG["base_url"])
-    model_name = model_name or eval_cfg.get("model_name", DEFAULT_EVAL_CONFIG["model_name"])
+    model_name = model_name or eval_cfg.get(
+        "model_name", DEFAULT_EVAL_CONFIG["model_name"]
+    )
 
     relevance_verdicts = []
     for ctx in retrieval_context:
@@ -216,7 +218,7 @@ def _split_into_sentences(text: str) -> list[str]:
     Returns:
         List of sentences.
     """
-    sentences = re.split(r'[。！？.!?]', text)
+    sentences = re.split(r"[。！？.!?]", text)
     sentences = [s.strip() for s in sentences if s.strip()]
     return sentences
 
@@ -260,7 +262,7 @@ def _can_infer_from_context(
 
         response_text = message.content[0].text.strip()
 
-        json_match = re.search(r'\{[\s\S]*\}', response_text)
+        json_match = re.search(r"\{[\s\S]*\}", response_text)
         if json_match:
             result = json.loads(json_match.group())
             verdict = result.get("verdict", "否")
@@ -327,7 +329,9 @@ def calculate_context_recall(
 
     eval_cfg = _get_eval_config(config)
     base_url = base_url or eval_cfg.get("base_url", DEFAULT_EVAL_CONFIG["base_url"])
-    model_name = model_name or eval_cfg.get("model_name", DEFAULT_EVAL_CONFIG["model_name"])
+    model_name = model_name or eval_cfg.get(
+        "model_name", DEFAULT_EVAL_CONFIG["model_name"]
+    )
 
     sentences = _split_into_sentences(ground_truth)
     if not sentences:
@@ -338,7 +342,9 @@ def calculate_context_recall(
     inferable_count = 0
 
     for sentence in sentences:
-        if _can_infer_from_context(sentence, context_text, api_key, base_url, model_name):
+        if _can_infer_from_context(
+            sentence, context_text, api_key, base_url, model_name
+        ):
             inferable_count += 1
 
     score = inferable_count / len(sentences)

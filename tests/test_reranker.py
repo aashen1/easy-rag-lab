@@ -17,9 +17,24 @@ class TestReranker:
 
     def _make_test_results(self):
         return [
-            {"chunk_id": "c1", "text": "贵州茅台2023年营业收入1500亿元", "metadata": {"source": "moutai.md"}, "score": 0.95},
-            {"chunk_id": "c2", "text": "五粮液2023年营收832亿元", "metadata": {"source": "wuliangye.md"}, "score": 0.80},
-            {"chunk_id": "c3", "text": "白酒行业整体增速放缓", "metadata": {"source": "industry.md"}, "score": 0.60},
+            {
+                "chunk_id": "c1",
+                "text": "贵州茅台2023年营业收入1500亿元",
+                "metadata": {"source": "moutai.md"},
+                "score": 0.95,
+            },
+            {
+                "chunk_id": "c2",
+                "text": "五粮液2023年营收832亿元",
+                "metadata": {"source": "wuliangye.md"},
+                "score": 0.80,
+            },
+            {
+                "chunk_id": "c3",
+                "text": "白酒行业整体增速放缓",
+                "metadata": {"source": "industry.md"},
+                "score": 0.60,
+            },
         ]
 
     @patch("src.reranker.AutoModelForSequenceClassification")
@@ -83,12 +98,16 @@ class TestReranker:
         assert len(reranked) == 2
 
     def test_rerank_empty_query_raises(self):
-        with patch("src.reranker.AutoModelForSequenceClassification"), \
-             patch("src.reranker.AutoTokenizer"):
+        with (
+            patch("src.reranker.AutoModelForSequenceClassification"),
+            patch("src.reranker.AutoTokenizer"),
+        ):
             pass
 
         reranker = object.__new__(Reranker)
-        with pytest.raises(ConfigurationError, match="Query must be a non-empty string"):
+        with pytest.raises(
+            ConfigurationError, match="Query must be a non-empty string"
+        ):
             reranker.rerank("", self._make_test_results())
 
     def test_rerank_empty_results_returns_empty(self):

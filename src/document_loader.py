@@ -189,9 +189,7 @@ class PagesJsonLoader(DocumentLoader):
 
             for page in pages_data:
                 if not isinstance(page, dict):
-                    logger.warning(
-                        f"Skipping non-dict page entry in {file_path}"
-                    )
+                    logger.warning(f"Skipping non-dict page entry in {file_path}")
                     continue
 
                 text = page.get("text", "")

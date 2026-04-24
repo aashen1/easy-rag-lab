@@ -76,7 +76,7 @@ class TestChunkText:
 
         assert len(result) > 1
 
-        for i, chunk in enumerate(result):
+        for chunk in result:
             assert chunk["metadata"]["token_count"] <= 50
 
     def test_chunk_text_token_count_accuracy(self):
@@ -88,7 +88,9 @@ class TestChunkText:
 
     def test_chunk_text_custom_encoding(self):
         text = "This is a test sentence."
-        result = chunk_text(text, chunk_size=100, overlap=0, encoding_name="cl100k_base")
+        result = chunk_text(
+            text, chunk_size=100, overlap=0, encoding_name="cl100k_base"
+        )
 
         assert len(result) == 1
         assert result[0]["text"] == text
@@ -230,7 +232,13 @@ class TestProcessParsedFiles:
         assert len(results) == 1
         assert results[0]["status"] == "success"
 
-        expected_output = output_dir / "annual_reports" / "2023" / "五粮液" / "2023年度报告_英文_.jsonl"
+        expected_output = (
+            output_dir
+            / "annual_reports"
+            / "2023"
+            / "五粮液"
+            / "2023年度报告_英文_.jsonl"
+        )
         actual_output = Path(results[0]["output"])
 
         assert actual_output == expected_output
@@ -240,7 +248,12 @@ class TestProcessParsedFiles:
             first_line = f.readline()
             chunk_data = json.loads(first_line)
             assert "source" in chunk_data["metadata"]
-            expected_source_parts = ["annual_reports", "2023", "五粮液", "2023年度报告_英文_.md"]
+            expected_source_parts = [
+                "annual_reports",
+                "2023",
+                "五粮液",
+                "2023年度报告_英文_.md",
+            ]
             expected_source = Path(*expected_source_parts).as_posix()
             assert chunk_data["metadata"]["source"] == expected_source
 
@@ -325,7 +338,11 @@ class TestChunkTextPageAware:
         page_chunks = [
             {
                 "text": "Short text on page one.",
-                "metadata": {"page_number": 1, "page_count": 1, "file_path": "test.pdf"},
+                "metadata": {
+                    "page_number": 1,
+                    "page_count": 1,
+                    "file_path": "test.pdf",
+                },
                 "toc_items": [],
                 "tables": [],
             }
@@ -338,14 +355,16 @@ class TestChunkTextPageAware:
         page_chunks = [
             {
                 "text": "This is a test sentence. " * 200,
-                "metadata": {"page_number": 3, "page_count": 1, "file_path": "test.pdf"},
+                "metadata": {
+                    "page_number": 3,
+                    "page_count": 1,
+                    "file_path": "test.pdf",
+                },
                 "toc_items": [],
                 "tables": [],
             }
         ]
-        result = chunk_text_page_aware(
-            page_chunks, source_name="test", chunk_size=50
-        )
+        result = chunk_text_page_aware(page_chunks, source_name="test", chunk_size=50)
         assert len(result) > 1
         for chunk in result:
             assert chunk["metadata"]["page_number"] == 3
@@ -354,19 +373,31 @@ class TestChunkTextPageAware:
         page_chunks = [
             {
                 "text": "Content for page one. " * 20,
-                "metadata": {"page_number": 1, "page_count": 3, "file_path": "test.pdf"},
+                "metadata": {
+                    "page_number": 1,
+                    "page_count": 3,
+                    "file_path": "test.pdf",
+                },
                 "toc_items": [],
                 "tables": [],
             },
             {
                 "text": "Content for page two. " * 20,
-                "metadata": {"page_number": 2, "page_count": 3, "file_path": "test.pdf"},
+                "metadata": {
+                    "page_number": 2,
+                    "page_count": 3,
+                    "file_path": "test.pdf",
+                },
                 "toc_items": [],
                 "tables": [],
             },
             {
                 "text": "Content for page three. " * 20,
-                "metadata": {"page_number": 3, "page_count": 3, "file_path": "test.pdf"},
+                "metadata": {
+                    "page_number": 3,
+                    "page_count": 3,
+                    "file_path": "test.pdf",
+                },
                 "toc_items": [],
                 "tables": [],
             },
@@ -381,19 +412,31 @@ class TestChunkTextPageAware:
         page_chunks = [
             {
                 "text": "",
-                "metadata": {"page_number": 1, "page_count": 3, "file_path": "test.pdf"},
+                "metadata": {
+                    "page_number": 1,
+                    "page_count": 3,
+                    "file_path": "test.pdf",
+                },
                 "toc_items": [],
                 "tables": [],
             },
             {
                 "text": "   ",
-                "metadata": {"page_number": 2, "page_count": 3, "file_path": "test.pdf"},
+                "metadata": {
+                    "page_number": 2,
+                    "page_count": 3,
+                    "file_path": "test.pdf",
+                },
                 "toc_items": [],
                 "tables": [],
             },
             {
                 "text": "Non-empty page content. " * 10,
-                "metadata": {"page_number": 3, "page_count": 3, "file_path": "test.pdf"},
+                "metadata": {
+                    "page_number": 3,
+                    "page_count": 3,
+                    "file_path": "test.pdf",
+                },
                 "toc_items": [],
                 "tables": [],
             },
@@ -407,7 +450,11 @@ class TestChunkTextPageAware:
         page_chunks = [
             {
                 "text": "Some text for chunking. " * 10,
-                "metadata": {"page_number": 5, "page_count": 1, "file_path": "test.pdf"},
+                "metadata": {
+                    "page_number": 5,
+                    "page_count": 1,
+                    "file_path": "test.pdf",
+                },
                 "toc_items": [],
                 "tables": [],
             }
@@ -422,7 +469,11 @@ class TestChunkTextPageAware:
         page_chunks = [
             {
                 "text": "Some text.",
-                "metadata": {"page_number": 1, "page_count": 1, "file_path": "test.pdf"},
+                "metadata": {
+                    "page_number": 1,
+                    "page_count": 1,
+                    "file_path": "test.pdf",
+                },
                 "toc_items": [],
                 "tables": [],
             }
@@ -437,20 +488,35 @@ class TestChunkTextPageAwareCrossPageOverlap:
     def _make_multi_page_chunks(self):
         return [
             {
-                "text": "Alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu. " * 10,
-                "metadata": {"page_number": 1, "page_count": 3, "file_path": "test.pdf"},
+                "text": "Alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu. "
+                * 10,
+                "metadata": {
+                    "page_number": 1,
+                    "page_count": 3,
+                    "file_path": "test.pdf",
+                },
                 "toc_items": [],
                 "tables": [],
             },
             {
-                "text": "Nu xi omicron pi rho sigma tau upsilon phi chi psi omega end. " * 10,
-                "metadata": {"page_number": 2, "page_count": 3, "file_path": "test.pdf"},
+                "text": "Nu xi omicron pi rho sigma tau upsilon phi chi psi omega end. "
+                * 10,
+                "metadata": {
+                    "page_number": 2,
+                    "page_count": 3,
+                    "file_path": "test.pdf",
+                },
                 "toc_items": [],
                 "tables": [],
             },
             {
-                "text": "One two three four five six seven eight nine ten eleven twelve. " * 10,
-                "metadata": {"page_number": 3, "page_count": 3, "file_path": "test.pdf"},
+                "text": "One two three four five six seven eight nine ten eleven twelve. "
+                * 10,
+                "metadata": {
+                    "page_number": 3,
+                    "page_count": 3,
+                    "file_path": "test.pdf",
+                },
                 "toc_items": [],
                 "tables": [],
             },
@@ -461,9 +527,7 @@ class TestChunkTextPageAwareCrossPageOverlap:
         result_no_cpo = chunk_text_page_aware(
             pages, source_name="test", chunk_size=50, cross_page_overlap=0
         )
-        result_default = chunk_text_page_aware(
-            pages, source_name="test", chunk_size=50
-        )
+        result_default = chunk_text_page_aware(pages, source_name="test", chunk_size=50)
         assert len(result_no_cpo) == len(result_default)
         for c1, c2 in zip(result_no_cpo, result_default, strict=False):
             assert c1["text"] == c2["text"]
@@ -516,13 +580,21 @@ class TestChunkTextPageAwareCrossPageOverlap:
         pages = [
             {
                 "text": page1_text,
-                "metadata": {"page_number": 1, "page_count": 2, "file_path": "test.pdf"},
+                "metadata": {
+                    "page_number": 1,
+                    "page_count": 2,
+                    "file_path": "test.pdf",
+                },
                 "toc_items": [],
                 "tables": [],
             },
             {
                 "text": page2_text,
-                "metadata": {"page_number": 2, "page_count": 2, "file_path": "test.pdf"},
+                "metadata": {
+                    "page_number": 2,
+                    "page_count": 2,
+                    "file_path": "test.pdf",
+                },
                 "toc_items": [],
                 "tables": [],
             },
@@ -553,19 +625,31 @@ class TestChunkTextPageAwareCrossPageOverlap:
         pages = [
             {
                 "text": "Alpha beta gamma delta. " * 30,
-                "metadata": {"page_number": 1, "page_count": 3, "file_path": "test.pdf"},
+                "metadata": {
+                    "page_number": 1,
+                    "page_count": 3,
+                    "file_path": "test.pdf",
+                },
                 "toc_items": [],
                 "tables": [],
             },
             {
                 "text": "",
-                "metadata": {"page_number": 2, "page_count": 3, "file_path": "test.pdf"},
+                "metadata": {
+                    "page_number": 2,
+                    "page_count": 3,
+                    "file_path": "test.pdf",
+                },
                 "toc_items": [],
                 "tables": [],
             },
             {
                 "text": "One two three four five. " * 30,
-                "metadata": {"page_number": 3, "page_count": 3, "file_path": "test.pdf"},
+                "metadata": {
+                    "page_number": 3,
+                    "page_count": 3,
+                    "file_path": "test.pdf",
+                },
                 "toc_items": [],
                 "tables": [],
             },
@@ -598,13 +682,21 @@ class TestProcessParsedFilesPageAware:
         return [
             {
                 "text": "Page 1 content with enough text to chunk. " * 20,
-                "metadata": {"page_number": 1, "page_count": 2, "file_path": "test.pdf"},
+                "metadata": {
+                    "page_number": 1,
+                    "page_count": 2,
+                    "file_path": "test.pdf",
+                },
                 "toc_items": [],
                 "tables": [],
             },
             {
                 "text": "Page 2 content with enough text to chunk. " * 20,
-                "metadata": {"page_number": 2, "page_count": 2, "file_path": "test.pdf"},
+                "metadata": {
+                    "page_number": 2,
+                    "page_count": 2,
+                    "file_path": "test.pdf",
+                },
                 "toc_items": [],
                 "tables": [],
             },
@@ -616,7 +708,9 @@ class TestProcessParsedFilesPageAware:
         assert "Input directory not found" in str(exc_info.value)
 
     def test_no_pages_json_files(self, tmp_path):
-        results = process_parsed_files_page_aware(str(tmp_path), str(tmp_path / "output"))
+        results = process_parsed_files_page_aware(
+            str(tmp_path), str(tmp_path / "output")
+        )
         assert results == []
 
     def test_process_pages_json(self, tmp_path):
@@ -694,13 +788,21 @@ class TestProcessParsedFilesPageAware:
         pages_data = [
             {
                 "text": "Alpha beta gamma delta epsilon. " * 30,
-                "metadata": {"page_number": 1, "page_count": 2, "file_path": "test.pdf"},
+                "metadata": {
+                    "page_number": 1,
+                    "page_count": 2,
+                    "file_path": "test.pdf",
+                },
                 "toc_items": [],
                 "tables": [],
             },
             {
                 "text": "Nu xi omicron pi rho sigma. " * 30,
-                "metadata": {"page_number": 2, "page_count": 2, "file_path": "test.pdf"},
+                "metadata": {
+                    "page_number": 2,
+                    "page_count": 2,
+                    "file_path": "test.pdf",
+                },
                 "toc_items": [],
                 "tables": [],
             },
@@ -760,7 +862,9 @@ class TestBGETokenizerEncoder:
         encoder._tokenizer = mock_tokenizer
 
         result = encoder.encode("测试文本")
-        mock_tokenizer.encode.assert_called_once_with("测试文本", add_special_tokens=False)
+        mock_tokenizer.encode.assert_called_once_with(
+            "测试文本", add_special_tokens=False
+        )
         assert result == [101, 202, 303]
 
     @pytest.mark.unit
@@ -772,7 +876,9 @@ class TestBGETokenizerEncoder:
         encoder._tokenizer = mock_tokenizer
 
         result = encoder.decode([101, 202, 303])
-        mock_tokenizer.decode.assert_called_once_with([101, 202, 303], skip_special_tokens=True)
+        mock_tokenizer.decode.assert_called_once_with(
+            [101, 202, 303], skip_special_tokens=True
+        )
         assert result == "测试文本"
 
     @pytest.mark.unit
@@ -802,7 +908,9 @@ class TestBGETokenizerEncoder:
         mock_tokenizer = MagicMock()
         mock_tokenizer.encode.return_value = [1]
 
-        with patch("src.embedder.Embedder.get_tokenizer", return_value=mock_tokenizer) as mock_get:
+        with patch(
+            "src.embedder.Embedder.get_tokenizer", return_value=mock_tokenizer
+        ) as mock_get:
             encoder = BGETokenizerEncoder("test-model")
             encoder.encode("a")
             encoder.encode("b")
@@ -811,7 +919,9 @@ class TestBGETokenizerEncoder:
 
     @pytest.mark.unit
     def test_load_failure_raises_exception(self):
-        with patch("src.embedder.Embedder.get_tokenizer", side_effect=Exception("load failed")):
+        with patch(
+            "src.embedder.Embedder.get_tokenizer", side_effect=Exception("load failed")
+        ):
             encoder = BGETokenizerEncoder("bad-model")
             with pytest.raises(Exception, match="Failed to load BGE tokenizer"):
                 encoder.encode("test")
@@ -866,12 +976,17 @@ class TestChunkTextBGE:
     def test_chunk_text_with_bge_encoding(self):
         mock_encoding = MagicMock()
         mock_encoding.encode.return_value = list(range(100))
-        mock_encoding.decode.side_effect = lambda tokens: f"chunk_{tokens[0]}_{tokens[-1]}"
+        mock_encoding.decode.side_effect = (
+            lambda tokens: f"chunk_{tokens[0]}_{tokens[-1]}"
+        )
 
         with patch("src.chunker._get_encoding", return_value=mock_encoding):
             result = chunk_text(
-                "Some text", chunk_size=50, overlap=0,
-                encoding_name="bge", model_name="BAAI/bge-large-zh-v1.5",
+                "Some text",
+                chunk_size=50,
+                overlap=0,
+                encoding_name="bge",
+                model_name="BAAI/bge-large-zh-v1.5",
             )
 
             assert len(result) == 2
@@ -887,7 +1002,9 @@ class TestChunkTextBGE:
         with patch("src.chunker._get_encoding") as mock_get:
             mock_get.return_value = mock_encoding
             chunk_text(
-                "text", encoding_name="bge", model_name="BAAI/bge-large-zh-v1.5",
+                "text",
+                encoding_name="bge",
+                model_name="BAAI/bge-large-zh-v1.5",
             )
             mock_get.assert_called_once_with("bge", "BAAI/bge-large-zh-v1.5")
 
@@ -920,7 +1037,11 @@ class TestChunkTextPageAwareBGE:
         page_chunks = [
             {
                 "text": "Some text. " * 50,
-                "metadata": {"page_number": 1, "page_count": 1, "file_path": "test.pdf"},
+                "metadata": {
+                    "page_number": 1,
+                    "page_count": 1,
+                    "file_path": "test.pdf",
+                },
                 "toc_items": [],
                 "tables": [],
             }
@@ -941,15 +1062,20 @@ class TestChunkTextPageAwareBGE:
             ]
 
             chunk_text_page_aware(
-                page_chunks, source_name="test",
-                encoding_name="bge", model_name="BAAI/bge-large-zh-v1.5",
+                page_chunks,
+                source_name="test",
+                encoding_name="bge",
+                model_name="BAAI/bge-large-zh-v1.5",
             )
 
             mock_chunk.assert_called_once()
             call_kwargs = mock_chunk.call_args
-            assert call_kwargs[1].get("model_name") == "BAAI/bge-large-zh-v1.5" or \
-                   call_kwargs[0][4] == "BAAI/bge-large-zh-v1.5" if len(call_kwargs[0]) > 4 else \
-                   call_kwargs.kwargs.get("model_name") == "BAAI/bge-large-zh-v1.5"
+            assert (
+                call_kwargs[1].get("model_name") == "BAAI/bge-large-zh-v1.5"
+                or call_kwargs[0][4] == "BAAI/bge-large-zh-v1.5"
+                if len(call_kwargs[0]) > 4
+                else call_kwargs.kwargs.get("model_name") == "BAAI/bge-large-zh-v1.5"
+            )
 
 
 class TestProcessParsedFilesBGE:
@@ -977,13 +1103,18 @@ class TestProcessParsedFilesBGE:
             ]
 
             process_parsed_files(
-                str(input_dir), str(output_dir),
-                encoding_name="bge", model_name="BAAI/bge-large-zh-v1.5",
+                str(input_dir),
+                str(output_dir),
+                encoding_name="bge",
+                model_name="BAAI/bge-large-zh-v1.5",
             )
 
             mock_chunk.assert_called()
             call_kwargs = mock_chunk.call_args
-            assert call_kwargs.kwargs.get("encoding_name") == "bge" or \
-                   (len(call_kwargs.args) > 3 and call_kwargs.args[3] == "bge")
-            assert call_kwargs.kwargs.get("model_name") == "BAAI/bge-large-zh-v1.5" or \
-                   (len(call_kwargs.args) > 4 and call_kwargs.args[4] == "BAAI/bge-large-zh-v1.5")
+            assert call_kwargs.kwargs.get("encoding_name") == "bge" or (
+                len(call_kwargs.args) > 3 and call_kwargs.args[3] == "bge"
+            )
+            assert call_kwargs.kwargs.get("model_name") == "BAAI/bge-large-zh-v1.5" or (
+                len(call_kwargs.args) > 4
+                and call_kwargs.args[4] == "BAAI/bge-large-zh-v1.5"
+            )

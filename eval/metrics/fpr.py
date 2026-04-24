@@ -1,5 +1,3 @@
-
-
 def calculate_false_positive_rate(
     retrieved_sources: list[str],
     k: int = 5,

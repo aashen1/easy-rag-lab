@@ -175,7 +175,10 @@ class TestGetEnvVar:
     def test_required_var_missing(self, mock_getenv):
         mock_getenv.return_value = None
 
-        with pytest.raises(ConfigurationError, match="Required environment variable 'REQUIRED_VAR' is not set"):
+        with pytest.raises(
+            ConfigurationError,
+            match="Required environment variable 'REQUIRED_VAR' is not set",
+        ):
             get_env_var("REQUIRED_VAR", required=True)
 
 
@@ -240,21 +243,27 @@ class TestDetectDocumentCategory:
     def test_custom_category_mapping(self):
         custom_mapping = {"financial": "financial_report", "ESG": "esg_report"}
 
-        result = detect_document_category("data/raw/financial/company_c.pdf", custom_mapping)
+        result = detect_document_category(
+            "data/raw/financial/company_c.pdf", custom_mapping
+        )
 
         assert result == "financial_report"
 
     def test_custom_mapping_priority_over_default(self):
         custom_mapping = {"annual_report": "custom_annual"}
 
-        result = detect_document_category("data/raw/annual_report/company_a.pdf", custom_mapping)
+        result = detect_document_category(
+            "data/raw/annual_report/company_a.pdf", custom_mapping
+        )
 
         assert result == "custom_annual"
 
     def test_custom_mapping_no_match_returns_unknown(self):
         custom_mapping = {"financial": "financial_report"}
 
-        result = detect_document_category("data/raw/annual_report/company_a.pdf", custom_mapping)
+        result = detect_document_category(
+            "data/raw/annual_report/company_a.pdf", custom_mapping
+        )
 
         assert result == "unknown"
 
@@ -275,7 +284,9 @@ class TestCreateLlmClient:
         mock_client = MagicMock()
         mock_anthropic_cls.return_value = mock_client
 
-        with patch.dict("sys.modules", {"anthropic": MagicMock(Anthropic=mock_anthropic_cls)}):
+        with patch.dict(
+            "sys.modules", {"anthropic": MagicMock(Anthropic=mock_anthropic_cls)}
+        ):
             result = create_llm_client(
                 llm_config=self._make_llm_config(),
                 mode="sdk",
@@ -296,9 +307,13 @@ class TestCreateLlmClient:
         mock_client = MagicMock()
         mock_anthropic_cls.return_value = mock_client
 
-        with patch.dict("sys.modules", {"anthropic": MagicMock(Anthropic=mock_anthropic_cls)}):
+        with patch.dict(
+            "sys.modules", {"anthropic": MagicMock(Anthropic=mock_anthropic_cls)}
+        ):
             create_llm_client(
-                llm_config=self._make_llm_config(base_url="https://api.longcat.chat/anthropic"),
+                llm_config=self._make_llm_config(
+                    base_url="https://api.longcat.chat/anthropic"
+                ),
                 mode="sdk",
             )
 
@@ -316,7 +331,9 @@ class TestCreateLlmClient:
         mock_client = MagicMock()
         mock_anthropic_cls.return_value = mock_client
 
-        with patch.dict("sys.modules", {"anthropic": MagicMock(Anthropic=mock_anthropic_cls)}):
+        with patch.dict(
+            "sys.modules", {"anthropic": MagicMock(Anthropic=mock_anthropic_cls)}
+        ):
             create_llm_client(
                 llm_config=self._make_llm_config(base_url="https://api.longcat.chat/"),
                 mode="sdk",
@@ -332,7 +349,9 @@ class TestCreateLlmClient:
         )
 
     def test_invalid_mode_raises_value_error(self):
-        with pytest.raises(ConfigurationError, match="Unsupported LLM client mode: invalid"):
+        with pytest.raises(
+            ConfigurationError, match="Unsupported LLM client mode: invalid"
+        ):
             create_llm_client(
                 llm_config=self._make_llm_config(),
                 mode="invalid",
@@ -349,11 +368,14 @@ class TestCreateLlmClient:
         mock_lc_module = MagicMock(ChatAnthropic=mock_chat_cls)
         mock_ragas_llm_module = MagicMock(LangchainLLMWrapper=mock_wrapper_cls)
 
-        with patch.dict("sys.modules", {
-            "langchain_anthropic": mock_lc_module,
-            "ragas": MagicMock(),
-            "ragas.llms": mock_ragas_llm_module,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "langchain_anthropic": mock_lc_module,
+                "ragas": MagicMock(),
+                "ragas.llms": mock_ragas_llm_module,
+            },
+        ):
             result = create_llm_client(
                 llm_config=self._make_llm_config(),
                 mode="langchain",
@@ -382,11 +404,14 @@ class TestCreateLlmClient:
         mock_lc_module = MagicMock(ChatAnthropic=mock_chat_cls)
         mock_ragas_llm_module = MagicMock(LangchainLLMWrapper=mock_wrapper_cls)
 
-        with patch.dict("sys.modules", {
-            "langchain_anthropic": mock_lc_module,
-            "ragas": MagicMock(),
-            "ragas.llms": mock_ragas_llm_module,
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "langchain_anthropic": mock_lc_module,
+                "ragas": MagicMock(),
+                "ragas.llms": mock_ragas_llm_module,
+            },
+        ):
             create_llm_client(
                 llm_config=self._make_llm_config(max_tokens=8192, temperature=0.5),
                 mode="langchain",

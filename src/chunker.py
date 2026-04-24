@@ -47,9 +47,7 @@ class BGETokenizerEncoder:
             self._tokenizer = Embedder.get_tokenizer(self._model_name)
             logger.info(f"BGETokenizerEncoder loaded tokenizer for: {self._model_name}")
         except Exception as e:
-            error_msg = (
-                f"Failed to load BGE tokenizer for {self._model_name}: {str(e)}"
-            )
+            error_msg = f"Failed to load BGE tokenizer for {self._model_name}: {str(e)}"
             logger.error(error_msg)
             raise Exception(error_msg) from e
 
@@ -148,9 +146,9 @@ def _extract_headings(text: str) -> list[str]:
         List of heading strings (e.g., ['# Title', '## Subtitle']).
     """
     headings = []
-    for line in text.split('\n'):
+    for line in text.split("\n"):
         stripped = line.strip()
-        if stripped.startswith('#'):
+        if stripped.startswith("#"):
             headings.append(stripped)
     return headings
 
@@ -330,7 +328,9 @@ def process_parsed_files(
 
             with open(output_file, "w", encoding="utf-8") as f:
                 for chunk in chunks:
-                    chunk_id = f"{source_name}::chunk::{chunk['metadata']['chunk_index']:03d}"
+                    chunk_id = (
+                        f"{source_name}::chunk::{chunk['metadata']['chunk_index']:03d}"
+                    )
 
                     chunk_headings = _extract_headings(chunk["text"])
 
@@ -441,9 +441,7 @@ def chunk_text_page_aware(
         raise ParsingError(error_msg)
 
     if cross_page_overlap < 0:
-        error_msg = (
-            f"cross_page_overlap ({cross_page_overlap}) must be non-negative"
-        )
+        error_msg = f"cross_page_overlap ({cross_page_overlap}) must be non-negative"
         logger.error(error_msg)
         raise ValueError(error_msg)
 
@@ -456,7 +454,9 @@ def chunk_text_page_aware(
         raise ValueError(error_msg)
 
     all_chunks: list[dict[str, Any]] = []
-    encoding = _get_encoding(encoding_name, model_name) if cross_page_overlap > 0 else None
+    encoding = (
+        _get_encoding(encoding_name, model_name) if cross_page_overlap > 0 else None
+    )
     prev_page_tail_tokens: list[int] | None = None
     prev_page_number: int | None = None
 
@@ -572,7 +572,9 @@ def process_parsed_files_page_aware(
     if source_filter is not None:
         original_count = len(pages_files)
         pages_files = [
-            f for f in pages_files if f.relative_to(input_path).as_posix() in source_filter
+            f
+            for f in pages_files
+            if f.relative_to(input_path).as_posix() in source_filter
         ]
         logger.info(
             f"Source filter applied: {len(pages_files)}/{original_count} files matched"
