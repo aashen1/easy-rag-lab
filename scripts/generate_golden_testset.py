@@ -78,7 +78,14 @@ GOLDEN_PROMPT = """你是一位资深金融行业QA工程师，正在为RAG问�
     "ground_truth_excerpt": "从原文逐字摘录的答案所在片段（50-200字）",
     "key_entities": ["问题涉及的关键实体"],
     "target_failure_mode": "该题针对的RAG失败模式"
-}}"""
+}}
+
+重要数值规则：
+- 文档中的财务数据通常以"元"为单位（如 12,162,684,368.86）
+- 答案中请换算为"亿元"：÷100,000,000（即去掉8位数字）
+- 正确示例：12,162,684,368.86元 = 121.63亿元
+- 错误示例：12,162,684,368.86元 ≠ 1216.3亿元（多了10倍）
+- 如果原文已用"亿元"为单位，则直接引用，不要再次换算"""
 
 SINGLE_FACT_INSTRUCTION = """请基于以上文档，生成一道**单知识点查询**题。
 
@@ -171,7 +178,8 @@ def _load_pages_json(file_path: Path, parsed_dir: Path) -> dict[str, str] | None
         parsed_dir: Base parsed directory for computing relative paths.
 
     Returns:
-        Dictionary with 'name', 'content', 'source_path' keys, or None on error.
+        Dictionary with 'name', 'content', 'source_path', 'doc_id' keys,
+        or None on error.
     """
     try:
         with open(file_path, encoding="utf-8") as f:
@@ -195,6 +203,7 @@ def _load_pages_json(file_path: Path, parsed_dir: Path) -> dict[str, str] | None
             "name": doc_name,
             "content": full_text,
             "source_path": rel_path,
+            "doc_id": rel_path,
         }
     except Exception as e:
         logger.error(f"Failed to load {file_path}: {str(e)}")
@@ -227,6 +236,7 @@ def load_documents(parsed_dir: Path) -> list[dict[str, str]]:
                 "name": doc_name,
                 "content": content,
                 "source_path": rel_path,
+                "doc_id": rel_path,
             })
             logger.debug(f"Loaded document: {doc_name} ({len(content)} chars)")
         except Exception as e:
@@ -269,35 +279,290 @@ def calculate_type_counts(num_questions: int, distribution: dict[str, float]) ->
 def distribute_across_documents(
     type_counts: dict[str, int],
     documents: list[dict[str, str]],
+    min_per_doc: int = 1,
+    max_per_doc: int | None = None,
+    seed: int | None = None,
 ) -> dict[str, list[str]]:
-    """Distribute question types across documents ensuring diversity.
+    """Distribute question types across documents using progressive power weighting.
 
-    Groups documents by their base name (stem before year) and ensures
-    each group gets a mix of question types. This prevents all questions
-    of one type from being assigned to similar documents.
+    Uses weight = L^p where p = max(0, (r-1)/r) and r = Q/N.
+    When r ≈ 1 (few questions per doc), p ≈ 0 → equal allocation.
+    When r >> 1 (many questions per doc), p → 1 → proportional to content length.
+    The transition is smooth with no discontinuity.
 
     Args:
         type_counts: Dictionary mapping question type names to counts.
-        documents: List of document dicts with 'name' and 'content' keys.
+        documents: List of document dicts with 'doc_id' and 'content' keys.
+        min_per_doc: Minimum questions per document (default 1, ensures coverage).
+        max_per_doc: Maximum questions per document (default None; optional safety cap).
+        seed: Random seed for reproducibility.
 
     Returns:
-        Dictionary mapping document names to their assigned question types.
+        Dictionary mapping doc_id to list of assigned question types.
     """
-    question_plan = []
-    for q_type, count in type_counts.items():
-        question_plan.extend([q_type] * count)
-
     import random
-    random.shuffle(question_plan)
 
-    doc_names = [d["name"] for d in documents]
-    doc_plans: dict[str, list[str]] = {name: [] for name in doc_names}
+    rng = random.Random(seed)
 
-    for i, q_type in enumerate(question_plan):
-        doc_name = doc_names[i % len(doc_names)]
-        doc_plans[doc_name].append(q_type)
+    total_questions = sum(type_counts.values())
+    n_docs = len(documents)
+    if n_docs == 0:
+        return {}
 
-    return doc_plans
+    r = total_questions / n_docs
+
+    if r < 1:
+        selected = rng.sample(documents, total_questions)
+        raw_alloc = {d["doc_id"]: 1.0 for d in selected}
+    else:
+        p = (r - 1) / r
+        lengths = [len(d["content"]) for d in documents]
+        powered = [length ** p for length in lengths]
+        total_powered = sum(powered)
+        raw_alloc = {}
+        for doc, pw in zip(documents, powered, strict=True):
+            raw_alloc[doc["doc_id"]] = (pw / total_powered) * total_questions
+
+    int_alloc = _round_allocations(
+        raw_alloc, total_questions, min_per_doc, max_per_doc,
+    )
+
+    all_types = []
+    for q_type, count in type_counts.items():
+        all_types.extend([q_type] * count)
+    rng.shuffle(all_types)
+
+    result = {}
+    idx = 0
+    doc_order = sorted(documents, key=lambda d: int_alloc.get(d["doc_id"], 0), reverse=True)
+    for doc in doc_order:
+        doc_id = doc["doc_id"]
+        n = int_alloc.get(doc_id, 0)
+        result[doc_id] = all_types[idx:idx + n]
+        idx += n
+
+    return result
+
+
+def _round_allocations(
+    raw_alloc: dict[str, float],
+    total: int,
+    min_per_doc: int = 1,
+    max_per_doc: int | None = None,
+) -> dict[str, int]:
+    """Round float allocations to integers, respecting min/max constraints.
+
+    Adjusts for rounding drift by adding/removing from the largest allocations.
+
+    Args:
+        raw_alloc: Dictionary mapping doc_id to float allocation.
+        total: Target total number of questions.
+        min_per_doc: Minimum allocation per document.
+        max_per_doc: Maximum allocation per document (None for no limit).
+
+    Returns:
+        Dictionary mapping doc_id to integer allocation.
+    """
+    int_alloc = {}
+    for doc_id, val in raw_alloc.items():
+        n = round(val)
+        n = max(min_per_doc, n)
+        if max_per_doc is not None:
+            n = min(max_per_doc, n)
+        int_alloc[doc_id] = n
+
+    diff = total - sum(int_alloc.values())
+    sorted_ids = sorted(
+        int_alloc.keys(), key=lambda k: int_alloc[k], reverse=True,
+    )
+
+    if diff > 0:
+        for doc_id in sorted_ids:
+            if diff <= 0:
+                break
+            if max_per_doc is None or int_alloc[doc_id] < max_per_doc:
+                int_alloc[doc_id] += 1
+                diff -= 1
+    elif diff < 0:
+        for doc_id in sorted_ids:
+            if diff >= 0:
+                break
+            if int_alloc[doc_id] > min_per_doc:
+                int_alloc[doc_id] -= 1
+                diff += 1
+
+    return int_alloc
+
+
+def detect_content_overlaps(
+    documents: list[dict], threshold: float = 0.8,
+) -> list[tuple[str, str, float]]:
+    """Detect content overlap between document pairs.
+
+    Samples 3 segments (beginning, middle, end) from the shorter document
+    and checks if they appear in the longer document. If the hit rate
+    exceeds the threshold, the shorter document is marked as supplementary.
+
+    Args:
+        documents: List of document dicts with 'doc_id' and 'content' keys.
+        threshold: Minimum hit rate to mark as supplementary (default 0.8).
+
+    Returns:
+        List of tuples: (supplementary_doc_id, primary_doc_id, overlap_ratio).
+    """
+    overlaps: list[tuple[str, str, float]] = []
+
+    for i in range(len(documents)):
+        for j in range(i + 1, len(documents)):
+            doc_a = documents[i]
+            doc_b = documents[j]
+            len_a = len(doc_a["content"])
+            len_b = len(doc_b["content"])
+
+            if len_a <= len_b:
+                shorter, longer = doc_a, doc_b
+            else:
+                shorter, longer = doc_b, doc_a
+
+            short_text = re.sub(r"\s+", "", shorter["content"])
+            long_text = re.sub(r"\s+", "", longer["content"])
+
+            if len(short_text) < 100:
+                continue
+
+            sample_size = 500
+            samples = [
+                short_text[:sample_size],
+                short_text[len(short_text) // 2: len(short_text) // 2 + sample_size],
+                short_text[-sample_size:],
+            ]
+
+            hits = sum(1 for s in samples if len(s) >= 50 and s in long_text)
+            hit_rate = hits / len(samples)
+
+            if hit_rate >= threshold:
+                overlaps.append((
+                    shorter["doc_id"], longer["doc_id"], hit_rate,
+                ))
+
+    return overlaps
+
+
+def build_primary_pool(
+    documents: list[dict], overlaps: list[tuple[str, str, float]],
+) -> list[dict]:
+    """Build primary document pool, excluding supplementary documents.
+
+    If document A is marked as supplementary to B, A is excluded from
+    the primary pool. If A is supplementary to both B and C, only the
+    longer one (B or C) is kept as the primary.
+
+    Args:
+        documents: List of document dicts.
+        overlaps: Overlap tuples from detect_content_overlaps().
+
+    Returns:
+        List of primary document dicts (supplementary documents excluded).
+    """
+    supplementary_ids: set[str] = set()
+    primary_map: dict[str, str] = {}
+
+    for supp_id, primary_id, _ratio in overlaps:
+        if supp_id not in supplementary_ids:
+            supplementary_ids.add(supp_id)
+            primary_map[supp_id] = primary_id
+        else:
+            existing_primary_id = primary_map[supp_id]
+            existing_doc = next(
+                (d for d in documents if d["doc_id"] == existing_primary_id), None,
+            )
+            new_doc = next(
+                (d for d in documents if d["doc_id"] == primary_id), None,
+            )
+            if new_doc and existing_doc and len(new_doc["content"]) > len(existing_doc["content"]):
+                primary_map[supp_id] = primary_id
+
+    return [d for d in documents if d["doc_id"] not in supplementary_ids]
+
+
+def validate_answer_numerical_accuracy(
+    question_data: dict,
+) -> tuple[bool, dict | None]:
+    """Validate numerical accuracy in answer against ground_truth_excerpt.
+
+    Detects 10x unit conversion errors where excerpt has large numbers
+    in yuan but answer incorrectly converts to yi-yuan.
+
+    Args:
+        question_data: Dictionary containing 'answer' and 'ground_truth_excerpt'.
+
+    Returns:
+        Tuple of (is_valid, correction). is_valid is True if numbers are
+        consistent. correction is None or contains fix information.
+    """
+    answer = question_data.get("answer", "")
+    excerpt = question_data.get("ground_truth_excerpt", "")
+
+    if not answer or not excerpt:
+        return True, None
+
+    excerpt_nums_raw = re.findall(r"[\d,]{8,}(?:\.\d+)?", excerpt)
+    excerpt_yi_values: list[float] = []
+    for raw_num in excerpt_nums_raw:
+        try:
+            clean = raw_num.replace(",", "")
+            val = float(clean)
+            yi_val = val / 1e8
+            if yi_val > 1:
+                excerpt_yi_values.append(yi_val)
+        except ValueError:
+            continue
+
+    if not excerpt_yi_values:
+        return True, None
+
+    answer_yi_matches = re.findall(r"([\d,.]+)\s*亿", answer)
+    answer_yi_values: list[float] = []
+    for num_str in answer_yi_matches:
+        try:
+            answer_yi_values.append(float(num_str.replace(",", "")))
+        except ValueError:
+            continue
+
+    if not answer_yi_values:
+        return True, None
+
+    errors: list[dict] = []
+    for ans_val in answer_yi_values:
+        for exc_val in excerpt_yi_values:
+            if exc_val == 0:
+                continue
+            ratio = ans_val / exc_val
+            if 9.5 <= ratio <= 10.5:
+                errors.append({
+                    "type": "10x_error",
+                    "answer_value": ans_val,
+                    "excerpt_value_yi": round(exc_val, 2),
+                    "correct_value": round(exc_val, 2),
+                })
+            elif 0.05 <= ratio <= 0.15:
+                errors.append({
+                    "type": "10x_error_reverse",
+                    "answer_value": ans_val,
+                    "excerpt_value_yi": round(exc_val, 2),
+                    "correct_value": round(exc_val, 2),
+                })
+
+    if errors:
+        correction = {
+            "errors": errors,
+            "suggestion": "Answer contains 10x unit conversion errors. "
+                          "Values in yuan should be divided by 100,000,000 "
+                          "to convert to yi-yuan.",
+        }
+        return False, correction
+
+    return True, None
 
 
 def generate_single_question(
@@ -601,6 +866,7 @@ def generate_golden_testset(
     output_path: Path | None = None,
     parsed_dir: Path | None = None,
     chunks_dir: Path | None = None,
+    seed: int | None = None,
 ) -> dict[str, Any]:
     """Generate a golden test set with LLM-assisted question generation.
 
@@ -611,10 +877,13 @@ def generate_golden_testset(
         output_path: Path to save the output JSON file.
         parsed_dir: Path to the parsed documents directory.
         chunks_dir: Path to the chunks directory.
+        seed: Random seed for reproducibility.
 
     Returns:
         Dictionary containing the golden test set.
     """
+    import random
+
     if parsed_dir is None:
         data_dir = config.get("data_dir", "data")
         parsed_dir = Path(data_dir) / "parsed"
@@ -629,10 +898,29 @@ def generate_golden_testset(
 
     logger.info(f"Loaded {len(documents)} documents")
 
+    overlaps = detect_content_overlaps(documents)
+    if overlaps:
+        for supp_id, primary_id, ratio in overlaps:
+            logger.info(
+                f"Content overlap detected: {supp_id} is supplementary "
+                f"to {primary_id} (overlap={ratio:.0%})"
+            )
+
+    primary_docs = build_primary_pool(documents, overlaps)
+    logger.info(
+        f"Primary document pool: {len(primary_docs)} documents "
+        f"({len(documents) - len(primary_docs)} supplementary excluded)"
+    )
+
+    rng = random.Random(seed)
+    rng.shuffle(primary_docs)
+
     type_counts = calculate_type_counts(num_questions, GOLDEN_TYPE_DISTRIBUTION)
     logger.info(f"Question type distribution: {type_counts}")
 
-    doc_plans = distribute_across_documents(type_counts, documents)
+    doc_plans = distribute_across_documents(
+        type_counts, primary_docs, seed=seed,
+    )
 
     llm_config = get_llm_config(config, llm_preset)
     generator = Generator(
@@ -649,9 +937,9 @@ def generate_golden_testset(
     total_attempts = 0
     failed_count = 0
 
-    for doc_data in documents:
-        doc_name = doc_data["name"]
-        assigned_types = doc_plans.get(doc_name, [])
+    for doc_data in primary_docs:
+        doc_id = doc_data["doc_id"]
+        assigned_types = doc_plans.get(doc_id, [])
         if not assigned_types:
             continue
 
@@ -668,7 +956,7 @@ def generate_golden_testset(
             total_attempts += 1
             logger.info(
                 f"Generating question {len(questions) + 1}/{num_questions} "
-                f"(type={q_type}, doc={doc_name})..."
+                f"(type={q_type}, doc={doc_id})..."
             )
 
             qa = generate_single_question(doc_content, q_type, generator)
@@ -680,8 +968,27 @@ def generate_golden_testset(
                     continue
                 seen_questions.add(q_text)
 
+                is_valid, correction = validate_answer_numerical_accuracy(qa)
+                if not is_valid and correction:
+                    logger.warning(
+                        f"Numerical accuracy issue for question: "
+                        f"{correction['suggestion']}"
+                    )
+                    for err in correction.get("errors", []):
+                        wrong_val = err["answer_value"]
+                        correct_val = err["correct_value"]
+                        answer_text = qa.get("answer", "")
+                        qa["answer"] = answer_text.replace(
+                            f"{wrong_val}", f"{correct_val}",
+                        )
+                        logger.warning(
+                            f"Auto-corrected: {wrong_val}亿 → {correct_val}亿"
+                        )
+                    qa.setdefault("metadata", {})
+                    qa["metadata"]["numerical_auto_corrected"] = True
+
                 qa["id"] = f"golden_{question_id:03d}"
-                qa["source_document"] = doc_name
+                qa["source_document"] = doc_data["name"]
 
                 if q_type == "irrelevant":
                     qa["source_files"] = []
@@ -744,7 +1051,7 @@ def generate_golden_testset(
 
         while len(questions) < num_questions and extra_attempt < max_extra:
             extra_attempt += 1
-            doc_data = documents[extra_attempt % len(documents)]
+            doc_data = primary_docs[extra_attempt % len(primary_docs)]
             q_type = all_types[extra_attempt % len(all_types)]
             doc_content = doc_data["content"]
             source_path = doc_data["source_path"]
@@ -755,6 +1062,21 @@ def generate_golden_testset(
                 if q_text in seen_questions:
                     continue
                 seen_questions.add(q_text)
+
+                is_valid, correction = validate_answer_numerical_accuracy(qa)
+                if not is_valid and correction:
+                    logger.warning(
+                        f"Numerical accuracy issue: {correction['suggestion']}"
+                    )
+                    for err in correction.get("errors", []):
+                        wrong_val = err["answer_value"]
+                        correct_val = err["correct_value"]
+                        answer_text = qa.get("answer", "")
+                        qa["answer"] = answer_text.replace(
+                            f"{wrong_val}", f"{correct_val}",
+                        )
+                    qa.setdefault("metadata", {})
+                    qa["metadata"]["numerical_auto_corrected"] = True
 
                 qa["id"] = f"golden_{question_id:03d}"
                 qa["source_document"] = doc_data["name"]
@@ -847,7 +1169,11 @@ def generate_golden_testset(
             "suppress_warnings": False,
             "composition": {
                 "type": "golden",
-                "documents_used": [d["source_path"] for d in documents],
+                "documents_used": [d["source_path"] for d in primary_docs],
+                "supplementary_excluded": [
+                    d["source_path"] for d in documents
+                    if d["doc_id"] not in {pd["doc_id"] for pd in primary_docs}
+                ],
             },
         },
         "quality_metrics": quality_metrics,
@@ -893,6 +1219,10 @@ def main():
         "--chunks-dir", default=None,
         help="Chunks directory (default: data/chunks)",
     )
+    parser.add_argument(
+        "--seed", type=int, default=None,
+        help="Random seed for reproducibility",
+    )
     args = parser.parse_args()
 
     config = load_config()
@@ -908,6 +1238,7 @@ def main():
         output_path=output_path,
         parsed_dir=parsed_dir,
         chunks_dir=chunks_dir,
+        seed=args.seed,
     )
 
 

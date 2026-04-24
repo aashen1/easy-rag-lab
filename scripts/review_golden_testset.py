@@ -3,18 +3,23 @@
 Provides a CLI-based interactive workflow for reviewing and editing
 golden test set questions one at a time. Supports approval, revision,
 rejection, and skip operations with automatic progress saving.
+Also provides an audit mode for generating quality reports.
 
 Usage:
     pixi run python scripts/review_golden_testset.py
     pixi run python scripts/review_golden_testset.py --input data/golden_testset/golden_150.json
     pixi run python scripts/review_golden_testset.py --start-from 50
+    pixi run python scripts/review_golden_testset.py --audit
+    pixi run python scripts/review_golden_testset.py --audit --input data/golden_testset/golden_150.json
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -22,6 +27,8 @@ from typing import Any
 from loguru import logger
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from scripts.generate_golden_testset import validate_answer_numerical_accuracy  # noqa: E402, I001
 
 
 REVIEW_STATUS_APPROVED = "approved"
@@ -334,6 +341,214 @@ def run_review(
     print(f"{'=' * 80}")
 
 
+def audit_testset(input_path: Path) -> dict[str, Any]:
+    """Generate an audit report for a golden test set.
+
+    Analyzes the test set for quality issues including document distribution
+    skew, numerical accuracy, content duplication, and pattern repetition.
+    Does not assume any directory structure.
+
+    Args:
+        input_path: Path to the golden test set JSON file.
+
+    Returns:
+        Dictionary containing the audit report.
+    """
+    testset = load_testset(input_path)
+    questions = testset.get("questions", [])
+    if not questions:
+        logger.error("No questions found in test set")
+        return {"error": "No questions found"}
+
+    report: dict[str, Any] = {
+        "file": str(input_path),
+        "total_questions": len(questions),
+    }
+
+    doc_counter: Counter[str] = Counter()
+    for q in questions:
+        for sf in q.get("source_files", []):
+            doc_counter[sf] += 1
+    total_docs = len(doc_counter)
+    skewed_docs = {
+        doc: count for doc, count in doc_counter.items()
+        if count / len(questions) > 0.15
+    }
+    report["document_distribution"] = {
+        "unique_source_files": total_docs,
+        "top_10": doc_counter.most_common(10),
+        "skewed_docs": skewed_docs,
+    }
+
+    numerical_issues: list[dict] = []
+    for q in questions:
+        if q.get("question_type") == "irrelevant":
+            continue
+        is_valid, correction = validate_answer_numerical_accuracy(q)
+        if not is_valid and correction:
+            numerical_issues.append({
+                "id": q.get("id", "unknown"),
+                "question": q.get("question", "")[:80],
+                "correction": correction,
+            })
+    report["numerical_accuracy"] = {
+        "issues_found": len(numerical_issues),
+        "issues": numerical_issues,
+    }
+
+    entity_groups: dict[tuple[str, ...], list[str]] = {}
+    for q in questions:
+        if q.get("question_type") == "irrelevant":
+            continue
+        entities = tuple(sorted(q.get("key_entities", [])))
+        source = q.get("source_files", ["unknown"])[0] if q.get("source_files") else "unknown"
+        key = (source, entities)
+        if key not in entity_groups:
+            entity_groups[key] = []
+        entity_groups[key].append(q.get("id", "unknown"))
+
+    duplicate_pairs: list[dict] = []
+    for key, qids in entity_groups.items():
+        if len(qids) >= 2 and len(key[1]) >= 2:
+            duplicate_pairs.append({
+                "source_file": key[0],
+                "shared_entities": list(key[1]),
+                "question_ids": qids,
+            })
+    report["content_duplication"] = {
+        "potential_duplicate_groups": len(duplicate_pairs),
+        "groups": duplicate_pairs[:20],
+    }
+
+    doc_type_counter: Counter[str] = Counter()
+    for q in questions:
+        if q.get("question_type") == "irrelevant":
+            continue
+        source = q.get("source_files", ["unknown"])[0] if q.get("source_files") else "unknown"
+        key = f"{source}|{q.get('question_type', 'unknown')}"
+        doc_type_counter[key] += 1
+    over_concentrated = {
+        key: count for key, count in doc_type_counter.items() if count > 2
+    }
+    report["document_concentration"] = {
+        "over_concentrated": over_concentrated,
+    }
+
+    diff_counter: Counter[str] = Counter(
+        q.get("difficulty", "unknown") for q in questions
+    )
+    report["difficulty_distribution"] = dict(diff_counter)
+
+    verified_count = sum(
+        1 for q in questions
+        if q.get("metadata", {}).get("excerpt_verified", False)
+    )
+    not_verified_count = sum(
+        1 for q in questions
+        if q.get("question_type") not in ("irrelevant",)
+        and q.get("metadata", {}).get("excerpt_verified") is False
+    )
+    report["excerpt_verification"] = {
+        "verified": verified_count,
+        "not_verified": not_verified_count,
+        "total_non_irrelevant": sum(
+            1 for q in questions if q.get("question_type") != "irrelevant"
+        ),
+    }
+
+    pattern_counter: Counter[str] = Counter()
+    for q in questions:
+        qtext = q.get("question", "")
+        pattern = re.sub(
+            r"[\u4e00-\u9fff]{2,6}(集团|股份|公司|银行|医药|时代|电器|水泥|味业|白药|茅台|老窖)?",
+            "X", qtext,
+        )
+        pattern = re.sub(r"\d{4}", "YEAR", pattern)
+        pattern = re.sub(r"[\d,.]+%?", "NUM", pattern)
+        pattern_counter[pattern] += 1
+    template_patterns = {
+        pat: count for pat, count in pattern_counter.items() if count >= 3
+    }
+    report["template_patterns"] = {
+        "repeated_patterns": len(template_patterns),
+        "patterns": dict(
+            sorted(template_patterns.items(), key=lambda x: -x[1])[:10]
+        ),
+    }
+
+    return report
+
+
+def print_audit_report(report: dict[str, Any]) -> None:
+    """Print a formatted audit report to stdout.
+
+    Args:
+        report: Audit report dictionary from audit_testset().
+    """
+    print(f"\n{'=' * 80}")
+    print("  Golden Test Set Audit Report")
+    print(f"  File: {report.get('file', 'N/A')}")
+    print(f"  Total Questions: {report.get('total_questions', 0)}")
+    print(f"{'=' * 80}")
+
+    doc_dist = report.get("document_distribution", {})
+    print("\n--- Document Distribution ---")
+    print(f"  Unique source files: {doc_dist.get('unique_source_files', 0)}")
+    print("  Top 10:")
+    for doc, count in doc_dist.get("top_10", []):
+        pct = count / report["total_questions"] * 100
+        flag = " ⚠️ SKEWED" if doc in doc_dist.get("skewed_docs", {}) else ""
+        print(f"    {doc}: {count} ({pct:.1f}%){flag}")
+
+    num_issues = report.get("numerical_accuracy", {})
+    print("\n--- Numerical Accuracy ---")
+    print(f"  Issues found: {num_issues.get('issues_found', 0)}")
+    for issue in num_issues.get("issues", [])[:10]:
+        print(f"    {issue['id']}: {issue['question']}")
+        for err in issue.get("correction", {}).get("errors", []):
+            print(
+                f"      → {err['type']}: answer={err['answer_value']}亿, "
+                f"correct={err['correct_value']}亿"
+            )
+
+    content_dup = report.get("content_duplication", {})
+    print("\n--- Content Duplication ---")
+    print(f"  Potential duplicate groups: {content_dup.get('potential_duplicate_groups', 0)}")
+    for group in content_dup.get("groups", [])[:10]:
+        print(
+            f"    {group['source_file']}: entities={group['shared_entities']} "
+            f"ids={group['question_ids']}"
+        )
+
+    conc = report.get("document_concentration", {})
+    print("\n--- Document Concentration ---")
+    if conc.get("over_concentrated"):
+        for key, count in conc["over_concentrated"].items():
+            print(f"    {key}: {count} questions")
+    else:
+        print("  No over-concentration detected ✓")
+
+    diff = report.get("difficulty_distribution", {})
+    print("\n--- Difficulty Distribution ---")
+    for d, count in sorted(diff.items()):
+        pct = count / report["total_questions"] * 100
+        print(f"    {d}: {count} ({pct:.1f}%)")
+
+    exc = report.get("excerpt_verification", {})
+    print("\n--- Excerpt Verification ---")
+    print(f"  Verified: {exc.get('verified', 0)}")
+    print(f"  Not verified: {exc.get('not_verified', 0)}")
+    print(f"  Total non-irrelevant: {exc.get('total_non_irrelevant', 0)}")
+
+    tmpl = report.get("template_patterns", {})
+    print("\n--- Template Patterns ---")
+    print(f"  Repeated patterns: {tmpl.get('repeated_patterns', 0)}")
+    for pat, count in tmpl.get("patterns", {}).items():
+        print(f"    ({count}x) {pat[:80]}")
+
+    print(f"\n{'=' * 80}")
+
+
 def main():
     """CLI entry point for golden test set review."""
     parser = argparse.ArgumentParser(
@@ -347,12 +562,20 @@ def main():
         "--start-from", type=int, default=1,
         help="Question index to start from (1-based)",
     )
+    parser.add_argument(
+        "--audit", action="store_true",
+        help="Run audit report instead of interactive review",
+    )
     args = parser.parse_args()
 
-    run_review(
-        input_path=Path(args.input),
-        start_from=args.start_from,
-    )
+    if args.audit:
+        report = audit_testset(Path(args.input))
+        print_audit_report(report)
+    else:
+        run_review(
+            input_path=Path(args.input),
+            start_from=args.start_from,
+        )
 
 
 if __name__ == "__main__":
