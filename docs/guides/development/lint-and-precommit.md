@@ -185,6 +185,9 @@ post-merge 钩子自动触发
 | check-yaml | 验证 YAML 语法 | 防止配置文件写错 |
 | check-merge-conflict | 检测未解决的合并冲突 | 防止冲突标记入库 |
 
+> **注意**：ruff 钩子使用 `repo: local` 配置，直接用 pixi 环境里的 ruff，
+> 不需要连 GitHub，commit 速度快（毫秒级）。版本由 `pixi.toml` 控制。
+
 #### merge 后钩子（`git merge` 完成后自动触发）
 
 | 钩子 | 做什么 | 为什么需要 |
