@@ -357,6 +357,12 @@ class RAGPipeline:
                 self.profiler.end_stage()
 
         logger.success("Index built successfully")
+        if sampling_config is None:
+            logger.info(
+                f"Artifacts: parsed={parsed_dir}, chunks={chunks_dir} "
+                f"| Pointers: data/artifacts/_pointers/full_parsed.pointer, "
+                f"data/artifacts/_pointers/full_chunks.pointer"
+            )
 
     def close(self) -> None:
         """Close the pipeline and release resources.
