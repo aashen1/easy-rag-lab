@@ -36,6 +36,7 @@ def _normalize_source_path(source_path: str) -> str:
 
 @dataclass
 class TestSetMetadata:
+    __test__ = False
     name: str
     meal_id: str
     created_at: str

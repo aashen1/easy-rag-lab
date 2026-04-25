@@ -43,6 +43,7 @@ class MealError(RAGPipelineError):
 class TestSetError(RAGPipelineError):
     """Raised when test set management operations fail."""
 
+    __test__ = False
     pass
 
 

@@ -556,7 +556,8 @@ class TestEndToEndEvaluationFlow:
         temp_project_dir,
         test_system_config,
     ):
-        from eval.run_eval import run_evaluation
+        with pytest.warns(DeprecationWarning, match="eval/run_eval.py is deprecated"):
+            from eval.run_eval import run_evaluation
 
         test_data = [
             {
@@ -880,7 +881,8 @@ class TestBackwardCompatibility:
         from src.experiment import ExperimentConfig
 
         exp_config = ExperimentConfig.from_dict(config)
-        errors = exp_config.validate()
+        with pytest.warns(DeprecationWarning, match="deprecated configuration format"):
+            errors = exp_config.validate()
 
         assert not any("metrics" in e.lower() for e in errors)
 

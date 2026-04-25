@@ -1,11 +1,14 @@
 import contextlib
 import shutil
 import tempfile
+import warnings
 from pathlib import Path
 from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
+
+warnings.simplefilter("always", DeprecationWarning)
 
 
 def pytest_configure(config):

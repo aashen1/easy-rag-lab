@@ -129,7 +129,8 @@ class TestExperimentConfig:
         data["variants"] = [{"description": "no name"}]
 
         config = ExperimentConfig.from_dict(data)
-        errors = config.validate()
+        with pytest.warns(DeprecationWarning, match="deprecated configuration format"):
+            errors = config.validate()
 
         assert "Test set 0 missing 'strategy' field" in errors
         assert "Test set 0 missing 'num_questions' field" not in errors
@@ -144,7 +145,8 @@ class TestExperimentConfig:
         data2 = self._make_config_dict()
         data2["test_sets"] = [{"strategy": "factual"}]
         config2 = ExperimentConfig.from_dict(data2)
-        errors2 = config2.validate()
+        with pytest.warns(DeprecationWarning, match="deprecated configuration format"):
+            errors2 = config2.validate()
         assert "Test set 0 missing 'num_questions' field" in errors2
 
     @pytest.mark.unit
@@ -152,7 +154,8 @@ class TestExperimentConfig:
         data = self._make_config_dict()
         data["evaluation"]["metrics"] = {"retrieval": ["hit_rate", "mrr", "ndcg"]}
         config = ExperimentConfig.from_dict(data)
-        errors = config.validate()
+        with pytest.warns(DeprecationWarning, match="deprecated configuration format"):
+            errors = config.validate()
         assert not any("metrics" in e.lower() for e in errors)
 
     @pytest.mark.unit
@@ -163,7 +166,8 @@ class TestExperimentConfig:
             "generation": ["faithfulness", "answer_relevancy"],
         }
         config = ExperimentConfig.from_dict(data)
-        errors = config.validate()
+        with pytest.warns(DeprecationWarning, match="deprecated configuration format"):
+            errors = config.validate()
         assert not any("metrics" in e.lower() for e in errors)
 
     @pytest.mark.unit
@@ -173,7 +177,8 @@ class TestExperimentConfig:
             "retrieval": ["hit_rate", "invalid_metric", "another_invalid"]
         }
         config = ExperimentConfig.from_dict(data)
-        errors = config.validate()
+        with pytest.warns(DeprecationWarning, match="deprecated configuration format"):
+            errors = config.validate()
         assert any("Invalid retrieval metrics" in e for e in errors)
         assert any("invalid_metric" in e for e in errors)
 
@@ -185,7 +190,8 @@ class TestExperimentConfig:
             "generation": ["faithfulness", "invalid_gen_metric"],
         }
         config = ExperimentConfig.from_dict(data)
-        errors = config.validate()
+        with pytest.warns(DeprecationWarning, match="deprecated configuration format"):
+            errors = config.validate()
         assert any("Invalid generation metrics" in e for e in errors)
         assert any("invalid_gen_metric" in e for e in errors)
 
@@ -194,7 +200,8 @@ class TestExperimentConfig:
         data = self._make_config_dict()
         data["evaluation"]["metrics"] = ["hit_rate", "mrr"]
         config = ExperimentConfig.from_dict(data)
-        errors = config.validate()
+        with pytest.warns(DeprecationWarning, match="deprecated configuration format"):
+            errors = config.validate()
         assert any("must be a dictionary" in e for e in errors)
 
     @pytest.mark.unit
@@ -202,7 +209,8 @@ class TestExperimentConfig:
         data = self._make_config_dict()
         data["evaluation"]["metrics"] = {"retrieval": "hit_rate"}
         config = ExperimentConfig.from_dict(data)
-        errors = config.validate()
+        with pytest.warns(DeprecationWarning, match="deprecated configuration format"):
+            errors = config.validate()
         assert any("Retrieval metrics must be a list" in e for e in errors)
 
     @pytest.mark.unit
@@ -213,7 +221,8 @@ class TestExperimentConfig:
             "generation": "faithfulness",
         }
         config = ExperimentConfig.from_dict(data)
-        errors = config.validate()
+        with pytest.warns(DeprecationWarning, match="deprecated configuration format"):
+            errors = config.validate()
         assert any("Generation metrics must be a list" in e for e in errors)
 
     @pytest.mark.unit
@@ -221,7 +230,8 @@ class TestExperimentConfig:
         data = self._make_config_dict()
         data["evaluation"]["metrics"] = {"generation": ["faithfulness"]}
         config = ExperimentConfig.from_dict(data)
-        errors = config.validate()
+        with pytest.warns(DeprecationWarning, match="deprecated configuration format"):
+            errors = config.validate()
         assert any("must include 'retrieval' field" in e for e in errors)
 
     @pytest.mark.unit
@@ -254,7 +264,8 @@ class TestExperimentConfig:
             "generation": ["faithfulness", "answer_relevancy", "answer_correctness"],
         }
         config = ExperimentConfig.from_dict(data)
-        errors = config.validate()
+        with pytest.warns(DeprecationWarning, match="deprecated configuration format"):
+            errors = config.validate()
         assert not any("Invalid retrieval metrics" in e for e in errors)
 
     @pytest.mark.unit
@@ -265,7 +276,8 @@ class TestExperimentConfig:
             "retrieval": ["context_precision", "context_recall"],
         }
         config = ExperimentConfig.from_dict(data)
-        errors = config.validate()
+        with pytest.warns(DeprecationWarning, match="deprecated configuration format"):
+            errors = config.validate()
         assert not any("Invalid retrieval metrics" in e for e in errors)
 
     @pytest.mark.unit
@@ -276,7 +288,8 @@ class TestExperimentConfig:
             "retrieval": ["context_precision"],
         }
         config = ExperimentConfig.from_dict(data)
-        errors = config.validate()
+        with pytest.warns(DeprecationWarning, match="deprecated configuration format"):
+            errors = config.validate()
         assert any("LLM-based retrieval metrics" in e for e in errors)
 
     @pytest.mark.unit
@@ -288,7 +301,8 @@ class TestExperimentConfig:
             "generation": ["faithfulness", "answer_correctness"],
         }
         config = ExperimentConfig.from_dict(data)
-        errors = config.validate()
+        with pytest.warns(DeprecationWarning, match="deprecated configuration format"):
+            errors = config.validate()
         assert any("require 'ragas' in evaluation.backends" in e for e in errors)
 
     @pytest.mark.unit
@@ -300,7 +314,8 @@ class TestExperimentConfig:
             "generation": ["context_precision", "context_recall", "answer_correctness"],
         }
         config = ExperimentConfig.from_dict(data)
-        errors = config.validate()
+        with pytest.warns(DeprecationWarning, match="deprecated configuration format"):
+            errors = config.validate()
         assert not any("metrics" in e.lower() for e in errors)
 
 
@@ -471,7 +486,10 @@ class TestLoadExperimentConfig:
             temp_path = f.name
 
         try:
-            config = load_experiment_config(temp_path)
+            with pytest.warns(
+                DeprecationWarning, match="deprecated configuration format"
+            ):
+                config = load_experiment_config(temp_path)
             assert config.name == "test_exp"
             assert config.description == "Test experiment"
         finally:
@@ -542,7 +560,12 @@ class TestLoadExperimentConfig:
             temp_path = f.name
 
         try:
-            with pytest.raises(ConfigurationError, match="validation failed"):
+            with (
+                pytest.warns(
+                    DeprecationWarning, match="deprecated configuration format"
+                ),
+                pytest.raises(ConfigurationError, match="validation failed"),
+            ):
                 load_experiment_config(temp_path)
         finally:
             Path(temp_path).unlink()
@@ -1341,7 +1364,8 @@ class TestExperimentBoundaryConditions:
     def test_empty_variants_errors(self):
         data = self._make_config_dict(variants=[])
         config = ExperimentConfig.from_dict(data)
-        errors = config.validate()
+        with pytest.warns(DeprecationWarning, match="deprecated configuration format"):
+            errors = config.validate()
         assert "At least one variant must be defined" in errors
 
     @pytest.mark.unit
@@ -1349,7 +1373,8 @@ class TestExperimentBoundaryConditions:
         data = self._make_config_dict()
         data["evaluation"]["metrics"] = {}
         config = ExperimentConfig.from_dict(data)
-        errors = config.validate()
+        with pytest.warns(DeprecationWarning, match="deprecated configuration format"):
+            errors = config.validate()
         assert "Evaluation metrics must include 'retrieval' field" in errors
 
     @pytest.mark.unit
@@ -1520,7 +1545,12 @@ class TestExperimentExceptionPaths:
             temp_path = f.name
 
         try:
-            with pytest.raises(ConfigurationError, match="validation failed"):
+            with (
+                pytest.warns(
+                    DeprecationWarning, match="deprecated configuration format"
+                ),
+                pytest.raises(ConfigurationError, match="validation failed"),
+            ):
                 load_experiment_config(temp_path)
         finally:
             Path(temp_path).unlink()

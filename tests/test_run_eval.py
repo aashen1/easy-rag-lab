@@ -132,7 +132,10 @@ class TestRunEvalExpConfig:
 
             from src.experiment import load_experiment_config
 
-            exp_config = load_experiment_config(str(config_path))
+            with pytest.warns(
+                DeprecationWarning, match="deprecated configuration format"
+            ):
+                exp_config = load_experiment_config(str(config_path))
 
             assert exp_config.name == "test_experiment"
             assert exp_config.data.get("meal") == "test_meal"
@@ -159,7 +162,12 @@ class TestRunEvalExpConfig:
 
             from src.experiment import load_experiment_config
 
-            with pytest.raises(ConfigurationError, match="meal"):
+            with (
+                pytest.warns(
+                    DeprecationWarning, match="deprecated configuration format"
+                ),
+                pytest.raises(ConfigurationError, match="meal"),
+            ):
                 load_experiment_config(str(config_path))
 
     @pytest.mark.unit
@@ -170,7 +178,10 @@ class TestRunEvalExpConfig:
 
             from src.experiment import load_experiment_config
 
-            exp_config = load_experiment_config(str(config_path))
+            with pytest.warns(
+                DeprecationWarning, match="deprecated configuration format"
+            ):
+                exp_config = load_experiment_config(str(config_path))
 
             first_variant = exp_config.variants[0]
             assert first_variant.get("name") == "test_variant"
@@ -183,7 +194,10 @@ class TestRunEvalExpConfig:
 
             from src.experiment import load_experiment_config
 
-            exp_config = load_experiment_config(str(config_path))
+            with pytest.warns(
+                DeprecationWarning, match="deprecated configuration format"
+            ):
+                exp_config = load_experiment_config(str(config_path))
 
             variant_name = "test_variant_alt"
             found_variant = None
@@ -203,7 +217,10 @@ class TestRunEvalExpConfig:
 
             from src.experiment import load_experiment_config, merge_config
 
-            exp_config = load_experiment_config(str(config_path))
+            with pytest.warns(
+                DeprecationWarning, match="deprecated configuration format"
+            ):
+                exp_config = load_experiment_config(str(config_path))
             system_config = {
                 "chunker": {
                     "chunk_size": 256,
@@ -229,7 +246,10 @@ class TestRunEvalExpConfig:
 
             from src.experiment import load_experiment_config, merge_config
 
-            exp_config = load_experiment_config(str(config_path))
+            with pytest.warns(
+                DeprecationWarning, match="deprecated configuration format"
+            ):
+                exp_config = load_experiment_config(str(config_path))
             system_config = {
                 "chunker": {
                     "chunk_size": 256,
@@ -287,7 +307,10 @@ class TestRunEvalExpConfig:
 
             from src.experiment import load_experiment_config
 
-            exp_config = load_experiment_config(str(config_path))
+            with pytest.warns(
+                DeprecationWarning, match="deprecated configuration format"
+            ):
+                exp_config = load_experiment_config(str(config_path))
 
             variant_names = [v.get("name") for v in exp_config.variants]
             assert "nonexistent_variant" not in variant_names
@@ -300,7 +323,10 @@ class TestRunEvalExpConfig:
 
             from src.experiment import load_experiment_config
 
-            exp_config = load_experiment_config(str(config_path))
+            with pytest.warns(
+                DeprecationWarning, match="deprecated configuration format"
+            ):
+                exp_config = load_experiment_config(str(config_path))
 
             llm_preset = exp_config.evaluation.get("llm_preset", "default")
             assert llm_preset == "default"
@@ -463,7 +489,10 @@ class TestMetricsConfig:
 
             from src.experiment import load_experiment_config
 
-            exp_config = load_experiment_config(str(config_path))
+            with pytest.warns(
+                DeprecationWarning, match="deprecated configuration format"
+            ):
+                exp_config = load_experiment_config(str(config_path))
 
             metrics = exp_config.evaluation.get("metrics", {}).get("retrieval")
             assert metrics == ["hit_rate"]
@@ -772,7 +801,10 @@ class TestGenerationMetrics:
 
             from src.experiment import load_experiment_config
 
-            exp_config = load_experiment_config(str(config_path))
+            with pytest.warns(
+                DeprecationWarning, match="deprecated configuration format"
+            ):
+                exp_config = load_experiment_config(str(config_path))
 
             retrieval_metrics = exp_config.evaluation.get("metrics", {}).get(
                 "retrieval"
