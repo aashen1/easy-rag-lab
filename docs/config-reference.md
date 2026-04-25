@@ -92,7 +92,6 @@ llm_presets:
 ```yaml
 parser:
   input_dir: "data/raw"      # PDF 输入目录
-  output_dir: "data/parsed"  # 解析输出目录
   algorithm: "pymupdf4llm"   # 解析算法
   pymupdf4llm:               # pymupdf4llm 专用参数
     header: false            # 不提取页眉
@@ -107,12 +106,14 @@ parser:
     show_progress: true      # 显示解析进度
 ```
 
+> **注意**：解析产物不再输出到固定目录，而是由 Artifact 系统自动管理至
+> `data/artifacts/{data_id[:16]}/parsed_{hash}/`。`parser.output_dir` 配置项已移除。
+
 ### 基础参数
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `input_dir` | `"data/raw"` | PDF 文件输入目录 |
-| `output_dir` | `"data/parsed"` | 解析结果输出目录 |
 | `algorithm` | `"pymupdf4llm"` | PDF 解析算法。支持 `pymupdf4llm`（推荐）或 `fitz_pdfplumber` |
 
 ### pymupdf4llm 参数
@@ -178,8 +179,6 @@ parser:
 
 ```yaml
 chunker:
-  input_dir: "data/parsed"   # Markdown 输入目录
-  output_dir: "data/chunks"  # JSONL 输出目录
   strategy: "fixed"          # 分块策略: "fixed" 或 "semantic"
   chunk_size: 512            # 每块最大 token 数
   chunk_overlap: 0           # 相邻块重叠 token 数（fixed 策略）
@@ -188,6 +187,10 @@ chunker:
     breakpoint_percentile: null  # 百分位阈值（null = 禁用）
     min_chunk_size: 100          # 最小 chunk token 数
 ```
+
+> **注意**：分块产物不再输出到固定目录，而是由 Artifact 系统自动管理至
+> `data/artifacts/{data_id[:16]}/chunks_{hash}/`。`chunker.input_dir` 和
+> `chunker.output_dir` 配置项已移除。
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
@@ -388,7 +391,7 @@ test_generation:
   default_strategy: "factual"   # 默认问题策略
   default_num_questions: 20     # 默认问题数量
   max_retries: 3                # 最大重试次数
-  
+
   # 文档级问题生成配置
   document_level:
     enabled: true               # 是否启用文档级问题生成
