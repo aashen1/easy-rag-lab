@@ -1,3 +1,4 @@
+import hashlib
 import json
 import random
 import re
@@ -1374,7 +1375,7 @@ class TestSetGenerator:
 
         supplement = QUESTION_TYPE_SUPPLEMENTS.get(question_type, "")
 
-        doc_key = str(hash(document_content[:1000]))
+        doc_key = hashlib.sha256(document_content[:1000].encode()).hexdigest()[:16]
         if doc_key in self._doc_truncate_cache:
             truncated_doc = self._doc_truncate_cache[doc_key]
         else:

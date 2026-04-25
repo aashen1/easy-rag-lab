@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -313,7 +314,7 @@ class TestLocateAnswerChunks:
     def test_locate_with_meal_config_uses_artifact_cache(self, tmp_path):
         from src.meal import MealConfig, MealFile
 
-        chunks_dir = tmp_path / "artifacts" / "abc123000000" / "chunks_hash123"
+        chunks_dir = tmp_path / "artifacts" / "abc1230000000000" / "chunks_hash123"
         chunks_dir.mkdir(parents=True)
         source_dir = chunks_dir / "reports"
         source_dir.mkdir()
@@ -1431,3 +1432,14 @@ class TestSupplementDocumentBasedQuestions:
             )
 
         assert len(result["questions"]) == 1
+
+
+class TestDocTruncateCacheKeyStability:
+    def test_doc_truncate_cache_key_stability(self):
+        content = "A" * 2000
+        key1 = hashlib.sha256(content[:1000].encode()).hexdigest()[:16]
+        key2 = hashlib.sha256(content[:1000].encode()).hexdigest()[:16]
+        assert key1 == key2
+        different_content = "B" * 2000
+        key3 = hashlib.sha256(different_content[:1000].encode()).hexdigest()[:16]
+        assert key1 != key3
