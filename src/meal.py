@@ -1078,6 +1078,35 @@ class MealManager:
                 equivalents.append(meal)
         return equivalents
 
+    def find_full_dataset_meal(self) -> MealConfig | None:
+        """Find the meal that contains all PDFs in raw_dir.
+
+        Computes the full data_id from raw_dir via ArtifactCache, then
+        searches all meals for one with a matching data_id.
+
+        Returns:
+            MealConfig if a matching meal is found, None otherwise.
+        """
+        try:
+            full_data_id = self.cache._compute_full_data_id()
+        except ValueError:
+            logger.debug("Cannot compute full data_id: no PDFs in raw_dir")
+            return None
+
+        equivalents = self.find_equivalent_meals(full_data_id)
+        if equivalents:
+            logger.info(
+                f"Found full-dataset meal '{equivalents[0].name}' "
+                f"(data_id={full_data_id[:16]}...)"
+            )
+            return equivalents[0]
+
+        logger.debug(
+            f"No meal matches full data_id {full_data_id[:16]}... "
+            f"— create a meal with sampling=1.0 first"
+        )
+        return None
+
     def list_meals(self) -> list[MealConfig]:
         """List all available meals by scanning the meals directory.
 

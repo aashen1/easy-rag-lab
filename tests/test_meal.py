@@ -940,6 +940,41 @@ class TestMealManager:
         assert "options" in snapshot["parser"]
         assert snapshot["parser"]["options"] == {}
 
+    def test_find_full_dataset_meal_found(self, temp_dirs):
+        manager = MealManager(temp_dirs)
+        full_data_id = manager.cache._compute_full_data_id()
+        meal_config = self._make_meal_config(name="full_meal", data_id=full_data_id)
+        self._save_meal(manager, meal_config)
+
+        result = manager.find_full_dataset_meal()
+        assert result is not None
+        assert result.name == "full_meal"
+        assert result.data_id == full_data_id
+
+    def test_find_full_dataset_meal_not_found(self, temp_dirs):
+        manager = MealManager(temp_dirs)
+        other_meal = self._make_meal_config(name="partial_meal", data_id="deadbeef" * 8)
+        self._save_meal(manager, other_meal)
+
+        result = manager.find_full_dataset_meal()
+        assert result is None
+
+    def test_find_full_dataset_meal_no_pdfs(self, tmp_path):
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        meals_dir = tmp_path / "meals"
+        meals_dir.mkdir()
+        artifacts_dir = tmp_path / "artifacts"
+        artifacts_dir.mkdir()
+        config = {
+            "parser": {"input_dir": str(raw_dir)},
+            "meals": {"dir": str(meals_dir)},
+            "artifacts": {"dir": str(artifacts_dir)},
+        }
+        manager = MealManager(config)
+        result = manager.find_full_dataset_meal()
+        assert result is None
+
 
 class TestBuildChunksIfNeeded:
     def test_build_chunks_if_needed_pages_json(self, tmp_path):
