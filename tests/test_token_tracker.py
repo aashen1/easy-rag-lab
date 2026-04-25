@@ -467,3 +467,78 @@ class TestTokenTracker:
         assert "TOKEN USAGE SUMMARY" in table
         assert "rag_qa" in table
         assert "1,000" in table
+
+    def test_get_summary_by_variant_empty(self):
+        tracker = TokenTracker()
+        summary = tracker.get_summary_by_variant()
+        assert summary == {}
+
+    def test_get_summary_by_variant_single_variant(self):
+        tracker = TokenTracker()
+        tracker.record(
+            "rag_qa",
+            "model-a",
+            DetailedTokenUsage(input_tokens=100, output_tokens=50),
+            variant_name="baseline",
+        )
+        tracker.record(
+            "rag_qa",
+            "model-a",
+            DetailedTokenUsage(input_tokens=200, output_tokens=80),
+            variant_name="baseline",
+        )
+
+        summary = tracker.get_summary_by_variant()
+        assert "baseline" in summary
+        assert "rag_qa" in summary["baseline"]
+        assert summary["baseline"]["rag_qa"].input_tokens == 300
+        assert summary["baseline"]["rag_qa"].output_tokens == 130
+
+    def test_get_summary_by_variant_multiple_variants(self):
+        tracker = TokenTracker()
+        tracker.record(
+            "rag_qa",
+            "model-a",
+            DetailedTokenUsage(input_tokens=100, output_tokens=50),
+            variant_name="baseline",
+        )
+        tracker.record(
+            "rag_qa",
+            "model-a",
+            DetailedTokenUsage(input_tokens=150, output_tokens=60),
+            variant_name="rerank",
+        )
+        tracker.record(
+            "test_generation",
+            "model-a",
+            DetailedTokenUsage(input_tokens=80, output_tokens=30),
+            variant_name="baseline",
+        )
+
+        summary = tracker.get_summary_by_variant()
+        assert len(summary) == 2
+        assert "baseline" in summary
+        assert "rerank" in summary
+        assert summary["baseline"]["rag_qa"].input_tokens == 100
+        assert summary["baseline"]["test_generation"].input_tokens == 80
+        assert summary["rerank"]["rag_qa"].input_tokens == 150
+
+    def test_get_summary_by_variant_no_variant_name(self):
+        tracker = TokenTracker()
+        tracker.record(
+            "rag_qa",
+            "model-a",
+            DetailedTokenUsage(input_tokens=100, output_tokens=50),
+        )
+        tracker.record(
+            "rag_qa",
+            "model-a",
+            DetailedTokenUsage(input_tokens=200, output_tokens=80),
+            variant_name="baseline",
+        )
+
+        summary = tracker.get_summary_by_variant()
+        assert "__none__" in summary
+        assert "baseline" in summary
+        assert summary["__none__"]["rag_qa"].input_tokens == 100
+        assert summary["baseline"]["rag_qa"].input_tokens == 200

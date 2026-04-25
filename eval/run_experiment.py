@@ -1992,6 +1992,7 @@ def run_experiment(
                             category=rec_data["category"],
                             model_name=rec_data["model_name"],
                             usage=usage,
+                            variant_name=variant_name,
                         )
                     experiment_tracker.merge(variant_tracker)
 
