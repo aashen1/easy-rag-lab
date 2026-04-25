@@ -259,12 +259,12 @@ class BuiltinEvaluator(BaseEvaluator):
                     calculate_retrieval_diversity(sources_for_retrieval, k=5)
                 )
 
-            if llm_config and contexts:
+            if llm_config and contexts and expect_retrieval and expected_answer:
                 if "context_precision" in retrieval_metrics:
                     try:
                         cp_score = calculate_context_precision(
                             question=question,
-                            expected_output=expected_answer or "",
+                            expected_output=expected_answer,
                             retrieval_context=contexts,
                             api_key=llm_config["api_key"],
                             base_url=llm_config["base_url"],
@@ -281,7 +281,7 @@ class BuiltinEvaluator(BaseEvaluator):
                     try:
                         cr_score = calculate_context_recall(
                             question=question,
-                            ground_truth=expected_answer or "",
+                            ground_truth=expected_answer,
                             retrieval_context=contexts,
                             api_key=llm_config["api_key"],
                             base_url=llm_config["base_url"],

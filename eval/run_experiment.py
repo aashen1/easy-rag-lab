@@ -976,9 +976,9 @@ def _evaluate_with_builtin(
             results.append(result)
             continue
 
-        expected_answer = sample.get("ground_truth_excerpt") or sample.get(
-            "expected_answer"
-        )
+        expected_answer = sample.get("ground_truth_excerpt")
+        if not expected_answer and sample.get("expect_retrieval", True):
+            expected_answer = sample.get("expected_answer")
 
         eval_result = evaluator.evaluate_single(
             question_id=question_id,
@@ -1119,6 +1119,11 @@ def _evaluate_with_ragas(
                 if expect_retrieval:
                     llm_retrieval_part[k] = v
             else:
+                if not expect_retrieval and k in (
+                    "answer_correctness",
+                    "semantic_similarity",
+                ):
+                    continue
                 generation_part[k] = v
 
         result = {
