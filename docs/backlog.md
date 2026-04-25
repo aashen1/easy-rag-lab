@@ -114,7 +114,7 @@
 | RF-017 | 自定义异常类型定义（RAGPipelineError、RetrievalError 等） | 深度审查 | ✅ 已完成 | 小 | 新增 src/exceptions.py，9个业务异常类，全项目替换 |
 | RF-018 | Pipeline 类职责拆分（当前 560 行承担全流程） | 深度审查 | 📋 待处理 | 大 | 可拆分为 PipelineOrchestrator + 各阶段 Stage 类 |
 | RF-019 | answer_relevancy 评分稳定性改进 | [INV-007 调查](reviews/investigations/inv-007-eval-system-reliability.md) | 📋 待处理 | 小 | overall_score 由 LLM 自主决定，考虑引入 RAGAS 式伪问题生成作为交叉验证 |
-| RF-020 | 全量测试路径重构（data/parsed→artifacts） | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 将"全量"视为 meal，data/parsed 改为指向 artifacts 的辅助角色，权衡便利性与一致性 |
+| RF-020 | 全量测试路径重构（data/parsed→artifacts） | [TODO.md](../TODO.md) | ✅ 已完成 | 中 | 旧路径全面迁移至 Artifact 体系，新增 Pointer 机制和 artifact_cli 工具 |
 
 ---
 
