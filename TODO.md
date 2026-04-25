@@ -92,6 +92,9 @@ v0.1.10→v0.1.11 的主要任务：
 - [ ] `2026-04-25 11:10:25 | INFO     | src.indexer:index_chunks:134 - Indexing 45077 chunks
   B:\project\ash-easy-rag\src\indexer.py:153: UserWarning: Local mode is not recommended for collections with more than 20,000 points. Current collection contains 20100 points. Consider using Qdrant in Docker or Qdrant Cloud for better performance with large datasets.` 全量测试的时候报了一个这个
 - [ ] 多变体实验的增量补做。比如这一次我只做基线。跑完了，把下面加个variant，做chunksize变动；再跑完，再加上重排序……这样每次都只需要算新增的那部分，同时最后又可以得到一份综合的实验报告
+- [ ] 只有实验顺利结束了，才生成最后的LLM报告，否则这步直接跳过。
+- [ ] 如果跑一半不想跑了，手动结束的话，是否可以事后指定让它只根据已完成部分单独生成报告？比如有六个variant，跑完三个在第四个停掉，那么前三个的数据其实也是可用的。但这首先要确认现在手动interrrupt的时候会不会保存已经跑完的结果。
+- [ ] 感觉Token统计功能是不是不能正常识别多变体的各个变体消耗？弄个小试验排查一下是否有bug
 
 
 
