@@ -16,6 +16,24 @@ if TYPE_CHECKING:
     from src.test_generator import TestSetGenerator
 
 
+def _normalize_source_path(source_path: str) -> str:
+    """Normalize source file path to .pdf format for comparison.
+
+    Converts .pages.json or .md paths to their corresponding .pdf path.
+
+    Args:
+        source_path: Original source file path.
+
+    Returns:
+        Normalized path with .pdf extension.
+    """
+    if source_path.endswith(".pages.json"):
+        return source_path[: -len(".pages.json")] + ".pdf"
+    elif source_path.endswith(".md"):
+        return source_path[: -len(".md")] + ".pdf"
+    return source_path
+
+
 @dataclass
 class TestSetMetadata:
     name: str
@@ -382,7 +400,11 @@ class TestSetManager:
             if not source_files:
                 continue
 
-            if not all(sf in meal_pdf_paths for sf in source_files):
+            normalized_source_files = [
+                _normalize_source_path(sf) for sf in source_files
+            ]
+
+            if not all(sf in meal_pdf_paths for sf in normalized_source_files):
                 invalid_questions.append(question)
 
         return invalid_questions
@@ -1106,7 +1128,11 @@ class TestSetManager:
                 valid_questions.append(question)
                 continue
 
-            if all(sf in meal_pdf_paths for sf in source_files):
+            normalized_source_files = [
+                _normalize_source_path(sf) for sf in source_files
+            ]
+
+            if all(sf in meal_pdf_paths for sf in normalized_source_files):
                 valid_questions.append(question)
             else:
                 invalid_count += 1
