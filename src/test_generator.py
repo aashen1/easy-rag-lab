@@ -1,3 +1,4 @@
+import difflib
 import json
 import random
 import re
@@ -438,6 +439,10 @@ class TestSetGenerator:
         self.segment_sampling_strategy = tg_config.get(
             "segment_sampling_strategy", "random"
         )
+        self.multi_hop_candidate_count = tg_config.get("multi_hop_candidate_count", 4)
+        self.quote_fuzzy_match_threshold = tg_config.get(
+            "quote_fuzzy_match_threshold", 0.85
+        )
         self._doc_truncate_cache: dict[str, str] = {}
 
     def _segment_document(
@@ -574,6 +579,253 @@ class TestSetGenerator:
             return segments[start_idx : start_idx + selected_count]
         else:
             return random.sample(segments, selected_count)
+
+    def _select_candidate_segments(
+        self,
+        segments: list[dict[str, Any]],
+        question_type: str,
+        num_candidates: int = 4,
+    ) -> list[dict[str, Any]]:
+        """Select candidate segments for multi-hop question generation.
+
+        For multi-hop question types (multi_fact, reasoning, comparative),
+        selects multiple candidate segments with diversity in document position.
+        For other types, delegates to _select_segments_for_question_type.
+
+        Args:
+            segments: List of segment dictionaries from _segment_document.
+            question_type: Type of question to generate.
+            num_candidates: Number of candidate segments to select for multi-hop
+                types. Defaults to 4.
+
+        Returns:
+            List of selected segment dictionaries for multi-hop types,
+            or result of _select_segments_for_question_type for other types.
+        """
+        if not segments:
+            return []
+
+        multi_hop_types = {"multi_fact", "reasoning", "comparative"}
+
+        if question_type not in multi_hop_types:
+            return self._select_segments_for_question_type(
+                segments, question_type, num_candidates
+            )
+
+        actual_count = min(num_candidates, len(segments))
+
+        if actual_count >= len(segments):
+            return segments.copy()
+
+        if self.segment_sampling_strategy == "random":
+            return self._select_diverse_segments(segments, actual_count)
+        elif self.segment_sampling_strategy == "sequential":
+            start_idx = random.randint(0, len(segments) - actual_count)
+            return segments[start_idx : start_idx + actual_count]
+        else:
+            return self._select_diverse_segments(segments, actual_count)
+
+    def _select_diverse_segments(
+        self,
+        segments: list[dict[str, Any]],
+        count: int,
+    ) -> list[dict[str, Any]]:
+        """Select segments with diversity in document position.
+
+        Ensures selected segments are spread across different parts of the
+        document to maximize information diversity for multi-hop questions.
+
+        Args:
+            segments: List of segment dictionaries with 'segment_index' key.
+            count: Number of segments to select.
+
+        Returns:
+            List of selected segment dictionaries with diverse positions.
+        """
+        if count >= len(segments):
+            return segments.copy()
+
+        total_segments = len(segments)
+        step = total_segments / count
+
+        selected: list[dict[str, Any]] = []
+        for i in range(count):
+            target_index = int(i * step)
+            target_index = min(target_index, total_segments - 1)
+
+            for seg in segments:
+                if seg.get("segment_index", 0) == target_index:
+                    selected.append(seg)
+                    break
+            else:
+                if segments:
+                    selected.append(segments[target_index])
+
+        if len(selected) < count:
+            remaining = [s for s in segments if s not in selected]
+            needed = count - len(selected)
+            if remaining and needed > 0:
+                selected.extend(random.sample(remaining, min(needed, len(remaining))))
+
+        return selected
+
+    def _parse_segment_selection(
+        self,
+        llm_response: dict[str, Any],
+        num_available_segments: int,
+    ) -> list[int]:
+        """Parse segment selection from LLM response.
+
+        Extracts and validates the 'selected_segments' field from the LLM
+        response. Returns all segment indices if the field is missing or
+        invalid.
+
+        Args:
+            llm_response: Parsed LLM response dictionary.
+            num_available_segments: Total number of available segments.
+
+        Returns:
+            List of valid segment indices. Returns all indices (0 to
+            num_available_segments-1) if selection is invalid or missing.
+        """
+        if num_available_segments <= 0:
+            return []
+
+        all_indices = list(range(num_available_segments))
+
+        selected = llm_response.get("selected_segments")
+        if selected is None:
+            return all_indices
+
+        if not isinstance(selected, list):
+            logger.warning(
+                f"selected_segments is not a list: {type(selected).__name__}"
+            )
+            return all_indices
+
+        valid_indices: list[int] = []
+        for idx in selected:
+            if isinstance(idx, int) and 0 <= idx < num_available_segments:
+                valid_indices.append(idx)
+            else:
+                logger.warning(
+                    f"Invalid segment index: {idx} (available: 0-{num_available_segments - 1})"
+                )
+
+        if not valid_indices:
+            logger.warning("No valid segment indices found in selected_segments")
+            return all_indices
+
+        return valid_indices
+
+    def _validate_segment_relevance(
+        self,
+        selected_indices: list[int],
+        segments: list[dict[str, Any]],
+    ) -> bool:
+        """Validate if selected segments share any common keywords.
+
+        Performs a simple heuristic check to determine if the selected
+        segments are potentially related by looking for shared keywords.
+        Logs a warning if segments seem unrelated but does not reject them.
+
+        Args:
+            selected_indices: List of segment indices that were selected.
+            segments: List of all available segment dictionaries.
+
+        Returns:
+            True if segments share common keywords or if only one segment
+            is selected. False if segments appear unrelated.
+        """
+        if len(selected_indices) <= 1:
+            return True
+
+        selected_segments = [segments[i] for i in selected_indices if i < len(segments)]
+
+        if len(selected_segments) <= 1:
+            return True
+
+        keyword_sets: list[set[str]] = []
+        for seg in selected_segments:
+            text = seg.get("text", "")
+            keywords = self._extract_segment_keywords(text)
+            keyword_sets.append(keywords)
+
+        if not keyword_sets:
+            return True
+
+        common_keywords = keyword_sets[0]
+        for kw_set in keyword_sets[1:]:
+            common_keywords = common_keywords & kw_set
+
+        if not common_keywords:
+            logger.warning(
+                f"Selected segments (indices: {selected_indices}) share no common keywords. "
+                "They may be unrelated, which could affect question quality."
+            )
+            return False
+
+        logger.debug(
+            f"Segments share {len(common_keywords)} common keywords: "
+            f"{list(common_keywords)[:5]}"
+        )
+        return True
+
+    def _extract_segment_keywords(self, text: str) -> set[str]:
+        """Extract meaningful keywords from segment text.
+
+        Identifies domain-specific terms, numbers with units, and
+        significant Chinese words for keyword matching.
+
+        Args:
+            text: The segment text to extract keywords from.
+
+        Returns:
+            Set of keyword strings extracted from the text.
+        """
+        keywords: set[str] = set()
+
+        numbers_with_units = re.findall(r"\d+\.?\d*[万亿千百%％]?", text)
+        keywords.update(numbers_with_units)
+
+        proper_nouns = re.findall(
+            r"[\u4e00-\u9fff]{2,8}(?:股份|集团|公司|行业|市场|技术|产品|业务)",
+            text,
+        )
+        keywords.update(proper_nouns)
+
+        domain_keywords = [
+            "增长",
+            "下降",
+            "上升",
+            "减少",
+            "增加",
+            "收入",
+            "利润",
+            "营收",
+            "市值",
+            "占比",
+            "规模",
+            "产量",
+            "销量",
+            "价格",
+            "成本",
+            "投资",
+            "融资",
+            "估值",
+            "盈利",
+            "亏损",
+            "负债",
+            "资产",
+            "现金流",
+            "毛利率",
+            "净利率",
+        ]
+        for kw in domain_keywords:
+            if kw in text:
+                keywords.add(kw)
+
+        return keywords
 
     def _map_segments_to_chunks(
         self,
@@ -2198,3 +2450,220 @@ class TestSetGenerator:
                 return True
 
         return False
+
+    def _verify_quote_in_segment(self, quote: str, segment_text: str) -> dict[str, Any]:
+        """Verify if a quote exists in a segment text.
+
+        First attempts exact match, then falls back to fuzzy matching if
+        exact match fails.
+
+        Args:
+            quote: The quote text to verify.
+            segment_text: The segment text to search within.
+
+        Returns:
+            Dictionary with keys:
+                - found: bool indicating if quote was found
+                - position: int or None, the character position of the match
+                - match_type: str, one of "exact", "fuzzy", or None
+        """
+        if not quote or not segment_text:
+            return {"found": False, "position": None, "match_type": None}
+
+        pos = segment_text.find(quote)
+        if pos != -1:
+            return {"found": True, "position": pos, "match_type": "exact"}
+
+        fuzzy_result = self._fuzzy_match_quote(
+            quote, segment_text, self.quote_fuzzy_match_threshold
+        )
+        if fuzzy_result["found"]:
+            return {
+                "found": True,
+                "position": fuzzy_result["position"],
+                "match_type": "fuzzy",
+            }
+
+        return {"found": False, "position": None, "match_type": None}
+
+    def _fuzzy_match_quote(
+        self, quote: str, segment_text: str, threshold: float = 0.85
+    ) -> dict[str, Any]:
+        """Perform fuzzy matching of a quote within segment text.
+
+        Uses difflib.SequenceMatcher for similarity calculation. Handles
+        minor differences such as whitespace variations and punctuation
+        differences.
+
+        Args:
+            quote: The quote text to match.
+            segment_text: The segment text to search within.
+            threshold: Minimum similarity ratio for a match. Defaults to 0.85.
+
+        Returns:
+            Dictionary with keys:
+                - found: bool indicating if a match was found
+                - position: int or None, the starting character position
+                - similarity: float, the similarity ratio of the best match
+        """
+        if not quote or not segment_text:
+            return {"found": False, "position": None, "similarity": 0.0}
+
+        quote_len = len(quote)
+        if quote_len == 0:
+            return {"found": False, "position": None, "similarity": 0.0}
+
+        best_similarity = 0.0
+        best_position = None
+
+        normalized_quote = quote.replace("\n", " ").replace("\t", " ")
+        normalized_quote = " ".join(normalized_quote.split())
+
+        step = max(1, quote_len // 10)
+
+        for start in range(0, len(segment_text) - quote_len + 1, step):
+            substring = segment_text[start : start + quote_len]
+            normalized_substring = substring.replace("\n", " ").replace("\t", " ")
+            normalized_substring = " ".join(normalized_substring.split())
+
+            matcher = difflib.SequenceMatcher(
+                None, normalized_quote, normalized_substring
+            )
+            similarity = matcher.ratio()
+
+            if similarity > best_similarity:
+                best_similarity = similarity
+                best_position = start
+
+            if similarity >= threshold:
+                for fine_start in range(
+                    max(0, start - step),
+                    min(len(segment_text) - quote_len + 1, start + step),
+                ):
+                    fine_substring = segment_text[fine_start : fine_start + quote_len]
+                    fine_normalized = fine_substring.replace("\n", " ").replace(
+                        "\t", " "
+                    )
+                    fine_normalized = " ".join(fine_normalized.split())
+
+                    fine_matcher = difflib.SequenceMatcher(
+                        None, normalized_quote, fine_normalized
+                    )
+                    fine_similarity = fine_matcher.ratio()
+
+                    if fine_similarity > best_similarity:
+                        best_similarity = fine_similarity
+                        best_position = fine_start
+
+        if best_similarity >= threshold:
+            return {
+                "found": True,
+                "position": best_position,
+                "similarity": best_similarity,
+            }
+
+        return {"found": False, "position": None, "similarity": best_similarity}
+
+    def _validate_evidence(
+        self,
+        evidence_list: list[dict[str, Any]],
+        segments: list[dict[str, Any]],
+        question_type: str = "unknown",
+    ) -> dict[str, Any]:
+        """Validate evidence entries against document segments.
+
+        For each evidence entry, verifies that the segment_index is valid
+        and that the quote exists in the specified segment. Records
+        verification results and detects potential hallucinations.
+
+        Args:
+            evidence_list: List of evidence dictionaries, each containing
+                'segment_index' and 'quote' keys.
+            segments: List of segment dictionaries, each containing 'text'
+                and 'segment_index' keys.
+            question_type: Type of question for logging context. Defaults
+                to "unknown".
+
+        Returns:
+            Dictionary with keys:
+                - valid: bool indicating if all evidence is valid
+                - verified_evidence: list of evidence dicts with added
+                    'verified' field
+                - invalid_quotes: list of dicts with 'quote' and 'reason'
+                    for invalid entries
+        """
+        if not evidence_list:
+            return {
+                "valid": True,
+                "verified_evidence": [],
+                "invalid_quotes": [],
+            }
+
+        segment_map = {
+            seg.get("segment_index", i): seg for i, seg in enumerate(segments)
+        }
+
+        verified_evidence: list[dict[str, Any]] = []
+        invalid_quotes: list[dict[str, str]] = []
+
+        for evidence in evidence_list:
+            segment_index = evidence.get("segment_index")
+            quote = evidence.get("quote", "")
+
+            if segment_index is None:
+                verified_evidence.append({**evidence, "verified": False})
+                invalid_quotes.append(
+                    {
+                        "quote": quote[:50] + "..." if len(quote) > 50 else quote,
+                        "reason": "Missing segment_index",
+                    }
+                )
+                continue
+
+            if segment_index not in segment_map:
+                verified_evidence.append({**evidence, "verified": False})
+                invalid_quotes.append(
+                    {
+                        "quote": quote[:50] + "..." if len(quote) > 50 else quote,
+                        "reason": f"Invalid segment_index: {segment_index}",
+                    }
+                )
+                continue
+
+            segment = segment_map[segment_index]
+            segment_text = segment.get("text", "")
+
+            verification = self._verify_quote_in_segment(quote, segment_text)
+
+            if verification["found"]:
+                verified_evidence.append(
+                    {
+                        **evidence,
+                        "verified": True,
+                        "match_type": verification["match_type"],
+                        "position": verification["position"],
+                    }
+                )
+            else:
+                verified_evidence.append({**evidence, "verified": False})
+                truncated_quote = quote[:50] + "..." if len(quote) > 50 else quote
+                invalid_quotes.append(
+                    {
+                        "quote": truncated_quote,
+                        "reason": "Quote not found in segment",
+                    }
+                )
+
+                logger.warning(
+                    f"Potential hallucination detected: quote '{truncated_quote}' "
+                    f"not found in segment {segment_index}. "
+                    f"Question type: {question_type}"
+                )
+
+        all_valid = len(invalid_quotes) == 0
+
+        return {
+            "valid": all_valid,
+            "verified_evidence": verified_evidence,
+            "invalid_quotes": invalid_quotes,
+        }
