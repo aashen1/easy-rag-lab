@@ -145,7 +145,7 @@ else:
 
 ---
 
-## 6. 未修复问题：Chunk JSONL 文本编码损坏
+## 6. 已修复问题：Chunk JSONL 文本编码损坏（BUG-024）
 
 ### 现象
 
@@ -161,14 +161,21 @@ Chunk JSONL 文件中的 `text` 字段存在编码损坏，中文字符显示为
 6. 直接读取 chunk JSONL 文件 — 发现文本是乱码
 7. 对比 parsed JSON 文件 — 原文可读，问题出在 chunker 输出
 
-### 影响范围
+### 根因
 
-- chunk_hit_rate / chunk_mrr / chunk_ndcg：无法计算（null）
-- 其他所有指标：不受影响
+`chunk_text()` 中 `encoding.encode(text)` → 切片 → `encoding.decode(chunk_tokens)` 的往返过程中，当 chunk 边界恰好切在多字节 UTF-8 字符的 token 中间时，`decode()` 会产生乱码。tiktoken 官方文档明确警告："decode() can be lossy for tokens that aren't on utf-8 boundaries"。
 
-### 已归档
+### 修复方案
 
-BUG-024，见 `docs/backlog.md`
+新增 `_build_token_char_offsets()` 函数，构建 token 索引到原始文本字符偏移的映射。`chunk_text()` 改用 `text[char_start:char_end]` 原文切片替代 `encoding.decode(chunk_tokens)`，彻底避免编码/解码问题。`chunk_text_page_aware()` 的 cross_page_overlap 逻辑同步修复。
+
+### 验证结果
+
+使用 `quick_verify_metrics` 配置重新运行实验，chunk-level 指标恢复正常：
+- chunk_hit_rate: 1.0（之前 null）
+- chunk_mrr: 0.29（之前 null）
+- chunk_ndcg: 0.45（之前 null）
+- 其他所有指标未受影响
 
 ---
 
