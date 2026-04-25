@@ -273,7 +273,14 @@ EVIDENCE_AWARE_PROMPT = """你是一位金融行业从业者，正在阅读一�
 - quote 必须与片段原文完全一致，不能修改或概括
 - selected_segments 仅多知识点综合问题需要填写，其他类型可省略
 - 单知识点问题通常只需1条证据
-- 多知识点综合问题需要多条证据，且必须填写 selected_segments"""
+- 多知识点综合问题需要多条证据，且必须填写 selected_segments
+
+重要数值规则：
+- 文档中的财务数据通常以"元"为单位（如 12,162,684,368.86）
+- 答案中请换算为"亿元"：÷100,000,000（即去掉8位数字）
+- 正确示例：12,162,684,368.86元 = 121.63亿元
+- 错误示例：12,162,684,368.86元 ≠ 1216.3亿元（多了10倍）
+- 如果原文已用"亿元"为单位，则直接引用，不要再次换算"""
 
 EVIDENCE_SINGLE_FACT_SUPPLEMENT = """
 ## 单知识点查询的特别说明
@@ -1593,6 +1600,36 @@ class TestSetGenerator:
                     else:
                         qa["source_files"] = [source_path]
 
+                    is_valid, correction = self._validate_numerical_accuracy(qa)
+                    if not is_valid and correction:
+                        logger.warning(
+                            f"Numerical accuracy issue: {correction['suggestion']}"
+                        )
+                        for err in correction.get("errors", []):
+                            wrong_val = err["answer_value"]
+                            correct_val = err["correct_value"]
+                            answer_text = qa.get("answer", "")
+                            qa["answer"] = answer_text.replace(
+                                f"{wrong_val}",
+                                f"{correct_val}",
+                            )
+                        qa.setdefault("metadata", {})
+                        qa["metadata"]["numerical_auto_corrected"] = True
+
+                    excerpt = qa.get("ground_truth_excerpt", "")
+                    if excerpt and q_type not in ("irrelevant",):
+                        excerpt_verified = self._verify_excerpt_in_document(
+                            excerpt,
+                            doc_content,
+                        )
+                        qa.setdefault("metadata", {})
+                        qa["metadata"]["excerpt_verified"] = excerpt_verified
+                        if not excerpt_verified:
+                            logger.warning(
+                                f"ground_truth_excerpt not found in document "
+                                f"for question {qa['id']}"
+                            )
+
                     questions.append(qa)
                     question_id += 1
                 else:
@@ -1658,6 +1695,36 @@ class TestSetGenerator:
                         qa["expect_retrieval"] = True
                     else:
                         qa["source_files"] = [source_path]
+
+                    is_valid, correction = self._validate_numerical_accuracy(qa)
+                    if not is_valid and correction:
+                        logger.warning(
+                            f"Numerical accuracy issue: {correction['suggestion']}"
+                        )
+                        for err in correction.get("errors", []):
+                            wrong_val = err["answer_value"]
+                            correct_val = err["correct_value"]
+                            answer_text = qa.get("answer", "")
+                            qa["answer"] = answer_text.replace(
+                                f"{wrong_val}",
+                                f"{correct_val}",
+                            )
+                        qa.setdefault("metadata", {})
+                        qa["metadata"]["numerical_auto_corrected"] = True
+
+                    excerpt = qa.get("ground_truth_excerpt", "")
+                    if excerpt and q_type not in ("irrelevant",):
+                        excerpt_verified = self._verify_excerpt_in_document(
+                            excerpt,
+                            doc_content,
+                        )
+                        qa.setdefault("metadata", {})
+                        qa["metadata"]["excerpt_verified"] = excerpt_verified
+                        if not excerpt_verified:
+                            logger.warning(
+                                f"ground_truth_excerpt not found in document "
+                                f"for question {qa['id']}"
+                            )
 
                     questions.append(qa)
                     question_id += 1
@@ -1882,6 +1949,127 @@ class TestSetGenerator:
 
         return None
 
+    def _validate_numerical_accuracy(
+        self, question_data: dict[str, Any]
+    ) -> tuple[bool, dict[str, Any] | None]:
+        """Validate numerical accuracy in answer against ground_truth_excerpt.
+
+        Detects 10x unit conversion errors where excerpt has large numbers
+        in yuan but answer incorrectly converts to yi-yuan.
+
+        Args:
+            question_data: Dictionary containing 'answer' and
+                'ground_truth_excerpt'.
+
+        Returns:
+            Tuple of (is_valid, correction). is_valid is True if numbers
+            are consistent. correction is None or contains fix information.
+        """
+        answer = question_data.get("answer", "")
+        excerpt = question_data.get("ground_truth_excerpt", "")
+
+        if not answer or not excerpt:
+            return True, None
+
+        excerpt_nums_raw = re.findall(r"[\d,]{8,}(?:\.\d+)?", excerpt)
+        excerpt_yi_values: list[float] = []
+        for raw_num in excerpt_nums_raw:
+            try:
+                clean = raw_num.replace(",", "")
+                val = float(clean)
+                yi_val = val / 1e8
+                if yi_val > 1:
+                    excerpt_yi_values.append(yi_val)
+            except ValueError:
+                continue
+
+        if not excerpt_yi_values:
+            return True, None
+
+        answer_yi_matches = re.findall(r"([\d,.]+)\s*亿", answer)
+        answer_yi_values: list[float] = []
+        for num_str in answer_yi_matches:
+            try:
+                answer_yi_values.append(float(num_str.replace(",", "")))
+            except ValueError:
+                continue
+
+        if not answer_yi_values:
+            return True, None
+
+        errors: list[dict[str, Any]] = []
+        for ans_val in answer_yi_values:
+            for exc_val in excerpt_yi_values:
+                if exc_val == 0:
+                    continue
+                ratio = ans_val / exc_val
+                if 9.5 <= ratio <= 10.5:
+                    errors.append(
+                        {
+                            "type": "10x_error",
+                            "answer_value": ans_val,
+                            "excerpt_value_yi": round(exc_val, 2),
+                            "correct_value": round(exc_val, 2),
+                        }
+                    )
+                elif 0.05 <= ratio <= 0.15:
+                    errors.append(
+                        {
+                            "type": "10x_error_reverse",
+                            "answer_value": ans_val,
+                            "excerpt_value_yi": round(exc_val, 2),
+                            "correct_value": round(exc_val, 2),
+                        }
+                    )
+
+        if errors:
+            correction = {
+                "errors": errors,
+                "suggestion": (
+                    "Answer contains 10x unit conversion errors. "
+                    "Values in yuan should be divided by 100,000,000 "
+                    "to convert to yi-yuan."
+                ),
+            }
+            return False, correction
+
+        return True, None
+
+    def _verify_excerpt_in_document(
+        self,
+        excerpt: str,
+        document_content: str,
+        min_overlap: int = 15,
+    ) -> bool:
+        """Verify that the excerpt can be found in the document content.
+
+        Uses fuzzy matching: strips whitespace and checks for substring
+        overlap of at least min_overlap consecutive characters.
+
+        Args:
+            excerpt: The ground truth excerpt to verify.
+            document_content: The full document content to search in.
+            min_overlap: Minimum number of consecutive matching characters.
+
+        Returns:
+            True if the excerpt (or a substantial part of it) is found.
+        """
+        if not excerpt:
+            return False
+
+        excerpt_clean = re.sub(r"\s+", "", excerpt)
+        doc_clean = re.sub(r"\s+", "", document_content)
+
+        if excerpt_clean in doc_clean:
+            return True
+
+        for start in range(0, len(excerpt_clean) - min_overlap + 1, min_overlap // 2):
+            window = excerpt_clean[start : start + min_overlap]
+            if len(window) >= min_overlap and window in doc_clean:
+                return True
+
+        return False
+
     def _generate_question_with_evidence(
         self,
         selected_segments: list[dict[str, Any]],
@@ -1995,6 +2183,8 @@ class TestSetGenerator:
                 "type_distribution": {},
                 "quote_verification_rate": 0.0,
                 "ground_truth_confidence": 0.0,
+                "excerpt_verified_rate": 0.0,
+                "numerical_correction_rate": 0.0,
             }
 
         base_metrics = self._calculate_quality_metrics(questions)
@@ -2033,10 +2223,23 @@ class TestSetGenerator:
             else 0.0
         )
 
+        questions_with_excerpt = sum(
+            1 for q in questions if q.get("metadata", {}).get("excerpt_verified", True)
+        )
+        questions_with_numerical_correction = sum(
+            1
+            for q in questions
+            if q.get("metadata", {}).get("numerical_auto_corrected", False)
+        )
+        excerpt_verified_rate = questions_with_excerpt / total
+        numerical_correction_rate = questions_with_numerical_correction / total
+
         return {
             **base_metrics,
             "quote_verification_rate": round(quote_verification_rate, 4),
             "ground_truth_confidence": round(ground_truth_confidence, 4),
+            "excerpt_verified_rate": round(excerpt_verified_rate, 4),
+            "numerical_correction_rate": round(numerical_correction_rate, 4),
         }
 
     def generate_document_based_questions(
