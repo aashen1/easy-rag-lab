@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -28,118 +29,139 @@ def artifacts_dir(tmp_path):
 
 
 def test_unified_parser_creates_artifacts(sample_pdf_dir, artifacts_dir):
-    results = parse_all_pdfs_unified(
-        input_dir=str(sample_pdf_dir),
-        artifacts_dir=str(artifacts_dir),
-        algorithm="pymupdf4llm",
-        parser_options={"page_chunks": False},
-    )
+    with patch("src.parsers.pymupdf4llm_parser.pymupdf4llm.to_markdown") as mock_parse:
+        mock_parse.return_value = "# Test Document\n\nThis is test content."
 
-    assert len(results) == 1
-    assert results[0]["status"] in ("success", "failed")
+        results = parse_all_pdfs_unified(
+            input_dir=str(sample_pdf_dir),
+            artifacts_dir=str(artifacts_dir),
+            algorithm="pymupdf4llm",
+            parser_options={"page_chunks": False},
+        )
 
-    if results[0]["status"] == "success":
+        assert len(results) == 1
+        assert results[0]["status"] == "success"
+
         output_path = Path(results[0]["output"])
         assert output_path.exists()
         assert output_path.suffix == ".md"
 
 
 def test_unified_parser_caches_results(sample_pdf_dir, artifacts_dir):
-    parse_all_pdfs_unified(
-        input_dir=str(sample_pdf_dir),
-        artifacts_dir=str(artifacts_dir),
-        algorithm="pymupdf4llm",
-        parser_options={"page_chunks": False},
-    )
+    with patch("src.parsers.pymupdf4llm_parser.pymupdf4llm.to_markdown") as mock_parse:
+        mock_parse.return_value = "# Test Document\n\nThis is test content."
 
-    second_run = parse_all_pdfs_unified(
-        input_dir=str(sample_pdf_dir),
-        artifacts_dir=str(artifacts_dir),
-        algorithm="pymupdf4llm",
-        parser_options={"page_chunks": False},
-    )
+        parse_all_pdfs_unified(
+            input_dir=str(sample_pdf_dir),
+            artifacts_dir=str(artifacts_dir),
+            algorithm="pymupdf4llm",
+            parser_options={"page_chunks": False},
+        )
 
-    assert all(r["status"] == "skipped" for r in second_run)
+        second_run = parse_all_pdfs_unified(
+            input_dir=str(sample_pdf_dir),
+            artifacts_dir=str(artifacts_dir),
+            algorithm="pymupdf4llm",
+            parser_options={"page_chunks": False},
+        )
+
+        assert all(r["status"] == "skipped" for r in second_run)
 
 
 def test_unified_parser_detects_config_change(sample_pdf_dir, artifacts_dir):
-    parse_all_pdfs_unified(
-        input_dir=str(sample_pdf_dir),
-        artifacts_dir=str(artifacts_dir),
-        algorithm="pymupdf4llm",
-        parser_options={"page_chunks": False},
-    )
+    with patch("src.parsers.pymupdf4llm_parser.pymupdf4llm.to_markdown") as mock_parse:
+        mock_parse.return_value = "# Test Document\n\nThis is test content."
 
-    second_run = parse_all_pdfs_unified(
-        input_dir=str(sample_pdf_dir),
-        artifacts_dir=str(artifacts_dir),
-        algorithm="pymupdf4llm",
-        parser_options={"page_chunks": True},
-    )
+        parse_all_pdfs_unified(
+            input_dir=str(sample_pdf_dir),
+            artifacts_dir=str(artifacts_dir),
+            algorithm="pymupdf4llm",
+            parser_options={"page_chunks": False},
+        )
 
-    assert any(r["status"] == "success" for r in second_run)
+        mock_parse.return_value = [
+            {"text": "Page 1 content", "metadata": {"page_number": 1}},
+        ]
+
+        second_run = parse_all_pdfs_unified(
+            input_dir=str(sample_pdf_dir),
+            artifacts_dir=str(artifacts_dir),
+            algorithm="pymupdf4llm",
+            parser_options={"page_chunks": True},
+        )
+
+        assert any(r["status"] == "success" for r in second_run)
 
 
 def test_unified_parser_detects_source_change(sample_pdf_dir, artifacts_dir):
-    parse_all_pdfs_unified(
-        input_dir=str(sample_pdf_dir),
-        artifacts_dir=str(artifacts_dir),
-        algorithm="pymupdf4llm",
-        parser_options={"page_chunks": False},
-    )
+    with patch("src.parsers.pymupdf4llm_parser.pymupdf4llm.to_markdown") as mock_parse:
+        mock_parse.return_value = "# Test Document\n\nThis is test content."
 
-    pdf_file = list(sample_pdf_dir.rglob("*.pdf"))[0]
-    pdf_file.write_bytes(b"%PDF-1.4 modified content to invalidate cache")
+        parse_all_pdfs_unified(
+            input_dir=str(sample_pdf_dir),
+            artifacts_dir=str(artifacts_dir),
+            algorithm="pymupdf4llm",
+            parser_options={"page_chunks": False},
+        )
 
-    second_run = parse_all_pdfs_unified(
-        input_dir=str(sample_pdf_dir),
-        artifacts_dir=str(artifacts_dir),
-        algorithm="pymupdf4llm",
-        parser_options={"page_chunks": False},
-    )
+        pdf_file = list(sample_pdf_dir.rglob("*.pdf"))[0]
+        pdf_file.write_bytes(b"%PDF-1.4 modified content to invalidate cache")
 
-    assert any(r["status"] == "success" for r in second_run)
+        second_run = parse_all_pdfs_unified(
+            input_dir=str(sample_pdf_dir),
+            artifacts_dir=str(artifacts_dir),
+            algorithm="pymupdf4llm",
+            parser_options={"page_chunks": False},
+        )
+
+        assert any(r["status"] == "success" for r in second_run)
 
 
 def test_unified_parser_manifest_structure(sample_pdf_dir, artifacts_dir):
-    parse_all_pdfs_unified(
-        input_dir=str(sample_pdf_dir),
-        artifacts_dir=str(artifacts_dir),
-        algorithm="pymupdf4llm",
-        parser_options={"page_chunks": False},
-    )
+    with patch("src.parsers.pymupdf4llm_parser.pymupdf4llm.to_markdown") as mock_parse:
+        mock_parse.return_value = "# Test Document\n\nThis is test content."
 
-    cache = ArtifactCache(artifacts_dir, sample_pdf_dir)
-    manifest = cache.load_full_manifest()
+        parse_all_pdfs_unified(
+            input_dir=str(sample_pdf_dir),
+            artifacts_dir=str(artifacts_dir),
+            algorithm="pymupdf4llm",
+            parser_options={"page_chunks": False},
+        )
 
-    assert manifest is not None
-    assert "pdf_inventory" in manifest
-    assert "config_hashes" in manifest
-    assert "parser" in manifest["config_hashes"]
+        cache = ArtifactCache(artifacts_dir, sample_pdf_dir)
+        manifest = cache.load_full_manifest()
 
-    for rel_path, sha256 in manifest["pdf_inventory"].items():
-        assert isinstance(rel_path, str)
-        assert isinstance(sha256, str)
-        assert len(sha256) == 64
+        assert manifest is not None
+        assert "pdf_inventory" in manifest
+        assert "config_hashes" in manifest
+        assert "parser" in manifest["config_hashes"]
+
+        for rel_path, sha256 in manifest["pdf_inventory"].items():
+            assert isinstance(rel_path, str)
+            assert isinstance(sha256, str)
+            assert len(sha256) == 64
 
 
 def test_unified_parser_force_flag(sample_pdf_dir, artifacts_dir):
-    parse_all_pdfs_unified(
-        input_dir=str(sample_pdf_dir),
-        artifacts_dir=str(artifacts_dir),
-        algorithm="pymupdf4llm",
-        parser_options={"page_chunks": False},
-    )
+    with patch("src.parsers.pymupdf4llm_parser.pymupdf4llm.to_markdown") as mock_parse:
+        mock_parse.return_value = "# Test Document\n\nThis is test content."
 
-    second_run = parse_all_pdfs_unified(
-        input_dir=str(sample_pdf_dir),
-        artifacts_dir=str(artifacts_dir),
-        algorithm="pymupdf4llm",
-        parser_options={"page_chunks": False},
-        force=True,
-    )
+        parse_all_pdfs_unified(
+            input_dir=str(sample_pdf_dir),
+            artifacts_dir=str(artifacts_dir),
+            algorithm="pymupdf4llm",
+            parser_options={"page_chunks": False},
+        )
 
-    assert any(r["status"] == "success" for r in second_run)
+        second_run = parse_all_pdfs_unified(
+            input_dir=str(sample_pdf_dir),
+            artifacts_dir=str(artifacts_dir),
+            algorithm="pymupdf4llm",
+            parser_options={"page_chunks": False},
+            force=True,
+        )
+
+        assert any(r["status"] == "success" for r in second_run)
 
 
 def test_unified_parser_no_pdfs(tmp_path):

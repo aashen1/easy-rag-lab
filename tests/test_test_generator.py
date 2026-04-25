@@ -1108,7 +1108,7 @@ class TestGenerateDocumentBasedQuestionsSupplemental:
 
         call_count = 0
 
-        def mock_generate(query, contexts, system_prompt, category):
+        def mock_generate(query, contexts, system_prompt, category, **kwargs):
             nonlocal call_count
             call_count += 1
             if call_count <= 2:

@@ -1461,6 +1461,7 @@ class TestCleanMachineTestSet:
                 target_count,
                 llm_preset,
                 token_tracker,
+                chunks_dir=None,
             ):
                 current_count = len(existing_test_set.get("questions", []))
                 deficit = target_count - current_count
@@ -1794,7 +1795,13 @@ class TestResolveTestSet:
 
         class MockGenerator:
             def generate_document_based_questions(
-                self, meal_name, num_questions, name, llm_preset, token_tracker
+                self,
+                meal_name,
+                num_questions,
+                name,
+                llm_preset,
+                token_tracker,
+                chunks_dir=None,
             ):
                 return {
                     "metadata": {
@@ -1838,7 +1845,13 @@ class TestResolveTestSet:
 
         class MockGenerator:
             def generate_document_based_questions(
-                self, meal_name, num_questions, name, llm_preset, token_tracker
+                self,
+                meal_name,
+                num_questions,
+                name,
+                llm_preset,
+                token_tracker,
+                chunks_dir=None,
             ):
                 return {
                     "metadata": {
@@ -2678,7 +2691,13 @@ class TestBoundaryConditions:
 
         class MockGenerator:
             def generate_document_based_questions(
-                self, meal_name, num_questions, name, llm_preset, token_tracker
+                self,
+                meal_name,
+                num_questions,
+                name,
+                llm_preset,
+                token_tracker,
+                chunks_dir=None,
             ):
                 return {
                     "metadata": {

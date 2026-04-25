@@ -385,7 +385,7 @@ class TestRAGPipeline:
         pipeline = RAGPipeline(config_path="dummy.yaml")
 
         with (
-            patch("src.pipeline.parse_all_pdfs") as mock_parse,
+            patch("src.pipeline.parse_all_pdfs_unified") as mock_parse,
             patch("src.chunker.process_parsed_files_page_aware") as mock_page_aware,
         ):
             mock_parse.return_value = []
@@ -394,9 +394,8 @@ class TestRAGPipeline:
 
         mock_parse.assert_called_once_with(
             input_dir="/tmp/parser_in",
-            output_dir="/tmp/parser_out",
+            artifacts_dir="/tmp/parser_out",
             force=False,
-            pdf_files=None,
             parser_options={"page_chunks": True, "table_strategy": "text"},
         )
         mock_page_aware.assert_called_once_with(
@@ -446,7 +445,7 @@ class TestRAGPipeline:
         pipeline = RAGPipeline(config_path="dummy.yaml")
 
         with (
-            patch("src.pipeline.parse_all_pdfs") as mock_parse,
+            patch("src.pipeline.parse_all_pdfs_unified") as mock_parse,
             patch("src.pipeline.process_parsed_files") as mock_chunk,
         ):
             mock_parse.return_value = []
@@ -455,9 +454,8 @@ class TestRAGPipeline:
 
         mock_parse.assert_called_once_with(
             input_dir="/tmp/parser_in",
-            output_dir="/tmp/parser_out",
+            artifacts_dir="/tmp/parser_out",
             force=False,
-            pdf_files=None,
             parser_options=None,
         )
 
@@ -503,7 +501,7 @@ class TestRAGPipeline:
         ]
 
         with (
-            patch("src.pipeline.parse_all_pdfs") as mock_parse,
+            patch("src.pipeline.parse_all_pdfs_unified") as mock_parse,
             patch("src.chunker.process_parsed_files_page_aware") as mock_page_aware,
             patch("src.pipeline.process_parsed_files") as mock_chunk,
         ):
@@ -563,7 +561,7 @@ class TestRAGPipeline:
         pipeline = RAGPipeline(config_path="dummy.yaml")
 
         with (
-            patch("src.pipeline.parse_all_pdfs") as mock_parse,
+            patch("src.pipeline.parse_all_pdfs_unified") as mock_parse,
             patch("src.pipeline.process_parsed_files") as mock_chunk,
         ):
             mock_parse.return_value = []

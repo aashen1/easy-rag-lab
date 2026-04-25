@@ -1530,7 +1530,9 @@ class TestRunExperimentBoundaryConditions:
 
 
 class TestRunExperimentExceptionPaths:
-    def _make_exp_config(self, **overrides) -> dict:
+    def _make_exp_config(self, **overrides):
+        from src.experiment import ExperimentConfig
+
         defaults = {
             "name": "test_exp",
             "description": "test",
@@ -1547,18 +1549,16 @@ class TestRunExperimentExceptionPaths:
             },
         }
         defaults.update(overrides)
-        return defaults
+        return ExperimentConfig(**defaults)
 
     @pytest.mark.unit
     def test_verify_experiment_assets_missing_dir(self, tmp_path):
-        exp_config = self._make_exp_config()
         exp_dir = tmp_path / "exp_missing"
         with pytest.raises(ConfigurationError, match="Experiment directory not found"):
-            verify_experiment_assets(exp_dir, exp_config)
+            verify_experiment_assets(exp_dir, {"name": "test_exp"})
 
     @pytest.mark.unit
     def test_verify_experiment_assets_corrupted_meal_snapshot(self, tmp_path):
-        exp_config = self._make_exp_config()
         exp_dir = tmp_path / "exp_corrupted"
         exp_dir.mkdir()
         (exp_dir / "manifest.json").write_text("{}", encoding="utf-8")
@@ -1567,7 +1567,9 @@ class TestRunExperimentExceptionPaths:
         with open(exp_dir / "meal_snapshot.json", "w", encoding="utf-8") as f:
             f.write("invalid json {")
 
-        result = verify_experiment_assets(exp_dir, exp_config, verify_pdf_hashes=False)
+        result = verify_experiment_assets(
+            exp_dir, {"name": "test_exp"}, verify_pdf_hashes=False
+        )
         assert result.valid is False
         assert "meal_snapshot.json" in result.invalid_files
 
@@ -1591,11 +1593,11 @@ class TestRunExperimentExceptionPaths:
         with open(exp_dir / "meal_snapshot.json", "w", encoding="utf-8") as f:
             json.dump({"pdf_files": [{"path": "fake.pdf", "sha256": "0" * 64}]}, f)
 
-        config_with_raw = self._make_exp_config()
-        config_with_raw["parser"] = {"input_dir": str(raw_dir)}
-        result = verify_experiment_assets(
-            exp_dir, config_with_raw, verify_pdf_hashes=True
-        )
+        config_dict = {
+            "name": "test_exp",
+            "parser": {"input_dir": str(raw_dir)},
+        }
+        result = verify_experiment_assets(exp_dir, config_dict, verify_pdf_hashes=True)
         assert result.pdf_issues
         assert "fake.pdf" in result.pdf_issues
 
