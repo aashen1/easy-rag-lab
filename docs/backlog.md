@@ -2,7 +2,7 @@
 
 <!-- status: active -->
 
-> 最后更新：2026-04-26（RF-008：新增 issue 详情文件机制，4 个高优先级 issue 已补充详情链接）
+> 最后更新：2026-04-26（修复 BUG-029/030/031，完成 OPT-004；RF-008：新增 issue 详情文件机制，4 个高优先级 issue 已补充详情链接）
 
 本文档是项目"卫生情况"的总入口，追踪所有非阻塞性质的待做事项。
 
@@ -12,11 +12,11 @@
 
 | 类型 | 待处理 | 进行中 | 已完成 | 已延期 |
 |------|--------|--------|--------|--------|
-| Bug | 8 | 0 | 18 | 2 |
-| Feature | 26 | 0 | 21 | 0 |
-| Refactor | 5 | 0 | 17 | 1 |
-| Optimization | 7 | 0 | 2 | 0 |
-| Investigation | 4 | 0 | 17 | 1 |
+| Bug | 8 | 0 | 21 | 2 |
+| Feature | 28 | 0 | 19 | 0 |
+| Refactor | 8 | 0 | 14 | 1 |
+| Optimization | 7 | 0 | 3 | 0 |
+| Investigation | 3 | 0 | 17 | 1 |
 | Test | 0 | 0 | 8 | 0 |
 
 ---
@@ -33,6 +33,9 @@
 | BUG-026 | 全量缓存 hash 计算问题导致缓存无法命中 | [TODO.md](../TODO.md) | ✅ 已完成 | pipeline.py 传了错误的 artifacts_dir，改为使用 ArtifactCache 动态计算路径 |
 | BUG-027 | Token 统计功能可能无法正确识别多变体各变体消耗 | [TODO.md](../TODO.md) | ✅ 已完成 | 新增 get_summary_by_variant() 方法，run_experiment 中为 variant_tracker 添加 variant_name metadata |
 | BUG-028 | 审查脚本缺少页码信息，无法定位 ground truth 出自哪一页 | [TODO.md](../TODO.md) | 📋 待处理 | source_chunks 字段未实装，审查时无法精确定位 |
+| BUG-029 | irrelevant 问题 context_precision/context_recall 使用错误 ground truth | [troubleshooting](troubleshooting/irrelevant-question-metrics-fix.md) | ✅ 已完成 | builtin_evaluator 增加 expect_retrieval + expected_answer 守卫，irrelevant 问题不再计算 |
+| BUG-030 | RAGAS answer_correctness/semantic_similarity 对 irrelevant 问题循环论证 | [troubleshooting](troubleshooting/irrelevant-question-metrics-fix.md) | ✅ 已完成 | ragas_evaluator 仅 expect_retrieval=True 时回退到 expected_answer，run_experiment 过滤 irrelevant 问题的 reference-required 指标 |
+| BUG-031 | expected_answer fallback 不区分问题类型 | [troubleshooting](troubleshooting/irrelevant-question-metrics-fix.md) | ✅ 已完成 | run_experiment 中 expected_answer 仅在 expect_retrieval=True 时回退 |
 
 ### 🟡 已延期
 
@@ -124,7 +127,7 @@
 | OPT-001 | 优化"新用户"链路性能（PDF→parse→chunk→embed） | [原 TODO.md](../TODO.md) | 📋 待处理 | 需性能基准测试，部分可上 GPU |
 | OPT-002 | 集成测试时间优化（当前 182s） | [原 TODO.md](../TODO.md) | 📋 待处理 | 需分析瓶颈；旧数据，需重新测试更新 |
 | OPT-003 | 问题生成 token 消耗优化 | [TODO.md](../TODO.md) | ✅ 已完成 | 每问题 5-6k token，添加文档截断缓存机制 |
-| OPT-004 | Hit Rate 扩充到 Recall@3/5/10 | [TODO.md](../TODO.md) | 📋 待处理 | 需先澄清现有指标体系（RAGAS 线 vs builtin 线） |
+| OPT-004 | Hit Rate 扩充到 Recall@3/5/10 | [TODO.md](../TODO.md) | ✅ 已完成 | builtin_evaluator 已支持 recall_3/5/10，需在 YAML 中显式列出 |
 | OPT-005 | RAGAS/builtin 指标结果统一归一化 | [RAGAS 指南](guides/ragas-evaluation.md#5-后续优化方向) | 📋 待处理 | 后端间分数相关性分析 + 归一化映射 + prompt 版本追踪 |
 | OPT-006 | RAGAS 评测缓存与增量计算 | [RAGAS 指南](guides/ragas-evaluation.md#5-后续优化方向) | 📋 待处理 | 基于 question+answer+contexts hash 缓存 + 增量评测 + 失效策略 |
 | OPT-007 | 基线 chunk_overlap 非零优化 | [pipeline-deep-audit.md](pipeline-deep-audit.md#P2-1) | 📋 待处理 | 评测链路修复后，通过对比实验确定合适的非零 overlap 值 |
@@ -183,6 +186,9 @@
 | BUG-016 | chunker config hash 缺少 strategy/semantic 参数 | v0.1.8 合并发现 | 2026-04-20 |
 | BUG-017 | pytest tmp 目录配置导致 FileExistsError | [TODO.md](../TODO.md) | 2026-04-22 |
 | BUG-023 | missing 类型 expect_retrieval 标记错误导致 FPR 计算异常 | inbox | 2026-04-24 |
+| BUG-029 | irrelevant 问题 context_precision/context_recall 使用错误 ground truth | [troubleshooting](troubleshooting/irrelevant-question-metrics-fix.md) | 2026-04-26 |
+| BUG-030 | RAGAS answer_correctness/semantic_similarity 对 irrelevant 问题循环论证 | [troubleshooting](troubleshooting/irrelevant-question-metrics-fix.md) | 2026-04-26 |
+| BUG-031 | expected_answer fallback 不区分问题类型 | [troubleshooting](troubleshooting/irrelevant-question-metrics-fix.md) | 2026-04-26 |
 
 ### Feature
 
@@ -253,6 +259,7 @@
 | ID | 描述 | 来源 | 完成日期 |
 |----|------|------|---------|
 | OPT-003 | 问题生成 token 消耗优化 → 添加文档截断缓存机制 | [TODO.md](../TODO.md) | 2026-04-21 |
+| OPT-004 | Recall@3/5/10 指标 → builtin_evaluator 已支持，需在 YAML 中显式列出 | [TODO.md](../TODO.md) | 2026-04-26 |
 
 ---
 

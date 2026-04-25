@@ -92,7 +92,11 @@
 **近期修复**（2026-04-26）：
 - BUG-026：pipeline.py 全量缓存路径不一致 → 改用 ArtifactCache 动态计算
 - BUG-027：Token 统计无法按 variant 区分 → 新增 get_summary_by_variant()
+- BUG-029：irrelevant 问题 context_precision/context_recall 使用错误 ground truth → 增加 expect_retrieval 守卫
+- BUG-030：RAGAS answer_correctness/semantic_similarity 对 irrelevant 问题循环论证 → 条件 reference fallback
+- BUG-031：expected_answer fallback 不区分问题类型 → 仅 expect_retrieval=True 时回退
 - FEAT-042：实验全部失败时跳过 LLM 报告生成
+- OPT-004：Recall@3/5/10 指标已实装验证通过
 - OPT-009：chunker 逐文件日志降噪（INFO→DEBUG）
 - RF-014：normalize_source 已确认使用 include_parent=True
 - RF-020：Golden 独立生成链路收编入 TestSetGenerator，消除重复代码
