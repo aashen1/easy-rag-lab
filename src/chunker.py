@@ -242,7 +242,7 @@ def chunk_text(
 
         start = end - overlap if overlap > 0 else end
 
-    logger.info(f"Created {len(chunks)} chunks from text with {total_tokens} tokens")
+    logger.debug(f"Created {len(chunks)} chunks from text with {total_tokens} tokens")
     return chunks
 
 
@@ -361,7 +361,7 @@ def process_parsed_files(
                 }
             )
 
-            logger.success(
+            logger.debug(
                 f"Processed {md_file.name}: {len(chunks)} chunks -> {output_file.name}"
             )
 
@@ -648,7 +648,7 @@ def process_parsed_files_page_aware(
                 }
             )
 
-            logger.success(
+            logger.debug(
                 f"Processed {pages_file.name}: {len(chunks)} chunks -> {output_file.name}"
             )
 
