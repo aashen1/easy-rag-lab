@@ -153,6 +153,39 @@ def _extract_headings(text: str) -> list[str]:
     return headings
 
 
+def _build_token_char_offsets(
+    encoding: Any, tokens: list[int], text: str
+) -> list[tuple[int, int]]:
+    """Build a mapping from token indices to character offsets in *text*.
+
+    For each token, decodes it individually to determine its character
+    length, then accumulates offsets so that ``token_char_offsets[i]``
+    gives the ``(start_char, end_char)`` range in the original text.
+
+    This avoids the encoding corruption that can occur when
+    ``encoding.decode(tokens[start:end])`` splits a multi-byte UTF-8
+    character across chunk boundaries (BUG-024).
+
+    Args:
+        encoding: A tiktoken or BGETokenizerEncoder object with
+            ``decode`` method.
+        tokens: List of token IDs produced by ``encoding.encode(text)``.
+        text: The original text that was tokenized.
+
+    Returns:
+        List of ``(start_char, end_char)`` tuples, one per token.
+    """
+    offsets: list[tuple[int, int]] = []
+    char_pos = 0
+    for i in range(len(tokens)):
+        token_text = encoding.decode(tokens[i : i + 1])
+        start_char = char_pos
+        end_char = char_pos + len(token_text)
+        offsets.append((start_char, end_char))
+        char_pos = end_char
+    return offsets
+
+
 def chunk_text(
     text: str,
     chunk_size: int = 512,
@@ -164,6 +197,11 @@ def chunk_text(
 
     Uses the specified encoding to tokenize the input text, then slices
     the token sequence into overlapping or non-overlapping chunks.
+    Chunk text is extracted directly from the original text using
+    character offsets derived from token boundaries, which avoids
+    encoding corruption when chunk boundaries split multi-byte UTF-8
+    characters (BUG-024).
+
     When *encoding_name* is ``"bge"``, the HuggingFace tokenizer from
     the embedding model is used so that token counts align with the
     embedder's ``max_length``.
@@ -181,9 +219,9 @@ def chunk_text(
             encodings.  Defaults to None.
 
     Returns:
-        List of dictionaries, each with a "text" key containing the decoded
-        chunk and a "metadata" key with chunk_index, char_count, token_count,
-        start_token, and end_token.
+        List of dictionaries, each with a "text" key containing the chunk
+        text (a substring of the original text) and a "metadata" key with
+        chunk_index, char_count, token_count, start_token, and end_token.
 
     Raises:
         ValueError: If overlap is greater than or equal to chunk_size, or
@@ -210,17 +248,21 @@ def chunk_text(
 
     logger.debug(f"Text has {total_tokens} tokens")
 
+    token_char_offsets = _build_token_char_offsets(encoding, tokens, text)
+
     chunks = []
     chunk_index = 0
     start = 0
 
     while start < total_tokens:
         end = min(start + chunk_size, total_tokens)
-        chunk_tokens = tokens[start:end]
-        chunk_text_decoded = encoding.decode(chunk_tokens)
+
+        char_start = token_char_offsets[start][0]
+        char_end = token_char_offsets[end - 1][1]
+        chunk_text_decoded = text[char_start:char_end]
 
         char_count = len(chunk_text_decoded)
-        token_count = len(chunk_tokens)
+        token_count = end - start
 
         chunks.append(
             {
@@ -457,7 +499,7 @@ def chunk_text_page_aware(
     encoding = (
         _get_encoding(encoding_name, model_name) if cross_page_overlap > 0 else None
     )
-    prev_page_tail_tokens: list[int] | None = None
+    prev_page_overlap_text: str | None = None
     prev_page_number: int | None = None
 
     for page in page_chunks:
@@ -468,12 +510,13 @@ def chunk_text_page_aware(
             logger.debug(f"Skipping empty page {page_number}")
             continue
 
-        if cross_page_overlap > 0 and prev_page_tail_tokens is not None:
-            overlap_text = encoding.decode(prev_page_tail_tokens)  # type: ignore[union-attr]
+        if cross_page_overlap > 0 and prev_page_overlap_text is not None:
             separator = "\n"
-            combined_text = overlap_text + separator + text
+            combined_text = prev_page_overlap_text + separator + text
 
-            overlap_prefix_tokens = encoding.encode(overlap_text + separator)  # type: ignore[union-attr]
+            overlap_prefix_tokens = encoding.encode(  # type: ignore[union-attr]
+                prev_page_overlap_text + separator
+            )
             overlap_prefix_token_count = len(overlap_prefix_tokens)
 
             page_chunks_result = chunk_text(
@@ -501,9 +544,12 @@ def chunk_text_page_aware(
         if cross_page_overlap > 0:
             tokens = encoding.encode(text)  # type: ignore[union-attr]
             if len(tokens) > cross_page_overlap:
-                prev_page_tail_tokens = tokens[-cross_page_overlap:]
+                offsets = _build_token_char_offsets(encoding, tokens, text)  # type: ignore[arg-type]
+                char_start = offsets[len(tokens) - cross_page_overlap][0]
+                char_end = offsets[-1][1]
+                prev_page_overlap_text = text[char_start:char_end]
             else:
-                prev_page_tail_tokens = tokens
+                prev_page_overlap_text = text
             prev_page_number = page_number
 
         all_chunks.extend(page_chunks_result)

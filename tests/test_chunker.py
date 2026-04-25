@@ -6,6 +6,7 @@ import pytest
 
 from src.chunker import (
     BGETokenizerEncoder,
+    _build_token_char_offsets,
     _extract_headings,
     _get_bge_encoder,
     _get_encoding,
@@ -1118,3 +1119,161 @@ class TestProcessParsedFilesBGE:
                 len(call_kwargs.args) > 4
                 and call_kwargs.args[4] == "BAAI/bge-large-zh-v1.5"
             )
+
+
+class TestBuildTokenCharOffsets:
+    def test_basic_offsets(self):
+        enc = _get_encoding("cl100k_base")
+        text = "Hello world"
+        tokens = enc.encode(text)
+        offsets = _build_token_char_offsets(enc, tokens, text)
+        assert len(offsets) == len(tokens)
+        assert offsets[0][0] == 0
+        assert offsets[-1][1] == len(text)
+
+    def test_chinese_offsets(self):
+        enc = _get_encoding("cl100k_base")
+        text = "地产开发投资"
+        tokens = enc.encode(text)
+        offsets = _build_token_char_offsets(enc, tokens, text)
+        assert len(offsets) == len(tokens)
+        assert offsets[0][0] == 0
+        assert offsets[-1][1] == len(text)
+
+    def test_offsets_cover_entire_text(self):
+        enc = _get_encoding("cl100k_base")
+        text = "这是一段中文测试文本，用于验证token到字符的映射是否正确。"
+        tokens = enc.encode(text)
+        offsets = _build_token_char_offsets(enc, tokens, text)
+        reconstructed = ""
+        for start, end in offsets:
+            reconstructed += text[start:end]
+        assert reconstructed == text
+
+
+class TestChunkTextChineseRoundtrip:
+    def test_chinese_text_is_substring_of_original(self):
+        text = "地产开发投资同比增长百分之十五，其中住宅投资增长百分之二十。商业地产投资增速放缓，办公楼投资同比下降百分之五。"
+        result = chunk_text(text, chunk_size=20, overlap=0, encoding_name="cl100k_base")
+        for chunk in result:
+            assert chunk["text"] in text
+
+    def test_chinese_text_no_garbled_characters(self):
+        text = "万科企业股份有限公司二零二三年年度报告。公司实现营业收入四千六百五十五亿元，归属于上市公司股东的净利润一百二十亿元。"
+        result = chunk_text(text, chunk_size=30, overlap=0, encoding_name="cl100k_base")
+        for chunk in result:
+            for char in chunk["text"]:
+                assert ord(char) < 0x10000 or char in text
+
+    def test_chinese_chunks_cover_entire_text(self):
+        text = "金融行业研报指出，银行业资产质量持续改善，不良贷款率下降至百分之一点六。保险业保费收入稳步增长，寿险业务占比提升。"
+        result = chunk_text(text, chunk_size=20, overlap=0, encoding_name="cl100k_base")
+        reconstructed = result[0]["text"]
+        for chunk in result[1:]:
+            reconstructed += chunk["text"]
+        assert reconstructed == text
+
+    def test_chinese_text_with_overlap_covers_entire_text(self):
+        text = "中国证券市场在二零二三年经历了显著的结构性变化。注册制改革全面推进，IPO数量创历史新高。同时，退市制度也在不断完善。"
+        result = chunk_text(text, chunk_size=25, overlap=5, encoding_name="cl100k_base")
+        assert len(result) > 1
+        for chunk in result:
+            assert chunk["text"] in text
+
+    def test_mixed_chinese_english_text(self):
+        text = "OpenAI发布了GPT-4模型，该模型在中文理解能力上有了显著提升。根据MIT的研究报告，GPT-4在中文问答任务上的准确率达到了百分之八十五。"
+        result = chunk_text(text, chunk_size=30, overlap=0, encoding_name="cl100k_base")
+        for chunk in result:
+            assert chunk["text"] in text
+
+    def test_single_chunk_equals_original_text(self):
+        text = "这是一段短文本。"
+        result = chunk_text(
+            text, chunk_size=100, overlap=0, encoding_name="cl100k_base"
+        )
+        assert len(result) == 1
+        assert result[0]["text"] == text
+
+    def test_long_chinese_text_all_chunks_are_substrings(self):
+        text = "地产行业深度研究报告。" * 200
+        result = chunk_text(text, chunk_size=50, overlap=0, encoding_name="cl100k_base")
+        assert len(result) > 1
+        for chunk in result:
+            assert chunk["text"] in text
+
+
+class TestChunkTextPageAwareChineseRoundtrip:
+    def test_page_aware_chinese_text_is_substring(self):
+        page_chunks = [
+            {
+                "text": "第一页：地产开发投资同比增长百分之十五，住宅投资增长百分之二十。",
+                "metadata": {
+                    "page_number": 1,
+                    "page_count": 2,
+                    "file_path": "test.pdf",
+                },
+                "toc_items": [],
+                "tables": [],
+            },
+            {
+                "text": "第二页：商业地产投资增速放缓，办公楼投资同比下降百分之五。",
+                "metadata": {
+                    "page_number": 2,
+                    "page_count": 2,
+                    "file_path": "test.pdf",
+                },
+                "toc_items": [],
+                "tables": [],
+            },
+        ]
+        result = chunk_text_page_aware(
+            page_chunks, source_name="test", chunk_size=30, encoding_name="cl100k_base"
+        )
+        for chunk in result:
+            page_num = chunk["metadata"]["page_number"]
+            page_text = page_chunks[page_num - 1]["text"]
+            assert chunk["text"] in page_text
+
+    def test_page_aware_cross_page_overlap_chinese(self):
+        page1_text = (
+            "第一页内容：万科企业股份有限公司二零二三年年度报告。公司实现营业收入四千六百五十五亿元。"
+            * 5
+        )
+        page2_text = (
+            "第二页内容：归属于上市公司股东的净利润一百二十亿元。经营活动产生的现金流量净额为八百九十亿元。"
+            * 5
+        )
+        page_chunks = [
+            {
+                "text": page1_text,
+                "metadata": {
+                    "page_number": 1,
+                    "page_count": 2,
+                    "file_path": "test.pdf",
+                },
+                "toc_items": [],
+                "tables": [],
+            },
+            {
+                "text": page2_text,
+                "metadata": {
+                    "page_number": 2,
+                    "page_count": 2,
+                    "file_path": "test.pdf",
+                },
+                "toc_items": [],
+                "tables": [],
+            },
+        ]
+        result = chunk_text_page_aware(
+            page_chunks,
+            source_name="test",
+            chunk_size=50,
+            encoding_name="cl100k_base",
+            cross_page_overlap=20,
+        )
+        page2_chunks = [c for c in result if c["metadata"]["page_number"] == 2]
+        cross_page_chunks = [c for c in page2_chunks if c["metadata"].get("cross_page")]
+        assert len(cross_page_chunks) >= 1
+        for chunk in cross_page_chunks:
+            assert chunk["metadata"]["overlap_from_page"] == 1
