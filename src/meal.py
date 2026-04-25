@@ -743,9 +743,6 @@ class MealManager:
         self.meals_dir = Path(meals_config.get("dir", "data/meals"))
         self.collection_prefix = meals_config.get("collection_prefix", "m_")
         self.raw_dir = Path(config.get("parser", {}).get("input_dir", "data/raw"))
-        self.chunks_dir = Path(
-            config.get("chunker", {}).get("output_dir", "data/chunks")
-        )
 
         artifacts_config = config.get("artifacts", {})
         artifacts_base = artifacts_config.get("dir", "data/artifacts")
