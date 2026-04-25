@@ -1443,3 +1443,508 @@ class TestDocTruncateCacheKeyStability:
         different_content = "B" * 2000
         key3 = hashlib.sha256(different_content[:1000].encode()).hexdigest()[:16]
         assert key1 != key3
+
+
+class TestSegmentDocument:
+    def setup_method(self):
+        self.config = {
+            "test_generation": {"max_retries": 3},
+        }
+        self.generator = TestSetGenerator(self.config)
+
+    def test_short_document_returns_single_segment(self):
+        doc = "这是一个短文档。只有几百个字符。"
+        segments = self.generator._segment_document(doc, segment_size=1000)
+        assert len(segments) == 1
+        assert segments[0]["text"] == doc
+        assert segments[0]["start_char"] == 0
+        assert segments[0]["end_char"] == len(doc)
+        assert segments[0]["segment_index"] == 0
+
+    def test_long_document_returns_multiple_segments(self):
+        sentence = "这是一句话。"
+        doc = sentence * 100
+        segment_size = 50
+        segments = self.generator._segment_document(doc, segment_size=segment_size)
+        assert len(segments) > 1
+        total_chars = sum(seg["end_char"] - seg["start_char"] for seg in segments)
+        assert total_chars <= len(doc)
+
+    def test_segments_end_at_sentence_boundaries(self):
+        sentences = ["第一句话内容很长。", "第二句话也很长。", "第三句话继续。"]
+        doc = "".join(sentences)
+        segment_size = 15
+        segments = self.generator._segment_document(doc, segment_size=segment_size)
+        for seg in segments:
+            text = seg["text"]
+            if text and text[-1] not in [
+                "。",
+                "！",
+                "？",
+                "！",
+                "?",
+                "!",
+                "\n",
+                "；",
+                ";",
+            ]:
+                raise AssertionError(
+                    f"Segment does not end at sentence boundary: {text[-10:]}"
+                )
+
+    def test_empty_document_returns_empty_list(self):
+        segments = self.generator._segment_document("", segment_size=1000)
+        assert segments == []
+
+    def test_document_exactly_segment_size(self):
+        doc = "a" * 1000
+        segments = self.generator._segment_document(doc, segment_size=1000)
+        assert len(segments) == 1
+        assert segments[0]["text"] == doc
+
+    def test_segment_indices_are_sequential(self):
+        sentence = "这是一句话。"
+        doc = sentence * 50
+        segments = self.generator._segment_document(doc, segment_size=50)
+        for i, seg in enumerate(segments):
+            assert seg["segment_index"] == i
+
+    def test_segments_cover_entire_document(self):
+        sentence = "这是一句话。"
+        doc = sentence * 100
+        segments = self.generator._segment_document(doc, segment_size=100)
+        covered_chars = set()
+        for seg in segments:
+            for i in range(seg["start_char"], seg["end_char"]):
+                covered_chars.add(i)
+        expected_chars = set(range(len(doc)))
+        assert covered_chars == expected_chars
+
+
+class TestSelectSegmentsForQuestionType:
+    def setup_method(self):
+        self.config = {
+            "test_generation": {
+                "max_retries": 3,
+                "segment_sampling_strategy": "random",
+            },
+        }
+        self.generator = TestSetGenerator(self.config)
+        self.segments = [
+            {
+                "text": f"段落{i}",
+                "segment_index": i,
+                "start_char": i * 100,
+                "end_char": (i + 1) * 100,
+            }
+            for i in range(10)
+        ]
+
+    def test_single_fact_returns_one_segment(self):
+        selected = self.generator._select_segments_for_question_type(
+            self.segments, "single_fact"
+        )
+        assert len(selected) == 1
+
+    def test_multi_fact_returns_two_to_three_segments(self):
+        for _ in range(10):
+            selected = self.generator._select_segments_for_question_type(
+                self.segments, "multi_fact"
+            )
+            assert 2 <= len(selected) <= 3
+
+    def test_reasoning_returns_two_to_three_segments(self):
+        for _ in range(10):
+            selected = self.generator._select_segments_for_question_type(
+                self.segments, "reasoning"
+            )
+            assert 2 <= len(selected) <= 3
+
+    def test_comparative_returns_two_to_three_segments(self):
+        for _ in range(10):
+            selected = self.generator._select_segments_for_question_type(
+                self.segments, "comparative"
+            )
+            assert 2 <= len(selected) <= 3
+
+    def test_missing_returns_one_segment(self):
+        selected = self.generator._select_segments_for_question_type(
+            self.segments, "missing"
+        )
+        assert len(selected) == 1
+
+    def test_irrelevant_returns_empty_list(self):
+        selected = self.generator._select_segments_for_question_type(
+            self.segments, "irrelevant"
+        )
+        assert selected == []
+
+    def test_empty_segments_returns_empty_list(self):
+        selected = self.generator._select_segments_for_question_type([], "single_fact")
+        assert selected == []
+
+    def test_fewer_segments_than_requested(self):
+        few_segments = self.segments[:2]
+        selected = self.generator._select_segments_for_question_type(
+            few_segments, "multi_fact"
+        )
+        assert len(selected) == 2
+
+    def test_unknown_type_uses_num_segments_parameter(self):
+        selected = self.generator._select_segments_for_question_type(
+            self.segments, "unknown_type", num_segments=3
+        )
+        assert len(selected) == 3
+
+    def test_sequential_strategy(self):
+        config = {
+            "test_generation": {
+                "max_retries": 3,
+                "segment_sampling_strategy": "sequential",
+            },
+        }
+        generator = TestSetGenerator(config)
+        selected = generator._select_segments_for_question_type(
+            self.segments, "multi_fact"
+        )
+        assert 2 <= len(selected) <= 3
+        indices = [s["segment_index"] for s in selected]
+        for i in range(len(indices) - 1):
+            assert indices[i + 1] == indices[i] + 1
+
+
+class TestVerifyQuoteInSegment:
+    def setup_method(self):
+        self.config = {
+            "test_generation": {
+                "max_retries": 3,
+                "quote_fuzzy_match_threshold": 0.85,
+            },
+        }
+        self.generator = TestSetGenerator(self.config)
+
+    def test_exact_match(self):
+        segment = "这是一段文本，其中包含引用的内容。"
+        quote = "包含引用"
+        result = self.generator._verify_quote_in_segment(quote, segment)
+        assert result["found"] is True
+        assert result["match_type"] == "exact"
+        assert result["position"] is not None
+
+    def test_no_match(self):
+        segment = "这是一段文本。"
+        quote = "不存在的引用"
+        result = self.generator._verify_quote_in_segment(quote, segment)
+        assert result["found"] is False
+        assert result["match_type"] is None
+        assert result["position"] is None
+
+    def test_fuzzy_match_minor_difference(self):
+        segment = "这是一段文本，其中包含引用的内容。"
+        quote = "包含引用的内容。"
+        result = self.generator._verify_quote_in_segment(quote, segment)
+        assert result["found"] is True
+        assert result["match_type"] == "exact"
+
+    def test_empty_quote_returns_not_found(self):
+        segment = "这是一段文本。"
+        result = self.generator._verify_quote_in_segment("", segment)
+        assert result["found"] is False
+
+    def test_empty_segment_returns_not_found(self):
+        result = self.generator._verify_quote_in_segment("引用", "")
+        assert result["found"] is False
+
+    def test_both_empty_returns_not_found(self):
+        result = self.generator._verify_quote_in_segment("", "")
+        assert result["found"] is False
+
+    def test_quote_longer_than_segment(self):
+        segment = "短文本"
+        quote = "这是一个非常长的引用内容，比段落本身还要长"
+        result = self.generator._verify_quote_in_segment(quote, segment)
+        assert result["found"] is False
+
+
+class TestValidateEvidence:
+    def setup_method(self):
+        self.config = {
+            "test_generation": {
+                "max_retries": 3,
+                "quote_fuzzy_match_threshold": 0.85,
+            },
+        }
+        self.generator = TestSetGenerator(self.config)
+        self.segments = [
+            {"text": "第一段内容，包含营收数据。", "segment_index": 0},
+            {"text": "第二段内容，包含利润数据。", "segment_index": 1},
+            {"text": "第三段内容，包含增长数据。", "segment_index": 2},
+        ]
+
+    def test_valid_evidence_all_quotes_found(self):
+        evidence_list = [
+            {"segment_index": 0, "quote": "营收数据"},
+            {"segment_index": 1, "quote": "利润数据"},
+        ]
+        result = self.generator._validate_evidence(evidence_list, self.segments)
+        assert result["valid"] is True
+        assert len(result["verified_evidence"]) == 2
+        assert len(result["invalid_quotes"]) == 0
+        for ev in result["verified_evidence"]:
+            assert ev["verified"] is True
+
+    def test_invalid_evidence_some_quotes_not_found(self):
+        evidence_list = [
+            {"segment_index": 0, "quote": "营收数据"},
+            {"segment_index": 1, "quote": "不存在的数据"},
+        ]
+        result = self.generator._validate_evidence(evidence_list, self.segments)
+        assert result["valid"] is False
+        assert len(result["invalid_quotes"]) == 1
+        assert result["verified_evidence"][0]["verified"] is True
+        assert result["verified_evidence"][1]["verified"] is False
+
+    def test_invalid_segment_index(self):
+        evidence_list = [
+            {"segment_index": 99, "quote": "营收数据"},
+        ]
+        result = self.generator._validate_evidence(evidence_list, self.segments)
+        assert result["valid"] is False
+        assert len(result["invalid_quotes"]) == 1
+        assert "Invalid segment_index" in result["invalid_quotes"][0]["reason"]
+
+    def test_missing_segment_index(self):
+        evidence_list = [
+            {"quote": "营收数据"},
+        ]
+        result = self.generator._validate_evidence(evidence_list, self.segments)
+        assert result["valid"] is False
+        assert len(result["invalid_quotes"]) == 1
+        assert "Missing segment_index" in result["invalid_quotes"][0]["reason"]
+
+    def test_empty_evidence_list_returns_valid(self):
+        result = self.generator._validate_evidence([], self.segments)
+        assert result["valid"] is True
+        assert result["verified_evidence"] == []
+        assert result["invalid_quotes"] == []
+
+    def test_evidence_with_fuzzy_match(self):
+        evidence_list = [
+            {"segment_index": 0, "quote": "营收数据。"},
+        ]
+        result = self.generator._validate_evidence(evidence_list, self.segments)
+        assert result["verified_evidence"][0]["verified"] is True
+        assert result["verified_evidence"][0]["match_type"] == "exact"
+
+
+class TestLocateChunksByQuote:
+    def setup_method(self):
+        self.config = {
+            "test_generation": {
+                "max_retries": 3,
+                "quote_fuzzy_match_threshold": 0.85,
+            },
+        }
+        self.generator = TestSetGenerator(self.config)
+
+    def test_quote_found_in_one_chunk(self):
+        segments = [
+            {
+                "text": "营收增长9.53%，净利润增长12.75%。",
+                "segment_index": 0,
+                "start_char": 0,
+                "end_char": 20,
+            },
+        ]
+        segment_chunk_map = {0: ["chunk_001", "chunk_002"]}
+        doc_chunks = [
+            {"chunk_id": "chunk_001", "text": "营收增长9.53%，净利润增长12.75%。"},
+            {"chunk_id": "chunk_002", "text": "其他内容。"},
+        ]
+        result = self.generator._locate_chunks_by_quote(
+            "营收增长9.53%", segments, segment_chunk_map, doc_chunks
+        )
+        assert len(result) == 1
+        assert "chunk_001" in result
+
+    def test_quote_found_in_multiple_chunks(self):
+        segments = [
+            {
+                "text": "营收增长9.53%，净利润增长12.75%。",
+                "segment_index": 0,
+                "start_char": 0,
+                "end_char": 20,
+            },
+        ]
+        segment_chunk_map = {0: ["chunk_001", "chunk_002"]}
+        doc_chunks = [
+            {"chunk_id": "chunk_001", "text": "营收增长9.53%"},
+            {"chunk_id": "chunk_002", "text": "营收增长9.53%，净利润增长12.75%。"},
+        ]
+        result = self.generator._locate_chunks_by_quote(
+            "营收增长9.53%", segments, segment_chunk_map, doc_chunks
+        )
+        assert len(result) == 2
+
+    def test_quote_not_found(self):
+        segments = [
+            {
+                "text": "营收增长9.53%。",
+                "segment_index": 0,
+                "start_char": 0,
+                "end_char": 10,
+            },
+        ]
+        segment_chunk_map = {0: ["chunk_001"]}
+        doc_chunks = [
+            {"chunk_id": "chunk_001", "text": "营收增长9.53%。"},
+        ]
+        result = self.generator._locate_chunks_by_quote(
+            "不存在的引用", segments, segment_chunk_map, doc_chunks
+        )
+        assert result == []
+
+    def test_empty_inputs(self):
+        assert self.generator._locate_chunks_by_quote("", [], {}, []) == []
+        assert self.generator._locate_chunks_by_quote("quote", [], {}, []) == []
+        assert self.generator._locate_chunks_by_quote("quote", [{}], {}, []) == []
+
+    def test_quote_not_in_mapped_chunks(self):
+        segments = [
+            {
+                "text": "营收增长9.53%。",
+                "segment_index": 0,
+                "start_char": 0,
+                "end_char": 10,
+            },
+        ]
+        segment_chunk_map = {0: ["chunk_001"]}
+        doc_chunks = [
+            {"chunk_id": "chunk_001", "text": "其他不相关的内容。"},
+        ]
+        result = self.generator._locate_chunks_by_quote(
+            "营收增长9.53%", segments, segment_chunk_map, doc_chunks
+        )
+        assert result == []
+
+
+class TestSelectCandidateSegments:
+    def setup_method(self):
+        self.config = {
+            "test_generation": {
+                "max_retries": 3,
+                "segment_sampling_strategy": "random",
+            },
+        }
+        self.generator = TestSetGenerator(self.config)
+        self.segments = [
+            {
+                "text": f"段落{i}",
+                "segment_index": i,
+                "start_char": i * 100,
+                "end_char": (i + 1) * 100,
+            }
+            for i in range(20)
+        ]
+
+    def test_multi_hop_returns_diverse_segments(self):
+        selected = self.generator._select_candidate_segments(
+            self.segments, "multi_fact", num_candidates=4
+        )
+        assert len(selected) == 4
+        indices = [s["segment_index"] for s in selected]
+        assert len(set(indices)) == len(indices)
+
+    def test_multi_hop_returns_correct_count(self):
+        for count in [2, 3, 4]:
+            selected = self.generator._select_candidate_segments(
+                self.segments, "reasoning", num_candidates=count
+            )
+            assert len(selected) == count
+
+    def test_comparative_returns_correct_count(self):
+        selected = self.generator._select_candidate_segments(
+            self.segments, "comparative", num_candidates=3
+        )
+        assert len(selected) == 3
+
+    def test_single_fact_delegates_to_select_segments(self):
+        selected = self.generator._select_candidate_segments(
+            self.segments, "single_fact", num_candidates=4
+        )
+        assert len(selected) == 1
+
+    def test_empty_segments_returns_empty(self):
+        selected = self.generator._select_candidate_segments(
+            [], "multi_fact", num_candidates=4
+        )
+        assert selected == []
+
+    def test_fewer_segments_than_candidates(self):
+        few_segments = self.segments[:2]
+        selected = self.generator._select_candidate_segments(
+            few_segments, "multi_fact", num_candidates=4
+        )
+        assert len(selected) == 2
+
+    def test_sequential_strategy(self):
+        config = {
+            "test_generation": {
+                "max_retries": 3,
+                "segment_sampling_strategy": "sequential",
+            },
+        }
+        generator = TestSetGenerator(config)
+        selected = generator._select_candidate_segments(
+            self.segments, "multi_fact", num_candidates=4
+        )
+        assert len(selected) == 4
+        indices = [s["segment_index"] for s in selected]
+        for i in range(len(indices) - 1):
+            assert indices[i + 1] == indices[i] + 1
+
+
+class TestHallucinationDetection:
+    def setup_method(self):
+        self.config = {
+            "test_generation": {
+                "max_retries": 3,
+                "quote_fuzzy_match_threshold": 0.85,
+            },
+        }
+        self.generator = TestSetGenerator(self.config)
+        self.segments = [
+            {"text": "第一段内容，包含营收数据。", "segment_index": 0},
+            {"text": "第二段内容，包含利润数据。", "segment_index": 1},
+        ]
+
+    def test_invalid_quote_detected_in_result(self):
+        evidence_list = [
+            {"segment_index": 0, "quote": "不存在的引用内容"},
+        ]
+        result = self.generator._validate_evidence(evidence_list, self.segments)
+
+        assert result["valid"] is False
+        assert len(result["invalid_quotes"]) == 1
+        assert "not found" in result["invalid_quotes"][0]["reason"].lower()
+
+    def test_valid_quote_no_invalid_entries(self):
+        evidence_list = [
+            {"segment_index": 0, "quote": "营收数据"},
+        ]
+        result = self.generator._validate_evidence(evidence_list, self.segments)
+
+        assert result["valid"] is True
+        assert len(result["invalid_quotes"]) == 0
+
+    def test_multiple_invalid_quotes_all_detected(self):
+        evidence_list = [
+            {"segment_index": 0, "quote": "不存在的引用1"},
+            {"segment_index": 1, "quote": "不存在的引用2"},
+        ]
+        result = self.generator._validate_evidence(evidence_list, self.segments)
+
+        assert result["valid"] is False
+        assert len(result["invalid_quotes"]) == 2
+        reasons = [q["reason"] for q in result["invalid_quotes"]]
+        assert all("not found" in r.lower() for r in reasons)
