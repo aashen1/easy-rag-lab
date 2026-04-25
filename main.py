@@ -101,7 +101,7 @@ def main():
         "--strategy",
         type=str,
         default="factual",
-        choices=["factual", "boundary", "multi_hop", "document"],
+        choices=["factual", "boundary", "multi_hop", "document", "hybrid"],
         help="Test generation strategy (default: factual)",
     )
     testgen_group.add_argument(
@@ -551,6 +551,13 @@ def _handle_generate_test_set(
                 num_questions=args.num_questions,
                 llm_preset=args.llm_preset or "default",
             )
+        elif args.strategy == "hybrid":
+            test_set = generator.generate_hybrid_questions(
+                meal_name=args.generate_test_set,
+                name=getattr(args, "name", None),
+                num_questions=args.num_questions,
+                llm_preset=args.llm_preset or "default",
+            )
         else:
             test_set = generator.generate_test_set(
                 meal_name=args.generate_test_set,
@@ -559,8 +566,11 @@ def _handle_generate_test_set(
                 llm_preset=args.llm_preset or "default",
                 seed=args.seed,
             )
+        test_set_name = test_set.get("name") or test_set.get("metadata", {}).get(
+            "name", "unknown"
+        )
         logger.success(
-            f"Test set '{test_set['name']}' generated for meal '{args.generate_test_set}' "
+            f"Test set '{test_set_name}' generated for meal '{args.generate_test_set}' "
             f"({len(test_set['questions'])} questions, strategy: {args.strategy})"
         )
     except Exception as e:
