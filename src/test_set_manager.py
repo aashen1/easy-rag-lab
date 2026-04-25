@@ -837,7 +837,20 @@ class TestSetManager:
         """
         if test_set_config.get("golden"):
             golden_name = test_set_config.get("name", "golden_150")
-            return self.load_golden_testset(golden_name)
+            try:
+                return self.load_golden_testset(golden_name)
+            except TestSetError:
+                if generator is None:
+                    raise
+                logger.info(
+                    f"Golden test set '{golden_name}' not found, "
+                    f"generating via generator..."
+                )
+                return generator.generate_golden_testset(
+                    name=golden_name,
+                    llm_preset=llm_preset,
+                    token_tracker=token_tracker,
+                )
 
         name = test_set_config.get("name")
         on_missing = test_set_config.get("on_missing", "auto")
