@@ -1,3 +1,4 @@
+import difflib
 import hashlib
 import json
 import random
@@ -207,6 +208,190 @@ QUESTION_TYPE_SUPPLEMENTS = {
     "irrelevant": IRRELEVANT_SUPPLEMENT,
 }
 
+EVIDENCE_AWARE_PROMPT = """你是一位金融行业从业者，正在阅读一份研究报告的若干片段。请基于这些片段，生成一个你会真实提出的问题，并提供支撑答案的原文引用。
+
+## 你的背景
+- 你可能是投资分析师、基金经理、行业研究员或企业战略规划人员
+- 你关心的是能帮助你做决策的信息
+- 你的提问风格是直接、口语化、不啰嗦
+
+## 文档片段
+以下是从同一份文档中选取的 {num_segments} 个片段：
+
+{segments_text}
+
+## 问题类型要求
+请生成一个【{question_type}】类型的问题。
+
+类型说明：
+- 单知识点查询：查询某个具体数据、事实或概念
+- 多知识点综合：需要整合多个信息点才能回答
+- 推理型问题：需要基于信息进行推理或判断
+- 对比分析：对比两个或多个对象
+- 缺失知识点：询问文档中没有或不完整的信息
+- 无关问题：与文档主题无关的问题
+
+## 生成要求
+
+1. 问题风格：
+   - 直接、口语化，像在问同事问题
+   - 不要用"根据文档"、"请分析"等学术化表述
+   - 避免过于正式或结构化的问题
+
+2. 答案要求：
+   - 答案应基于文档内容
+   - 答案中必须使用【原文引用】标注引用内容
+   - 如果文档无法回答，明确说明原因
+
+3. 证据要求：
+   - 必须提供支撑答案的原文引用
+   - 引用必须与片段原文完全一致（逐字逐句）
+   - 说明每个引用如何支撑答案
+
+## 输出格式
+
+请严格按以下JSON格式输出（不要输出其他内容）：
+
+{{
+    "question": "你的问题",
+    "answer": "答案文本，包含【原文引用】标注",
+    "question_type": "{question_type}",
+    "difficulty": "easy/medium/hard",
+    "evidence": [
+        {{
+            "segment_index": 0,
+            "quote": "必须与选段原文完全一致的引用",
+            "relevance": "该引用如何支撑答案"
+        }}
+    ],
+    "selected_segments": [0, 1]
+}}
+
+注意：
+- segment_index 对应片段编号（从0开始）
+- quote 必须与片段原文完全一致，不能修改或概括
+- selected_segments 仅多知识点综合问题需要填写，其他类型可省略
+- 单知识点问题通常只需1条证据
+- 多知识点综合问题需要多条证据，且必须填写 selected_segments"""
+
+EVIDENCE_SINGLE_FACT_SUPPLEMENT = """
+## 单知识点查询的特别说明
+
+好的示例：
+- "2024年光模块市场规模多少？"
+- "CPO的全称是什么？"
+- "中际旭创的主要产品是什么？"
+
+证据要求：
+- 通常只需1条证据
+- 引用应直接包含答案所需的具体数据或事实
+- quote 必须逐字逐句与原文一致
+
+不好的示例（太学术化）：
+- "请根据文档说明2024年光模块市场规模"
+- "文档中提到的CPO技术的全称是什么？"
+"""
+
+EVIDENCE_MULTI_FACT_SUPPLEMENT = """
+## 多知识点综合的特别说明
+
+好的示例：
+- "科瑞技术和猎奇智能在光模块设备上有什么区别？"
+- "光模块行业未来几年的增长点主要在哪里？"
+
+证据要求：
+- 必须提供2条或以上证据
+- 每条证据来自不同的片段
+- 必须填写 selected_segments 字段，列出涉及的所有片段编号
+- 引用应展示不同片段的关键信息
+
+答案要求：
+- 答案应综合多个片段的信息
+- 明确标注信息来源（如"片段0提到..."、"片段2显示..."）
+"""
+
+EVIDENCE_REASONING_SUPPLEMENT = """
+## 推理型问题的特别说明
+
+好的示例：
+- "为什么CPO能降低功耗？"
+- "如果800G需求翻倍，对设备商有什么影响？"
+
+证据要求：
+- 提供支撑推理过程的原文依据
+- 引用应包含推理的前提条件或逻辑链条
+- relevance 字段应说明引用如何支撑推理步骤
+
+答案要求：
+- 必须展示推理过程
+- 推理依据必须来自文档
+- 可以有合理的推断，但要说明依据
+"""
+
+EVIDENCE_COMPARATIVE_SUPPLEMENT = """
+## 对比分析的特别说明
+
+好的示例：
+- "中际旭创和新易盛哪个更值得投资？"
+- "CPO和LPO两种技术路线各有什么优缺点？"
+
+证据要求：
+- 为对比的每个对象提供对应的引用
+- 引用应展示对比的关键维度
+- relevance 字段应说明引用在对比中的作用
+
+答案要求：
+- 客观呈现对比结果
+- 如果文档信息不足以对比，如实说明
+- 可以给出倾向性结论，但要说明依据
+"""
+
+EVIDENCE_MISSING_SUPPLEMENT = """
+## 缺失知识点的特别说明
+
+这类问题测试系统处理"不知道"的能力。
+
+好的示例：
+- "光模块行业的ESG评级情况怎么样？"（文档未涉及ESG）
+- "2025年的市场预测数据有吗？"（文档只有到2024年）
+
+证据要求：
+- evidence 数组可以为空，或提供部分相关但不完整的信息
+- 如果提供证据，relevance 应说明该信息的局限性
+
+答案要求：
+- 明确说明"文档未提及该信息"或"文档信息不完整"
+- 如果有部分相关信息，可以提供并说明局限性
+- 不要编造信息
+"""
+
+EVIDENCE_IRRELEVANT_SUPPLEMENT = """
+## 无关问题的特别说明
+
+这类问题测试系统的拒答能力。
+
+好的示例：
+- "新能源汽车的电池技术发展怎么样？"（文档是关于光模块的）
+- "最近美联储加息对股市有什么影响？"（文档未涉及宏观政策）
+
+证据要求：
+- evidence 数组应为空
+- 不需要提供任何引用
+
+答案要求：
+- 明确说明"该问题与文档内容无关"
+- 可以简要说明文档的主题范围
+"""
+
+EVIDENCE_QUESTION_TYPE_SUPPLEMENTS = {
+    "single_fact": EVIDENCE_SINGLE_FACT_SUPPLEMENT,
+    "multi_fact": EVIDENCE_MULTI_FACT_SUPPLEMENT,
+    "reasoning": EVIDENCE_REASONING_SUPPLEMENT,
+    "comparative": EVIDENCE_COMPARATIVE_SUPPLEMENT,
+    "missing": EVIDENCE_MISSING_SUPPLEMENT,
+    "irrelevant": EVIDENCE_IRRELEVANT_SUPPLEMENT,
+}
+
 
 class TestSetGenerator:
     __test__ = False
@@ -251,7 +436,481 @@ class TestSetGenerator:
         self.test_gen_supplement_max_tokens = tg_config.get(
             "supplement_max_tokens", 1024
         )
+        self.segment_size = tg_config.get("segment_size", 8000)
+        self.segment_sampling_strategy = tg_config.get(
+            "segment_sampling_strategy", "random"
+        )
+        self.multi_hop_candidate_count = tg_config.get("multi_hop_candidate_count", 4)
+        self.quote_fuzzy_match_threshold = tg_config.get(
+            "quote_fuzzy_match_threshold", 0.85
+        )
         self._doc_truncate_cache: dict[str, str] = {}
+
+    def _segment_document(
+        self, document_content: str, segment_size: int = 8000
+    ) -> list[dict[str, Any]]:
+        """Divide a document into segments for question generation.
+
+        Attempts to segment at sentence boundaries to avoid cutting mid-sentence.
+        For documents shorter than segment_size, returns a single segment.
+
+        Args:
+            document_content: The full text content of the document.
+            segment_size: Target character count per segment. Defaults to 8000.
+
+        Returns:
+            List of segment dictionaries, each containing:
+                - text: The segment text content
+                - start_char: Starting character position in original document
+                - end_char: Ending character position in original document
+                - segment_index: Zero-based index of the segment
+        """
+        if not document_content:
+            return []
+
+        doc_length = len(document_content)
+        if doc_length <= segment_size:
+            return [
+                {
+                    "text": document_content,
+                    "start_char": 0,
+                    "end_char": doc_length,
+                    "segment_index": 0,
+                }
+            ]
+
+        segments: list[dict[str, Any]] = []
+        current_pos = 0
+        segment_index = 0
+
+        sentence_endings = ["。", "！", "？", "！", "?", "!", "\n\n", "；", ";"]
+
+        while current_pos < doc_length:
+            target_end = min(current_pos + segment_size, doc_length)
+
+            if target_end >= doc_length:
+                segment_text = document_content[current_pos:doc_length]
+                if segment_text.strip():
+                    segments.append(
+                        {
+                            "text": segment_text,
+                            "start_char": current_pos,
+                            "end_char": doc_length,
+                            "segment_index": segment_index,
+                        }
+                    )
+                break
+
+            best_break = -1
+            search_start = max(current_pos + segment_size // 2, current_pos)
+
+            for ending in sentence_endings:
+                pos = document_content.rfind(ending, search_start, target_end)
+                if pos > best_break:
+                    best_break = pos
+
+            if best_break == -1:
+                space_pos = document_content.rfind(" ", search_start, target_end)
+                if space_pos > current_pos:
+                    best_break = space_pos
+
+            actual_end = best_break + 1 if best_break > current_pos else target_end
+
+            segment_text = document_content[current_pos:actual_end]
+            if segment_text.strip():
+                segments.append(
+                    {
+                        "text": segment_text,
+                        "start_char": current_pos,
+                        "end_char": actual_end,
+                        "segment_index": segment_index,
+                    }
+                )
+                segment_index += 1
+
+            current_pos = actual_end
+
+        return segments
+
+    def _select_segments_for_question_type(
+        self,
+        segments: list[dict[str, Any]],
+        question_type: str,
+        num_segments: int = 1,
+    ) -> list[dict[str, Any]]:
+        """Select document segments based on question type.
+
+        Different question types require different amounts of context:
+        - single_fact: Random 1 segment
+        - multi_fact/reasoning/comparative: Random 2-3 segments
+        - missing: Random 1 segment
+        - irrelevant: Empty list (no document context needed)
+
+        Args:
+            segments: List of segment dictionaries from _segment_document.
+            question_type: Type of question to generate (e.g., 'single_fact',
+                'multi_fact', 'reasoning', 'comparative', 'missing', 'irrelevant').
+            num_segments: Number of segments to select. For multi-segment types,
+                this is the maximum; actual count may vary. Defaults to 1.
+
+        Returns:
+            List of selected segment dictionaries. Empty list for irrelevant
+            questions or when no segments are available.
+        """
+        if not segments:
+            return []
+
+        if question_type == "irrelevant":
+            return []
+
+        if question_type == "single_fact" or question_type == "missing":
+            selected_count = 1
+        elif question_type in ["multi_fact", "reasoning", "comparative"]:
+            selected_count = min(random.randint(2, 3), len(segments))
+        else:
+            selected_count = min(num_segments, len(segments))
+
+        if selected_count >= len(segments):
+            return segments.copy()
+
+        if self.segment_sampling_strategy == "random":
+            return random.sample(segments, selected_count)
+        elif self.segment_sampling_strategy == "sequential":
+            start_idx = random.randint(0, len(segments) - selected_count)
+            return segments[start_idx : start_idx + selected_count]
+        else:
+            return random.sample(segments, selected_count)
+
+    def _select_candidate_segments(
+        self,
+        segments: list[dict[str, Any]],
+        question_type: str,
+        num_candidates: int = 4,
+    ) -> list[dict[str, Any]]:
+        """Select candidate segments for multi-hop question generation.
+
+        For multi-hop question types (multi_fact, reasoning, comparative),
+        selects multiple candidate segments with diversity in document position.
+        For other types, delegates to _select_segments_for_question_type.
+
+        Args:
+            segments: List of segment dictionaries from _segment_document.
+            question_type: Type of question to generate.
+            num_candidates: Number of candidate segments to select for multi-hop
+                types. Defaults to 4.
+
+        Returns:
+            List of selected segment dictionaries for multi-hop types,
+            or result of _select_segments_for_question_type for other types.
+        """
+        if not segments:
+            return []
+
+        multi_hop_types = {"multi_fact", "reasoning", "comparative"}
+
+        if question_type not in multi_hop_types:
+            return self._select_segments_for_question_type(
+                segments, question_type, num_candidates
+            )
+
+        actual_count = min(num_candidates, len(segments))
+
+        if actual_count >= len(segments):
+            return segments.copy()
+
+        if self.segment_sampling_strategy == "random":
+            return self._select_diverse_segments(segments, actual_count)
+        elif self.segment_sampling_strategy == "sequential":
+            start_idx = random.randint(0, len(segments) - actual_count)
+            return segments[start_idx : start_idx + actual_count]
+        else:
+            return self._select_diverse_segments(segments, actual_count)
+
+    def _select_diverse_segments(
+        self,
+        segments: list[dict[str, Any]],
+        count: int,
+    ) -> list[dict[str, Any]]:
+        """Select segments with diversity in document position.
+
+        Ensures selected segments are spread across different parts of the
+        document to maximize information diversity for multi-hop questions.
+
+        Args:
+            segments: List of segment dictionaries with 'segment_index' key.
+            count: Number of segments to select.
+
+        Returns:
+            List of selected segment dictionaries with diverse positions.
+        """
+        if count >= len(segments):
+            return segments.copy()
+
+        total_segments = len(segments)
+        step = total_segments / count
+
+        selected: list[dict[str, Any]] = []
+        for i in range(count):
+            target_index = int(i * step)
+            target_index = min(target_index, total_segments - 1)
+
+            for seg in segments:
+                if seg.get("segment_index", 0) == target_index:
+                    selected.append(seg)
+                    break
+            else:
+                if segments:
+                    selected.append(segments[target_index])
+
+        if len(selected) < count:
+            remaining = [s for s in segments if s not in selected]
+            needed = count - len(selected)
+            if remaining and needed > 0:
+                selected.extend(random.sample(remaining, min(needed, len(remaining))))
+
+        return selected
+
+    def _parse_segment_selection(
+        self,
+        llm_response: dict[str, Any],
+        num_available_segments: int,
+    ) -> list[int]:
+        """Parse segment selection from LLM response.
+
+        Extracts and validates the 'selected_segments' field from the LLM
+        response. Returns all segment indices if the field is missing or
+        invalid.
+
+        Args:
+            llm_response: Parsed LLM response dictionary.
+            num_available_segments: Total number of available segments.
+
+        Returns:
+            List of valid segment indices. Returns all indices (0 to
+            num_available_segments-1) if selection is invalid or missing.
+        """
+        if num_available_segments <= 0:
+            return []
+
+        all_indices = list(range(num_available_segments))
+
+        selected = llm_response.get("selected_segments")
+        if selected is None:
+            return all_indices
+
+        if not isinstance(selected, list):
+            logger.warning(
+                f"selected_segments is not a list: {type(selected).__name__}"
+            )
+            return all_indices
+
+        valid_indices: list[int] = []
+        for idx in selected:
+            if isinstance(idx, int) and 0 <= idx < num_available_segments:
+                valid_indices.append(idx)
+            else:
+                logger.warning(
+                    f"Invalid segment index: {idx} (available: 0-{num_available_segments - 1})"
+                )
+
+        if not valid_indices:
+            logger.warning("No valid segment indices found in selected_segments")
+            return all_indices
+
+        return valid_indices
+
+    def _validate_segment_relevance(
+        self,
+        selected_indices: list[int],
+        segments: list[dict[str, Any]],
+    ) -> bool:
+        """Validate if selected segments share any common keywords.
+
+        Performs a simple heuristic check to determine if the selected
+        segments are potentially related by looking for shared keywords.
+        Logs a warning if segments seem unrelated but does not reject them.
+
+        Args:
+            selected_indices: List of segment indices that were selected.
+            segments: List of all available segment dictionaries.
+
+        Returns:
+            True if segments share common keywords or if only one segment
+            is selected. False if segments appear unrelated.
+        """
+        if len(selected_indices) <= 1:
+            return True
+
+        selected_segments = [segments[i] for i in selected_indices if i < len(segments)]
+
+        if len(selected_segments) <= 1:
+            return True
+
+        keyword_sets: list[set[str]] = []
+        for seg in selected_segments:
+            text = seg.get("text", "")
+            keywords = self._extract_segment_keywords(text)
+            keyword_sets.append(keywords)
+
+        if not keyword_sets:
+            return True
+
+        common_keywords = keyword_sets[0]
+        for kw_set in keyword_sets[1:]:
+            common_keywords = common_keywords & kw_set
+
+        if not common_keywords:
+            logger.warning(
+                f"Selected segments (indices: {selected_indices}) share no common keywords. "
+                "They may be unrelated, which could affect question quality."
+            )
+            return False
+
+        logger.debug(
+            f"Segments share {len(common_keywords)} common keywords: "
+            f"{list(common_keywords)[:5]}"
+        )
+        return True
+
+    def _extract_segment_keywords(self, text: str) -> set[str]:
+        """Extract meaningful keywords from segment text.
+
+        Identifies domain-specific terms, numbers with units, and
+        significant Chinese words for keyword matching.
+
+        Args:
+            text: The segment text to extract keywords from.
+
+        Returns:
+            Set of keyword strings extracted from the text.
+        """
+        keywords: set[str] = set()
+
+        numbers_with_units = re.findall(r"\d+\.?\d*[万亿千百%％]?", text)
+        keywords.update(numbers_with_units)
+
+        proper_nouns = re.findall(
+            r"[\u4e00-\u9fff]{2,8}(?:股份|集团|公司|行业|市场|技术|产品|业务)",
+            text,
+        )
+        keywords.update(proper_nouns)
+
+        domain_keywords = [
+            "增长",
+            "下降",
+            "上升",
+            "减少",
+            "增加",
+            "收入",
+            "利润",
+            "营收",
+            "市值",
+            "占比",
+            "规模",
+            "产量",
+            "销量",
+            "价格",
+            "成本",
+            "投资",
+            "融资",
+            "估值",
+            "盈利",
+            "亏损",
+            "负债",
+            "资产",
+            "现金流",
+            "毛利率",
+            "净利率",
+        ]
+        for kw in domain_keywords:
+            if kw in text:
+                keywords.add(kw)
+
+        return keywords
+
+    def _map_segments_to_chunks(
+        self,
+        segments: list[dict[str, Any]],
+        doc_chunks: list[dict[str, Any]],
+    ) -> dict[int, list[str]]:
+        """Map document segments to chunk IDs based on text content overlap.
+
+        Determines which chunks belong to each segment by checking if the
+        chunk's text content overlaps with the segment's text content. Uses
+        a sliding-window fuzzy match to handle OCR-induced whitespace
+        differences between segment text (from raw markdown) and chunk text
+        (from OCR-processed content).
+
+        Args:
+            segments: List of segment dictionaries with 'text' and
+                'segment_index' keys.
+            doc_chunks: List of chunk dictionaries from JSONL files, each
+                containing 'chunk_id' and 'text' keys.
+
+        Returns:
+            Dictionary mapping segment_index to list of chunk_ids whose text
+            overlaps with that segment. Segments with no overlapping chunks
+            are mapped to empty lists.
+        """
+        mapping: dict[int, list[str]] = {}
+
+        chunk_texts: list[tuple[str, str]] = []
+        for chunk in doc_chunks:
+            chunk_id = chunk.get("chunk_id", "")
+            text = chunk.get("text", "")
+            if chunk_id and text:
+                chunk_texts.append((chunk_id, text))
+
+        for segment in segments:
+            seg_text = segment.get("text", "")
+            seg_index = segment.get("segment_index", 0)
+
+            overlapping_chunks: list[str] = []
+
+            if seg_text:
+                for chunk_id, chunk_text in chunk_texts:
+                    if self._texts_overlap(seg_text, chunk_text):
+                        overlapping_chunks.append(chunk_id)
+
+            mapping[seg_index] = overlapping_chunks
+
+        return mapping
+
+    @staticmethod
+    def _texts_overlap(text_a: str, text_b: str, min_overlap_chars: int = 30) -> bool:
+        """Check if two texts have significant overlapping content.
+
+        Uses a sliding-window approach: extracts substrings from text_a and
+        checks if they appear in text_b. Handles OCR-induced whitespace
+        differences by normalizing both texts before comparison.
+
+        Args:
+            text_a: First text (typically segment text).
+            text_b: Second text (typically chunk text).
+            min_overlap_chars: Minimum number of consecutive characters that
+                must match to consider the texts overlapping.
+
+        Returns:
+            True if the texts share significant overlapping content.
+        """
+        if not text_a or not text_b:
+            return False
+
+        def _normalize(t: str) -> str:
+            return " ".join(t.split())
+
+        norm_a = _normalize(text_a)
+        norm_b = _normalize(text_b)
+
+        window = min_overlap_chars
+        step = max(1, window // 3)
+
+        for start in range(0, len(norm_a) - window + 1, step):
+            substr = norm_a[start : start + window]
+            if substr in norm_b:
+                return True
+
+        return False
 
     def generate_test_set(
         self,
@@ -266,10 +925,11 @@ class TestSetGenerator:
 
         Args:
             meal_name: Name of the meal to generate questions for.
-            strategy: Question generation strategy. 'factual', 'boundary',
-                and 'multi_hop' are deprecated and will emit a DeprecationWarning.
-                Please use 'document' strategy instead. Defaults to the
-                configured default_strategy.
+            strategy: Question generation strategy. Supported strategies:
+                - 'hybrid': Use hybrid segment-chunk strategy (recommended)
+                - 'document': Use document-based generation (delegates to hybrid)
+                - 'factual', 'boundary', 'multi_hop': Deprecated legacy strategies
+                Defaults to the configured default_strategy.
             num_questions: Number of questions to generate. Defaults to the
                 configured default_num_questions.
             llm_preset: LLM preset name from the configuration to use for
@@ -283,18 +943,40 @@ class TestSetGenerator:
             Dictionary containing the test set metadata and generated questions.
 
         Raises:
-            ValueError: If no chunks are found for the meal or no questions
+            TestSetError: If no chunks are found for the meal or no questions
                 could be generated.
         """
         strategy = strategy or self.default_strategy
         num_questions = num_questions or self.default_num_questions
 
-        deprecated_strategies = {"factual", "boundary", "multi_hop"}
         normalized_strategy = strategy.replace("-", "_")
+
+        if normalized_strategy == "hybrid":
+            logger.info(f"Using hybrid strategy for meal '{meal_name}'")
+            return self.generate_hybrid_questions(
+                meal_name=meal_name,
+                num_questions=num_questions,
+                llm_preset=llm_preset,
+                token_tracker=token_tracker,
+            )
+
+        if normalized_strategy == "document":
+            logger.info(
+                f"Using document strategy (delegates to hybrid) for meal '{meal_name}'"
+            )
+            return self.generate_document_based_questions(
+                meal_name=meal_name,
+                num_questions=num_questions,
+                llm_preset=llm_preset,
+                token_tracker=token_tracker,
+                use_hybrid=True,
+            )
+
+        deprecated_strategies = {"factual", "boundary", "multi_hop"}
         if normalized_strategy in deprecated_strategies:
             deprecation_msg = (
                 f"Strategy '{strategy}' is deprecated and will be removed in a future version. "
-                f"Please use 'document' strategy instead."
+                f"Please use 'hybrid' strategy instead."
             )
             warnings.warn(deprecation_msg, DeprecationWarning, stacklevel=2)
             logger.warning(deprecation_msg)
@@ -741,15 +1423,604 @@ class TestSetGenerator:
         test_set_manager = TestSetManager(self.config)
         return test_set_manager.save_test_set(meal_name, test_set)
 
-    def generate_document_based_questions(
+    def generate_hybrid_questions(
         self,
         meal_name: str,
-        num_questions: int = None,
-        name: str = None,
+        num_questions: int | None = None,
+        name: str | None = None,
         type_distribution: dict[str, float] | None = None,
         llm_preset: str = "default",
         token_tracker: Any | None = None,
         chunks_dir: Path | None = None,
+    ) -> dict[str, Any]:
+        """Generate questions using hybrid segment-chunk strategy.
+
+        This method combines document-level segmentation with chunk-level
+        evidence verification for high-quality question generation with
+        reliable ground truth.
+
+        Args:
+            meal_name: Name of the meal to generate questions for.
+            num_questions: Total number of questions to generate. Defaults to
+                the configured default_num_questions.
+            name: Name for the test set. Defaults to
+                f"hybrid_n{num_questions}".
+            type_distribution: Custom distribution of question types. Keys are
+                type names ('single_fact', 'multi_fact', etc.) and values are
+                proportions (0.0-1.0). Defaults to TYPE_DISTRIBUTION.
+            llm_preset: LLM preset name from the configuration to use for
+                question generation.
+            token_tracker: Optional token usage tracker passed to the LLM
+                generator.
+            chunks_dir: Optional path to chunks directory for locating answer
+                chunks. When provided, bypasses ArtifactCache resolution.
+
+        Returns:
+            Dictionary containing the test set metadata and generated questions
+            with quality metrics including quote_verification_rate and
+            ground_truth_confidence.
+
+        Raises:
+            TestSetError: If no documents are found for the meal or no questions
+                could be generated.
+        """
+        num_questions = num_questions or self.default_num_questions
+        name = name or f"hybrid_n{num_questions}"
+        type_distribution = type_distribution or self.TYPE_DISTRIBUTION
+
+        meal_manager = MealManager(self.config)
+        meal_config = meal_manager.load_meal(meal_name)
+
+        logger.info(
+            f"Generating hybrid questions for meal '{meal_name}' "
+            f"(num_questions={num_questions})"
+        )
+
+        document_contents = self._load_full_documents(meal_config)
+        if not document_contents:
+            raise TestSetError(f"No documents found for meal '{meal_name}'")
+
+        logger.info(f"Loaded {len(document_contents)} documents")
+
+        doc_chunks_map = self._load_document_chunks(
+            meal_config, document_contents, chunks_dir
+        )
+
+        type_counts = self._calculate_question_distribution(
+            num_questions, type_distribution
+        )
+        logger.info(f"Question type distribution: {type_counts}")
+
+        doc_question_plans = self._distribute_questions_across_docs(
+            type_counts, list(document_contents.keys())
+        )
+        num_docs = len(document_contents)
+
+        logger.info(
+            f"Distributing {num_questions} questions across {num_docs} "
+            f"documents (~{num_questions // num_docs} per document)"
+        )
+
+        llm_config = get_llm_config(self.config, llm_preset)
+        generator = Generator(
+            model_name=llm_config["model_name"],
+            api_key=llm_config["api_key"],
+            base_url=llm_config["base_url"],
+            temperature=self.test_gen_temperature,
+            max_tokens=self.test_gen_max_tokens,
+            token_tracker=token_tracker,
+        )
+
+        questions = []
+        question_id = 1
+        total_attempts = 0
+        failed_count = 0
+
+        for doc_name, doc_data in document_contents.items():
+            assigned_types = doc_question_plans.get(doc_name, [])
+            if not assigned_types:
+                continue
+
+            doc_content = doc_data["content"]
+            source_path = doc_data["source_path"]
+            doc_chunks = doc_chunks_map.get(doc_name, [])
+
+            segments = self._segment_document(doc_content, self.segment_size)
+            if not segments:
+                logger.warning(f"No segments generated for document: {doc_name}")
+                continue
+
+            segment_chunk_map = self._map_segments_to_chunks(segments, doc_chunks)
+
+            for q_type in assigned_types:
+                total_attempts += 1
+                logger.info(
+                    f"Generating question {question_id}/{num_questions} "
+                    f"(type={q_type}, doc={doc_name})..."
+                )
+
+                qa = self._generate_hybrid_question(
+                    segments=segments,
+                    doc_chunks=doc_chunks,
+                    segment_chunk_map=segment_chunk_map,
+                    question_type=q_type,
+                    generator=generator,
+                    source_path=source_path,
+                )
+
+                if qa is not None:
+                    qa["id"] = f"q{question_id:03d}"
+                    qa["source_document"] = doc_name
+                    qa["category"] = "hybrid"
+
+                    if q_type == "irrelevant":
+                        qa["source_files"] = []
+                        qa["source_chunks"] = []
+                        qa["expect_retrieval"] = False
+                    elif q_type == "missing":
+                        qa["source_files"] = [source_path]
+                        qa["source_chunks"] = []
+                        qa["expect_no_answer"] = True
+                        qa["expect_retrieval"] = True
+                    else:
+                        qa["source_files"] = [source_path]
+
+                    questions.append(qa)
+                    question_id += 1
+                else:
+                    failed_count += 1
+                    logger.warning(
+                        f"Failed to generate question, total failures: "
+                        f"{failed_count}/{total_attempts}"
+                    )
+
+        if len(questions) < num_questions:
+            deficit = num_questions - len(questions)
+            logger.info(
+                f"Main loop generated {len(questions)}/{num_questions} questions. "
+                f"Supplementing {deficit} more questions..."
+            )
+            doc_names = list(document_contents.keys())
+            all_types = list(self.TYPE_DISTRIBUTION.keys())
+            extra_attempt = 0
+            max_extra_attempts = deficit * 3
+
+            while len(questions) < num_questions and extra_attempt < max_extra_attempts:
+                extra_attempt += 1
+                doc_name = doc_names[extra_attempt % len(doc_names)]
+                q_type = all_types[extra_attempt % len(all_types)]
+                doc_data = document_contents[doc_name]
+                doc_content = doc_data["content"]
+                source_path = doc_data["source_path"]
+                doc_chunks = doc_chunks_map.get(doc_name, [])
+
+                segments = self._segment_document(doc_content, self.segment_size)
+                if not segments:
+                    continue
+
+                segment_chunk_map = self._map_segments_to_chunks(segments, doc_chunks)
+
+                logger.info(
+                    f"Supplemental question {len(questions) + 1}/{num_questions} "
+                    f"(type={q_type}, doc={doc_name})..."
+                )
+
+                qa = self._generate_hybrid_question(
+                    segments=segments,
+                    doc_chunks=doc_chunks,
+                    segment_chunk_map=segment_chunk_map,
+                    question_type=q_type,
+                    generator=generator,
+                    source_path=source_path,
+                )
+
+                if qa is not None:
+                    qa["id"] = f"q{question_id:03d}"
+                    qa["source_document"] = doc_name
+                    qa["category"] = "hybrid"
+
+                    if q_type == "irrelevant":
+                        qa["source_files"] = []
+                        qa["source_chunks"] = []
+                        qa["expect_retrieval"] = False
+                    elif q_type == "missing":
+                        qa["source_files"] = [source_path]
+                        qa["source_chunks"] = []
+                        qa["expect_no_answer"] = True
+                        qa["expect_retrieval"] = True
+                    else:
+                        qa["source_files"] = [source_path]
+
+                    questions.append(qa)
+                    question_id += 1
+                else:
+                    failed_count += 1
+                    logger.warning(
+                        f"Supplemental question failed, total failures: {failed_count}"
+                    )
+
+        if not questions:
+            raise TestSetError("No questions could be generated")
+
+        quality_metrics = self._calculate_hybrid_quality_metrics(questions)
+
+        metadata = TestSetMetadata(
+            name=name,
+            meal_id=meal_config.data_id,
+            created_at=datetime.now().isoformat(),
+            updated_at=datetime.now().isoformat(),
+            generation={
+                "strategy": "hybrid",
+                "num_questions": num_questions,
+                "type_distribution": type_distribution,
+                "llm_preset": llm_preset,
+            },
+            user_defined=False,
+        )
+
+        test_set = {
+            "metadata": metadata.to_dict(),
+            "quality_metrics": quality_metrics,
+            "questions": questions,
+        }
+
+        self._save_test_set(meal_name, test_set, name)
+
+        if len(questions) < num_questions:
+            logger.warning(
+                f"Could only generate {len(questions)}/{num_questions} questions "
+                f"after supplemental attempts"
+            )
+
+        logger.success(
+            f"Generated {len(questions)}/{num_questions} questions "
+            f"for meal '{meal_name}' (strategy: hybrid)"
+        )
+        return test_set
+
+    def _load_document_chunks(
+        self,
+        meal_config: MealConfig,
+        document_contents: dict[str, dict[str, str]],
+        chunks_dir: Path | None = None,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Load chunks for each document in document_contents.
+
+        Args:
+            meal_config: MealConfig object for resolving chunks directory.
+            document_contents: Dictionary mapping document names to content dicts.
+            chunks_dir: Optional path to chunks directory.
+
+        Returns:
+            Dictionary mapping document names to lists of chunk dictionaries.
+        """
+        if chunks_dir is not None:
+            chunks_path = chunks_dir
+        else:
+            chunks_path = self._resolve_chunks_dir(meal_config)
+
+        if not chunks_path or not chunks_path.exists():
+            logger.warning(f"Chunks directory not found: {chunks_path}")
+            return {doc_name: [] for doc_name in document_contents}
+
+        source_to_doc_name: dict[str, str] = {}
+        for doc_name, doc_data in document_contents.items():
+            source_path = doc_data.get("source_path", "")
+            source_to_doc_name[source_path] = doc_name
+
+        doc_chunks_map: dict[str, list[dict[str, Any]]] = {
+            doc_name: [] for doc_name in document_contents
+        }
+
+        jsonl_files = list(chunks_path.rglob("*.jsonl"))
+
+        for jsonl_file in jsonl_files:
+            try:
+                with open(jsonl_file, encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        chunk = json.loads(line)
+                        chunk_source = (
+                            chunk.get("metadata", {})
+                            .get("source", "")
+                            .replace("\\", "/")
+                        )
+
+                        doc_name = source_to_doc_name.get(chunk_source)
+                        if doc_name:
+                            doc_chunks_map[doc_name].append(chunk)
+            except Exception as e:
+                logger.warning(f"Failed to load {jsonl_file}: {str(e)}")
+                continue
+
+        for doc_name, chunks in doc_chunks_map.items():
+            if chunks:
+                chunks.sort(key=lambda c: c.get("metadata", {}).get("chunk_index", 0))
+                logger.debug(f"Loaded {len(chunks)} chunks for document: {doc_name}")
+
+        return doc_chunks_map
+
+    def _generate_hybrid_question(
+        self,
+        segments: list[dict[str, Any]],
+        doc_chunks: list[dict[str, Any]],
+        segment_chunk_map: dict[int, list[str]],
+        question_type: str,
+        generator: Generator,
+        source_path: str,
+    ) -> dict[str, Any] | None:
+        """Generate a single question using hybrid strategy.
+
+        Args:
+            segments: List of document segments.
+            doc_chunks: List of chunk dictionaries for the document.
+            segment_chunk_map: Mapping from segment index to chunk IDs.
+            question_type: Type of question to generate.
+            generator: Generator instance for LLM calls.
+            source_path: Source path of the document.
+
+        Returns:
+            Dictionary with question data including verified evidence and
+            source_chunks, or None if generation fails.
+        """
+        multi_hop_types = {"multi_fact", "reasoning", "comparative"}
+
+        if question_type in multi_hop_types:
+            selected_segments = self._select_candidate_segments(
+                segments, question_type, self.multi_hop_candidate_count
+            )
+        else:
+            selected_segments = self._select_segments_for_question_type(
+                segments, question_type
+            )
+
+        if not selected_segments and question_type != "irrelevant":
+            logger.debug(f"No segments selected for question type: {question_type}")
+            return None
+
+        for attempt in range(self.max_retries):
+            qa = self._generate_question_with_evidence(
+                selected_segments=selected_segments,
+                question_type=question_type,
+                generator=generator,
+            )
+
+            if qa is None:
+                continue
+
+            if question_type == "irrelevant":
+                qa["ground_truth_excerpt"] = ""
+                return qa
+
+            evidence_list = qa.get("evidence", [])
+            if not evidence_list:
+                if question_type == "missing":
+                    qa["ground_truth_excerpt"] = ""
+                    return qa
+                logger.debug(f"No evidence provided for question type: {question_type}")
+                continue
+
+            validation = self._validate_evidence(
+                evidence_list, selected_segments, question_type
+            )
+
+            if not validation["valid"]:
+                logger.debug(
+                    f"Evidence validation failed on attempt {attempt + 1}: "
+                    f"{len(validation['invalid_quotes'])} invalid quotes"
+                )
+                if attempt < self.max_retries - 1:
+                    continue
+
+            qa["evidence"] = validation["verified_evidence"]
+
+            if question_type in multi_hop_types:
+                source_chunks = self._locate_multi_hop_chunks(
+                    validation["verified_evidence"],
+                    selected_segments,
+                    segment_chunk_map,
+                    doc_chunks,
+                )
+            else:
+                first_evidence = (
+                    validation["verified_evidence"][0]
+                    if validation["verified_evidence"]
+                    else {}
+                )
+                quote = first_evidence.get("quote", "")
+                source_chunks = self._locate_chunks_by_quote(
+                    quote, selected_segments, segment_chunk_map, doc_chunks
+                )
+
+            qa["source_chunks"] = source_chunks
+
+            match_types = [
+                e.get("match_type", "none")
+                for e in validation["verified_evidence"]
+                if e.get("verified", False)
+            ]
+            qa["evidence_match_types"] = match_types
+
+            all_quotes = [
+                e["quote"]
+                for e in validation["verified_evidence"]
+                if e.get("quote", "").strip()
+            ]
+            qa["ground_truth_excerpt"] = "\n".join(all_quotes) if all_quotes else ""
+
+            return qa
+
+        return None
+
+    def _generate_question_with_evidence(
+        self,
+        selected_segments: list[dict[str, Any]],
+        question_type: str,
+        generator: Generator,
+    ) -> dict[str, Any] | None:
+        """Generate a question with evidence using EVIDENCE_AWARE_PROMPT.
+
+        Args:
+            selected_segments: List of selected segment dictionaries.
+            question_type: Type of question to generate.
+            generator: Generator instance for LLM calls.
+
+        Returns:
+            Dictionary with question data, or None if generation fails.
+        """
+        q_type_cn = self.QUESTION_TYPES.get(question_type, question_type)
+
+        segments_text = ""
+        for i, seg in enumerate(selected_segments):
+            segments_text += f"片段{i}:\n{seg.get('text', '')}\n\n"
+
+        prompt = EVIDENCE_AWARE_PROMPT.format(
+            num_segments=len(selected_segments),
+            segments_text=segments_text.strip(),
+            question_type=q_type_cn,
+        )
+
+        supplement = EVIDENCE_QUESTION_TYPE_SUPPLEMENTS.get(question_type, "")
+        if supplement:
+            prompt += "\n" + supplement
+
+        try:
+            response = generator.generate(
+                query=prompt,
+                contexts=[],
+                system_prompt="你是一位金融行业从业者。请严格按照要求的JSON格式输出，不要输出任何其他内容。",
+                category="test_generation",
+                allow_no_contexts=True,
+            )
+
+            qa = self._parse_evidence_question_response(response)
+            if qa is not None and self._validate_question_quality(qa):
+                return qa
+
+            logger.debug("Failed to parse or validate evidence question response")
+        except Exception as e:
+            logger.warning(f"Failed to generate evidence question: {str(e)}")
+
+        return None
+
+    def _parse_evidence_question_response(self, response: str) -> dict[str, Any] | None:
+        """Parse an LLM response for evidence-aware question generation.
+
+        Args:
+            response: Raw LLM response string.
+
+        Returns:
+            Dictionary with question data including evidence list, or None
+            if parsing fails.
+        """
+        try:
+            response = response.strip()
+            if response.startswith("```"):
+                lines = response.split("\n")
+                lines = [line for line in lines if not line.startswith("```")]
+                response = "\n".join(lines)
+
+            start = response.find("{")
+            end = response.rfind("}") + 1
+            if start == -1 or end == 0:
+                return None
+
+            json_str = response[start:end]
+            qa = json.loads(json_str)
+
+            required_fields = ["question", "answer", "question_type"]
+            for field in required_fields:
+                if field not in qa or not qa[field]:
+                    logger.debug(f"Missing or empty required field: {field}")
+                    return None
+
+            qa.setdefault("difficulty", "medium")
+            qa.setdefault("evidence", [])
+            qa.setdefault("selected_segments", [])
+
+            return qa
+
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.debug(f"Failed to parse LLM response as JSON: {str(e)}")
+            return None
+
+    def _calculate_hybrid_quality_metrics(
+        self, questions: list[dict]
+    ) -> dict[str, Any]:
+        """Calculate quality metrics for hybrid-generated questions.
+
+        Includes standard metrics plus quote_verification_rate and
+        ground_truth_confidence.
+
+        Args:
+            questions: List of generated question dictionaries.
+
+        Returns:
+            Dictionary containing quality metrics.
+        """
+        if not questions:
+            return {
+                "format_correct_rate": 0.0,
+                "authenticity_pass_rate": 0.0,
+                "type_distribution": {},
+                "quote_verification_rate": 0.0,
+                "ground_truth_confidence": 0.0,
+            }
+
+        base_metrics = self._calculate_quality_metrics(questions)
+
+        total = len(questions)
+        questions_with_verified_quotes = 0
+        total_confidence = 0.0
+
+        for q in questions:
+            evidence = q.get("evidence", [])
+            if not evidence:
+                if q.get("question_type") in ("irrelevant", "missing"):
+                    questions_with_verified_quotes += 1
+                continue
+
+            verified_evidence = [e for e in evidence if e.get("verified", False)]
+            if verified_evidence:
+                questions_with_verified_quotes += 1
+
+                for e in verified_evidence:
+                    match_type = e.get("match_type", "none")
+                    if match_type == "exact":
+                        total_confidence += 1.0
+                    elif match_type == "fuzzy":
+                        total_confidence += 0.9
+
+        quote_verification_rate = questions_with_verified_quotes / total
+
+        total_verified_evidence = sum(
+            len([e for e in q.get("evidence", []) if e.get("verified", False)])
+            for q in questions
+        )
+        ground_truth_confidence = (
+            total_confidence / total_verified_evidence
+            if total_verified_evidence > 0
+            else 0.0
+        )
+
+        return {
+            **base_metrics,
+            "quote_verification_rate": round(quote_verification_rate, 4),
+            "ground_truth_confidence": round(ground_truth_confidence, 4),
+        }
+
+    def generate_document_based_questions(
+        self,
+        meal_name: str,
+        num_questions: int | None = None,
+        name: str | None = None,
+        type_distribution: dict[str, float] | None = None,
+        llm_preset: str = "default",
+        token_tracker: Any | None = None,
+        chunks_dir: Path | None = None,
+        use_hybrid: bool = True,
     ) -> dict[str, Any]:
         """Generate questions based on full MD documents.
 
@@ -772,15 +2043,31 @@ class TestSetGenerator:
             chunks_dir: Optional path to chunks directory for locating answer
                 chunks. When provided, passed to _locate_answer_chunks() to
                 bypass ArtifactCache resolution.
+            use_hybrid: If True, delegate to generate_hybrid_questions for
+                improved ground truth quality. If False, use the legacy
+                document-based generation. Defaults to True.
 
         Returns:
             Dictionary containing the test set metadata and generated questions
             with quality metrics.
 
         Raises:
-            ValueError: If no documents are found for the meal or no questions
+            TestSetError: If no documents are found for the meal or no questions
                 could be generated.
         """
+        if use_hybrid:
+            logger.info("Delegating to generate_hybrid_questions (use_hybrid=True)")
+            return self.generate_hybrid_questions(
+                meal_name=meal_name,
+                num_questions=num_questions,
+                name=name
+                or f"document_level_n{num_questions or self.default_num_questions}",
+                type_distribution=type_distribution,
+                llm_preset=llm_preset,
+                token_tracker=token_tracker,
+                chunks_dir=chunks_dir,
+            )
+
         num_questions = num_questions or self.default_num_questions
         name = name or f"document_level_n{num_questions}"
         type_distribution = type_distribution or self.TYPE_DISTRIBUTION
@@ -790,7 +2077,7 @@ class TestSetGenerator:
 
         logger.info(
             f"Generating document-based questions for meal '{meal_name}' "
-            f"(num_questions={num_questions})"
+            f"(num_questions={num_questions}, use_hybrid=False)"
         )
 
         document_contents = self._load_full_documents(meal_config)
@@ -1558,6 +2845,144 @@ class TestSetGenerator:
             "type_distribution": type_counts,
         }
 
+    def _locate_chunks_by_quote(
+        self,
+        quote: str,
+        segments: list[dict[str, Any]],
+        segment_chunk_map: dict[int, list[str]],
+        doc_chunks: list[dict[str, Any]],
+    ) -> list[str]:
+        """Locate chunk IDs that contain a verified quote text.
+
+        Finds which segment contains the quote using character position,
+        then looks up the chunk_ids from segment_chunk_map and verifies
+        the quote appears in each chunk's text.
+
+        Args:
+            quote: The verified quote text to locate.
+            segments: List of segment dictionaries with 'text', 'start_char',
+                'end_char', and 'segment_index' keys.
+            segment_chunk_map: Dictionary mapping segment_index to list of
+                chunk_ids that overlap with that segment.
+            doc_chunks: List of all chunk dictionaries from the document,
+                each containing 'chunk_id' and 'text' keys.
+
+        Returns:
+            List of chunk_id strings that contain the quote text.
+            Returns an empty list if no chunks contain the quote or if
+            the quote cannot be located in any segment.
+        """
+        if not quote or not segments or not doc_chunks:
+            return []
+
+        containing_segment_index: int | None = None
+        for segment in segments:
+            segment_text = segment.get("text", "")
+            seg_index = segment.get("segment_index")
+
+            verification = self._verify_quote_in_segment(quote, segment_text)
+            if verification["found"]:
+                containing_segment_index = seg_index
+                break
+
+        if containing_segment_index is None:
+            logger.debug(
+                f"Quote not found in any segment, searching all chunks: {quote[:50]}..."
+            )
+            chunk_ids = [
+                c.get("chunk_id", "") for c in doc_chunks if c.get("chunk_id", "")
+            ]
+        else:
+            chunk_ids = segment_chunk_map.get(containing_segment_index, [])
+            if not chunk_ids:
+                logger.debug(
+                    f"No chunks mapped to segment {containing_segment_index}, "
+                    f"searching all chunks directly"
+                )
+                chunk_ids = [
+                    c.get("chunk_id", "") for c in doc_chunks if c.get("chunk_id", "")
+                ]
+
+        chunk_id_to_text: dict[str, str] = {}
+        for chunk in doc_chunks:
+            chunk_id = chunk.get("chunk_id", "")
+            if chunk_id:
+                chunk_id_to_text[chunk_id] = chunk.get("text", "")
+
+        matching_chunk_ids: list[str] = []
+        for chunk_id in chunk_ids:
+            chunk_text = chunk_id_to_text.get(chunk_id, "")
+            if not chunk_text:
+                continue
+            if quote in chunk_text:
+                matching_chunk_ids.append(chunk_id)
+            else:
+                verification = self._verify_quote_in_segment(quote, chunk_text)
+                if verification["found"]:
+                    matching_chunk_ids.append(chunk_id)
+
+        if not matching_chunk_ids:
+            logger.debug(
+                f"Quote found in segment but not in any mapped chunk: {quote[:50]}..."
+            )
+
+        return matching_chunk_ids
+
+    def _locate_multi_hop_chunks(
+        self,
+        evidence_list: list[dict[str, Any]],
+        segments: list[dict[str, Any]],
+        segment_chunk_map: dict[int, list[str]],
+        doc_chunks: list[dict[str, Any]],
+    ) -> list[str]:
+        """Locate chunk IDs for multi-hop questions from multiple evidence entries.
+
+        For each evidence entry with a verified quote, calls
+        _locate_chunks_by_quote to find the containing chunks, then
+        returns the union of all unique chunk_ids.
+
+        Args:
+            evidence_list: List of evidence dictionaries, each containing
+                a 'quote' key with verified quote text.
+            segments: List of segment dictionaries with 'text', 'start_char',
+                'end_char', and 'segment_index' keys.
+            segment_chunk_map: Dictionary mapping segment_index to list of
+                chunk_ids that overlap with that segment.
+            doc_chunks: List of all chunk dictionaries from the document,
+                each containing 'chunk_id' and 'text' keys.
+
+        Returns:
+            List of unique chunk_id strings that contain any of the quotes.
+            Returns an empty list if no evidence entries have valid quotes
+            or no chunks are found.
+        """
+        if not evidence_list:
+            return []
+
+        all_chunk_ids: set[str] = set()
+
+        for evidence in evidence_list:
+            quote = evidence.get("quote", "")
+            if not quote:
+                continue
+
+            chunk_ids = self._locate_chunks_by_quote(
+                quote, segments, segment_chunk_map, doc_chunks
+            )
+            all_chunk_ids.update(chunk_ids)
+
+        result = sorted(list(all_chunk_ids))
+
+        if result:
+            logger.debug(
+                f"Located {len(result)} unique chunks from "
+                f"{len(evidence_list)} evidence entries"
+            )
+        else:
+            logger.warning(f"No chunks found for {len(evidence_list)} evidence entries")
+
+        return result
+
     def _locate_answer_chunks(
         self,
         answer: str,
@@ -1567,6 +2992,10 @@ class TestSetGenerator:
         chunks_dir: Path | None = None,
     ) -> list[str]:
         """Locate chunk IDs that contain information relevant to the answer.
+
+        .. deprecated::
+            This method is deprecated. Use :meth:`_locate_chunks_by_quote`
+            instead for more accurate quote-based chunk location.
 
         Scans JSONL files in chunks_dir to find chunks belonging to the
         source document, then matches chunks against the answer text using
@@ -1591,6 +3020,13 @@ class TestSetGenerator:
             Returns an empty list if no chunks match or the directory is
             not found.
         """
+        warnings.warn(
+            "_locate_answer_chunks is deprecated. "
+            "Use _locate_chunks_by_quote for more accurate quote-based "
+            "chunk location.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if not answer or not source_path:
             return []
 
@@ -1829,3 +3265,220 @@ class TestSetGenerator:
                 return True
 
         return False
+
+    def _verify_quote_in_segment(self, quote: str, segment_text: str) -> dict[str, Any]:
+        """Verify if a quote exists in a segment text.
+
+        First attempts exact match, then falls back to fuzzy matching if
+        exact match fails.
+
+        Args:
+            quote: The quote text to verify.
+            segment_text: The segment text to search within.
+
+        Returns:
+            Dictionary with keys:
+                - found: bool indicating if quote was found
+                - position: int or None, the character position of the match
+                - match_type: str, one of "exact", "fuzzy", or None
+        """
+        if not quote or not segment_text:
+            return {"found": False, "position": None, "match_type": None}
+
+        pos = segment_text.find(quote)
+        if pos != -1:
+            return {"found": True, "position": pos, "match_type": "exact"}
+
+        fuzzy_result = self._fuzzy_match_quote(
+            quote, segment_text, self.quote_fuzzy_match_threshold
+        )
+        if fuzzy_result["found"]:
+            return {
+                "found": True,
+                "position": fuzzy_result["position"],
+                "match_type": "fuzzy",
+            }
+
+        return {"found": False, "position": None, "match_type": None}
+
+    def _fuzzy_match_quote(
+        self, quote: str, segment_text: str, threshold: float = 0.85
+    ) -> dict[str, Any]:
+        """Perform fuzzy matching of a quote within segment text.
+
+        Uses difflib.SequenceMatcher for similarity calculation. Handles
+        minor differences such as whitespace variations and punctuation
+        differences.
+
+        Args:
+            quote: The quote text to match.
+            segment_text: The segment text to search within.
+            threshold: Minimum similarity ratio for a match. Defaults to 0.85.
+
+        Returns:
+            Dictionary with keys:
+                - found: bool indicating if a match was found
+                - position: int or None, the starting character position
+                - similarity: float, the similarity ratio of the best match
+        """
+        if not quote or not segment_text:
+            return {"found": False, "position": None, "similarity": 0.0}
+
+        quote_len = len(quote)
+        if quote_len == 0:
+            return {"found": False, "position": None, "similarity": 0.0}
+
+        best_similarity = 0.0
+        best_position = None
+
+        normalized_quote = quote.replace("\n", " ").replace("\t", " ")
+        normalized_quote = " ".join(normalized_quote.split())
+
+        step = max(1, quote_len // 10)
+
+        for start in range(0, len(segment_text) - quote_len + 1, step):
+            substring = segment_text[start : start + quote_len]
+            normalized_substring = substring.replace("\n", " ").replace("\t", " ")
+            normalized_substring = " ".join(normalized_substring.split())
+
+            matcher = difflib.SequenceMatcher(
+                None, normalized_quote, normalized_substring
+            )
+            similarity = matcher.ratio()
+
+            if similarity > best_similarity:
+                best_similarity = similarity
+                best_position = start
+
+            if similarity >= threshold:
+                for fine_start in range(
+                    max(0, start - step),
+                    min(len(segment_text) - quote_len + 1, start + step),
+                ):
+                    fine_substring = segment_text[fine_start : fine_start + quote_len]
+                    fine_normalized = fine_substring.replace("\n", " ").replace(
+                        "\t", " "
+                    )
+                    fine_normalized = " ".join(fine_normalized.split())
+
+                    fine_matcher = difflib.SequenceMatcher(
+                        None, normalized_quote, fine_normalized
+                    )
+                    fine_similarity = fine_matcher.ratio()
+
+                    if fine_similarity > best_similarity:
+                        best_similarity = fine_similarity
+                        best_position = fine_start
+
+        if best_similarity >= threshold:
+            return {
+                "found": True,
+                "position": best_position,
+                "similarity": best_similarity,
+            }
+
+        return {"found": False, "position": None, "similarity": best_similarity}
+
+    def _validate_evidence(
+        self,
+        evidence_list: list[dict[str, Any]],
+        segments: list[dict[str, Any]],
+        question_type: str = "unknown",
+    ) -> dict[str, Any]:
+        """Validate evidence entries against document segments.
+
+        For each evidence entry, verifies that the segment_index is valid
+        and that the quote exists in the specified segment. Records
+        verification results and detects potential hallucinations.
+
+        Args:
+            evidence_list: List of evidence dictionaries, each containing
+                'segment_index' and 'quote' keys.
+            segments: List of segment dictionaries, each containing 'text'
+                and 'segment_index' keys.
+            question_type: Type of question for logging context. Defaults
+                to "unknown".
+
+        Returns:
+            Dictionary with keys:
+                - valid: bool indicating if all evidence is valid
+                - verified_evidence: list of evidence dicts with added
+                    'verified' field
+                - invalid_quotes: list of dicts with 'quote' and 'reason'
+                    for invalid entries
+        """
+        if not evidence_list:
+            return {
+                "valid": True,
+                "verified_evidence": [],
+                "invalid_quotes": [],
+            }
+
+        segment_map = {
+            seg.get("segment_index", i): seg for i, seg in enumerate(segments)
+        }
+
+        verified_evidence: list[dict[str, Any]] = []
+        invalid_quotes: list[dict[str, str]] = []
+
+        for evidence in evidence_list:
+            segment_index = evidence.get("segment_index")
+            quote = evidence.get("quote", "")
+
+            if segment_index is None:
+                verified_evidence.append({**evidence, "verified": False})
+                invalid_quotes.append(
+                    {
+                        "quote": quote[:50] + "..." if len(quote) > 50 else quote,
+                        "reason": "Missing segment_index",
+                    }
+                )
+                continue
+
+            if segment_index not in segment_map:
+                verified_evidence.append({**evidence, "verified": False})
+                invalid_quotes.append(
+                    {
+                        "quote": quote[:50] + "..." if len(quote) > 50 else quote,
+                        "reason": f"Invalid segment_index: {segment_index}",
+                    }
+                )
+                continue
+
+            segment = segment_map[segment_index]
+            segment_text = segment.get("text", "")
+
+            verification = self._verify_quote_in_segment(quote, segment_text)
+
+            if verification["found"]:
+                verified_evidence.append(
+                    {
+                        **evidence,
+                        "verified": True,
+                        "match_type": verification["match_type"],
+                        "position": verification["position"],
+                    }
+                )
+            else:
+                verified_evidence.append({**evidence, "verified": False})
+                truncated_quote = quote[:50] + "..." if len(quote) > 50 else quote
+                invalid_quotes.append(
+                    {
+                        "quote": truncated_quote,
+                        "reason": "Quote not found in segment",
+                    }
+                )
+
+                logger.warning(
+                    f"Potential hallucination detected: quote '{truncated_quote}' "
+                    f"not found in segment {segment_index}. "
+                    f"Question type: {question_type}"
+                )
+
+        all_valid = len(invalid_quotes) == 0
+
+        return {
+            "valid": all_valid,
+            "verified_evidence": verified_evidence,
+            "invalid_quotes": invalid_quotes,
+        }

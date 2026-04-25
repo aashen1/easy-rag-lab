@@ -224,7 +224,7 @@ evaluation:
   # 评测后端选择：["builtin"], ["ragas"], 或 ["builtin", "ragas"]
   backends: ["builtin"]
   normalize_source_include_parent: true
-  
+
   # RAGAS 专用配置
   ragas:
     enabled: false
@@ -250,6 +250,10 @@ test_generation:
   max_tokens: 1024
   supplement_max_tokens: 1024
   initial_max_tokens: 512
+  segment_size: 8000
+  segment_sampling_strategy: "random"
+  multi_hop_candidate_count: 4
+  quote_fuzzy_match_threshold: 0.85
   document_level:
     enabled: true
     default_num_questions: 20

@@ -1,0 +1,133 @@
+# ============================================================================
+# 交互效应实验 (Interaction Effect Experiments)
+# ============================================================================
+# 设计思路：单变量实验无法揭示组件间的交互效应。通过 2×2 因子设计，
+# 检测两个组件同时启用时是否存在协同（正交互）或抵消（负交互）效应。
+#
+# 包含三个因子实验：
+#
+# 因子1: 分块策略 × 检索方式
+#   inter_semantic_hybrid = semantic/t50 + hybrid_rrf
+#   对比递进L2(semantic+vector) 和 L3(fixed+hybrid)，
+#   若 inter_semantic_hybrid > L2+L3简单叠加 → 正交互效应
+#
+# 因子2: 检索方式 × 重排序
+#   inter_hybrid_rerank = hybrid_rrf + reranker(top5)
+#   对比递进L3(fixed+hybrid) 和 L4(fixed+vector+rerank)，
+#   若 L5增量 > L3增量+L4增量 → 协同效应
+#
+# 因子3: 查询改写 × 检索方式
+#   inter_hyde_vector = HyDE + vector
+#   inter_hyde_hybrid = HyDE + hybrid_rrf
+#   HyDE生成的假设性文档embedding在向量检索上可能效果显著，
+#   但在混合检索上增益可能有限（BM25不受embedding影响）
+# ============================================================================
+
+name: "interaction_effects"
+description: "交互效应实验 - 2×2因子设计，检测组件间的协同或抵消效应"
+
+data:
+  meal: "meal_interaction_effects"
+  create_if_missing:
+    sample_ratio: 0.2
+    seed: 42
+
+test_sets:
+  - name: "interaction_eval"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 65
+
+variants:
+  # ====================================================================
+  # 因子1: 分块策略 × 检索方式
+  # 已有对照：L0(fixed+vector), L2(semantic+vector), L3(fixed+hybrid)
+  # 本实验补充：semantic + hybrid 的组合
+  # ====================================================================
+  - name: "inter_semantic_hybrid"
+    description: "交互: 语义分块×混合检索 - semantic/t50 + hybrid_rrf，检测正交互效应"
+    config_overrides:
+      chunker:
+        strategy: "semantic"
+        semantic:
+          similarity_threshold: 0.5
+          min_chunk_size: 100
+      retrieval:
+        method: "hybrid"
+        top_k: 5
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+
+  # ====================================================================
+  # 因子2: 检索方式 × 重排序
+  # 已有对照：L0(vector+no_rerank), L3(hybrid+no_rerank), L4(vector+rerank)
+  # 本实验补充：hybrid + rerank 的组合（与递进L5相同，用于交叉验证）
+  # ====================================================================
+  - name: "inter_hybrid_rerank"
+    description: "交互: 混合检索×重排序 - hybrid_rrf + reranker(top5)，检测协同效应"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 10
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+        reranker:
+          enabled: true
+          model_name: "BAAI/bge-reranker-large"
+          top_n: 5
+
+  # ====================================================================
+  # 因子3: 查询改写 × 检索方式
+  # 已有对照：L0(vector+no_rewrite), L3(hybrid+no_rewrite)
+  # 本实验补充：HyDE+vector 和 HyDE+hybrid 的组合
+  # ====================================================================
+  - name: "inter_hyde_vector"
+    description: "交互: HyDE×向量检索 - HyDE + vector，测试HyDE在纯向量检索上的增益"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        top_k: 5
+        query_rewrite:
+          enabled: true
+          strategy: "hyde"
+
+  - name: "inter_hyde_hybrid"
+    description: "交互: HyDE×混合检索 - HyDE + hybrid_rrf，测试HyDE在混合检索上的增益"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 5
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+        query_rewrite:
+          enabled: true
+          strategy: "hyde"
+
+evaluation:
+  llm_preset: "default"
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+      - "chunk_hit_rate"
+      - "chunk_mrr"
+      - "chunk_ndcg"
+      - "dedup_hit_rate"
+      - "dedup_mrr"
+      - "dedup_ndcg"
+      - "false_positive_rate"
+      - "recall_3"
+      - "recall_5"
+      - "recall_10"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+
+llm:
+  question_generation: "default"
+  answering: "default"

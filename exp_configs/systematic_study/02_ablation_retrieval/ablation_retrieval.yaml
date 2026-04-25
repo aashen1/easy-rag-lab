@@ -1,0 +1,151 @@
+# ============================================================================
+# 消融实验 A: 检索方式消融 (Retrieval Ablation)
+# ============================================================================
+# 设计思路：从"满配"出发，逐个关闭组件，回答"哪个组件最不可缺"。
+# 满配定义：hybrid_rrf + reranker(top5) + HyDE
+#
+# 变体对比逻辑：
+#   abl_vector_full        → 纯向量+全部后处理（检索方式消融点）
+#   abl_bm25_full          → 纯BM25+全部后处理（检索方式消融点）
+#   abl_hybrid_full        → 混合+全部后处理（对照组/满配）
+#   abl_hybrid_no_rerank   → 去掉重排，混合检索本身够不够？
+#   abl_hybrid_no_rewrite  → 去掉查询改写，原始查询够不够？
+#   abl_hybrid_bare        → 混合检索裸用（与递进L3对比）
+#
+# 关键分析：
+#   - abl_hybrid_full vs abl_vector_full: 混合检索 vs 纯向量的增量
+#   - abl_hybrid_full vs abl_bm25_full: 混合检索 vs 纯BM25的增量
+#   - abl_hybrid_full vs abl_hybrid_no_rerank: 重排序的不可替代性
+#   - abl_hybrid_full vs abl_hybrid_no_rewrite: 查询改写的不可替代性
+#   - abl_hybrid_bare vs L3(递进): 交叉验证混合检索裸用的效果
+# ============================================================================
+
+name: "ablation_retrieval"
+description: "消融实验A - 检索方式消融，从满配逐个关闭组件，评估各组件不可替代性"
+
+data:
+  meal: "meal_ablation_retrieval"
+  create_if_missing:
+    sample_ratio: 0.2
+    seed: 42
+
+test_sets:
+  - name: "ablation_retrieval_eval"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 65
+
+variants:
+  # ---- 纯向量 + 全部后处理 ----
+  - name: "abl_vector_full"
+    description: "纯向量检索 + reranker(top5) + HyDE - 评估向量检索在后处理加持下的表现"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        top_k: 10
+        reranker:
+          enabled: true
+          model_name: "BAAI/bge-reranker-large"
+          top_n: 5
+        query_rewrite:
+          enabled: true
+          strategy: "hyde"
+
+  # ---- 纯BM25 + 全部后处理 ----
+  - name: "abl_bm25_full"
+    description: "纯BM25检索 + reranker(top5) + HyDE - 评估稀疏检索在后处理加持下的表现"
+    config_overrides:
+      retrieval:
+        method: "bm25"
+        top_k: 10
+        reranker:
+          enabled: true
+          model_name: "BAAI/bge-reranker-large"
+          top_n: 5
+        query_rewrite:
+          enabled: true
+          strategy: "hyde"
+
+  # ---- 满配对照组：混合检索 + 全部后处理 ----
+  - name: "abl_hybrid_full"
+    description: "满配对照组 - hybrid_rrf + reranker(top5) + HyDE"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 10
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+        reranker:
+          enabled: true
+          model_name: "BAAI/bge-reranker-large"
+          top_n: 5
+        query_rewrite:
+          enabled: true
+          strategy: "hyde"
+
+  # ---- 去掉重排序 ----
+  - name: "abl_hybrid_no_rerank"
+    description: "去掉重排序 - hybrid_rrf + HyDE，无reranker"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 5
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+        query_rewrite:
+          enabled: true
+          strategy: "hyde"
+
+  # ---- 去掉查询改写 ----
+  - name: "abl_hybrid_no_rewrite"
+    description: "去掉查询改写 - hybrid_rrf + reranker(top5)，无query_rewrite"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 10
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+        reranker:
+          enabled: true
+          model_name: "BAAI/bge-reranker-large"
+          top_n: 5
+
+  # ---- 混合检索裸用 ----
+  - name: "abl_hybrid_bare"
+    description: "混合检索裸用 - hybrid_rrf only，无reranker无query_rewrite"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 5
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+
+evaluation:
+  llm_preset: "default"
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+      - "chunk_hit_rate"
+      - "chunk_mrr"
+      - "chunk_ndcg"
+      - "dedup_hit_rate"
+      - "dedup_mrr"
+      - "dedup_ndcg"
+      - "false_positive_rate"
+      - "recall_3"
+      - "recall_5"
+      - "recall_10"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+
+llm:
+  question_generation: "default"
+  answering: "default"

@@ -1,0 +1,165 @@
+# ============================================================================
+# 消融实验 B: 分块策略消融 (Chunking Ablation)
+# ============================================================================
+# 设计思路：固定检索为 hybrid_rrf + reranker(top5)，仅变化分块策略，
+# 排除检索层干扰，纯粹评估分块策略对下游质量的影响。
+#
+# 变体对比逻辑：
+#   abl_fixed_512_o0    → 固定分块无重叠（分块基线）
+#   abl_fixed_512_o50   → 固定分块有重叠（overlap增量）
+#   abl_semantic_t50    → 语义分块标准阈值
+#   abl_semantic_t30    → 语义分块低阈值（更多断点=更小chunk）
+#   abl_semantic_p25    → 语义分块百分位模式
+#
+# 关键分析：
+#   - abl_fixed_512_o0 vs abl_fixed_512_o50: overlap 在混合检索+重排下的增量
+#   - abl_fixed_512_o0 vs abl_semantic_t50: 语义分块 vs 固定分块
+#   - abl_semantic_t50 vs abl_semantic_t30: 阈值敏感度
+#   - abl_semantic_t50 vs abl_semantic_p25: 阈值模式 vs 百分位模式
+# ============================================================================
+
+name: "ablation_chunking"
+description: "消融实验B - 分块策略消融，固定检索条件，纯粹评估分块策略影响"
+
+data:
+  meal: "meal_ablation_chunking"
+  create_if_missing:
+    sample_ratio: 0.2
+    seed: 42
+
+test_sets:
+  - name: "ablation_chunking_eval"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 65
+
+# 公共检索配置：hybrid_rrf + reranker(top5)
+# 每个变体只改分块参数，检索配置通过 anchor 复用
+variants:
+  # ---- 固定分块无重叠（分块基线） ----
+  - name: "abl_fixed_512_o0"
+    description: "固定分块无重叠 - chunk_size=512, overlap=0"
+    config_overrides:
+      chunker:
+        strategy: "fixed"
+        chunk_size: 512
+        chunk_overlap: 0
+      retrieval:
+        method: "hybrid"
+        top_k: 10
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+        reranker:
+          enabled: true
+          model_name: "BAAI/bge-reranker-large"
+          top_n: 5
+
+  # ---- 固定分块有重叠 ----
+  - name: "abl_fixed_512_o50"
+    description: "固定分块有重叠 - chunk_size=512, overlap=50"
+    config_overrides:
+      chunker:
+        strategy: "fixed"
+        chunk_size: 512
+        chunk_overlap: 50
+      retrieval:
+        method: "hybrid"
+        top_k: 10
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+        reranker:
+          enabled: true
+          model_name: "BAAI/bge-reranker-large"
+          top_n: 5
+
+  # ---- 语义分块标准阈值 ----
+  - name: "abl_semantic_t50"
+    description: "语义分块 - similarity_threshold=0.5（标准阈值）"
+    config_overrides:
+      chunker:
+        strategy: "semantic"
+        chunk_size: 512
+        semantic:
+          similarity_threshold: 0.5
+          min_chunk_size: 100
+      retrieval:
+        method: "hybrid"
+        top_k: 10
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+        reranker:
+          enabled: true
+          model_name: "BAAI/bge-reranker-large"
+          top_n: 5
+
+  # ---- 语义分块低阈值 ----
+  - name: "abl_semantic_t30"
+    description: "语义分块 - similarity_threshold=0.3（低阈值，更多断点，更小chunk）"
+    config_overrides:
+      chunker:
+        strategy: "semantic"
+        chunk_size: 512
+        semantic:
+          similarity_threshold: 0.3
+          min_chunk_size: 100
+      retrieval:
+        method: "hybrid"
+        top_k: 10
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+        reranker:
+          enabled: true
+          model_name: "BAAI/bge-reranker-large"
+          top_n: 5
+
+  # ---- 语义分块百分位模式 ----
+  - name: "abl_semantic_p25"
+    description: "语义分块 - breakpoint_percentile=25（百分位断点模式）"
+    config_overrides:
+      chunker:
+        strategy: "semantic"
+        chunk_size: 512
+        semantic:
+          similarity_threshold: 0.5
+          breakpoint_percentile: 25
+          min_chunk_size: 100
+      retrieval:
+        method: "hybrid"
+        top_k: 10
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+        reranker:
+          enabled: true
+          model_name: "BAAI/bge-reranker-large"
+          top_n: 5
+
+evaluation:
+  llm_preset: "default"
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+      - "chunk_hit_rate"
+      - "chunk_mrr"
+      - "chunk_ndcg"
+      - "dedup_hit_rate"
+      - "dedup_mrr"
+      - "dedup_ndcg"
+      - "false_positive_rate"
+      - "recall_3"
+      - "recall_5"
+      - "recall_10"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+
+llm:
+  question_generation: "default"
+  answering: "default"

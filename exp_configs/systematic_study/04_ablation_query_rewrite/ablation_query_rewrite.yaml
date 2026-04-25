@@ -1,0 +1,126 @@
+# ============================================================================
+# 消融实验 C: 查询改写策略消融 (Query Rewrite Ablation)
+# ============================================================================
+# 设计思路：固定检索为 hybrid_rrf + reranker(top5)，仅变化查询改写策略，
+# 排除检索层干扰，纯粹评估查询改写对质量的影响。
+#
+# 变体对比逻辑：
+#   abl_no_rewrite     → 无改写基线
+#   abl_hyde           → HyDE（假设性文档嵌入）
+#   abl_multi_q3       → Multi-Query（3个子查询）
+#   abl_hyde_hybrid    → HyDE + hybrid_rrf（无reranker，测试协同效应）
+#
+# 关键分析：
+#   - abl_no_rewrite vs abl_hyde: HyDE 的增量
+#   - abl_no_rewrite vs abl_multi_q3: Multi-Query 的增量
+#   - abl_hyde vs abl_multi_q3: 两种改写策略的直接对比
+#   - abl_hyde_hybrid vs abl_hyde: HyDE 在有无 reranker 下的差异
+# ============================================================================
+
+name: "ablation_query_rewrite"
+description: "消融实验C - 查询改写策略消融，固定检索条件，评估HyDE与Multi-Query的效果"
+
+data:
+  meal: "meal_ablation_query_rewrite"
+  create_if_missing:
+    sample_ratio: 0.2
+    seed: 42
+
+test_sets:
+  - name: "ablation_qrewrite_eval"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 65
+
+variants:
+  # ---- 无改写基线 ----
+  - name: "abl_no_rewrite"
+    description: "无查询改写基线 - hybrid_rrf + reranker(top5)"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 10
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+        reranker:
+          enabled: true
+          model_name: "BAAI/bge-reranker-large"
+          top_n: 5
+
+  # ---- HyDE ----
+  - name: "abl_hyde"
+    description: "HyDE查询改写 - hybrid_rrf + reranker(top5) + HyDE"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 10
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+        reranker:
+          enabled: true
+          model_name: "BAAI/bge-reranker-large"
+          top_n: 5
+        query_rewrite:
+          enabled: true
+          strategy: "hyde"
+
+  # ---- Multi-Query ----
+  - name: "abl_multi_q3"
+    description: "Multi-Query查询改写 - hybrid_rrf + reranker(top5) + 3子查询"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 10
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+        reranker:
+          enabled: true
+          model_name: "BAAI/bge-reranker-large"
+          top_n: 5
+        query_rewrite:
+          enabled: true
+          strategy: "multi_query"
+          num_queries: 3
+
+  # ---- HyDE + hybrid_rrf（无reranker） ----
+  - name: "abl_hyde_hybrid"
+    description: "HyDE + 混合检索（无reranker）- 测试HyDE与混合检索的协同效应"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 5
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+        query_rewrite:
+          enabled: true
+          strategy: "hyde"
+
+evaluation:
+  llm_preset: "default"
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+      - "chunk_hit_rate"
+      - "chunk_mrr"
+      - "chunk_ndcg"
+      - "dedup_hit_rate"
+      - "dedup_mrr"
+      - "dedup_ndcg"
+      - "false_positive_rate"
+      - "recall_3"
+      - "recall_5"
+      - "recall_10"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+
+llm:
+  question_generation: "default"
+  answering: "default"

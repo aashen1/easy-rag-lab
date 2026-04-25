@@ -1,0 +1,51 @@
+name: "quick-verify-metrics"
+description: "快速验证全指标支持 - 最小规模，仅验证指标可计算性"
+
+data:
+  meal: "quick_verify"
+  create_if_missing:
+    sample_pages: 50
+    seed: 42
+
+test_sets:
+  - name: "quick_verify_test"
+    on_missing: "auto"
+    generation:
+      strategy: "hybrid"
+      num_questions: 6
+      type_distribution:
+        single_fact: 0.34
+        multi_fact: 0.33
+        irrelevant: 0.33
+
+variants:
+  - name: "baseline"
+    description: "基线配置 - 全指标验证"
+    config_overrides: {}
+
+evaluation:
+  backends: ["builtin", "ragas"]
+  llm_preset: "default"
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+      - "chunk_hit_rate"
+      - "chunk_mrr"
+      - "chunk_ndcg"
+      - "dedup_hit_rate"
+      - "dedup_mrr"
+      - "dedup_ndcg"
+      - "false_positive_rate"
+      - "context_precision"
+      - "context_recall"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+      - "answer_correctness"
+      - "semantic_similarity"
+
+llm:
+  question_generation: "default"
+  answering: "default"
