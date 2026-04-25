@@ -323,6 +323,10 @@ class RAGPipeline:
                     )
             logger.info(f"Source filter for indexer: {len(source_filter_jsonl)} files")
 
+        if sampling_config is None:
+            relative_chunks = f"{data_id[:16]}/chunks_{chunker_hash}"
+            cache.save_pointer("full_chunks", relative_chunks)
+
         if self.profiler:
             self.profiler.begin_stage("S3")
 

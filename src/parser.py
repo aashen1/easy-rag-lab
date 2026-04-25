@@ -253,6 +253,9 @@ def parse_all_pdfs_unified(
     }
     cache.save_manifest(data_id, artifact_manifest)
 
+    relative_parsed = f"{data_id[:16]}/parsed_{parser_hash}"
+    cache.save_pointer("full_parsed", relative_parsed)
+
     logger.info(
         f"Parsing completed: {success_count} succeeded, {skipped_count} skipped, "
         f"{failed_count} failed out of {len(pdf_files)} total"
