@@ -242,7 +242,7 @@ evaluation:
 
 # 测试集生成配置
 test_generation:
-  default_strategy: "document"
+  default_strategy: "hybrid"
   default_num_questions: 20
   max_retries: 3
   model_name: "LongCat-Flash-Lite"
@@ -250,10 +250,14 @@ test_generation:
   max_tokens: 1024
   supplement_max_tokens: 1024
   initial_max_tokens: 512
-  segment_size: 8000
-  segment_sampling_strategy: "random"
-  multi_hop_candidate_count: 4
-  quote_fuzzy_match_threshold: 0.85
+
+  hybrid:
+    enabled: true
+    segment_size: 8000
+    segment_sampling_strategy: "random"
+    quote_fuzzy_match_threshold: 0.85
+    multi_hop_candidate_count: 4
+
   document_level:
     enabled: true
     default_num_questions: 20
