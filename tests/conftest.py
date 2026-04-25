@@ -1,6 +1,5 @@
 import contextlib
 import shutil
-import tempfile
 import warnings
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -70,18 +69,15 @@ def mock_anthropic_client():
 
 
 @pytest.fixture
-def temp_project_dir():
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir)
+def temp_project_dir(tmp_path):
+    (tmp_path / "data" / "raw").mkdir(parents=True)
+    (tmp_path / "data" / "parsed").mkdir(parents=True)
+    (tmp_path / "data" / "chunks").mkdir(parents=True)
+    (tmp_path / "data" / "artifacts").mkdir(parents=True)
+    (tmp_path / "data" / "meals").mkdir(parents=True)
+    (tmp_path / "data" / "exp_reports").mkdir(parents=True)
+    (tmp_path / "data" / "vector_store").mkdir(parents=True)
+    (tmp_path / "exp_configs").mkdir(parents=True)
+    (tmp_path / "logs").mkdir(parents=True)
 
-        (temp_path / "data" / "raw").mkdir(parents=True)
-        (temp_path / "data" / "parsed").mkdir(parents=True)
-        (temp_path / "data" / "chunks").mkdir(parents=True)
-        (temp_path / "data" / "artifacts").mkdir(parents=True)
-        (temp_path / "data" / "meals").mkdir(parents=True)
-        (temp_path / "data" / "exp_reports").mkdir(parents=True)
-        (temp_path / "data" / "vector_store").mkdir(parents=True)
-        (temp_path / "exp_configs").mkdir(parents=True)
-        (temp_path / "logs").mkdir(parents=True)
-
-        yield temp_path
+    yield tmp_path
