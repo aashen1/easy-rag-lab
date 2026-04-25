@@ -832,63 +832,84 @@ class TestSetGenerator:
         segments: list[dict[str, Any]],
         doc_chunks: list[dict[str, Any]],
     ) -> dict[int, list[str]]:
-        """Map document segments to chunk IDs based on character position overlap.
+        """Map document segments to chunk IDs based on text content overlap.
 
         Determines which chunks belong to each segment by checking if the
-        chunk's character range overlaps with the segment's character range.
-        Chunk character positions are derived from cumulative char_count
-        metadata when start_index/end_index are not available.
+        chunk's text content overlaps with the segment's text content. Uses
+        a sliding-window fuzzy match to handle OCR-induced whitespace
+        differences between segment text (from raw markdown) and chunk text
+        (from OCR-processed content).
 
         Args:
-            segments: List of segment dictionaries with 'start_char', 'end_char',
-                and 'segment_index' keys.
+            segments: List of segment dictionaries with 'text' and
+                'segment_index' keys.
             doc_chunks: List of chunk dictionaries from JSONL files, each
-                containing 'metadata' with 'start_index' and 'end_index' keys
-                (or 'char_count' for cumulative position estimation), and
-                'chunk_id' key.
+                containing 'chunk_id' and 'text' keys.
 
         Returns:
-            Dictionary mapping segment_index to list of chunk_ids that overlap
-            with that segment. Segments with no overlapping chunks are mapped
-            to empty lists.
+            Dictionary mapping segment_index to list of chunk_ids whose text
+            overlaps with that segment. Segments with no overlapping chunks
+            are mapped to empty lists.
         """
         mapping: dict[int, list[str]] = {}
 
-        chunk_positions: list[tuple[str, int, int]] = []
-        cumulative_char = 0
+        chunk_texts: list[tuple[str, str]] = []
         for chunk in doc_chunks:
-            metadata = chunk.get("metadata", {})
             chunk_id = chunk.get("chunk_id", "")
-            if not chunk_id:
-                cumulative_char += metadata.get("char_count", 0)
-                continue
-
-            chunk_start = metadata.get("start_index")
-            chunk_end = metadata.get("end_index")
-
-            if chunk_start is not None and chunk_end is not None:
-                chunk_positions.append((chunk_id, chunk_start, chunk_end))
-            else:
-                char_count = metadata.get("char_count", 0)
-                chunk_positions.append(
-                    (chunk_id, cumulative_char, cumulative_char + char_count)
-                )
-                cumulative_char += char_count
+            text = chunk.get("text", "")
+            if chunk_id and text:
+                chunk_texts.append((chunk_id, text))
 
         for segment in segments:
-            seg_start = segment.get("start_char", 0)
-            seg_end = segment.get("end_char", 0)
+            seg_text = segment.get("text", "")
             seg_index = segment.get("segment_index", 0)
 
             overlapping_chunks: list[str] = []
 
-            for chunk_id, c_start, c_end in chunk_positions:
-                if c_start < seg_end and c_end > seg_start:
-                    overlapping_chunks.append(chunk_id)
+            if seg_text:
+                for chunk_id, chunk_text in chunk_texts:
+                    if self._texts_overlap(seg_text, chunk_text):
+                        overlapping_chunks.append(chunk_id)
 
             mapping[seg_index] = overlapping_chunks
 
         return mapping
+
+    @staticmethod
+    def _texts_overlap(text_a: str, text_b: str, min_overlap_chars: int = 30) -> bool:
+        """Check if two texts have significant overlapping content.
+
+        Uses a sliding-window approach: extracts substrings from text_a and
+        checks if they appear in text_b. Handles OCR-induced whitespace
+        differences by normalizing both texts before comparison.
+
+        Args:
+            text_a: First text (typically segment text).
+            text_b: Second text (typically chunk text).
+            min_overlap_chars: Minimum number of consecutive characters that
+                must match to consider the texts overlapping.
+
+        Returns:
+            True if the texts share significant overlapping content.
+        """
+        if not text_a or not text_b:
+            return False
+
+        def _normalize(t: str) -> str:
+            return " ".join(t.split())
+
+        norm_a = _normalize(text_a)
+        norm_b = _normalize(text_b)
+
+        window = min_overlap_chars
+        step = max(1, window // 3)
+
+        for start in range(0, len(norm_a) - window + 1, step):
+            substr = norm_a[start : start + window]
+            if substr in norm_b:
+                return True
+
+        return False
 
     def generate_test_set(
         self,
