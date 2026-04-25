@@ -33,22 +33,28 @@
 
 repos:
   # ---------------------------------------------------------------------------
-  # Ruff：代码检查 + 自动格式化
+  # Ruff：代码检查 + 自动格式化（本地版本，不连网）
   # ---------------------------------------------------------------------------
   # 这是最核心的钩子。它做两件事：
   # 1. ruff check --fix ：检查代码问题，能自动修的就修
   # 2. ruff format      ：格式化代码，统一风格
   #
-  # 如果 ruff 修改了文件，commit 会被阻止，你需要重新 git add 再提交。
+  # 这里使用 repo: local，直接用 pixi 环境里的 ruff，
+  # 不用从 GitHub 下载，速度快，不依赖网络。
+  # 版本由 pixi.toml 控制（当前 >=0.11.0, <0.12）。
   # ---------------------------------------------------------------------------
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.6
+  - repo: local
     hooks:
       - id: ruff
         name: ruff (linter)
-        args: ["--fix"]
+        entry: pixi run ruff check --fix
+        language: system
+        types: [python]
       - id: ruff-format
         name: ruff (formatter)
+        entry: pixi run ruff format
+        language: system
+        types: [python]
 
   # ---------------------------------------------------------------------------
   # trailing-whitespace：删除行尾多余空格
