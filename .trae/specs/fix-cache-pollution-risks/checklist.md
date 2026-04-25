@@ -1,0 +1,15 @@
+- [x] `compute_chunker_config_hash` 包含 `cross_page_overlap` 字段，且仅该参数变化时哈希不同
+- [x] `compute_embedding_config_hash` 包含 `dimension` 字段，且仅该参数变化时哈希不同
+- [x] `compute_parser_config_hash` 包含 `_version_hint` 字段，且版本号变化时哈希不同
+- [x] `save_manifest` 使用文件锁保护写入，并发写入不损坏 manifest
+- [x] `load_manifest` 使用共享锁保护读取，不会读取到写入一半的 manifest
+- [x] 部分解析失败时 `pdf_inventory` 仅包含成功文件，`failed_inventory` 记录失败文件
+- [x] `is_full_parsed_valid` 对 `failed_inventory` 中的文件跳过 SHA-256 校验
+- [x] `LazyDocumentLoader.get` 在返回缓存前校验文件 mtime，文件修改后自动重新加载
+- [x] `LazyDocumentLoader._cache` 使用 LRU 策略淘汰，默认上限 128 个文档
+- [x] `TestSetGenerator._doc_truncate_cache` 使用 `hashlib.sha256` 计算缓存键，跨进程稳定
+- [x] `get_artifact_group_dir` 使用 `data_id[:16]` 作为目录名
+- [x] `parsed_exists` 在提供 manifest 时校验源文件 SHA-256
+- [x] `chunks_exist` 在提供 manifest 时校验源文件 SHA-256
+- [x] 所有新增/修改的测试通过 `pixi run test`
+- [x] 代码通过 `pixi run lint` 检查
