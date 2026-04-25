@@ -12,7 +12,7 @@
 
 | 类型 | 待处理 | 进行中 | 已完成 | 已延期 |
 |------|--------|--------|--------|--------|
-| Bug | 10 | 0 | 16 | 2 |
+| Bug | 9 | 0 | 17 | 2 |
 | Feature | 28 | 0 | 19 | 0 |
 | Refactor | 8 | 0 | 14 | 1 |
 | Optimization | 9 | 0 | 1 | 0 |
@@ -30,7 +30,7 @@
 | BUG-023 | `missing` 类型 `expect_retrieval` 标记错误导致 FPR 计算异常 | [inbox](inbox/一个关于FPR的bug，及两种修复方案.md) | ✅ 已完成 | commit `5e9fa65`：采用方案 A 将 `expect_retrieval` 改为 `True`，同时新增 `expect_no_answer` 跳过 faithfulness |
 | BUG-024 | Chunk JSONL 文本编码损坏导致 chunk-level 指标无法计算 | [hybrid-metrics-fix.md](guides/development/hybrid-metrics-fix.md#6-未修复问题chunk-jsonl-文本编码损坏) | 📋 待处理 | chunk text 字段中文字符为乱码（如`鍦 浜`而非`地产`），source_chunks 始终为空，chunk_hit_rate/mrr/ndcg 为 null；需排查 chunker 输出编码 |
 | BUG-025 | `source_chunks` 字段始终为空，文档级策略无法精确到页或 chunk | [TODO.md](../TODO.md) | 📋 待处理 | 需调研文档级策略能否精确到页/chunk，或需恢复 chunk 级策略 |
-| BUG-026 | 全量缓存 hash 计算问题导致缓存无法命中 | [TODO.md](../TODO.md) | 📋 待处理 | 手动 copy 可识别但自动计算不命中，hash 逻辑需排查 |
+| BUG-026 | 全量缓存 hash 计算问题导致缓存无法命中 | [TODO.md](../TODO.md) | ✅ 已完成 | pipeline.py 传了错误的 artifacts_dir，改为使用 ArtifactCache 动态计算路径 |
 | BUG-027 | Token 统计功能可能无法正确识别多变体各变体消耗 | [TODO.md](../TODO.md) | 📋 待处理 | 需小试验排查是否存在 bug |
 | BUG-028 | 审查脚本缺少页码信息，无法定位 ground truth 出自哪一页 | [TODO.md](../TODO.md) | 📋 待处理 | source_chunks 字段未实装，审查时无法精确定位 |
 
@@ -217,6 +217,7 @@
 | RF-016 | Optional 类型使用规范化 → 统一为 Python 3.10+ 的 `| None` 语法 | 深度审查 | 2026-04-24 |
 | RF-017 | 自定义异常类型定义 → 新增 src/exceptions.py，9个业务异常类，全项目替换 | 深度审查 | 2026-04-24 |
 | RF-014 | normalize_source 匹配精度提升 → 已统一使用 include_parent=True | [pipeline-deep-audit.md](pipeline-deep-audit.md#P6-1) | 2026-04-26 |
+| BUG-026 | 全量缓存 hash 路径不一致 → pipeline.py 改用 ArtifactCache 动态计算 | [TODO.md](../TODO.md) | 2026-04-26 |
 
 ### Investigation
 
