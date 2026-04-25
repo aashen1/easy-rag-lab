@@ -1793,6 +1793,367 @@ class TestSetGenerator:
         )
         return test_set
 
+    def generate_golden_testset(
+        self,
+        num_questions: int = 150,
+        name: str = "golden_150",
+        llm_preset: str = "default",
+        token_tracker: Any | None = None,
+        type_distribution: dict[str, float] | None = None,
+        seed: int | None = None,
+    ) -> dict[str, Any]:
+        """Generate a golden test set from the full dataset.
+
+        Uses the full-dataset meal to load all documents, applies content
+        deduplication, and generates questions with golden-specific
+        metadata (FAILURE_MODES, audit fields, immutable policy).
+
+        Args:
+            num_questions: Total number of questions to generate.
+            name: Name for the golden test set.
+            llm_preset: LLM preset name for generation.
+            token_tracker: Optional token tracker.
+            type_distribution: Override type distribution. Defaults to
+                GOLDEN_TYPE_DISTRIBUTION.
+            seed: Random seed for reproducibility.
+
+        Returns:
+            Dictionary containing the golden test set.
+
+        Raises:
+            TestSetError: If no full-dataset meal is found or generation
+                fails.
+        """
+        import random as rng_module
+
+        from src.meal import MealManager
+
+        meal_manager = MealManager(self.config)
+        meal_config = meal_manager.find_full_dataset_meal()
+
+        if meal_config is None:
+            raise TestSetError(
+                "No full-dataset meal found. Create a meal with "
+                "sampling=1.0 (i.e. include all PDFs) first."
+            )
+
+        logger.info(
+            f"Using full-dataset meal '{meal_config.name}' "
+            f"for golden test set generation"
+        )
+
+        if type_distribution is None:
+            type_distribution = self.GOLDEN_TYPE_DISTRIBUTION
+
+        if seed is not None:
+            rng_module.seed(seed)
+
+        document_contents = self._load_full_documents(meal_config)
+        if not document_contents:
+            raise TestSetError(f"No documents found for meal '{meal_config.name}'")
+
+        logger.info(f"Loaded {len(document_contents)} documents")
+
+        doc_chunks_map = self._load_document_chunks(meal_config, document_contents)
+
+        doc_list = [
+            {"doc_id": doc_name, "content": doc_data["content"]}
+            for doc_name, doc_data in document_contents.items()
+        ]
+        overlaps = self._detect_content_overlaps(doc_list)
+        if overlaps:
+            for supp_id, primary_id, ratio in overlaps:
+                logger.info(
+                    f"Content overlap: {supp_id} is supplementary "
+                    f"to {primary_id} (overlap={ratio:.0%})"
+                )
+
+        primary_pool = self._build_primary_pool(doc_list, overlaps)
+        primary_names = {d["doc_id"] for d in primary_pool}
+
+        if len(primary_names) < len(document_contents):
+            excluded = set(document_contents.keys()) - primary_names
+            logger.info(
+                f"Primary pool: {len(primary_names)} documents "
+                f"({len(excluded)} supplementary excluded: {excluded})"
+            )
+            filtered_contents = {
+                k: v for k, v in document_contents.items() if k in primary_names
+            }
+        else:
+            filtered_contents = document_contents
+
+        type_counts = self._calculate_question_distribution(
+            num_questions, type_distribution
+        )
+        logger.info(f"Golden type distribution: {type_counts}")
+
+        doc_question_plans = self._distribute_questions_across_docs(
+            type_counts, list(filtered_contents.keys())
+        )
+
+        llm_config = get_llm_config(self.config, llm_preset)
+        generator = Generator(
+            model_name=llm_config["model_name"],
+            api_key=llm_config["api_key"],
+            base_url=llm_config["base_url"],
+            temperature=self.test_gen_temperature,
+            max_tokens=self.test_gen_max_tokens,
+            token_tracker=token_tracker,
+        )
+
+        questions: list[dict[str, Any]] = []
+        question_id = 1
+        total_attempts = 0
+        failed_count = 0
+
+        for doc_name, doc_data in filtered_contents.items():
+            assigned_types = doc_question_plans.get(doc_name, [])
+            if not assigned_types:
+                continue
+
+            doc_content = doc_data["content"]
+            source_path = doc_data["source_path"]
+            doc_chunks = doc_chunks_map.get(doc_name, [])
+
+            segments = self._segment_document(doc_content, self.segment_size)
+            if not segments:
+                logger.warning(f"No segments for document: {doc_name}")
+                continue
+
+            segment_chunk_map = self._map_segments_to_chunks(segments, doc_chunks)
+
+            for q_type in assigned_types:
+                if len(questions) >= num_questions:
+                    break
+                total_attempts += 1
+                logger.info(
+                    f"Generating question {len(questions) + 1}/{num_questions} "
+                    f"(type={q_type}, doc={doc_name})..."
+                )
+
+                qa = self._generate_hybrid_question(
+                    segments=segments,
+                    doc_chunks=doc_chunks,
+                    segment_chunk_map=segment_chunk_map,
+                    question_type=q_type,
+                    generator=generator,
+                    source_path=source_path,
+                )
+
+                if qa is not None:
+                    qa["id"] = f"golden_{question_id:03d}"
+                    qa["source_document"] = doc_name
+                    qa["category"] = "golden"
+
+                    if q_type == "irrelevant":
+                        qa["source_files"] = []
+                        qa["source_chunks"] = []
+                        qa["expect_retrieval"] = False
+                    elif q_type == "missing":
+                        qa["source_files"] = [source_path]
+                        qa["source_chunks"] = []
+                        qa["expect_no_answer"] = True
+                        qa["expect_retrieval"] = True
+                    else:
+                        qa["source_files"] = [source_path]
+
+                    is_valid, correction = self._validate_numerical_accuracy(qa)
+                    if not is_valid and correction:
+                        logger.warning(
+                            f"Numerical accuracy issue: {correction['suggestion']}"
+                        )
+                        for err in correction.get("errors", []):
+                            wrong_val = err["answer_value"]
+                            correct_val = err["correct_value"]
+                            answer_text = qa.get("answer", "")
+                            qa["answer"] = answer_text.replace(
+                                f"{wrong_val}",
+                                f"{correct_val}",
+                            )
+                        qa.setdefault("metadata", {})
+                        qa["metadata"]["numerical_auto_corrected"] = True
+
+                    excerpt = qa.get("ground_truth_excerpt", "")
+                    if excerpt and q_type not in ("irrelevant",):
+                        excerpt_verified = self._verify_excerpt_in_document(
+                            excerpt,
+                            doc_content,
+                        )
+                        qa.setdefault("metadata", {})
+                        qa["metadata"]["excerpt_verified"] = excerpt_verified
+                        if not excerpt_verified:
+                            logger.warning(
+                                f"ground_truth_excerpt not found in document "
+                                f"for question {qa['id']}"
+                            )
+
+                    qa.setdefault("metadata", {})
+                    qa["metadata"]["author"] = "llm_assisted"
+                    qa["metadata"]["reviewed"] = False
+                    qa["metadata"]["review_notes"] = ""
+                    if not qa["metadata"].get("target_failure_mode"):
+                        qa["metadata"]["target_failure_mode"] = self.FAILURE_MODES.get(
+                            q_type, ""
+                        )
+
+                    questions.append(qa)
+                    question_id += 1
+                else:
+                    failed_count += 1
+                    logger.warning(
+                        f"Failed to generate question, total failures: "
+                        f"{failed_count}/{total_attempts}"
+                    )
+
+        if len(questions) < num_questions:
+            deficit = num_questions - len(questions)
+            logger.info(
+                f"Main loop generated {len(questions)}/{num_questions}. "
+                f"Supplementing {deficit} more..."
+            )
+            doc_names = list(filtered_contents.keys())
+            all_types = list(type_distribution.keys())
+            extra_attempt = 0
+            max_extra_attempts = deficit * 3
+
+            while len(questions) < num_questions and extra_attempt < max_extra_attempts:
+                extra_attempt += 1
+                doc_name = doc_names[extra_attempt % len(doc_names)]
+                q_type = all_types[extra_attempt % len(all_types)]
+                doc_data = filtered_contents[doc_name]
+                doc_content = doc_data["content"]
+                source_path = doc_data["source_path"]
+                doc_chunks = doc_chunks_map.get(doc_name, [])
+
+                segments = self._segment_document(doc_content, self.segment_size)
+                if not segments:
+                    continue
+
+                segment_chunk_map = self._map_segments_to_chunks(segments, doc_chunks)
+
+                logger.info(
+                    f"Supplemental question {len(questions) + 1}/{num_questions} "
+                    f"(type={q_type}, doc={doc_name})..."
+                )
+
+                qa = self._generate_hybrid_question(
+                    segments=segments,
+                    doc_chunks=doc_chunks,
+                    segment_chunk_map=segment_chunk_map,
+                    question_type=q_type,
+                    generator=generator,
+                    source_path=source_path,
+                )
+
+                if qa is not None:
+                    qa["id"] = f"golden_{question_id:03d}"
+                    qa["source_document"] = doc_name
+                    qa["category"] = "golden"
+
+                    if q_type == "irrelevant":
+                        qa["source_files"] = []
+                        qa["source_chunks"] = []
+                        qa["expect_retrieval"] = False
+                    elif q_type == "missing":
+                        qa["source_files"] = [source_path]
+                        qa["source_chunks"] = []
+                        qa["expect_no_answer"] = True
+                        qa["expect_retrieval"] = True
+                    else:
+                        qa["source_files"] = [source_path]
+
+                    is_valid, correction = self._validate_numerical_accuracy(qa)
+                    if not is_valid and correction:
+                        for err in correction.get("errors", []):
+                            wrong_val = err["answer_value"]
+                            correct_val = err["correct_value"]
+                            answer_text = qa.get("answer", "")
+                            qa["answer"] = answer_text.replace(
+                                f"{wrong_val}",
+                                f"{correct_val}",
+                            )
+                        qa.setdefault("metadata", {})
+                        qa["metadata"]["numerical_auto_corrected"] = True
+
+                    excerpt = qa.get("ground_truth_excerpt", "")
+                    if excerpt and q_type not in ("irrelevant",):
+                        excerpt_verified = self._verify_excerpt_in_document(
+                            excerpt,
+                            doc_content,
+                        )
+                        qa.setdefault("metadata", {})
+                        qa["metadata"]["excerpt_verified"] = excerpt_verified
+
+                    qa.setdefault("metadata", {})
+                    qa["metadata"]["author"] = "llm_assisted"
+                    qa["metadata"]["reviewed"] = False
+                    qa["metadata"]["review_notes"] = ""
+                    if not qa["metadata"].get("target_failure_mode"):
+                        qa["metadata"]["target_failure_mode"] = self.FAILURE_MODES.get(
+                            q_type, ""
+                        )
+
+                    questions.append(qa)
+                    question_id += 1
+                else:
+                    failed_count += 1
+                    logger.warning(
+                        f"Supplemental question failed, total failures: {failed_count}"
+                    )
+
+        if not questions:
+            raise TestSetError("No golden questions could be generated")
+
+        quality_metrics = self._calculate_hybrid_quality_metrics(questions)
+
+        metadata = TestSetMetadata(
+            name=name,
+            meal_id=meal_config.data_id,
+            created_at=datetime.now().isoformat(),
+            updated_at=datetime.now().isoformat(),
+            generation={
+                "strategy": "golden",
+                "num_questions": num_questions,
+                "type_distribution": type_distribution,
+                "llm_preset": llm_preset,
+                "seed": seed,
+            },
+            user_defined=True,
+            invalid_policy="immutable",
+        )
+
+        test_set = {
+            "metadata": metadata.to_dict(),
+            "quality_metrics": quality_metrics,
+            "questions": questions,
+        }
+
+        golden_dir = Path(self.config.get("data_dir", "data")) / "golden_testset"
+        golden_dir.mkdir(parents=True, exist_ok=True)
+        output_path = golden_dir / f"{name}.json"
+
+        try:
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(test_set, f, ensure_ascii=False, indent=2)
+            logger.info(f"Saved golden test set '{name}' to {output_path}")
+        except Exception as e:
+            raise TestSetError(
+                f"Failed to save golden test set '{name}': {str(e)}"
+            ) from e
+
+        if len(questions) < num_questions:
+            logger.warning(
+                f"Could only generate {len(questions)}/{num_questions} "
+                f"golden questions after supplemental attempts"
+            )
+
+        logger.success(
+            f"Generated {len(questions)}/{num_questions} golden questions "
+            f"(strategy: golden)"
+        )
+        return test_set
+
     def _load_document_chunks(
         self,
         meal_config: MealConfig,
