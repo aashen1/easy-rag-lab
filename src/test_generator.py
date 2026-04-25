@@ -836,13 +836,16 @@ class TestSetGenerator:
 
         Determines which chunks belong to each segment by checking if the
         chunk's character range overlaps with the segment's character range.
+        Chunk character positions are derived from cumulative char_count
+        metadata when start_index/end_index are not available.
 
         Args:
             segments: List of segment dictionaries with 'start_char', 'end_char',
                 and 'segment_index' keys.
             doc_chunks: List of chunk dictionaries from JSONL files, each
-                containing 'metadata' with 'start_index' and 'end_index' keys,
-                and 'chunk_id' key.
+                containing 'metadata' with 'start_index' and 'end_index' keys
+                (or 'char_count' for cumulative position estimation), and
+                'chunk_id' key.
 
         Returns:
             Dictionary mapping segment_index to list of chunk_ids that overlap
@@ -851,6 +854,27 @@ class TestSetGenerator:
         """
         mapping: dict[int, list[str]] = {}
 
+        chunk_positions: list[tuple[str, int, int]] = []
+        cumulative_char = 0
+        for chunk in doc_chunks:
+            metadata = chunk.get("metadata", {})
+            chunk_id = chunk.get("chunk_id", "")
+            if not chunk_id:
+                cumulative_char += metadata.get("char_count", 0)
+                continue
+
+            chunk_start = metadata.get("start_index")
+            chunk_end = metadata.get("end_index")
+
+            if chunk_start is not None and chunk_end is not None:
+                chunk_positions.append((chunk_id, chunk_start, chunk_end))
+            else:
+                char_count = metadata.get("char_count", 0)
+                chunk_positions.append(
+                    (chunk_id, cumulative_char, cumulative_char + char_count)
+                )
+                cumulative_char += char_count
+
         for segment in segments:
             seg_start = segment.get("start_char", 0)
             seg_end = segment.get("end_char", 0)
@@ -858,16 +882,8 @@ class TestSetGenerator:
 
             overlapping_chunks: list[str] = []
 
-            for chunk in doc_chunks:
-                metadata = chunk.get("metadata", {})
-                chunk_start = metadata.get("start_index", 0)
-                chunk_end = metadata.get("end_index", 0)
-                chunk_id = chunk.get("chunk_id", "")
-
-                if not chunk_id:
-                    continue
-
-                if chunk_start < seg_end and chunk_end > seg_start:
+            for chunk_id, c_start, c_end in chunk_positions:
+                if c_start < seg_end and c_end > seg_start:
                     overlapping_chunks.append(chunk_id)
 
             mapping[seg_index] = overlapping_chunks
