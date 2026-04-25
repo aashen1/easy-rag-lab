@@ -77,7 +77,7 @@
 | FEAT-028 | 配置验证系统（Pydantic 模型验证 + 必填项校验 + 范围校验） | 深度审查 | 📋 待处理 | 中 | 当前 yaml.safe_load 直接加载无验证，可能导致意外行为 |
 | FEAT-029 | 项目记忆系统 Skill（project-memory） | [TODO.md](../TODO.md) | ✅ 已完成 | 中 | 跨 session 项目记忆读写方法论，替代原"Project Context Skill"概念 |
 | FEAT-030 | 实验报告 sources 字段细化 | [INV-001 调查](reviews/investigations/inv-001-sources-field.md) | 📋 待处理 | 中 | 增加 retrieved_chunks 字段、标题层级信息，改善命中率虚高问题 |
-| FEAT-031 | golden_qa.json 重做与回归测试更新 | [INV-006 调查](reviews/investigations/inv-006-golden-test.md) | 📋 待处理 | 中 | 使用 document-based 策略重做，迁移为 TestSetManager 格式 |
+| FEAT-031 | golden_qa.json 重做与回归测试更新 | [INV-006 调查](reviews/investigations/inv-006-golden-test.md) | ✅ 已完成 | 中 | Golden 生成逻辑收编入 TestSetGenerator，统一链路 |
 | FEAT-032 | 评估模型与生成模型分离配置 | [INV-007 调查](reviews/investigations/inv-007-eval-system-reliability.md) | 📋 待处理 | 中 | 解决 faithfulness/answer_relevancy 自评偏差问题 |
 | FEAT-033 | 增强日志系统覆盖率与 pytest 集成 | [INV-003 调查](reviews/investigations/inv-003-logging.md) | 📋 待处理 | 中 | pytest-loguru 集成、配置加载日志、文件写入结构化日志 |
 | FEAT-034 | 开源准备度完善 | [INV-005 调查](reviews/investigations/inv-005-open-source.md) | 📋 待处理 | 中 | CONTRIBUTING.md、README 更新、可选 SECURITY.md |
@@ -114,7 +114,7 @@
 | RF-017 | 自定义异常类型定义（RAGPipelineError、RetrievalError 等） | 深度审查 | ✅ 已完成 | 小 | 新增 src/exceptions.py，9个业务异常类，全项目替换 |
 | RF-018 | Pipeline 类职责拆分（当前 560 行承担全流程） | 深度审查 | 📋 待处理 | 大 | 可拆分为 PipelineOrchestrator + 各阶段 Stage 类 |
 | RF-019 | answer_relevancy 评分稳定性改进 | [INV-007 调查](reviews/investigations/inv-007-eval-system-reliability.md) | 📋 待处理 | 小 | overall_score 由 LLM 自主决定，考虑引入 RAGAS 式伪问题生成作为交叉验证 |
-| RF-020 | 全量测试路径重构（data/parsed→artifacts） | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 将"全量"视为 meal，data/parsed 改为指向 artifacts 的辅助角色，权衡便利性与一致性 |
+| RF-020 | 全量测试路径重构（data/parsed→artifacts） | [TODO.md](../TODO.md) | ✅ 已完成 | Golden 改用 find_full_dataset_meal() 查找全量 meal，不再直接读 data/parsed |
 
 ---
 
