@@ -50,7 +50,7 @@
 
 ### 检查范围
 
-当前 ruff 覆盖的路径：`src/`、`eval/`、`tests/`、`main.py`、`interactive.py`
+当前 ruff 覆盖的路径：`src/`、`eval/`、`tests/`、`main.py`
 
 ---
 

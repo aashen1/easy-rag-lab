@@ -50,7 +50,7 @@ pixi install
 pixi run python main.py --query "中芯国际2024年的营业收入是多少？"
 
 # 交互式问答
-pixi run python interactive.py
+pixi run interactive
 
 # 构建向量索引
 pixi run python main.py --build-index --sample-count 5
@@ -74,8 +74,7 @@ pixi run python main.py --build-index --sample-count 5
 
 ```
 ash-easy-rag/
-├── main.py              # 主入口（CLI）
-├── interactive.py       # 交互式问答
+├── main.py              # 主入口（CLI + 交互式问答）
 ├── config.yaml          # 配置文件
 ├── src/                 # 核心模块
 ├── eval/                # 评测模块

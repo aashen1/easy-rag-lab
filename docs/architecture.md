@@ -122,8 +122,7 @@ Meal 是数据集版本管理系统，核心概念：
 
 ```
 ash-easy-rag/
-├── main.py              # 主入口（CLI）
-├── interactive.py       # 交互式问答
+├── main.py              # 主入口（CLI + 交互式问答）
 ├── config.yaml          # 配置文件
 ├── src/                 # 核心模块
 │   ├── parser.py
