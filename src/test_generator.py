@@ -1063,8 +1063,7 @@ class TestSetGenerator:
     def _resolve_parsed_dir(self, meal_config: MealConfig) -> Path | None:
         """Resolve the parsed artifacts directory for a meal.
 
-        Tries the ArtifactCache first (based on meal data_id and parser_hash),
-        then falls back to the config-based ``parser.output_dir`` path.
+        Uses ArtifactCache based on meal data_id and parser_hash.
 
         Args:
             meal_config: MealConfig object with data_id and config_hashes.
@@ -1086,19 +1085,16 @@ class TestSetGenerator:
                     logger.debug(f"Resolved parsed dir via ArtifactCache: {parsed_dir}")
                     return parsed_dir
 
-        fallback = Path(self.config.get("parser", {}).get("output_dir", "data/parsed"))
-        if fallback.exists():
-            logger.debug(f"Resolved parsed dir via config fallback: {fallback}")
-            return fallback
-
+        logger.warning(
+            f"Could not resolve parsed dir via ArtifactCache for "
+            f"meal_config data_id={meal_config.data_id}"
+        )
         return None
 
     def _resolve_chunks_dir(self, meal_config: MealConfig) -> Path | None:
         """Resolve the chunks artifacts directory for a meal.
 
-        Tries the ArtifactCache first (based on meal data_id and chunker
-        hash), then falls back to the config-based ``chunker.output_dir``
-        path.
+        Uses ArtifactCache based on meal data_id and chunker hash.
 
         Args:
             meal_config: MealConfig object with data_id and config_hashes.
@@ -1120,11 +1116,10 @@ class TestSetGenerator:
                     logger.debug(f"Resolved chunks dir via ArtifactCache: {chunks_dir}")
                     return chunks_dir
 
-        fallback = Path(self.config.get("chunker", {}).get("output_dir", "data/chunks"))
-        if fallback.exists():
-            logger.debug(f"Resolved chunks dir via config fallback: {fallback}")
-            return fallback
-
+        logger.warning(
+            f"Could not resolve chunks dir via ArtifactCache for "
+            f"meal_config data_id={meal_config.data_id}"
+        )
         return None
 
     def _load_meal_chunks(self, meal_config) -> list[dict[str, Any]]:
@@ -3035,16 +3030,12 @@ class TestSetGenerator:
         elif meal_config is not None:
             chunks_path = self._resolve_chunks_dir(meal_config)
             if not chunks_path:
-                logger.warning(
-                    f"Chunks directory not found via ArtifactCache for "
-                    f"meal_config data_id={meal_config.data_id}"
-                )
                 return []
         else:
-            resolved_chunks_dir = self.config.get("chunker", {}).get(
-                "output_dir", "data/chunks"
+            logger.warning(
+                "No chunks_dir or meal_config provided for find_adjacent_chunks"
             )
-            chunks_path = Path(resolved_chunks_dir)
+            return []
 
         if not chunks_path.exists():
             logger.warning(f"Chunks directory not found: {chunks_path}")
