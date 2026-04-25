@@ -15,7 +15,7 @@ from src.utils import ensure_dir
 class VectorIndexer:
     def __init__(
         self,
-        persist_dir: str = "data/vector_store",
+        persist_dir: str | None = None,
         collection_name: str = "financial_reports",
         distance: str = "Cosine",
     ):
@@ -23,6 +23,7 @@ class VectorIndexer:
 
         Args:
             persist_dir: Directory path for Qdrant data persistence.
+                If None, reads from config ``vector_store.persist_dir``.
             collection_name: Name of the Qdrant collection to use.
             distance: Distance metric for vector similarity. One of
                 ``"Cosine"``, ``"Euclidean"``, or ``"Dot"``.
@@ -30,6 +31,13 @@ class VectorIndexer:
         Raises:
             Exception: If the Qdrant client fails to initialize.
         """
+        if persist_dir is None:
+            from src.utils import load_config
+
+            config = load_config()
+            persist_dir = config.get("vector_store", {}).get(
+                "persist_dir", "data/vector_store"
+            )
         self.persist_dir = Path(persist_dir)
         self.collection_name = collection_name
         self.distance = distance
