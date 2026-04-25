@@ -12,7 +12,7 @@ from src.test_generator import TestSetGenerator
 class TestGroupChunksBySource:
     def setup_method(self):
         self.config = {
-            "chunker": {"output_dir": "data/chunks"},
+            "chunker": {},
             "test_generation": {"max_retries": 3},
         }
         self.generator = TestSetGenerator(self.config)
@@ -57,7 +57,7 @@ class TestGroupChunksBySource:
 class TestSelectChunksForFactual:
     def setup_method(self):
         self.config = {
-            "chunker": {"output_dir": "data/chunks"},
+            "chunker": {},
             "test_generation": {"max_retries": 3},
         }
         self.generator = TestSetGenerator(self.config)
@@ -98,7 +98,7 @@ class TestSelectChunksForFactual:
 class TestSelectChunksForBoundary:
     def setup_method(self):
         self.config = {
-            "chunker": {"output_dir": "data/chunks"},
+            "chunker": {},
             "test_generation": {"max_retries": 3},
         }
         self.generator = TestSetGenerator(self.config)
@@ -137,7 +137,7 @@ class TestSelectChunksForBoundary:
 class TestSelectChunksForMultiHop:
     def setup_method(self):
         self.config = {
-            "chunker": {"output_dir": "data/chunks"},
+            "chunker": {},
             "test_generation": {"max_retries": 3},
         }
         self.generator = TestSetGenerator(self.config)
@@ -177,7 +177,7 @@ class TestSelectChunksForMultiHop:
 class TestParseLlmResponse:
     def setup_method(self):
         self.config = {
-            "chunker": {"output_dir": "data/chunks"},
+            "chunker": {},
             "test_generation": {"max_retries": 3},
         }
         self.generator = TestSetGenerator(self.config)
@@ -292,7 +292,7 @@ class TestLoadMealChunks:
 class TestLocateAnswerChunks:
     def setup_method(self):
         self.config = {
-            "chunker": {"output_dir": "data/chunks"},
+            "chunker": {},
             "test_generation": {"max_retries": 3},
         }
         self.generator = TestSetGenerator(self.config)
@@ -351,7 +351,7 @@ class TestLocateAnswerChunks:
 
         config = {
             "artifacts": {"dir": str(tmp_path / "artifacts")},
-            "chunker": {"output_dir": "data/chunks"},
+            "chunker": {},
             "test_generation": {"max_retries": 3},
         }
         generator = TestSetGenerator(config)
@@ -967,7 +967,7 @@ class TestDistributeQuestionsAcrossDocs:
 class TestLoadFullDocuments:
     def setup_method(self):
         self.config = {
-            "parser": {"output_dir": "data/parsed"},
+            "parser": {},
             "test_generation": {"max_retries": 3},
         }
         self.generator = TestSetGenerator(self.config)
@@ -1011,7 +1011,7 @@ class TestLoadFullDocuments:
 class TestDocumentBasedQuestionsSourceFiles:
     def setup_method(self):
         self.config = {
-            "parser": {"output_dir": "data/parsed"},
+            "parser": {},
             "test_generation": {"max_retries": 3, "default_num_questions": 20},
         }
         self.generator = TestSetGenerator(self.config)
@@ -1077,7 +1077,7 @@ class TestDocumentBasedQuestionsSourceFiles:
 class TestGenerateDocumentBasedQuestionsSupplemental:
     def setup_method(self):
         self.config = {
-            "parser": {"output_dir": "data/parsed"},
+            "parser": {},
             "test_generation": {"max_retries": 3, "default_num_questions": 20},
         }
         self.generator = TestSetGenerator(self.config)
@@ -1189,7 +1189,7 @@ class TestGenerateDocumentBasedQuestionsSupplemental:
 class TestSupplementDocumentBasedQuestions:
     def setup_method(self):
         self.config = {
-            "parser": {"output_dir": "data/parsed"},
+            "parser": {},
             "test_generation": {"max_retries": 3, "default_num_questions": 20},
         }
         self.generator = TestSetGenerator(self.config)
