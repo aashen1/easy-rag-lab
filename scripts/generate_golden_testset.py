@@ -132,7 +132,8 @@ MISSING_INSTRUCTION = """请基于以上文档，生成一道**缺失知识点**
 - 好的例子："光模块行业的ESG评级情况怎么样？"（文档未涉及ESG）
 - ground_truth_excerpt：与问题最相关但确实不包含答案的原文段落"""
 
-IRRELEVANT_INSTRUCTION = """请生成一道与以上文档主题**完全无关**的问题。
+IRRELEVANT_INSTRUCTION = (
+    """请生成一道与以上文档主题**完全无关**的问题。
 
 要求：
 - 问题必须与文档主题完全无关，测试系统的拒答能力
@@ -140,7 +141,9 @@ IRRELEVANT_INSTRUCTION = """请生成一道与以上文档主题**完全无关**
 - 问题要口语化，像在问同事
 - 好的例子：如果文档是关于光模块的，可以问"新能源汽车的电池技术发展怎么样？"
 - answer：写"该问题与文档内容无关，无法基于文档回答"
-- ground_truth_excerpt：留空字符串"""""
+- ground_truth_excerpt：留空字符串"""
+    ""
+)
 
 ADVERSARIAL_INSTRUCTION = """请基于以上文档，生成一道**对抗性**问题，故意设计容易让RAG系统出错的边界场景。
 
@@ -232,12 +235,14 @@ def load_documents(parsed_dir: Path) -> list[dict[str, str]]:
             content = md_file.read_text(encoding="utf-8")
             rel_path = md_file.relative_to(parsed_dir).as_posix()
             doc_name = md_file.stem
-            documents.append({
-                "name": doc_name,
-                "content": content,
-                "source_path": rel_path,
-                "doc_id": rel_path,
-            })
+            documents.append(
+                {
+                    "name": doc_name,
+                    "content": content,
+                    "source_path": rel_path,
+                    "doc_id": rel_path,
+                }
+            )
             logger.debug(f"Loaded document: {doc_name} ({len(content)} chars)")
         except Exception as e:
             logger.error(f"Failed to load {md_file}: {str(e)}")
@@ -246,12 +251,16 @@ def load_documents(parsed_dir: Path) -> list[dict[str, str]]:
         result = _load_pages_json(pages_file, parsed_dir)
         if result is not None:
             documents.append(result)
-            logger.debug(f"Loaded document: {result['name']} ({len(result['content'])} chars)")
+            logger.debug(
+                f"Loaded document: {result['name']} ({len(result['content'])} chars)"
+            )
 
     return documents
 
 
-def calculate_type_counts(num_questions: int, distribution: dict[str, float]) -> dict[str, int]:
+def calculate_type_counts(
+    num_questions: int, distribution: dict[str, float]
+) -> dict[str, int]:
     """Calculate the number of questions for each type.
 
     Args:
@@ -317,14 +326,17 @@ def distribute_across_documents(
     else:
         p = (r - 1) / r
         lengths = [len(d["content"]) for d in documents]
-        powered = [length ** p for length in lengths]
+        powered = [length**p for length in lengths]
         total_powered = sum(powered)
         raw_alloc = {}
         for doc, pw in zip(documents, powered, strict=True):
             raw_alloc[doc["doc_id"]] = (pw / total_powered) * total_questions
 
     int_alloc = _round_allocations(
-        raw_alloc, total_questions, min_per_doc, max_per_doc,
+        raw_alloc,
+        total_questions,
+        min_per_doc,
+        max_per_doc,
     )
 
     all_types = []
@@ -334,11 +346,13 @@ def distribute_across_documents(
 
     result = {}
     idx = 0
-    doc_order = sorted(documents, key=lambda d: int_alloc.get(d["doc_id"], 0), reverse=True)
+    doc_order = sorted(
+        documents, key=lambda d: int_alloc.get(d["doc_id"], 0), reverse=True
+    )
     for doc in doc_order:
         doc_id = doc["doc_id"]
         n = int_alloc.get(doc_id, 0)
-        result[doc_id] = all_types[idx:idx + n]
+        result[doc_id] = all_types[idx : idx + n]
         idx += n
 
     return result
@@ -373,7 +387,9 @@ def _round_allocations(
 
     diff = total - sum(int_alloc.values())
     sorted_ids = sorted(
-        int_alloc.keys(), key=lambda k: int_alloc[k], reverse=True,
+        int_alloc.keys(),
+        key=lambda k: int_alloc[k],
+        reverse=True,
     )
 
     if diff > 0:
@@ -395,7 +411,8 @@ def _round_allocations(
 
 
 def detect_content_overlaps(
-    documents: list[dict], threshold: float = 0.8,
+    documents: list[dict],
+    threshold: float = 0.8,
 ) -> list[tuple[str, str, float]]:
     """Detect content overlap between document pairs.
 
@@ -433,7 +450,7 @@ def detect_content_overlaps(
             sample_size = 500
             samples = [
                 short_text[:sample_size],
-                short_text[len(short_text) // 2: len(short_text) // 2 + sample_size],
+                short_text[len(short_text) // 2 : len(short_text) // 2 + sample_size],
                 short_text[-sample_size:],
             ]
 
@@ -441,15 +458,20 @@ def detect_content_overlaps(
             hit_rate = hits / len(samples)
 
             if hit_rate >= threshold:
-                overlaps.append((
-                    shorter["doc_id"], longer["doc_id"], hit_rate,
-                ))
+                overlaps.append(
+                    (
+                        shorter["doc_id"],
+                        longer["doc_id"],
+                        hit_rate,
+                    )
+                )
 
     return overlaps
 
 
 def build_primary_pool(
-    documents: list[dict], overlaps: list[tuple[str, str, float]],
+    documents: list[dict],
+    overlaps: list[tuple[str, str, float]],
 ) -> list[dict]:
     """Build primary document pool, excluding supplementary documents.
 
@@ -474,12 +496,18 @@ def build_primary_pool(
         else:
             existing_primary_id = primary_map[supp_id]
             existing_doc = next(
-                (d for d in documents if d["doc_id"] == existing_primary_id), None,
+                (d for d in documents if d["doc_id"] == existing_primary_id),
+                None,
             )
             new_doc = next(
-                (d for d in documents if d["doc_id"] == primary_id), None,
+                (d for d in documents if d["doc_id"] == primary_id),
+                None,
             )
-            if new_doc and existing_doc and len(new_doc["content"]) > len(existing_doc["content"]):
+            if (
+                new_doc
+                and existing_doc
+                and len(new_doc["content"]) > len(existing_doc["content"])
+            ):
                 primary_map[supp_id] = primary_id
 
     return [d for d in documents if d["doc_id"] not in supplementary_ids]
@@ -539,26 +567,30 @@ def validate_answer_numerical_accuracy(
                 continue
             ratio = ans_val / exc_val
             if 9.5 <= ratio <= 10.5:
-                errors.append({
-                    "type": "10x_error",
-                    "answer_value": ans_val,
-                    "excerpt_value_yi": round(exc_val, 2),
-                    "correct_value": round(exc_val, 2),
-                })
+                errors.append(
+                    {
+                        "type": "10x_error",
+                        "answer_value": ans_val,
+                        "excerpt_value_yi": round(exc_val, 2),
+                        "correct_value": round(exc_val, 2),
+                    }
+                )
             elif 0.05 <= ratio <= 0.15:
-                errors.append({
-                    "type": "10x_error_reverse",
-                    "answer_value": ans_val,
-                    "excerpt_value_yi": round(exc_val, 2),
-                    "correct_value": round(exc_val, 2),
-                })
+                errors.append(
+                    {
+                        "type": "10x_error_reverse",
+                        "answer_value": ans_val,
+                        "excerpt_value_yi": round(exc_val, 2),
+                        "correct_value": round(exc_val, 2),
+                    }
+                )
 
     if errors:
         correction = {
             "errors": errors,
             "suggestion": "Answer contains 10x unit conversion errors. "
-                          "Values in yuan should be divided by 100,000,000 "
-                          "to convert to yi-yuan.",
+            "Values in yuan should be divided by 100,000,000 "
+            "to convert to yi-yuan.",
         }
         return False, correction
 
@@ -640,7 +672,12 @@ def parse_question_response(response: str) -> dict[str, Any] | None:
         json_str = response[start:end]
         qa = json.loads(json_str)
 
-        required_fields = ["question", "answer", "question_type", "ground_truth_excerpt"]
+        required_fields = [
+            "question",
+            "answer",
+            "question_type",
+            "ground_truth_excerpt",
+        ]
         for field in required_fields:
             if field not in qa:
                 logger.debug(f"Missing required field: {field}")
@@ -690,8 +727,14 @@ def validate_question_quality(question_data: dict) -> bool:
         return False
 
     academic_patterns = [
-        "根据文档", "根据提供的信息", "请分析", "请说明",
-        "请对比", "请总结", "文档中提到", "片段中提到",
+        "根据文档",
+        "根据提供的信息",
+        "请分析",
+        "请说明",
+        "请对比",
+        "请总结",
+        "文档中提到",
+        "片段中提到",
     ]
     for pattern in academic_patterns:
         if pattern in question:
@@ -741,9 +784,7 @@ def locate_source_chunks(
                         continue
                     chunk = json.loads(line)
                     chunk_source = (
-                        chunk.get("metadata", {})
-                        .get("source", "")
-                        .replace("\\", "/")
+                        chunk.get("metadata", {}).get("source", "").replace("\\", "/")
                     )
                     if chunk_source == normalized_source:
                         doc_chunks.append(chunk)
@@ -801,7 +842,7 @@ def extract_excerpt_core(excerpt: str, min_length: int = 20) -> str:
     """
     cleaned = re.sub(r"\s+", "", excerpt)
     if len(cleaned) >= min_length:
-        return cleaned[:max(min_length, len(cleaned) // 2)]
+        return cleaned[: max(min_length, len(cleaned) // 2)]
 
     sentences = re.split(r"[。！？；\n]", excerpt)
     for sent in sentences:
@@ -822,12 +863,27 @@ def extract_key_terms_from_excerpt(excerpt: str) -> list[str]:
         List of key term strings.
     """
     terms = re.findall(r"[\u4e00-\u9fff]{2,4}|\d+\.?\d*%?", excerpt)
-    stop_terms = {"的", "了", "在", "是", "和", "与", "或", "等", "为", "中", "对", "将"}
+    stop_terms = {
+        "的",
+        "了",
+        "在",
+        "是",
+        "和",
+        "与",
+        "或",
+        "等",
+        "为",
+        "中",
+        "对",
+        "将",
+    }
     return [t for t in terms if t not in stop_terms and len(t) >= 2]
 
 
 def verify_excerpt_in_document(
-    excerpt: str, document_content: str, min_overlap: int = 15,
+    excerpt: str,
+    document_content: str,
+    min_overlap: int = 15,
 ) -> bool:
     """Verify that the excerpt can be found in the document content.
 
@@ -919,7 +975,9 @@ def generate_golden_testset(
     logger.info(f"Question type distribution: {type_counts}")
 
     doc_plans = distribute_across_documents(
-        type_counts, primary_docs, seed=seed,
+        type_counts,
+        primary_docs,
+        seed=seed,
     )
 
     llm_config = get_llm_config(config, llm_preset)
@@ -979,7 +1037,8 @@ def generate_golden_testset(
                         correct_val = err["correct_value"]
                         answer_text = qa.get("answer", "")
                         qa["answer"] = answer_text.replace(
-                            f"{wrong_val}", f"{correct_val}",
+                            f"{wrong_val}",
+                            f"{correct_val}",
                         )
                         logger.warning(
                             f"Auto-corrected: {wrong_val}亿 → {correct_val}亿"
@@ -1004,7 +1063,9 @@ def generate_golden_testset(
                     qa["source_files"] = [source_path]
                     excerpt = qa.get("ground_truth_excerpt", "")
                     qa["source_chunks"] = locate_source_chunks(
-                        excerpt, source_path, chunks_dir,
+                        excerpt,
+                        source_path,
+                        chunks_dir,
                     )
                     qa["expect_retrieval"] = True
                     qa["expect_no_answer"] = False
@@ -1021,7 +1082,8 @@ def generate_golden_testset(
                 excerpt = qa.get("ground_truth_excerpt", "")
                 if excerpt and q_type not in ("irrelevant",):
                     excerpt_verified = verify_excerpt_in_document(
-                        excerpt, doc_content,
+                        excerpt,
+                        doc_content,
                     )
                     qa["metadata"]["excerpt_verified"] = excerpt_verified
                     if not excerpt_verified:
@@ -1073,7 +1135,8 @@ def generate_golden_testset(
                         correct_val = err["correct_value"]
                         answer_text = qa.get("answer", "")
                         qa["answer"] = answer_text.replace(
-                            f"{wrong_val}", f"{correct_val}",
+                            f"{wrong_val}",
+                            f"{correct_val}",
                         )
                     qa.setdefault("metadata", {})
                     qa["metadata"]["numerical_auto_corrected"] = True
@@ -1095,7 +1158,9 @@ def generate_golden_testset(
                     qa["source_files"] = [source_path]
                     excerpt = qa.get("ground_truth_excerpt", "")
                     qa["source_chunks"] = locate_source_chunks(
-                        excerpt, source_path, chunks_dir,
+                        excerpt,
+                        source_path,
+                        chunks_dir,
                     )
                     qa["expect_retrieval"] = True
                     qa["expect_no_answer"] = False
@@ -1124,26 +1189,18 @@ def generate_golden_testset(
         type_dist[qt] = type_dist.get(qt, 0) + 1
 
     excerpt_verified_count = sum(
-        1 for q in questions
-        if q.get("metadata", {}).get("excerpt_verified", False)
+        1 for q in questions if q.get("metadata", {}).get("excerpt_verified", False)
     )
-    chunks_located_count = sum(
-        1 for q in questions
-        if q.get("source_chunks")
-    )
+    chunks_located_count = sum(1 for q in questions if q.get("source_chunks"))
 
     quality_metrics = {
         "total_questions": len(questions),
         "type_distribution": type_dist,
         "excerpt_verified_rate": (
-            excerpt_verified_count / len(questions)
-            if questions
-            else 0.0
+            excerpt_verified_count / len(questions) if questions else 0.0
         ),
         "chunks_located_rate": (
-            chunks_located_count / len(questions)
-            if questions
-            else 0.0
+            chunks_located_count / len(questions) if questions else 0.0
         ),
         "generation_failures": failed_count,
     }
@@ -1171,7 +1228,8 @@ def generate_golden_testset(
                 "type": "golden",
                 "documents_used": [d["source_path"] for d in primary_docs],
                 "supplementary_excluded": [
-                    d["source_path"] for d in documents
+                    d["source_path"]
+                    for d in documents
                     if d["doc_id"] not in {pd["doc_id"] for pd in primary_docs}
                 ],
             },
@@ -1200,34 +1258,46 @@ def main():
         description="Generate golden test set for RAG evaluation"
     )
     parser.add_argument(
-        "--num-questions", type=int, default=150,
+        "--num-questions",
+        type=int,
+        default=150,
         help="Total number of questions to generate (default: 150)",
     )
     parser.add_argument(
-        "--llm-preset", default="default",
+        "--llm-preset",
+        default="default",
         help="LLM preset name from config (default: default)",
     )
     parser.add_argument(
-        "--output", default=None,
+        "--output",
+        default=None,
         help="Output file path (default: data/golden_testset/golden_150.json)",
     )
     parser.add_argument(
-        "--parsed-dir", default=None,
-        help="Parsed documents directory (default: data/parsed)",
+        "--parsed-dir",
+        default=None,
+        help="Parsed documents directory (auto-resolved via ArtifactCache if omitted)",
     )
     parser.add_argument(
-        "--chunks-dir", default=None,
-        help="Chunks directory (default: data/chunks)",
+        "--chunks-dir",
+        default=None,
+        help="Chunks directory (auto-resolved via ArtifactCache if omitted)",
     )
     parser.add_argument(
-        "--seed", type=int, default=None,
+        "--seed",
+        type=int,
+        default=None,
         help="Random seed for reproducibility",
     )
     args = parser.parse_args()
 
     config = load_config()
 
-    output_path = Path(args.output) if args.output else Path("data/golden_testset/golden_150.json")
+    output_path = (
+        Path(args.output)
+        if args.output
+        else Path("data/golden_testset/golden_150.json")
+    )
     parsed_dir = Path(args.parsed_dir) if args.parsed_dir else None
     chunks_dir = Path(args.chunks_dir) if args.chunks_dir else None
 
