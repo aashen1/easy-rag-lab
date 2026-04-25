@@ -1,0 +1,145 @@
+# ============================================================================
+# 递进增强实验 (Progressive Enhancement)
+# ============================================================================
+# 设计思路：从裸基线开始，逐层叠加一个优化组件，观察每层的边际收益。
+# 每步仅变化一个变量，可以清晰归因增量效果。
+#
+# 层级递进路线：
+#   L0 naive_baseline      → 裸基线（无任何优化）
+#   L1 overlap_enhanced     → L0 + chunk_overlap=50
+#   L2 semantic_chunk       → L0 基础上换用语义分块
+#   L3 hybrid_retrieval     → L0 基础上换用混合检索
+#   L4 rerank_on_vector     → L0 基础上加重排序
+#   L5 hybrid_rerank        → L0 基础上混合检索+重排序
+#   L6 full_pipeline        → 全链路优化
+#
+# 关键分析：
+#   - L0→L1: overlap 是否缓解跨 chunk 信息断裂？
+#   - L0→L2: 语义分块 vs 固定分块
+#   - L0→L3: 混合检索的增量
+#   - L0→L4: 重排序在纯向量上的效果
+#   - L4→L5: 混合检索+重排序的协同效应
+#   - L5→L6: 查询改写的边际价值（是否收益递减？）
+# ============================================================================
+
+name: "progressive_enhancement"
+description: "递进增强实验 - 从裸基线逐层叠加优化，观察每层边际收益"
+
+data:
+  meal: "meal_progressive_enhancement"
+  create_if_missing:
+    sample_ratio: 0.2
+    seed: 42
+
+test_sets:
+  - name: "progressive_eval"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 65
+
+variants:
+  # ---- L0: 裸基线，所有后续优化的参照系 ----
+  - name: "L0_naive_baseline"
+    description: "裸基线 - fixed/512/overlap=0, vector only, no rerank, no rewrite"
+    config_overrides: {}
+
+  # ---- L1: 在 L0 基础上加 overlap ----
+  - name: "L1_overlap_enhanced"
+    description: "L0 + overlap=50 - 测试重叠窗口是否缓解跨chunk信息断裂"
+    config_overrides:
+      chunker:
+        chunk_overlap: 50
+
+  # ---- L2: 在 L0 基础上换用语义分块 ----
+  - name: "L2_semantic_chunk"
+    description: "语义分块 - semantic/threshold=0.5, vector only, no rerank, no rewrite"
+    config_overrides:
+      chunker:
+        strategy: "semantic"
+        semantic:
+          similarity_threshold: 0.5
+          min_chunk_size: 100
+
+  # ---- L3: 在 L0 基础上换用混合检索 ----
+  - name: "L3_hybrid_retrieval"
+    description: "混合检索 - fixed/512/o0, hybrid_rrf, no rerank, no rewrite"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 5
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+
+  # ---- L4: 在 L0 基础上加重排序 ----
+  - name: "L4_rerank_on_vector"
+    description: "重排序 - fixed/512/o0, vector, reranker(top_n=3), no rewrite"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        top_k: 5
+        reranker:
+          enabled: true
+          model_name: "BAAI/bge-reranker-large"
+          top_n: 3
+
+  # ---- L5: 混合检索 + 重排序 ----
+  - name: "L5_hybrid_rerank"
+    description: "混合检索+重排序 - fixed/512/o0, hybrid_rrf, reranker(top_n=5), no rewrite"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 10
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+        reranker:
+          enabled: true
+          model_name: "BAAI/bge-reranker-large"
+          top_n: 5
+
+  # ---- L6: 全链路优化 ----
+  - name: "L6_full_pipeline"
+    description: "全链路优化 - fixed/512/o50, hybrid_rrf, reranker(top_n=5), HyDE"
+    config_overrides:
+      chunker:
+        chunk_overlap: 50
+      retrieval:
+        method: "hybrid"
+        top_k: 10
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+        reranker:
+          enabled: true
+          model_name: "BAAI/bge-reranker-large"
+          top_n: 5
+        query_rewrite:
+          enabled: true
+          strategy: "hyde"
+
+evaluation:
+  llm_preset: "default"
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+      - "chunk_hit_rate"
+      - "chunk_mrr"
+      - "chunk_ndcg"
+      - "dedup_hit_rate"
+      - "dedup_mrr"
+      - "dedup_ndcg"
+      - "false_positive_rate"
+      - "recall_3"
+      - "recall_5"
+      - "recall_10"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+
+llm:
+  question_generation: "default"
+  answering: "default"
