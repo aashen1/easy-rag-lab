@@ -230,6 +230,17 @@ def parse_all_pdfs_unified(
     failed_count = sum(1 for r in results if r["status"] == "failed")
     skipped_count = sum(1 for r in results if r["status"] == "skipped")
 
+    success_files = [
+        f
+        for f in pdf_files
+        if any(r["source"] == f.path and r["status"] == "success" for r in results)
+    ]
+    failed_files = [
+        f
+        for f in pdf_files
+        if any(r["source"] == f.path and r["status"] == "failed" for r in results)
+    ]
+
     artifact_manifest = {
         "data_id": data_id,
         "pdf_count": len(pdf_files),
@@ -237,7 +248,8 @@ def parse_all_pdfs_unified(
         "page_count": 0,
         "created_at": datetime.now().isoformat(),
         "config_hashes": {"parser": parser_hash},
-        "pdf_inventory": {f.path: f.sha256 for f in pdf_files},
+        "pdf_inventory": {f.path: f.sha256 for f in success_files},
+        "failed_inventory": {f.path: f.sha256 for f in failed_files},
     }
     cache.save_manifest(data_id, artifact_manifest)
 

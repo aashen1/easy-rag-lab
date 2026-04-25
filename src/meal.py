@@ -149,6 +149,19 @@ def compute_parser_config_hash(parser_config: dict) -> str:
     algorithm = parser_config.get("algorithm", "pymupdf4llm")
     options = parser_config.get("options", {})
     relevant = {"algorithm": algorithm, "options": options}
+
+    try:
+        if algorithm == "pymupdf4llm":
+            import pymupdf4llm
+
+            relevant["_version_hint"] = pymupdf4llm.__version__
+        elif algorithm == "pymupdf":
+            import pymupdf
+
+            relevant["_version_hint"] = pymupdf.__version__
+    except (ImportError, AttributeError):
+        relevant["_version_hint"] = "unknown"
+
     return hashlib.sha256(json.dumps(relevant, sort_keys=True).encode()).hexdigest()[:8]
 
 
@@ -174,6 +187,7 @@ def compute_chunker_config_hash(chunker_config: dict) -> str:
         "chunk_size": chunker_config["chunk_size"],
         "overlap": overlap,
         "encoding": chunker_config.get("encoding", "cl100k_base"),
+        "cross_page_overlap": chunker_config.get("cross_page_overlap", 0),
     }
 
     if chunker_config.get("strategy") == "semantic":
@@ -197,6 +211,8 @@ def compute_embedding_config_hash(embedding_config: dict) -> str:
         First 8 characters of the SHA-256 hex digest.
     """
     relevant = {"model_name": embedding_config["model_name"]}
+    if "dimension" in embedding_config:
+        relevant["dimension"] = embedding_config["dimension"]
     return hashlib.sha256(json.dumps(relevant, sort_keys=True).encode()).hexdigest()[:8]
 
 
@@ -448,9 +464,9 @@ class ArtifactCache:
             data_id: Data identifier string.
 
         Returns:
-            Path to the artifact group directory using the first 12 chars of data_id.
+            Path to the artifact group directory using the first 16 chars of data_id.
         """
-        short_id = data_id[:12]
+        short_id = data_id[:16]
         return self.artifacts_dir / short_id
 
     def get_parsed_dir(self, data_id: str, parser_hash: str | None = None) -> Path:
@@ -483,7 +499,11 @@ class ArtifactCache:
         return group_dir / f"chunks_{chunker_hash}"
 
     def parsed_exists(
-        self, data_id: str, expected_files: list[str], parser_hash: str | None = None
+        self,
+        data_id: str,
+        expected_files: list[str],
+        parser_hash: str | None = None,
+        manifest: dict[str, Any] | None = None,
     ) -> bool:
         """Check whether parsed artifacts exist and contain all expected files.
 
@@ -491,18 +511,38 @@ class ArtifactCache:
             data_id: Data identifier string.
             expected_files: List of expected markdown file names.
             parser_hash: Short hash of the parser configuration.
+            manifest: Optional manifest dict for SHA-256 validation. If provided,
+                source files are validated against pdf_inventory.
 
         Returns:
             True if the parsed directory exists and contains all expected .md files.
+            When manifest is provided, also validates source file SHA-256 hashes.
         """
         parsed_dir = self.get_parsed_dir(data_id, parser_hash)
         if not parsed_dir.exists():
             return False
         existing = set(p.name for p in parsed_dir.rglob("*.md"))
-        return set(expected_files).issubset(existing)
+        if not set(expected_files).issubset(existing):
+            return False
+        if (
+            manifest is not None
+            and "pdf_inventory" in manifest
+            and self.raw_dir is not None
+        ):
+            for rel_path, expected_sha in manifest["pdf_inventory"].items():
+                pdf_path = self.raw_dir / rel_path
+                if not pdf_path.exists():
+                    return False
+                if compute_file_sha256(pdf_path) != expected_sha:
+                    return False
+        return True
 
     def chunks_exist(
-        self, data_id: str, chunker_hash: str, expected_files: list[str]
+        self,
+        data_id: str,
+        chunker_hash: str,
+        expected_files: list[str],
+        manifest: dict[str, Any] | None = None,
     ) -> bool:
         """Check whether chunked artifacts exist and contain all expected files.
 
@@ -510,15 +550,31 @@ class ArtifactCache:
             data_id: Data identifier string.
             chunker_hash: Short hash of the chunker configuration.
             expected_files: List of expected JSONL file names.
+            manifest: Optional manifest dict for SHA-256 validation. If provided,
+                source files are validated against pdf_inventory.
 
         Returns:
             True if the chunks directory exists and contains all expected .jsonl files.
+            When manifest is provided, also validates source file SHA-256 hashes.
         """
         chunks_dir = self.get_chunks_dir(data_id, chunker_hash)
         if not chunks_dir.exists():
             return False
         existing = set(p.name for p in chunks_dir.rglob("*.jsonl"))
-        return set(expected_files).issubset(existing)
+        if not set(expected_files).issubset(existing):
+            return False
+        if (
+            manifest is not None
+            and "pdf_inventory" in manifest
+            and self.raw_dir is not None
+        ):
+            for rel_path, expected_sha in manifest["pdf_inventory"].items():
+                pdf_path = self.raw_dir / rel_path
+                if not pdf_path.exists():
+                    return False
+                if compute_file_sha256(pdf_path) != expected_sha:
+                    return False
+        return True
 
     def ensure_dirs(
         self, data_id: str, chunker_hash: str, parser_hash: str | None = None
@@ -547,12 +603,19 @@ class ArtifactCache:
         Args:
             data_id: Data identifier string.
             manifest: Dictionary to serialize as the manifest.
+
+        Returns:
+            True if saved successfully, False otherwise.
         """
         group_dir = self.get_artifact_group_dir(data_id)
         ensure_dir(str(group_dir))
         manifest_path = group_dir / "manifest.json"
+        lock_path = group_dir / "manifest.json.lock"
         try:
-            with open(manifest_path, "w", encoding="utf-8") as f:
+            from filelock import FileLock
+
+            lock = FileLock(str(lock_path), timeout=30)
+            with lock, open(manifest_path, "w", encoding="utf-8") as f:
                 json.dump(manifest, f, ensure_ascii=False, indent=2)
             return True
         except Exception as e:
@@ -572,8 +635,12 @@ class ArtifactCache:
         manifest_path = group_dir / "manifest.json"
         if not manifest_path.exists():
             return None
+        lock_path = group_dir / "manifest.json.lock"
         try:
-            with open(manifest_path, encoding="utf-8") as f:
+            from filelock import FileLock
+
+            lock = FileLock(str(lock_path), timeout=30)
+            with lock, open(manifest_path, encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
             logger.error(f"Failed to load manifest for data_id {data_id}: {str(e)}")
@@ -615,8 +682,9 @@ class ArtifactCache:
         Validates that:
         1. The parsed directory exists with parser_hash
         2. Manifest exists and contains pdf_inventory
-        3. All source PDFs have matching SHA-256 hashes
-        4. All expected parsed files exist
+        3. No previously failed files exist (retry them)
+        4. All source PDFs have matching SHA-256 hashes
+        5. All expected parsed files exist
 
         Args:
             parser_hash: Short hash of the parser configuration.
@@ -631,6 +699,14 @@ class ArtifactCache:
 
             parsed_dir = self.get_full_parsed_dir(parser_hash)
             if not parsed_dir.exists():
+                return False
+
+            failed_inventory = manifest.get("failed_inventory", {})
+            if failed_inventory:
+                logger.info(
+                    f"Found {len(failed_inventory)} previously failed files, "
+                    "invalidating cache for retry"
+                )
                 return False
 
             pdf_inventory = manifest["pdf_inventory"]

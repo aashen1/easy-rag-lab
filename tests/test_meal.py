@@ -1,5 +1,6 @@
 import hashlib
 import json
+import threading
 from pathlib import Path
 
 import pytest
@@ -447,13 +448,13 @@ class TestArtifactCache:
         data_id = "abc123" + "0" * 58
         parsed_dir = cache.get_parsed_dir(data_id)
         assert parsed_dir.name == "parsed"
-        assert parsed_dir.parent.name == data_id[:12]
+        assert parsed_dir.parent.name == data_id[:16]
 
     def test_get_chunks_dir(self, cache):
         data_id = "abc123" + "0" * 58
         chunks_dir = cache.get_chunks_dir(data_id, "c5d6e7f8")
         assert chunks_dir.name == "chunks_c5d6e7f8"
-        assert chunks_dir.parent.name == data_id[:12]
+        assert chunks_dir.parent.name == data_id[:16]
 
     def test_parsed_exists_false(self, cache):
         data_id = "abc123" + "0" * 58
@@ -501,6 +502,144 @@ class TestArtifactCache:
     def test_load_manifest_not_found(self, cache):
         data_id = "xyz789" + "0" * 58
         assert cache.load_manifest(data_id) is None
+
+    def test_concurrent_manifest_write(self, tmp_path):
+        cache = ArtifactCache(artifacts_dir=tmp_path, raw_dir=None)
+        data_id = "a" * 64
+        errors = []
+        results = []
+
+        def write_manifest(index):
+            try:
+                manifest = {"index": index, "data": f"test_{index}"}
+                result = cache.save_manifest(data_id, manifest)
+                results.append(result)
+            except Exception as e:
+                errors.append(str(e))
+
+        threads = [
+            threading.Thread(target=write_manifest, args=(i,)) for i in range(10)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(errors) == 0, f"Errors during concurrent writes: {errors}"
+        loaded = cache.load_manifest(data_id)
+        assert loaded is not None
+        assert "index" in loaded
+
+    def test_parsed_exists_sha_validation(self, tmp_path):
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        artifacts_dir = tmp_path / "artifacts"
+        artifacts_dir.mkdir()
+
+        pdf_file = raw_dir / "test.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4 fake content")
+
+        cache = ArtifactCache(artifacts_dir=artifacts_dir, raw_dir=raw_dir)
+        data_id = compute_data_id(
+            [
+                MealFile(
+                    path="test.pdf",
+                    sha256=compute_file_sha256(pdf_file),
+                    size_bytes=100,
+                )
+            ]
+        )
+
+        parsed_dir = cache.get_parsed_dir(data_id, "abc12345")
+        parsed_dir.mkdir(parents=True)
+        (parsed_dir / "test.md").write_text("parsed content", encoding="utf-8")
+
+        manifest = {"pdf_inventory": {"test.pdf": compute_file_sha256(pdf_file)}}
+        assert (
+            cache.parsed_exists(
+                data_id, ["test.md"], parser_hash="abc12345", manifest=manifest
+            )
+            is True
+        )
+
+        pdf_file.write_bytes(b"%PDF-1.4 modified content")
+        assert (
+            cache.parsed_exists(
+                data_id, ["test.md"], parser_hash="abc12345", manifest=manifest
+            )
+            is False
+        )
+
+    def test_chunks_exist_sha_validation(self, tmp_path):
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        artifacts_dir = tmp_path / "artifacts"
+        artifacts_dir.mkdir()
+
+        pdf_file = raw_dir / "test.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4 fake content")
+
+        cache = ArtifactCache(artifacts_dir=artifacts_dir, raw_dir=raw_dir)
+        data_id = compute_data_id(
+            [
+                MealFile(
+                    path="test.pdf",
+                    sha256=compute_file_sha256(pdf_file),
+                    size_bytes=100,
+                )
+            ]
+        )
+
+        chunks_dir = cache.get_chunks_dir(data_id, "abc12345")
+        chunks_dir.mkdir(parents=True)
+        (chunks_dir / "test.jsonl").write_text("{}", encoding="utf-8")
+
+        manifest = {"pdf_inventory": {"test.pdf": compute_file_sha256(pdf_file)}}
+        assert (
+            cache.chunks_exist(data_id, "abc12345", ["test.jsonl"], manifest=manifest)
+            is True
+        )
+
+        pdf_file.write_bytes(b"%PDF-1.4 modified content")
+        assert (
+            cache.chunks_exist(data_id, "abc12345", ["test.jsonl"], manifest=manifest)
+            is False
+        )
+
+    def test_parsed_exists_manifest_missing_pdf(self, tmp_path):
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        artifacts_dir = tmp_path / "artifacts"
+        artifacts_dir.mkdir()
+
+        cache = ArtifactCache(artifacts_dir=artifacts_dir, raw_dir=raw_dir)
+        data_id = "a" * 64
+
+        parsed_dir = cache.get_parsed_dir(data_id, "abc12345")
+        parsed_dir.mkdir(parents=True)
+        (parsed_dir / "test.md").write_text("parsed content", encoding="utf-8")
+
+        manifest = {"pdf_inventory": {"nonexistent.pdf": "somehash"}}
+        assert (
+            cache.parsed_exists(
+                data_id, ["test.md"], parser_hash="abc12345", manifest=manifest
+            )
+            is False
+        )
+
+    def test_parsed_exists_no_manifest_backward_compat(self, cache):
+        data_id = "abc123" + "0" * 58
+        parsed_dir = cache.get_parsed_dir(data_id)
+        parsed_dir.mkdir(parents=True)
+        (parsed_dir / "test.md").write_text("# Test")
+        assert cache.parsed_exists(data_id, ["test.md"]) is True
+
+    def test_chunks_exist_no_manifest_backward_compat(self, cache):
+        data_id = "abc123" + "0" * 58
+        chunks_dir = cache.get_chunks_dir(data_id, "c5d6e7f8")
+        chunks_dir.mkdir(parents=True)
+        (chunks_dir / "test.jsonl").write_text("{}")
+        assert cache.chunks_exist(data_id, "c5d6e7f8", ["test.jsonl"]) is True
 
 
 class TestMealManager:
@@ -1623,3 +1762,100 @@ class TestInferEquivalenceGroups:
         assert "隆基绿能/2023年年度报告" in groups
         assert "research_reports/2026现代女性精力管理现状报告" in groups
         assert len(groups["云南白药/2023年年度报告"]) == 2
+
+
+def test_chunker_config_hash_includes_cross_page_overlap():
+    config_base = {
+        "strategy": "fixed",
+        "chunk_size": 512,
+        "chunk_overlap": 0,
+        "encoding": "cl100k_base",
+    }
+    config_with_overlap = {**config_base, "cross_page_overlap": 50}
+    config_without_overlap = {**config_base, "cross_page_overlap": 0}
+    hash_with = compute_chunker_config_hash(config_with_overlap)
+    hash_without = compute_chunker_config_hash(config_without_overlap)
+    assert hash_with != hash_without
+
+
+def test_embedding_config_hash_includes_dimension():
+    config_base = {"model_name": "BAAI/bge-large-zh-v1.5"}
+    config_with_dim = {**config_base, "dimension": 1024}
+    config_without_dim = {**config_base}
+    hash_with = compute_embedding_config_hash(config_with_dim)
+    hash_without = compute_embedding_config_hash(config_without_dim)
+    assert hash_with != hash_without
+
+
+def test_parser_config_hash_includes_version():
+    config_a = {"algorithm": "pymupdf4llm", "options": {}}
+    config_b = {"algorithm": "pymupdf4llm", "options": {}}
+    hash_a = compute_parser_config_hash(config_a)
+    hash_b = compute_parser_config_hash(config_b)
+    assert hash_a == hash_b
+    config_c = {"algorithm": "nonexistent_parser", "options": {}}
+    hash_c = compute_parser_config_hash(config_c)
+    assert hash_a != hash_c
+
+
+def test_short_id_length():
+    cache = ArtifactCache(artifacts_dir=Path("/tmp/test_artifacts"), raw_dir=None)
+    data_id = "a" * 64
+    group_dir = cache.get_artifact_group_dir(data_id)
+    assert group_dir.name == data_id[:16]
+
+
+def test_partial_parse_manifest_consistency(tmp_path):
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    artifacts_dir = tmp_path / "artifacts"
+
+    cache = ArtifactCache(artifacts_dir=artifacts_dir, raw_dir=raw_dir)
+
+    data_id = "a" * 64
+    manifest = {
+        "data_id": data_id,
+        "pdf_count": 3,
+        "pdf_inventory": {"success1.pdf": "sha256_1", "success2.pdf": "sha256_2"},
+        "failed_inventory": {"failed1.pdf": "sha256_3"},
+    }
+    cache.save_manifest(data_id, manifest)
+
+    loaded = cache.load_manifest(data_id)
+    assert "pdf_inventory" in loaded
+    assert "failed_inventory" in loaded
+    assert len(loaded["pdf_inventory"]) == 2
+    assert len(loaded["failed_inventory"]) == 1
+    assert "failed1.pdf" not in loaded["pdf_inventory"]
+    assert "failed1.pdf" in loaded["failed_inventory"]
+
+
+def test_is_full_parsed_valid_with_failed_inventory(tmp_path):
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    artifacts_dir = tmp_path / "artifacts"
+
+    cache = ArtifactCache(artifacts_dir=artifacts_dir, raw_dir=raw_dir)
+
+    pdf_file = raw_dir / "test.pdf"
+    pdf_file.write_bytes(b"%PDF-1.4 fake content")
+    sha = compute_file_sha256(pdf_file)
+
+    data_id = compute_data_id([MealFile(path="test.pdf", sha256=sha, size_bytes=100)])
+
+    parsed_dir = cache.get_parsed_dir(data_id, "abc12345")
+    parsed_dir.mkdir(parents=True)
+    (parsed_dir / "test.md").write_text("content", encoding="utf-8")
+
+    manifest_with_failed = {
+        "pdf_inventory": {"test.pdf": sha},
+        "failed_inventory": {"other.pdf": "sha_other"},
+    }
+    cache.save_manifest(data_id, manifest_with_failed)
+    assert cache.is_full_parsed_valid("abc12345") is False
+
+    manifest_no_failed = {
+        "pdf_inventory": {"test.pdf": sha},
+    }
+    cache.save_manifest(data_id, manifest_no_failed)
+    assert cache.is_full_parsed_valid("abc12345") is True

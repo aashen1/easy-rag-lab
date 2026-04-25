@@ -66,6 +66,7 @@ loguru = ">=0.7.3, <0.8"      # Logging
 python-dotenv = ">=1.2.2, <2" # Environment variables
 pyyaml = ">=6.0.3, <7"        # YAML parsing
 tqdm = ">=4.67.3, <5"         # Progress bars
+filelock = ">=3.16.1, <4"     # File locking for concurrent access
 
 # ==============================
 # LLM & Embedding Providers
@@ -91,7 +92,7 @@ llama-index-core = ">=0.14.20, <0.15"         # Core RAG framework
 llama-index-readers-file = ">=0.6.0, <0.7"    # File readers (PDF, etc.)
 llama-index-retrievers-bm25 = ">=0.7.1, <0.8" # BM25 retriever
 llama-index-vector-stores-qdrant = ">=0.10.0, <0.11" # Qdrant vector store integration
- 
+
 # ==============================
 # Document Processing
 # ==============================
