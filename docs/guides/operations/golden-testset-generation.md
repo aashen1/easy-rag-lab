@@ -179,6 +179,14 @@ Type: single_fact | Difficulty: easy
 pixi run python scripts/review_golden_testset.py --audit
 ```
 
+## 第六步：恢复状态
+
+如果要撤销某次精修，可以使用准备的撤销脚本，该脚本将会把所有问题的状态恢复至未审核：
+
+```bash
+pixi run python scripts/reset_review_status.py data/golden_testset/golden_150.json
+```
+
 ## 常见问题
 
 ### Q: 生成时 API 报错怎么办？

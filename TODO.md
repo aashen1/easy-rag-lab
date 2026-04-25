@@ -83,6 +83,15 @@ v0.1.10→v0.1.11 的主要任务：
 
 - [ ] 旧格式 test_sets 的 DeprecationWarning ：测试中有大量旧格式警告，这是预期行为（向后兼容），但后续版本应逐步清理。 📋 2026-04-21 归档为 [RF-012]
 - [ ] 2026年4月25日：golden test 终于做了个雏形了。倒是可以加一个交互式审查的脚本，就是指定一个问题集，那么按顺序拿一个问题，生成一个答案，然后整个UI或者CLI就摆开来了：这是什么问题，预期答案是什么，实际答案是什么，判断信息源是什么，RAGAS/builtin测出来的分数是什么。摆在这里，用户就打开对应的PDF，看一眼，这个判定的有没有问题，选择打回还是放过。全部过下来，自动生成一份报告，说明这份测试集里哪些问题被打上了标。（听着有点像《papers, please》，感觉还蛮好玩的嚯
+- [ ] 现在的golden test审查脚本其实就是上面这条《papers, please》差不多的意思。但是这个审查脚本还有个可以改进的点：能不能直接把对应的PDF给它唤起，高亮出相关的段落里这个关键词，然后审核完自动关闭？这个要看PDF那边好不好做了。
+- [ ] 现在在做全量测试的时候，很多代码还是没有走meal这边，而是老的路径，比如生成的解析结果是放在data/parsed，而不是artifact。这个要好好想想。首先呢，我们要考虑到数据源是会变动的，所以今天的全量不一定是明天的全量。因此“全量”更应该是一个动态的快照而不是一个唯一的路径（就算是唯一路径，至少也要像meal一样，用一个hash给它打标，拥有判断变化的能力）。所以最合适的其实就是把“全量”看成一个meal。但是data/parsed有个很明显的优势，那就是方便。比起让用户去到artifact里面，找“全量meal”对应的那个hash名称是什么，老做法要直观得多。所以这个还是要权衡。一个方便的想法是把全量meal在名称里面体现出来，比如不叫什么`artifacts/d3a711e69a4e`，改成`artifacts/all_d3a711e69a4e`之类的。或者也可以考虑用链接或者命中缓存+复制的方式，把data/parsed视为一个需要去artifacts里面按hash找人的一个辅助角色，而不是一个主要的角色。（更正：感觉`artifacts/all_d3a711e69a4e`这名字也未必就好，如果后面PDF又变了，还得想着把它改掉。不如就这样，在data/parsed里面放一个指向的东西，链接能做就做链接，链接不能做就放个文本，指向此时此刻全量PDF解析出来的meal对应哪个名字，让用户自己去看，用户麻烦是麻烦点但感觉这样代码会更简单）
+- [ ] 这审查脚本好像不会让你审查具体出自哪一页？这样的话，如果是搞错了ground truth的位置，用户做审查时候好像没法去知道这个事。（看了一下……原来`"source_chunks": [],`这个东西还是没有实装吗？？？？）
+- [ ] `"source_chunks": [],`缺失的问题，还是要深度调研一下。目前的文档级策略到底有没有办法给它精确到页或者chunk？还是说需要把老的chunk级策略捡回来才更好做？
+- [ ] `2026-04-25 10:59:22 | INFO     | src.chunker:chunk_text:245 - Created 3 chunks from text with 1220 tokens `这个日志得修，给它打包起来，不然太吵眼睛。
+- [ ] 为啥现在全量的缓存会不能命中，但是我手动给它copy进去又能正常识别呢？估计是hash的计算逻辑上有点问题
+- [ ] `2026-04-25 11:10:25 | INFO     | src.indexer:index_chunks:134 - Indexing 45077 chunks
+  B:\project\ash-easy-rag\src\indexer.py:153: UserWarning: Local mode is not recommended for collections with more than 20,000 points. Current collection contains 20100 points. Consider using Qdrant in Docker or Qdrant Cloud for better performance with large datasets.` 全量测试的时候报了一个这个
+- [ ] 多变体实验的增量补做。比如这一次我只做基线。跑完了，把下面加个variant，做chunksize变动；再跑完，再加上重排序……这样每次都只需要算新增的那部分，同时最后又可以得到一份综合的实验报告
 
 
 
