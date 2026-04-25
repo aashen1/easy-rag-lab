@@ -1842,14 +1842,12 @@ class TestSetGenerator:
             ]
             qa["evidence_match_types"] = match_types
 
-            verified_quotes = [
+            all_quotes = [
                 e["quote"]
                 for e in validation["verified_evidence"]
-                if e.get("verified", False) and e.get("quote", "").strip()
+                if e.get("quote", "").strip()
             ]
-            qa["ground_truth_excerpt"] = (
-                "\n".join(verified_quotes) if verified_quotes else ""
-            )
+            qa["ground_truth_excerpt"] = "\n".join(all_quotes) if all_quotes else ""
 
             return qa
 
@@ -2887,13 +2885,22 @@ class TestSetGenerator:
                 break
 
         if containing_segment_index is None:
-            logger.debug(f"Quote not found in any segment: {quote[:50]}...")
-            return []
-
-        chunk_ids = segment_chunk_map.get(containing_segment_index, [])
-        if not chunk_ids:
-            logger.debug(f"No chunks mapped to segment {containing_segment_index}")
-            return []
+            logger.debug(
+                f"Quote not found in any segment, searching all chunks: {quote[:50]}..."
+            )
+            chunk_ids = [
+                c.get("chunk_id", "") for c in doc_chunks if c.get("chunk_id", "")
+            ]
+        else:
+            chunk_ids = segment_chunk_map.get(containing_segment_index, [])
+            if not chunk_ids:
+                logger.debug(
+                    f"No chunks mapped to segment {containing_segment_index}, "
+                    f"searching all chunks directly"
+                )
+                chunk_ids = [
+                    c.get("chunk_id", "") for c in doc_chunks if c.get("chunk_id", "")
+                ]
 
         chunk_id_to_text: dict[str, str] = {}
         for chunk in doc_chunks:
