@@ -87,6 +87,7 @@ DOCUMENT_LEVEL_PROMPT = """你是一位金融行业从业者，正在阅读一�
 - 对比分析：对比两个或多个对象
 - 缺失知识点：询问文档中没有或不完整的信息
 - 无关问题：与文档主题无关的问题
+- 对抗性问题：故意设计容易让RAG系统出错的边界场景
 
 ## 生成要求
 
@@ -383,6 +384,28 @@ EVIDENCE_IRRELEVANT_SUPPLEMENT = """
 - 可以简要说明文档的主题范围
 """
 
+EVIDENCE_ADVERSARIAL_SUPPLEMENT = """
+## 对抗性问题的特别说明
+
+请生成一道故意设计容易让RAG系统出错的边界场景问题。
+
+可选的对抗策略（选一种）：
+1. 数字近似陷阱：在问题中包含一个与文档中数字接近但不相同的值，看系统是否会纠正
+2. 时序陷阱：问一个文档未覆盖的时间段数据
+3. 否定问题：用"不是""没有"等否定措辞，看系统是否会忽略否定
+4. 部分匹配陷阱：问一个答案恰好跨越文档段落边界的问题
+
+要求：
+- 问题中必须包含"诱饵"信息，好的系统应该能识别并纠正
+- 答案必须指出文档中的正确信息，并说明问题中的诱饵
+- 问题要口语化，像在问同事，不要用"请说明""根据文档"等学术化措辞
+- 好的例子："光模块市场增长了15%吗？"（文档实际是12.5%，测试系统是否会纠正）
+
+证据要求：
+- 必须提供包含正确信息的原文引用
+- 引用应直接反驳问题中的诱饵信息
+"""
+
 EVIDENCE_QUESTION_TYPE_SUPPLEMENTS = {
     "single_fact": EVIDENCE_SINGLE_FACT_SUPPLEMENT,
     "multi_fact": EVIDENCE_MULTI_FACT_SUPPLEMENT,
@@ -390,6 +413,7 @@ EVIDENCE_QUESTION_TYPE_SUPPLEMENTS = {
     "comparative": EVIDENCE_COMPARATIVE_SUPPLEMENT,
     "missing": EVIDENCE_MISSING_SUPPLEMENT,
     "irrelevant": EVIDENCE_IRRELEVANT_SUPPLEMENT,
+    "adversarial": EVIDENCE_ADVERSARIAL_SUPPLEMENT,
 }
 
 
@@ -403,6 +427,7 @@ class TestSetGenerator:
         "comparative": "对比分析",
         "missing": "缺失知识点",
         "irrelevant": "无关问题",
+        "adversarial": "对抗性问题",
     }
 
     TYPE_DISTRIBUTION = {
@@ -412,6 +437,7 @@ class TestSetGenerator:
         "comparative": 0.15,
         "missing": 0.10,
         "irrelevant": 0.05,
+        "adversarial": 0.00,
     }
 
     DOCUMENT_TRUNCATE_MAX = 8000
@@ -567,6 +593,8 @@ class TestSetGenerator:
             selected_count = 1
         elif question_type in ["multi_fact", "reasoning", "comparative"]:
             selected_count = min(random.randint(2, 3), len(segments))
+        elif question_type == "adversarial":
+            selected_count = min(random.randint(1, 2), len(segments))
         else:
             selected_count = min(num_segments, len(segments))
 
