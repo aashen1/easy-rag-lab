@@ -326,7 +326,31 @@ def format_recommendation(
     return "\n".join(lines)
 
 
+def _resolve_parsed_dir_from_meal(config: dict, meal: MealConfig) -> Path | None:
+    from src.meal import ArtifactCache
+
+    if not meal.data_id or not meal.config_hashes:
+        return None
+
+    parser_hash = meal.config_hashes.get("parser", "")
+    if not parser_hash:
+        return None
+
+    artifacts_config = config.get("artifacts", {})
+    artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
+    raw_dir = Path(config.get("parser", {}).get("input_dir", "data/raw"))
+    cache = ArtifactCache(artifacts_dir, raw_dir)
+    parsed_dir = cache.get_parsed_dir(meal.data_id, parser_hash)
+    if parsed_dir.exists():
+        return parsed_dir
+    return None
+
+
 def main():
+    from src.utils import load_config
+
+    config = load_config()
+
     parser = argparse.ArgumentParser(description="Generate test set recommendations")
     parser.add_argument("--meal", required=True, help="Meal name (e.g. 5kpage)")
     parser.add_argument(
@@ -337,7 +361,7 @@ def main():
     )
     args = parser.parse_args()
 
-    meals_dir = Path("data/meals")
+    meals_dir = Path(config.get("meals", {}).get("dir", "data/meals"))
     meal_dir = meals_dir / args.meal
     manifest_path = meal_dir / "manifest.json"
 
@@ -350,9 +374,12 @@ def main():
 
     meal = MealConfig.from_dict(meal_data)
 
-    parsed_dir = Path("data/parsed")
-    if not parsed_dir.exists():
-        logger.error(f"Parsed directory not found: {parsed_dir}")
+    parsed_dir = _resolve_parsed_dir_from_meal(config, meal)
+    if not parsed_dir or not parsed_dir.exists():
+        logger.error(
+            f"Parsed directory not found via ArtifactCache for "
+            f"meal data_id={meal.data_id}"
+        )
         sys.exit(1)
 
     doc_info = analyze_meal(meal, parsed_dir)
@@ -369,9 +396,9 @@ def main():
         Path(args.output).write_text(output, encoding="utf-8")
         logger.success(f"Recommendation written to {args.output}")
     else:
+        exp_dir = Path(config.get("experiments", {}).get("dir", "data/exp_reports"))
         out_path = (
-            Path("data/exp_reports")
-            / f"testset_recommendation_{args.meal}_n{args.num_questions}.md"
+            exp_dir / f"testset_recommendation_{args.meal}_n{args.num_questions}.md"
         )
         out_path.write_text(output, encoding="utf-8")
         logger.success(f"Recommendation written to {out_path}")
