@@ -197,10 +197,45 @@ class RAGPipeline:
                 f"Sampled {len(sampled_pdf_files)} PDFs from {len(all_pdfs)} total"
             )
 
+        artifacts_config = self.config.get("artifacts", {})
+        artifacts_dir = artifacts_config.get("dir", "data/artifacts")
+        raw_dir = Path(parser_config["input_dir"])
+
+        from src.meal import (
+            ArtifactCache,
+            MealFile,
+            compute_chunker_config_hash,
+            compute_data_id,
+            compute_file_sha256,
+            compute_parser_config_hash,
+        )
+
+        cache = ArtifactCache(Path(artifacts_dir), raw_dir)
+        all_pdf_files = sorted(raw_dir.rglob("*.pdf"))
+        meal_files = []
+        for pdf_path in all_pdf_files:
+            try:
+                rel = pdf_path.relative_to(raw_dir).as_posix()
+                sha = compute_file_sha256(pdf_path)
+                meal_files.append(
+                    MealFile(path=rel, sha256=sha, size_bytes=pdf_path.stat().st_size)
+                )
+            except Exception:
+                continue
+        data_id = compute_data_id(meal_files)
+
+        parser_hash = compute_parser_config_hash(
+            {
+                "algorithm": parser_config.get("algorithm", "pymupdf4llm"),
+                "options": parser_config.get("pymupdf4llm", {}),
+            }
+        )
+        parsed_dir = cache.get_parsed_dir(data_id, parser_hash)
+
         logger.info("Step 1: Parsing PDFs...")
         parse_results = parse_all_pdfs_unified(
             input_dir=parser_config["input_dir"],
-            artifacts_dir=parser_config["output_dir"],
+            artifacts_dir=artifacts_dir,
             force=force_parse,
             parser_options=parser_config.get("pymupdf4llm"),
         )
@@ -211,12 +246,20 @@ class RAGPipeline:
             for r in parse_results:
                 if r.get("output"):
                     output_path = Path(r["output"])
-                    parsed_dir = Path(parser_config["output_dir"])
                     source_filter_md.add(output_path.relative_to(parsed_dir).as_posix())
             logger.info(f"Source filter for chunker: {len(source_filter_md)} files")
 
         parser_options = parser_config.get("pymupdf4llm", {})
         use_page_chunks = bool(parser_options.get("page_chunks", False))
+
+        chunker_hash = compute_chunker_config_hash(
+            {
+                "chunk_size": chunker_config.get("chunk_size", 512),
+                "chunk_overlap": chunker_config.get("chunk_overlap", 0),
+                "encoding": chunker_config.get("encoding", "cl100k_base"),
+            }
+        )
+        chunks_dir = cache.get_chunks_dir(data_id, chunker_hash)
 
         logger.info("Step 2: Chunking documents...")
         chunker_strategy = chunker_config.get("strategy", "fixed")
@@ -232,14 +275,13 @@ class RAGPipeline:
                 for r in parse_results:
                     if r.get("output"):
                         output_path = Path(r["output"])
-                        parsed_dir = Path(parser_config["output_dir"])
                         source_filter_pages.add(
                             output_path.relative_to(parsed_dir).as_posix()
                         )
 
             chunk_results = process_parsed_files_page_aware(
-                input_dir=chunker_config["input_dir"],
-                output_dir=chunker_config["output_dir"],
+                input_dir=str(parsed_dir),
+                output_dir=str(chunks_dir),
                 chunk_size=chunker_config["chunk_size"],
                 overlap=chunker_config["chunk_overlap"],
                 encoding_name=chunker_encoding,
@@ -250,8 +292,8 @@ class RAGPipeline:
         elif chunker_strategy == "semantic":
             semantic_config = chunker_config.get("semantic", {})
             chunk_results = process_parsed_files_semantic(
-                input_dir=chunker_config["input_dir"],
-                output_dir=chunker_config["output_dir"],
+                input_dir=str(parsed_dir),
+                output_dir=str(chunks_dir),
                 embedder=self.embedder,
                 chunk_size=chunker_config["chunk_size"],
                 similarity_threshold=semantic_config.get("similarity_threshold", 0.5),
@@ -261,8 +303,8 @@ class RAGPipeline:
             )
         else:
             chunk_results = process_parsed_files(
-                input_dir=chunker_config["input_dir"],
-                output_dir=chunker_config["output_dir"],
+                input_dir=str(parsed_dir),
+                output_dir=str(chunks_dir),
                 chunk_size=chunker_config["chunk_size"],
                 overlap=chunker_config["chunk_overlap"],
                 encoding_name=chunker_encoding,
@@ -276,7 +318,6 @@ class RAGPipeline:
             for r in chunk_results:
                 if r.get("output"):
                     output_path = Path(r["output"])
-                    chunks_dir = Path(chunker_config["output_dir"])
                     source_filter_jsonl.add(
                         output_path.relative_to(chunks_dir).as_posix()
                     )
@@ -287,7 +328,7 @@ class RAGPipeline:
 
         logger.info("Step 3: Building vector index...")
         self.indexer.build_index(
-            chunks_dir=chunker_config["output_dir"],
+            chunks_dir=str(chunks_dir),
             embedder=self.embedder,
             batch_size=embedding_config["batch_size"],
             rebuild=rebuild,

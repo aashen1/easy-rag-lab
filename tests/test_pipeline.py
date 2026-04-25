@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -387,20 +388,35 @@ class TestRAGPipeline:
         with (
             patch("src.pipeline.parse_all_pdfs_unified") as mock_parse,
             patch("src.chunker.process_parsed_files_page_aware") as mock_page_aware,
+            patch("src.meal.ArtifactCache") as mock_cache_cls,
+            patch("src.meal.compute_data_id", return_value="fake_data_id"),
+            patch(
+                "src.meal.compute_parser_config_hash",
+                return_value="fake_ph",
+            ),
+            patch(
+                "src.meal.compute_chunker_config_hash",
+                return_value="fake_ch",
+            ),
+            patch("src.meal.compute_file_sha256", return_value="sha"),
         ):
+            mock_cache = MagicMock()
+            mock_cache_cls.return_value = mock_cache
+            mock_cache.get_parsed_dir.return_value = Path("/tmp/parsed")
+            mock_cache.get_chunks_dir.return_value = Path("/tmp/chunks")
             mock_parse.return_value = []
             mock_page_aware.return_value = []
             pipeline.build_index()
 
         mock_parse.assert_called_once_with(
             input_dir="/tmp/parser_in",
-            artifacts_dir="/tmp/parser_out",
+            artifacts_dir="data/artifacts",
             force=False,
             parser_options={"page_chunks": True, "table_strategy": "text"},
         )
         mock_page_aware.assert_called_once_with(
-            input_dir="/tmp/chunker_in",
-            output_dir="/tmp/chunker_out",
+            input_dir=str(Path("/tmp/parsed")),
+            output_dir=str(Path("/tmp/chunks")),
             chunk_size=500,
             overlap=50,
             encoding_name="cl100k_base",
@@ -447,14 +463,29 @@ class TestRAGPipeline:
         with (
             patch("src.pipeline.parse_all_pdfs_unified") as mock_parse,
             patch("src.pipeline.process_parsed_files") as mock_chunk,
+            patch("src.meal.ArtifactCache") as mock_cache_cls,
+            patch("src.meal.compute_data_id", return_value="fake_data_id"),
+            patch(
+                "src.meal.compute_parser_config_hash",
+                return_value="fake_ph",
+            ),
+            patch(
+                "src.meal.compute_chunker_config_hash",
+                return_value="fake_ch",
+            ),
+            patch("src.meal.compute_file_sha256", return_value="sha"),
         ):
+            mock_cache = MagicMock()
+            mock_cache_cls.return_value = mock_cache
+            mock_cache.get_parsed_dir.return_value = Path("/tmp/parsed")
+            mock_cache.get_chunks_dir.return_value = Path("/tmp/chunks")
             mock_parse.return_value = []
             mock_chunk.return_value = []
             pipeline.build_index()
 
         mock_parse.assert_called_once_with(
             input_dir="/tmp/parser_in",
-            artifacts_dir="/tmp/parser_out",
+            artifacts_dir="data/artifacts",
             force=False,
             parser_options=None,
         )
@@ -504,17 +535,32 @@ class TestRAGPipeline:
             patch("src.pipeline.parse_all_pdfs_unified") as mock_parse,
             patch("src.chunker.process_parsed_files_page_aware") as mock_page_aware,
             patch("src.pipeline.process_parsed_files") as mock_chunk,
+            patch("src.meal.ArtifactCache") as mock_cache_cls,
+            patch("src.meal.compute_data_id", return_value="fake_data_id"),
+            patch(
+                "src.meal.compute_parser_config_hash",
+                return_value="fake_ph",
+            ),
+            patch(
+                "src.meal.compute_chunker_config_hash",
+                return_value="fake_ch",
+            ),
+            patch("src.meal.compute_file_sha256", return_value="sha"),
         ):
+            mock_cache = MagicMock()
+            mock_cache_cls.return_value = mock_cache
+            mock_cache.get_parsed_dir.return_value = Path("/tmp/parsed")
+            mock_cache.get_chunks_dir.return_value = Path("/tmp/chunks")
             mock_parse.return_value = parse_results
             mock_page_aware.return_value = [
-                {"output": "/tmp/chunker_out/report_2023.jsonl", "status": "ok"},
+                {"output": "/tmp/chunks/report_2023.jsonl", "status": "ok"},
             ]
             mock_chunk.return_value = []
             pipeline.build_index()
 
         mock_page_aware.assert_called_once_with(
-            input_dir="/tmp/chunker_in",
-            output_dir="/tmp/chunker_out",
+            input_dir=str(Path("/tmp/parsed")),
+            output_dir=str(Path("/tmp/chunks")),
             chunk_size=500,
             overlap=50,
             encoding_name="cl100k_base",
@@ -563,14 +609,29 @@ class TestRAGPipeline:
         with (
             patch("src.pipeline.parse_all_pdfs_unified") as mock_parse,
             patch("src.pipeline.process_parsed_files") as mock_chunk,
+            patch("src.meal.ArtifactCache") as mock_cache_cls,
+            patch("src.meal.compute_data_id", return_value="fake_data_id"),
+            patch(
+                "src.meal.compute_parser_config_hash",
+                return_value="fake_ph",
+            ),
+            patch(
+                "src.meal.compute_chunker_config_hash",
+                return_value="fake_ch",
+            ),
+            patch("src.meal.compute_file_sha256", return_value="sha"),
         ):
+            mock_cache = MagicMock()
+            mock_cache_cls.return_value = mock_cache
+            mock_cache.get_parsed_dir.return_value = Path("/tmp/parsed")
+            mock_cache.get_chunks_dir.return_value = Path("/tmp/chunks")
             mock_parse.return_value = []
             mock_chunk.return_value = []
             pipeline.build_index()
 
         mock_chunk.assert_called_once_with(
-            input_dir="/tmp/chunker_in",
-            output_dir="/tmp/chunker_out",
+            input_dir=str(Path("/tmp/parsed")),
+            output_dir=str(Path("/tmp/chunks")),
             chunk_size=500,
             overlap=50,
             encoding_name="cl100k_base",
