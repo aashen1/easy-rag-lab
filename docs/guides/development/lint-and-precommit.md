@@ -280,6 +280,26 @@ pixi run ruff check --fix src/ eval/ tests/
 
 Ruff 的速度是毫秒级的，通常不会感觉慢。如果确实慢，检查是不是钩子配置太多了。
 
+### Q: `repo: local` 和 `repo: https://...` 有什么区别？
+
+pre-commit 的钩子有两种来源方式：
+
+| | 远程 repo | `repo: local` |
+|---|---------|-------------|
+| 配置 | 指向 GitHub 仓库 | 直接运行本地命令 |
+| 速度 | 每次先 `git fetch` 检查版本，慢几秒 | 直接执行，毫秒级 |
+| 网络 | 需要能连 GitHub | 不需要网络 |
+| 隔离性 | 钩子用独立 venv 环境 | 用项目当前环境 |
+| 适用场景 | 多人协作项目，版本锁定 | 个人项目 / AI 开发 |
+
+本项目使用 `repo: local`，因为：
+1. 个人项目 + AI 开发，高频 commit 需要速度快
+2. ruff 版本已由 pixi 管理，不需要钩子再维护一份
+3. 不依赖 GitHub 网络，断网也能正常 commit
+
+如果你想切回远程 repo 方式（比如项目开源后需要版本锁定），把 ruff 钩子
+改回 `repo: https://github.com/astral-sh/ruff-pre-commit` 即可。
+
 ### Q: 我只想检查我改的文件，不想检查整个项目？
 
 pre-commit 默认只检查你 staged（git add 了）的文件，不会检查整个项目。
