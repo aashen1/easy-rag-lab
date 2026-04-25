@@ -12,10 +12,10 @@
 
 | 类型 | 待处理 | 进行中 | 已完成 | 已延期 |
 |------|--------|--------|--------|--------|
-| Bug | 9 | 0 | 17 | 2 |
+| Bug | 8 | 0 | 18 | 2 |
 | Feature | 28 | 0 | 19 | 0 |
 | Refactor | 8 | 0 | 14 | 1 |
-| Optimization | 9 | 0 | 1 | 0 |
+| Optimization | 7 | 0 | 2 | 0 |
 | Investigation | 3 | 0 | 17 | 1 |
 | Test | 0 | 0 | 8 | 0 |
 
@@ -31,7 +31,7 @@
 | BUG-024 | Chunk JSONL 文本编码损坏导致 chunk-level 指标无法计算 | [hybrid-metrics-fix.md](guides/development/hybrid-metrics-fix.md#6-未修复问题chunk-jsonl-文本编码损坏) | 📋 待处理 | chunk text 字段中文字符为乱码（如`鍦 浜`而非`地产`），source_chunks 始终为空，chunk_hit_rate/mrr/ndcg 为 null；需排查 chunker 输出编码 |
 | BUG-025 | `source_chunks` 字段始终为空，文档级策略无法精确到页或 chunk | [TODO.md](../TODO.md) | 📋 待处理 | 需调研文档级策略能否精确到页/chunk，或需恢复 chunk 级策略 |
 | BUG-026 | 全量缓存 hash 计算问题导致缓存无法命中 | [TODO.md](../TODO.md) | ✅ 已完成 | pipeline.py 传了错误的 artifacts_dir，改为使用 ArtifactCache 动态计算路径 |
-| BUG-027 | Token 统计功能可能无法正确识别多变体各变体消耗 | [TODO.md](../TODO.md) | 📋 待处理 | 需小试验排查是否存在 bug |
+| BUG-027 | Token 统计功能可能无法正确识别多变体各变体消耗 | [TODO.md](../TODO.md) | ✅ 已完成 | 新增 get_summary_by_variant() 方法，run_experiment 中为 variant_tracker 添加 variant_name metadata |
 | BUG-028 | 审查脚本缺少页码信息，无法定位 ground truth 出自哪一页 | [TODO.md](../TODO.md) | 📋 待处理 | source_chunks 字段未实装，审查时无法精确定位 |
 
 ### 🟡 已延期
@@ -130,7 +130,7 @@
 | OPT-006 | RAGAS 评测缓存与增量计算 | [RAGAS 指南](guides/ragas-evaluation.md#5-后续优化方向) | 📋 待处理 | 基于 question+answer+contexts hash 缓存 + 增量评测 + 失效策略 |
 | OPT-007 | 基线 chunk_overlap 非零优化 | [pipeline-deep-audit.md](pipeline-deep-audit.md#P2-1) | 📋 待处理 | 评测链路修复后，通过对比实验确定合适的非零 overlap 值 |
 | OPT-008 | GPU 内存管理优化（Embedder/Reranker 加载后正确释放） | 深度审查 | 📋 待处理 | 需评估 GPU 内存释放机制，避免资源泄漏 |
-| OPT-009 | chunker 日志降噪（逐 chunk 日志打包输出） | [TODO.md](../TODO.md) | 📋 待处理 | 逐 chunk 的 INFO 日志太吵，需聚合为单条汇总日志 |
+| OPT-009 | chunker 日志降噪（逐 chunk 日志打包输出） | [TODO.md](../TODO.md) | ✅ 已完成 | 逐文件 INFO→DEBUG，保留汇总 INFO 日志 |
 | OPT-010 | 大规模数据 Qdrant 本地模式性能优化 | [TODO.md](../TODO.md) | 📋 待处理 | 全量 45077 chunks 触发 20000+ points 警告，需评估 Docker/Cloud 方案或分片策略 |
 
 ---
@@ -218,6 +218,8 @@
 | RF-017 | 自定义异常类型定义 → 新增 src/exceptions.py，9个业务异常类，全项目替换 | 深度审查 | 2026-04-24 |
 | RF-014 | normalize_source 匹配精度提升 → 已统一使用 include_parent=True | [pipeline-deep-audit.md](pipeline-deep-audit.md#P6-1) | 2026-04-26 |
 | BUG-026 | 全量缓存 hash 路径不一致 → pipeline.py 改用 ArtifactCache 动态计算 | [TODO.md](../TODO.md) | 2026-04-26 |
+| BUG-027 | Token 统计按 variant 区分 → 新增 get_summary_by_variant() | [TODO.md](../TODO.md) | 2026-04-26 |
+| OPT-009 | chunker 日志降噪 → 逐文件 INFO→DEBUG | [TODO.md](../TODO.md) | 2026-04-26 |
 
 ### Investigation
 
