@@ -1,0 +1,49 @@
+name: "baseline-500page"
+description: "500页PDF基线 - hybrid策略 + 双后端(builtin+ragas)全指标验证"
+
+data:
+  meal: "500page"
+  create_if_missing:
+    sample_pages: 500
+    seed: 42
+
+test_sets:
+  - name: "baseline_test_500page"
+    on_missing: "auto"
+    generation:
+      strategy: "hybrid"
+      num_questions: 20
+
+variants:
+  - name: "baseline"
+    description: "基线配置 (chunk_size: 512, chunk_overlap: 0)"
+    config_overrides: {}
+
+evaluation:
+  backends: ["builtin", "ragas"]
+  llm_preset: "default"
+  llm_report: true
+  metrics:
+    retrieval:
+      - "hit_rate"
+      - "mrr"
+      - "ndcg"
+      - "chunk_hit_rate"
+      - "chunk_mrr"
+      - "chunk_ndcg"
+      - "dedup_hit_rate"
+      - "dedup_mrr"
+      - "dedup_ndcg"
+      - "false_positive_rate"
+      - "retrieval_diversity"
+      - "context_precision"
+      - "context_recall"
+    generation:
+      - "faithfulness"
+      - "answer_relevancy"
+      - "answer_correctness"
+      - "semantic_similarity"
+
+llm:
+  question_generation: "default"
+  answering: "default"

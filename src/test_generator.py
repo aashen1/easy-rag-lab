@@ -887,10 +887,11 @@ class TestSetGenerator:
 
         Args:
             meal_name: Name of the meal to generate questions for.
-            strategy: Question generation strategy. 'factual', 'boundary',
-                and 'multi_hop' are deprecated and will emit a DeprecationWarning.
-                Please use 'document' strategy instead. Defaults to the
-                configured default_strategy.
+            strategy: Question generation strategy. Supported strategies:
+                - 'hybrid': Use hybrid segment-chunk strategy (recommended)
+                - 'document': Use document-based generation (delegates to hybrid)
+                - 'factual', 'boundary', 'multi_hop': Deprecated legacy strategies
+                Defaults to the configured default_strategy.
             num_questions: Number of questions to generate. Defaults to the
                 configured default_num_questions.
             llm_preset: LLM preset name from the configuration to use for
@@ -904,18 +905,40 @@ class TestSetGenerator:
             Dictionary containing the test set metadata and generated questions.
 
         Raises:
-            ValueError: If no chunks are found for the meal or no questions
+            TestSetError: If no chunks are found for the meal or no questions
                 could be generated.
         """
         strategy = strategy or self.default_strategy
         num_questions = num_questions or self.default_num_questions
 
-        deprecated_strategies = {"factual", "boundary", "multi_hop"}
         normalized_strategy = strategy.replace("-", "_")
+
+        if normalized_strategy == "hybrid":
+            logger.info(f"Using hybrid strategy for meal '{meal_name}'")
+            return self.generate_hybrid_questions(
+                meal_name=meal_name,
+                num_questions=num_questions,
+                llm_preset=llm_preset,
+                token_tracker=token_tracker,
+            )
+
+        if normalized_strategy == "document":
+            logger.info(
+                f"Using document strategy (delegates to hybrid) for meal '{meal_name}'"
+            )
+            return self.generate_document_based_questions(
+                meal_name=meal_name,
+                num_questions=num_questions,
+                llm_preset=llm_preset,
+                token_tracker=token_tracker,
+                use_hybrid=True,
+            )
+
+        deprecated_strategies = {"factual", "boundary", "multi_hop"}
         if normalized_strategy in deprecated_strategies:
             deprecation_msg = (
                 f"Strategy '{strategy}' is deprecated and will be removed in a future version. "
-                f"Please use 'document' strategy instead."
+                f"Please use 'hybrid' strategy instead."
             )
             warnings.warn(deprecation_msg, DeprecationWarning, stacklevel=2)
             logger.warning(deprecation_msg)
@@ -1362,15 +1385,606 @@ class TestSetGenerator:
         test_set_manager = TestSetManager(self.config)
         return test_set_manager.save_test_set(meal_name, test_set)
 
-    def generate_document_based_questions(
+    def generate_hybrid_questions(
         self,
         meal_name: str,
-        num_questions: int = None,
-        name: str = None,
+        num_questions: int | None = None,
+        name: str | None = None,
         type_distribution: dict[str, float] | None = None,
         llm_preset: str = "default",
         token_tracker: Any | None = None,
         chunks_dir: Path | None = None,
+    ) -> dict[str, Any]:
+        """Generate questions using hybrid segment-chunk strategy.
+
+        This method combines document-level segmentation with chunk-level
+        evidence verification for high-quality question generation with
+        reliable ground truth.
+
+        Args:
+            meal_name: Name of the meal to generate questions for.
+            num_questions: Total number of questions to generate. Defaults to
+                the configured default_num_questions.
+            name: Name for the test set. Defaults to
+                f"hybrid_n{num_questions}".
+            type_distribution: Custom distribution of question types. Keys are
+                type names ('single_fact', 'multi_fact', etc.) and values are
+                proportions (0.0-1.0). Defaults to TYPE_DISTRIBUTION.
+            llm_preset: LLM preset name from the configuration to use for
+                question generation.
+            token_tracker: Optional token usage tracker passed to the LLM
+                generator.
+            chunks_dir: Optional path to chunks directory for locating answer
+                chunks. When provided, bypasses ArtifactCache resolution.
+
+        Returns:
+            Dictionary containing the test set metadata and generated questions
+            with quality metrics including quote_verification_rate and
+            ground_truth_confidence.
+
+        Raises:
+            TestSetError: If no documents are found for the meal or no questions
+                could be generated.
+        """
+        num_questions = num_questions or self.default_num_questions
+        name = name or f"hybrid_n{num_questions}"
+        type_distribution = type_distribution or self.TYPE_DISTRIBUTION
+
+        meal_manager = MealManager(self.config)
+        meal_config = meal_manager.load_meal(meal_name)
+
+        logger.info(
+            f"Generating hybrid questions for meal '{meal_name}' "
+            f"(num_questions={num_questions})"
+        )
+
+        document_contents = self._load_full_documents(meal_config)
+        if not document_contents:
+            raise TestSetError(f"No documents found for meal '{meal_name}'")
+
+        logger.info(f"Loaded {len(document_contents)} documents")
+
+        doc_chunks_map = self._load_document_chunks(
+            meal_config, document_contents, chunks_dir
+        )
+
+        type_counts = self._calculate_question_distribution(
+            num_questions, type_distribution
+        )
+        logger.info(f"Question type distribution: {type_counts}")
+
+        doc_question_plans = self._distribute_questions_across_docs(
+            type_counts, list(document_contents.keys())
+        )
+        num_docs = len(document_contents)
+
+        logger.info(
+            f"Distributing {num_questions} questions across {num_docs} "
+            f"documents (~{num_questions // num_docs} per document)"
+        )
+
+        llm_config = get_llm_config(self.config, llm_preset)
+        generator = Generator(
+            model_name=llm_config["model_name"],
+            api_key=llm_config["api_key"],
+            base_url=llm_config["base_url"],
+            temperature=self.test_gen_temperature,
+            max_tokens=self.test_gen_max_tokens,
+            token_tracker=token_tracker,
+        )
+
+        questions = []
+        question_id = 1
+        total_attempts = 0
+        failed_count = 0
+
+        for doc_name, doc_data in document_contents.items():
+            assigned_types = doc_question_plans.get(doc_name, [])
+            if not assigned_types:
+                continue
+
+            doc_content = doc_data["content"]
+            source_path = doc_data["source_path"]
+            doc_chunks = doc_chunks_map.get(doc_name, [])
+
+            segments = self._segment_document(doc_content, self.segment_size)
+            if not segments:
+                logger.warning(f"No segments generated for document: {doc_name}")
+                continue
+
+            segment_chunk_map = self._map_segments_to_chunks(segments, doc_chunks)
+
+            for q_type in assigned_types:
+                total_attempts += 1
+                logger.info(
+                    f"Generating question {question_id}/{num_questions} "
+                    f"(type={q_type}, doc={doc_name})..."
+                )
+
+                qa = self._generate_hybrid_question(
+                    segments=segments,
+                    doc_chunks=doc_chunks,
+                    segment_chunk_map=segment_chunk_map,
+                    question_type=q_type,
+                    generator=generator,
+                    source_path=source_path,
+                )
+
+                if qa is not None:
+                    qa["id"] = f"q{question_id:03d}"
+                    qa["source_document"] = doc_name
+                    qa["category"] = "hybrid"
+
+                    if q_type == "irrelevant":
+                        qa["source_files"] = []
+                        qa["source_chunks"] = []
+                        qa["expect_retrieval"] = False
+                    elif q_type == "missing":
+                        qa["source_files"] = [source_path]
+                        qa["source_chunks"] = []
+                        qa["expect_no_answer"] = True
+                        qa["expect_retrieval"] = True
+                    else:
+                        qa["source_files"] = [source_path]
+
+                    questions.append(qa)
+                    question_id += 1
+                else:
+                    failed_count += 1
+                    logger.warning(
+                        f"Failed to generate question, total failures: "
+                        f"{failed_count}/{total_attempts}"
+                    )
+
+        if len(questions) < num_questions:
+            deficit = num_questions - len(questions)
+            logger.info(
+                f"Main loop generated {len(questions)}/{num_questions} questions. "
+                f"Supplementing {deficit} more questions..."
+            )
+            doc_names = list(document_contents.keys())
+            all_types = list(self.TYPE_DISTRIBUTION.keys())
+            extra_attempt = 0
+            max_extra_attempts = deficit * 3
+
+            while len(questions) < num_questions and extra_attempt < max_extra_attempts:
+                extra_attempt += 1
+                doc_name = doc_names[extra_attempt % len(doc_names)]
+                q_type = all_types[extra_attempt % len(all_types)]
+                doc_data = document_contents[doc_name]
+                doc_content = doc_data["content"]
+                source_path = doc_data["source_path"]
+                doc_chunks = doc_chunks_map.get(doc_name, [])
+
+                segments = self._segment_document(doc_content, self.segment_size)
+                if not segments:
+                    continue
+
+                segment_chunk_map = self._map_segments_to_chunks(segments, doc_chunks)
+
+                logger.info(
+                    f"Supplemental question {len(questions) + 1}/{num_questions} "
+                    f"(type={q_type}, doc={doc_name})..."
+                )
+
+                qa = self._generate_hybrid_question(
+                    segments=segments,
+                    doc_chunks=doc_chunks,
+                    segment_chunk_map=segment_chunk_map,
+                    question_type=q_type,
+                    generator=generator,
+                    source_path=source_path,
+                )
+
+                if qa is not None:
+                    qa["id"] = f"q{question_id:03d}"
+                    qa["source_document"] = doc_name
+                    qa["category"] = "hybrid"
+
+                    if q_type == "irrelevant":
+                        qa["source_files"] = []
+                        qa["source_chunks"] = []
+                        qa["expect_retrieval"] = False
+                    elif q_type == "missing":
+                        qa["source_files"] = [source_path]
+                        qa["source_chunks"] = []
+                        qa["expect_no_answer"] = True
+                        qa["expect_retrieval"] = True
+                    else:
+                        qa["source_files"] = [source_path]
+
+                    questions.append(qa)
+                    question_id += 1
+                else:
+                    failed_count += 1
+                    logger.warning(
+                        f"Supplemental question failed, total failures: {failed_count}"
+                    )
+
+        if not questions:
+            raise TestSetError("No questions could be generated")
+
+        quality_metrics = self._calculate_hybrid_quality_metrics(questions)
+
+        metadata = TestSetMetadata(
+            name=name,
+            meal_id=meal_config.data_id,
+            created_at=datetime.now().isoformat(),
+            updated_at=datetime.now().isoformat(),
+            generation={
+                "strategy": "hybrid",
+                "num_questions": num_questions,
+                "type_distribution": type_distribution,
+                "llm_preset": llm_preset,
+            },
+            user_defined=False,
+        )
+
+        test_set = {
+            "metadata": metadata.to_dict(),
+            "quality_metrics": quality_metrics,
+            "questions": questions,
+        }
+
+        self._save_test_set(meal_name, test_set, name)
+
+        if len(questions) < num_questions:
+            logger.warning(
+                f"Could only generate {len(questions)}/{num_questions} questions "
+                f"after supplemental attempts"
+            )
+
+        logger.success(
+            f"Generated {len(questions)}/{num_questions} questions "
+            f"for meal '{meal_name}' (strategy: hybrid)"
+        )
+        return test_set
+
+    def _load_document_chunks(
+        self,
+        meal_config: MealConfig,
+        document_contents: dict[str, dict[str, str]],
+        chunks_dir: Path | None = None,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Load chunks for each document in document_contents.
+
+        Args:
+            meal_config: MealConfig object for resolving chunks directory.
+            document_contents: Dictionary mapping document names to content dicts.
+            chunks_dir: Optional path to chunks directory.
+
+        Returns:
+            Dictionary mapping document names to lists of chunk dictionaries.
+        """
+        if chunks_dir is not None:
+            chunks_path = chunks_dir
+        else:
+            chunks_path = self._resolve_chunks_dir(meal_config)
+
+        if not chunks_path or not chunks_path.exists():
+            logger.warning(f"Chunks directory not found: {chunks_path}")
+            return {doc_name: [] for doc_name in document_contents}
+
+        source_to_doc_name: dict[str, str] = {}
+        for doc_name, doc_data in document_contents.items():
+            source_path = doc_data.get("source_path", "")
+            source_to_doc_name[source_path] = doc_name
+
+        doc_chunks_map: dict[str, list[dict[str, Any]]] = {
+            doc_name: [] for doc_name in document_contents
+        }
+
+        jsonl_files = list(chunks_path.rglob("*.jsonl"))
+
+        for jsonl_file in jsonl_files:
+            try:
+                with open(jsonl_file, encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        chunk = json.loads(line)
+                        chunk_source = (
+                            chunk.get("metadata", {})
+                            .get("source", "")
+                            .replace("\\", "/")
+                        )
+
+                        doc_name = source_to_doc_name.get(chunk_source)
+                        if doc_name:
+                            doc_chunks_map[doc_name].append(chunk)
+            except Exception as e:
+                logger.warning(f"Failed to load {jsonl_file}: {str(e)}")
+                continue
+
+        for doc_name, chunks in doc_chunks_map.items():
+            if chunks:
+                chunks.sort(key=lambda c: c.get("metadata", {}).get("chunk_index", 0))
+                logger.debug(f"Loaded {len(chunks)} chunks for document: {doc_name}")
+
+        return doc_chunks_map
+
+    def _generate_hybrid_question(
+        self,
+        segments: list[dict[str, Any]],
+        doc_chunks: list[dict[str, Any]],
+        segment_chunk_map: dict[int, list[str]],
+        question_type: str,
+        generator: Generator,
+        source_path: str,
+    ) -> dict[str, Any] | None:
+        """Generate a single question using hybrid strategy.
+
+        Args:
+            segments: List of document segments.
+            doc_chunks: List of chunk dictionaries for the document.
+            segment_chunk_map: Mapping from segment index to chunk IDs.
+            question_type: Type of question to generate.
+            generator: Generator instance for LLM calls.
+            source_path: Source path of the document.
+
+        Returns:
+            Dictionary with question data including verified evidence and
+            source_chunks, or None if generation fails.
+        """
+        multi_hop_types = {"multi_fact", "reasoning", "comparative"}
+
+        if question_type in multi_hop_types:
+            selected_segments = self._select_candidate_segments(
+                segments, question_type, self.multi_hop_candidate_count
+            )
+        else:
+            selected_segments = self._select_segments_for_question_type(
+                segments, question_type
+            )
+
+        if not selected_segments and question_type != "irrelevant":
+            logger.debug(f"No segments selected for question type: {question_type}")
+            return None
+
+        for attempt in range(self.max_retries):
+            qa = self._generate_question_with_evidence(
+                selected_segments=selected_segments,
+                question_type=question_type,
+                generator=generator,
+            )
+
+            if qa is None:
+                continue
+
+            if question_type == "irrelevant":
+                qa["ground_truth_excerpt"] = ""
+                return qa
+
+            evidence_list = qa.get("evidence", [])
+            if not evidence_list:
+                if question_type == "missing":
+                    qa["ground_truth_excerpt"] = ""
+                    return qa
+                logger.debug(f"No evidence provided for question type: {question_type}")
+                continue
+
+            validation = self._validate_evidence(
+                evidence_list, selected_segments, question_type
+            )
+
+            if not validation["valid"]:
+                logger.debug(
+                    f"Evidence validation failed on attempt {attempt + 1}: "
+                    f"{len(validation['invalid_quotes'])} invalid quotes"
+                )
+                if attempt < self.max_retries - 1:
+                    continue
+
+            qa["evidence"] = validation["verified_evidence"]
+
+            if question_type in multi_hop_types:
+                source_chunks = self._locate_multi_hop_chunks(
+                    validation["verified_evidence"],
+                    selected_segments,
+                    segment_chunk_map,
+                    doc_chunks,
+                )
+            else:
+                first_evidence = (
+                    validation["verified_evidence"][0]
+                    if validation["verified_evidence"]
+                    else {}
+                )
+                quote = first_evidence.get("quote", "")
+                source_chunks = self._locate_chunks_by_quote(
+                    quote, selected_segments, segment_chunk_map, doc_chunks
+                )
+
+            qa["source_chunks"] = source_chunks
+
+            match_types = [
+                e.get("match_type", "none")
+                for e in validation["verified_evidence"]
+                if e.get("verified", False)
+            ]
+            qa["evidence_match_types"] = match_types
+
+            verified_quotes = [
+                e["quote"]
+                for e in validation["verified_evidence"]
+                if e.get("verified", False) and e.get("quote", "").strip()
+            ]
+            qa["ground_truth_excerpt"] = (
+                "\n".join(verified_quotes) if verified_quotes else ""
+            )
+
+            return qa
+
+        return None
+
+    def _generate_question_with_evidence(
+        self,
+        selected_segments: list[dict[str, Any]],
+        question_type: str,
+        generator: Generator,
+    ) -> dict[str, Any] | None:
+        """Generate a question with evidence using EVIDENCE_AWARE_PROMPT.
+
+        Args:
+            selected_segments: List of selected segment dictionaries.
+            question_type: Type of question to generate.
+            generator: Generator instance for LLM calls.
+
+        Returns:
+            Dictionary with question data, or None if generation fails.
+        """
+        q_type_cn = self.QUESTION_TYPES.get(question_type, question_type)
+
+        segments_text = ""
+        for i, seg in enumerate(selected_segments):
+            segments_text += f"片段{i}:\n{seg.get('text', '')}\n\n"
+
+        prompt = EVIDENCE_AWARE_PROMPT.format(
+            num_segments=len(selected_segments),
+            segments_text=segments_text.strip(),
+            question_type=q_type_cn,
+        )
+
+        supplement = EVIDENCE_QUESTION_TYPE_SUPPLEMENTS.get(question_type, "")
+        if supplement:
+            prompt += "\n" + supplement
+
+        try:
+            response = generator.generate(
+                query=prompt,
+                contexts=[],
+                system_prompt="你是一位金融行业从业者。请严格按照要求的JSON格式输出，不要输出任何其他内容。",
+                category="test_generation",
+                allow_no_contexts=True,
+            )
+
+            qa = self._parse_evidence_question_response(response)
+            if qa is not None and self._validate_question_quality(qa):
+                return qa
+
+            logger.debug("Failed to parse or validate evidence question response")
+        except Exception as e:
+            logger.warning(f"Failed to generate evidence question: {str(e)}")
+
+        return None
+
+    def _parse_evidence_question_response(self, response: str) -> dict[str, Any] | None:
+        """Parse an LLM response for evidence-aware question generation.
+
+        Args:
+            response: Raw LLM response string.
+
+        Returns:
+            Dictionary with question data including evidence list, or None
+            if parsing fails.
+        """
+        try:
+            response = response.strip()
+            if response.startswith("```"):
+                lines = response.split("\n")
+                lines = [line for line in lines if not line.startswith("```")]
+                response = "\n".join(lines)
+
+            start = response.find("{")
+            end = response.rfind("}") + 1
+            if start == -1 or end == 0:
+                return None
+
+            json_str = response[start:end]
+            qa = json.loads(json_str)
+
+            required_fields = ["question", "answer", "question_type"]
+            for field in required_fields:
+                if field not in qa or not qa[field]:
+                    logger.debug(f"Missing or empty required field: {field}")
+                    return None
+
+            qa.setdefault("difficulty", "medium")
+            qa.setdefault("evidence", [])
+            qa.setdefault("selected_segments", [])
+
+            return qa
+
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.debug(f"Failed to parse LLM response as JSON: {str(e)}")
+            return None
+
+    def _calculate_hybrid_quality_metrics(
+        self, questions: list[dict]
+    ) -> dict[str, Any]:
+        """Calculate quality metrics for hybrid-generated questions.
+
+        Includes standard metrics plus quote_verification_rate and
+        ground_truth_confidence.
+
+        Args:
+            questions: List of generated question dictionaries.
+
+        Returns:
+            Dictionary containing quality metrics.
+        """
+        if not questions:
+            return {
+                "format_correct_rate": 0.0,
+                "authenticity_pass_rate": 0.0,
+                "type_distribution": {},
+                "quote_verification_rate": 0.0,
+                "ground_truth_confidence": 0.0,
+            }
+
+        base_metrics = self._calculate_quality_metrics(questions)
+
+        total = len(questions)
+        questions_with_verified_quotes = 0
+        total_confidence = 0.0
+
+        for q in questions:
+            evidence = q.get("evidence", [])
+            if not evidence:
+                if q.get("question_type") in ("irrelevant", "missing"):
+                    questions_with_verified_quotes += 1
+                continue
+
+            verified_evidence = [e for e in evidence if e.get("verified", False)]
+            if verified_evidence:
+                questions_with_verified_quotes += 1
+
+                for e in verified_evidence:
+                    match_type = e.get("match_type", "none")
+                    if match_type == "exact":
+                        total_confidence += 1.0
+                    elif match_type == "fuzzy":
+                        total_confidence += 0.9
+
+        quote_verification_rate = questions_with_verified_quotes / total
+
+        total_verified_evidence = sum(
+            len([e for e in q.get("evidence", []) if e.get("verified", False)])
+            for q in questions
+        )
+        ground_truth_confidence = (
+            total_confidence / total_verified_evidence
+            if total_verified_evidence > 0
+            else 0.0
+        )
+
+        return {
+            **base_metrics,
+            "quote_verification_rate": round(quote_verification_rate, 4),
+            "ground_truth_confidence": round(ground_truth_confidence, 4),
+        }
+
+    def generate_document_based_questions(
+        self,
+        meal_name: str,
+        num_questions: int | None = None,
+        name: str | None = None,
+        type_distribution: dict[str, float] | None = None,
+        llm_preset: str = "default",
+        token_tracker: Any | None = None,
+        chunks_dir: Path | None = None,
+        use_hybrid: bool = True,
     ) -> dict[str, Any]:
         """Generate questions based on full MD documents.
 
@@ -1393,15 +2007,31 @@ class TestSetGenerator:
             chunks_dir: Optional path to chunks directory for locating answer
                 chunks. When provided, passed to _locate_answer_chunks() to
                 bypass ArtifactCache resolution.
+            use_hybrid: If True, delegate to generate_hybrid_questions for
+                improved ground truth quality. If False, use the legacy
+                document-based generation. Defaults to True.
 
         Returns:
             Dictionary containing the test set metadata and generated questions
             with quality metrics.
 
         Raises:
-            ValueError: If no documents are found for the meal or no questions
+            TestSetError: If no documents are found for the meal or no questions
                 could be generated.
         """
+        if use_hybrid:
+            logger.info("Delegating to generate_hybrid_questions (use_hybrid=True)")
+            return self.generate_hybrid_questions(
+                meal_name=meal_name,
+                num_questions=num_questions,
+                name=name
+                or f"document_level_n{num_questions or self.default_num_questions}",
+                type_distribution=type_distribution,
+                llm_preset=llm_preset,
+                token_tracker=token_tracker,
+                chunks_dir=chunks_dir,
+            )
+
         num_questions = num_questions or self.default_num_questions
         name = name or f"document_level_n{num_questions}"
         type_distribution = type_distribution or self.TYPE_DISTRIBUTION
@@ -1411,7 +2041,7 @@ class TestSetGenerator:
 
         logger.info(
             f"Generating document-based questions for meal '{meal_name}' "
-            f"(num_questions={num_questions})"
+            f"(num_questions={num_questions}, use_hybrid=False)"
         )
 
         document_contents = self._load_full_documents(meal_config)
@@ -2179,6 +2809,129 @@ class TestSetGenerator:
             "type_distribution": type_counts,
         }
 
+    def _locate_chunks_by_quote(
+        self,
+        quote: str,
+        segments: list[dict[str, Any]],
+        segment_chunk_map: dict[int, list[str]],
+        doc_chunks: list[dict[str, Any]],
+    ) -> list[str]:
+        """Locate chunk IDs that contain a verified quote text.
+
+        Finds which segment contains the quote using character position,
+        then looks up the chunk_ids from segment_chunk_map and verifies
+        the quote appears in each chunk's text.
+
+        Args:
+            quote: The verified quote text to locate.
+            segments: List of segment dictionaries with 'text', 'start_char',
+                'end_char', and 'segment_index' keys.
+            segment_chunk_map: Dictionary mapping segment_index to list of
+                chunk_ids that overlap with that segment.
+            doc_chunks: List of all chunk dictionaries from the document,
+                each containing 'chunk_id' and 'text' keys.
+
+        Returns:
+            List of chunk_id strings that contain the quote text.
+            Returns an empty list if no chunks contain the quote or if
+            the quote cannot be located in any segment.
+        """
+        if not quote or not segments or not doc_chunks:
+            return []
+
+        containing_segment_index: int | None = None
+        for segment in segments:
+            segment_text = segment.get("text", "")
+            seg_index = segment.get("segment_index")
+
+            verification = self._verify_quote_in_segment(quote, segment_text)
+            if verification["found"]:
+                containing_segment_index = seg_index
+                break
+
+        if containing_segment_index is None:
+            logger.debug(f"Quote not found in any segment: {quote[:50]}...")
+            return []
+
+        chunk_ids = segment_chunk_map.get(containing_segment_index, [])
+        if not chunk_ids:
+            logger.debug(f"No chunks mapped to segment {containing_segment_index}")
+            return []
+
+        chunk_id_to_text: dict[str, str] = {}
+        for chunk in doc_chunks:
+            chunk_id = chunk.get("chunk_id", "")
+            if chunk_id:
+                chunk_id_to_text[chunk_id] = chunk.get("text", "")
+
+        matching_chunk_ids: list[str] = []
+        for chunk_id in chunk_ids:
+            chunk_text = chunk_id_to_text.get(chunk_id, "")
+            if quote in chunk_text:
+                matching_chunk_ids.append(chunk_id)
+
+        if not matching_chunk_ids:
+            logger.debug(
+                f"Quote found in segment but not in any mapped chunk: {quote[:50]}..."
+            )
+
+        return matching_chunk_ids
+
+    def _locate_multi_hop_chunks(
+        self,
+        evidence_list: list[dict[str, Any]],
+        segments: list[dict[str, Any]],
+        segment_chunk_map: dict[int, list[str]],
+        doc_chunks: list[dict[str, Any]],
+    ) -> list[str]:
+        """Locate chunk IDs for multi-hop questions from multiple evidence entries.
+
+        For each evidence entry with a verified quote, calls
+        _locate_chunks_by_quote to find the containing chunks, then
+        returns the union of all unique chunk_ids.
+
+        Args:
+            evidence_list: List of evidence dictionaries, each containing
+                a 'quote' key with verified quote text.
+            segments: List of segment dictionaries with 'text', 'start_char',
+                'end_char', and 'segment_index' keys.
+            segment_chunk_map: Dictionary mapping segment_index to list of
+                chunk_ids that overlap with that segment.
+            doc_chunks: List of all chunk dictionaries from the document,
+                each containing 'chunk_id' and 'text' keys.
+
+        Returns:
+            List of unique chunk_id strings that contain any of the quotes.
+            Returns an empty list if no evidence entries have valid quotes
+            or no chunks are found.
+        """
+        if not evidence_list:
+            return []
+
+        all_chunk_ids: set[str] = set()
+
+        for evidence in evidence_list:
+            quote = evidence.get("quote", "")
+            if not quote:
+                continue
+
+            chunk_ids = self._locate_chunks_by_quote(
+                quote, segments, segment_chunk_map, doc_chunks
+            )
+            all_chunk_ids.update(chunk_ids)
+
+        result = sorted(list(all_chunk_ids))
+
+        if result:
+            logger.debug(
+                f"Located {len(result)} unique chunks from "
+                f"{len(evidence_list)} evidence entries"
+            )
+        else:
+            logger.warning(f"No chunks found for {len(evidence_list)} evidence entries")
+
+        return result
+
     def _locate_answer_chunks(
         self,
         answer: str,
@@ -2188,6 +2941,10 @@ class TestSetGenerator:
         chunks_dir: Path | None = None,
     ) -> list[str]:
         """Locate chunk IDs that contain information relevant to the answer.
+
+        .. deprecated::
+            This method is deprecated. Use :meth:`_locate_chunks_by_quote`
+            instead for more accurate quote-based chunk location.
 
         Scans JSONL files in chunks_dir to find chunks belonging to the
         source document, then matches chunks against the answer text using
@@ -2212,6 +2969,13 @@ class TestSetGenerator:
             Returns an empty list if no chunks match or the directory is
             not found.
         """
+        warnings.warn(
+            "_locate_answer_chunks is deprecated. "
+            "Use _locate_chunks_by_quote for more accurate quote-based "
+            "chunk location.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if not answer or not source_path:
             return []
 
