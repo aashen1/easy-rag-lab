@@ -1,3 +1,9 @@
+import os
+
+# 设置 HuggingFace Hub 为离线模式，避免模型加载时尝试从网络下载
+# 这对于已经预先下载好模型的离线环境非常有用
+os.environ["HF_HUB_OFFLINE"] = "1"
+
 from typing import Any
 
 import numpy as np
