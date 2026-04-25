@@ -14,7 +14,7 @@
 |------|--------|--------|--------|--------|
 | Bug | 10 | 0 | 16 | 2 |
 | Feature | 28 | 0 | 19 | 0 |
-| Refactor | 9 | 0 | 13 | 1 |
+| Refactor | 8 | 0 | 14 | 1 |
 | Optimization | 9 | 0 | 1 | 0 |
 | Investigation | 3 | 0 | 17 | 1 |
 | Test | 0 | 0 | 8 | 0 |
@@ -108,7 +108,7 @@
 | RF-011 | docs 目录组织度维护 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 打扫卫生时考量 docs 目录组织度，恢复整洁度 |
 | RF-012 | 旧格式 test_sets DeprecationWarning 清理 | [TODO.md](../TODO.md) | ⏳ 已延期 | ⬇️ 低优先级暂缓；chunk-based 策略有不可替代优势，待升级为 chunk-aware 策略后再清理；详见 [分析报告](reviews/investigations/rf-012-chunk-vs-document-strategy-analysis.md) |
 | RF-013 | chunk_id 命名规范化（当前依赖文件名含下划线时解析脆弱） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P2-3) | 📋 待处理 | 小 | 需设计新格式并考虑迁移兼容 |
-| RF-014 | normalize_source 匹配精度提升（当前仅比较文件名 stem，过于宽松） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P6-1) | 📋 待处理 | 小 | 可能误判不同版本的同名文档 |
+| RF-014 | normalize_source 匹配精度提升（当前仅比较文件名 stem，过于宽松） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P6-1) | ✅ 已完成 | 小 | 已在 retrieval.py/dedup.py/builtin_evaluator.py 中统一使用 include_parent=True |
 | RF-015 | 更新 hyperparameter-guide.md 增加新解析链路讲解 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 新增 PDF 解析策略章节，介绍 pymupdf4llm 和 fitz_pdfplumber 两种解析器 |
 | RF-006 | TestSet 独立管理系统重构 | 设计文档 | ✅ 已完成 | 大 | 新增 TestSetManager，重构 prepare_test_sets，支持 on_missing 三种模式 |
 | RF-017 | 自定义异常类型定义（RAGPipelineError、RetrievalError 等） | 深度审查 | ✅ 已完成 | 小 | 新增 src/exceptions.py，9个业务异常类，全项目替换 |
@@ -216,6 +216,7 @@
 | RF-009 | commit-rule 与 CLAUDE.md 渐进式披露 → 三层架构：commit-rule 23行+CLAUDE.md 3行+SKILL.md+docs/guides/commit-conventions.md | [TODO.md](../TODO.md) | 2026-04-22 |
 | RF-016 | Optional 类型使用规范化 → 统一为 Python 3.10+ 的 `| None` 语法 | 深度审查 | 2026-04-24 |
 | RF-017 | 自定义异常类型定义 → 新增 src/exceptions.py，9个业务异常类，全项目替换 | 深度审查 | 2026-04-24 |
+| RF-014 | normalize_source 匹配精度提升 → 已统一使用 include_parent=True | [pipeline-deep-audit.md](pipeline-deep-audit.md#P6-1) | 2026-04-26 |
 
 ### Investigation
 
