@@ -13,7 +13,7 @@
 | 类型 | 待处理 | 进行中 | 已完成 | 已延期 |
 |------|--------|--------|--------|--------|
 | Bug | 5 | 0 | 17 | 2 |
-| Feature | 21 | 0 | 19 | 0 |
+| Feature | 23 | 0 | 19 | 0 |
 | Refactor | 8 | 0 | 13 | 1 |
 | Optimization | 7 | 0 | 1 | 0 |
 | Investigation | 3 | 0 | 17 | 1 |
@@ -78,6 +78,8 @@
 | FEAT-034 | 开源准备度完善 | [INV-005 调查](reviews/investigations/inv-005-open-source.md) | 📋 待处理 | 中 | CONTRIBUTING.md、README 更新、可选 SECURITY.md |
 | FEAT-035 | 元数据增强（页码+标题层级） | [INV-010 调查](reviews/investigations/inv-010-metadata.md) | 📋 待处理 | 中 | chunk metadata 增加 page_number 和 headings 字段 |
 | FEAT-036 | PDF 表格解析质量提升 | [INV-016 调查](reviews/investigations/inv-016-table-parsing.md) | 📋 待处理 | 中 | fitz_pdfplumber 为推荐解析器、补充 OCR 支持、表格参数调优 |
+| FEAT-037 | benchmark_use_ocr 对比维度参数化 | benchmark_use_ocr 扩展规划 | 📋 待处理 | 中 | 将 OCR 开/关硬编码改为 YAML 配置驱动，支持任意 pymupdf4llm 选项的 A/B 对比 |
+| FEAT-038 | benchmark_use_ocr 与 exp 系统集成 | benchmark_use_ocr 扩展规划 | 📋 待处理 | 大 | 让实验系统支持单步对比（如 Parser 配置差异），需 Meal 与 Variant 解耦、S1 阶段 variant 级别记录 |
 
 ---
 

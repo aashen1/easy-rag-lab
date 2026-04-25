@@ -228,15 +228,15 @@ class TestConfigHashes:
         assert len(h1) == 8
 
     def test_parser_config_hash_different_options(self):
-        config_a = {"algorithm": "pymupdf4llm", "pymupdf4llm": {"page_chunks": True}}
-        config_b = {"algorithm": "pymupdf4llm", "pymupdf4llm": {"page_chunks": False}}
+        config_a = {"algorithm": "pymupdf4llm", "options": {"page_chunks": True}}
+        config_b = {"algorithm": "pymupdf4llm", "options": {"page_chunks": False}}
         h_a = compute_parser_config_hash(config_a)
         h_b = compute_parser_config_hash(config_b)
         assert h_a != h_b
 
     def test_parser_config_hash_same_options(self):
-        config_a = {"algorithm": "pymupdf4llm", "pymupdf4llm": {"page_chunks": True}}
-        config_b = {"algorithm": "pymupdf4llm", "pymupdf4llm": {"page_chunks": True}}
+        config_a = {"algorithm": "pymupdf4llm", "options": {"page_chunks": True}}
+        config_b = {"algorithm": "pymupdf4llm", "options": {"page_chunks": True}}
         h_a = compute_parser_config_hash(config_a)
         h_b = compute_parser_config_hash(config_b)
         assert h_a == h_b
@@ -246,8 +246,8 @@ class TestConfigHashes:
         h = compute_parser_config_hash(config)
         assert len(h) == 8
 
-    def test_parser_config_hash_options_from_pymupdf4llm_key(self):
-        config = {"algorithm": "pymupdf4llm", "pymupdf4llm": {"page_chunks": True}}
+    def test_parser_config_hash_options_included(self):
+        config = {"algorithm": "pymupdf4llm", "options": {"page_chunks": True}}
         h1 = compute_parser_config_hash(config)
         config_minimal = {"algorithm": "pymupdf4llm"}
         h2 = compute_parser_config_hash(config_minimal)

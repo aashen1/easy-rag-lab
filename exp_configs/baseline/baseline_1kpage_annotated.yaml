@@ -1,0 +1,249 @@
+# ============================================================
+# baseline_1kpage_annotated.yaml
+# 1000页PDF性能基线实验 — 注释版
+# ============================================================
+#
+# 本文件是 baseline_1kpage.yaml 的注释版本，用于阅读理解。
+# 实际运行实验或修改配置时，请使用无注释的 baseline_1kpage.yaml。
+#
+# 配置体系说明：
+#   实验配置只声明需要修改的字段，运行时与 config.yaml（系统基线）
+#   做深度合并。未声明的字段自动继承基线默认值。
+#   基线默认：纯向量检索、无重排序、无查询改写、chunk_size=512、chunk_overlap=0。
+#
+# 检索指标详解：docs/guides/operations/evaluation-metrics.md
+# RAGAS评测指南：docs/guides/operations/ragas-evaluation.md
+# 实验系统指南：docs/guides/operations/experiment-system.md
+# 配置参考手册：docs/config-reference.md
+# ============================================================
+
+# name — 实验的唯一标识符
+#   用于创建实验结果目录、报告文件命名等。
+#   命名建议：{类型}-{数据规模}，如 baseline-1kpage、chunk-5kpage。
+name: "baseline-1kpage"
+
+# description — 实验目的的简要说明
+#   会写入实验报告头部，方便回顾时快速理解实验意图。
+description: "1000页PDF性能基线实验 - 完整流程环节拆解与资源消耗分析"
+
+# ------------------------------------------------------------
+# data — 数据源配置
+# ------------------------------------------------------------
+data:
+  # meal — 数据集名称（"餐"的隐喻：一顿数据大餐）
+  #   系统会按此名称在 data/meals/ 下查找已准备好的数据集。
+  #   如果找不到且配置了 create_if_missing，则自动创建。
+  meal: "1kpage"
+
+  # create_if_missing — 当 meal 不存在时的自动创建参数
+  create_if_missing:
+    # sample_pages — 从原始PDF中随机采样的页数
+    #   原始PDF位于 data/raw/，系统会从中随机抽取指定页数。
+    #   1000页约对应 2-3 份完整年报，适合快速迭代验证。
+    sample_pages: 1000
+
+    # seed — 采样的随机种子
+    #   固定种子保证每次采样结果一致，确保实验可复现。
+    seed: 42
+
+# ------------------------------------------------------------
+# test_sets — 测试问题集配置
+# ------------------------------------------------------------
+#   一个实验可以定义多个测试集，每个测试集是一组问答对。
+#   测试集会持久化到磁盘，下次运行时按名称命中缓存。
+test_sets:
+  - # name — 测试集名称，用于缓存查找和结果追踪
+    #   命名建议：{实验类型}_test_{数据规模}
+    name: "baseline_test_1kpage"
+
+    # on_missing — 当测试集不存在时的行为
+    #   "auto"      : 不存在则自动生成，存在则复用（推荐）
+    #   "clean_only": 只使用已有测试集，不存在则报错
+    #   "strict"    : 必须已存在且完整，否则报错
+    on_missing: "auto"
+
+    # generation — 测试集生成配置
+    generation:
+      # strategy — 问题生成策略
+      #   "document" : 基于整篇文档生成问题（推荐，问题更自然）
+      #   "chunk"    : 基于单个chunk生成问题（问题更局部）
+      strategy: "document"
+
+      # num_questions — 生成的问题数量
+      #   10题适合快速验证，50-100题适合正式评测。
+      #   问题越多统计越稳定，但LLM调用成本也越高。
+      num_questions: 10
+
+      # seed — 问题生成的随机种子
+      #   固定种子保证同一文档生成相同的问题，确保可复现。
+      seed: 42
+
+# ------------------------------------------------------------
+# variants — 实验变体配置
+# ------------------------------------------------------------
+#   每个变体代表一种参数配置，运行时会分别执行并对比结果。
+#   config_overrides 中的字段会深度合并到 config.yaml 的基线配置上。
+variants:
+  - # name — 变体名称，出现在实验结果和报告中
+    name: "baseline"
+
+    # description — 变体说明
+    description: "基线配置 (chunk_size: 512, chunk_overlap: 0)"
+
+    # config_overrides — 对基线配置的覆盖
+    #   空字典 {} 表示完全使用基线默认值，不做任何修改。
+    config_overrides: {}
+
+  - name: "with_overlap"
+    description: "加入 chunk_overlap: 50 的对照 (chunk_size: 512, chunk_overlap: 50)"
+
+    # chunk_overlap: 50 — 相邻chunk之间重叠50个token
+    #   重叠可以避免关键信息被截断在chunk边界处。
+    #   50约为一个短段落的长度，是常用的保守设置。
+    #   与 baseline 变体对比，可以量化 overlap 对检索质量的影响。
+    config_overrides:
+      chunker:
+        chunk_overlap: 50
+
+# ------------------------------------------------------------
+# evaluation — 评测配置
+# ------------------------------------------------------------
+evaluation:
+  # llm_preset — 评测时使用的LLM预设名称
+  #   对应 config.yaml 中 llm_presets 下的某个预设。
+  #   "default" 通常指向性价比最高的模型（如 GPT-4o-mini）。
+  llm_preset: "default"
+
+  # llm_report — 是否生成LLM评测的详细报告
+  #   true  : 输出每个问题的LLM评判推理过程，便于发现评测偏差
+  #   false : 只输出指标数值，节省token成本
+  llm_report: true
+
+  # metrics — 评测指标配置
+  #   分为 retrieval（检索质量）和 generation（生成质量）两大类。
+  #   详见：docs/guides/operations/evaluation-metrics.md
+  metrics:
+    # ============================================================
+    # retrieval — 检索指标
+    # ============================================================
+    #   所有检索指标都基于 top-k 检索结果计算。
+    #   按粒度分为四组：文档级 → chunk级 → 去重级 → 误检率 → 召回率
+    #
+    #   指标详解：docs/guides/operations/evaluation-metrics.md
+    #   FPR专题：docs/inbox-processed/一个关于FPR的bug，及两种修复方案.md
+    # ============================================================
+    retrieval:
+      # --- 文档级排序指标 ---
+      #   判定粒度：检索结果是否命中了正确文档（按文件名匹配）
+      #   优点：计算简单，无需LLM；缺点：无法区分同一文档内不同段落的相关性
+
+      # hit_rate — 命中率
+      #   定义：top-k结果中包含正确文档的问题比例
+      #   公式：Hit Rate@k = (包含正确文档的问题数) / (总问题数)
+      #   取值：0.0~1.0，越高越好
+      #   解读：≥0.8 优秀 | 0.5~0.8 待优化 | <0.5 需重点改进
+      - "hit_rate"
+
+      # mrr — 平均倒数排名 (Mean Reciprocal Rank)
+      #   定义：正确文档在检索结果中排名的倒数的均值
+      #   公式：MRR = (1/Q) * Σ(1/rank_i)，rank_i 为第i个问题中正确文档的排名
+      #   取值：0.0~1.0，越高越好
+      #   解读：不仅看是否命中，还看命中的位置——排第1名得1分，排第2名得0.5分
+      - "mrr"
+
+      # ndcg — 归一化折损累积增益 (Normalized Discounted Cumulative Gain)
+      #   定义：考虑排序位置的检索质量，排名越靠前权重越高
+      #   公式：NDCG = DCG / IDCG，其中 DCG = Σ(rel_i / log2(i+1))
+      #   取值：0.0~1.0，越高越好
+      #   解读：比MRR更精细，能反映多个相关文档的排序质量
+      - "ndcg"
+
+      # --- Chunk级排序指标 ---
+      #   判定粒度：检索结果是否命中了正确的chunk（比文档级更精细）
+      #   同一文档可能有多个chunk，只有命中包含答案的chunk才算正确
+      #   通常数值低于文档级指标，但更能反映真实的检索精度
+
+      # chunk_hit_rate — Chunk级命中率
+      #   与 hit_rate 相同逻辑，但匹配粒度从文档细化到chunk
+      - "chunk_hit_rate"
+
+      # chunk_mrr — Chunk级平均倒数排名
+      #   与 mrr 相同逻辑，但匹配粒度从文档细化到chunk
+      - "chunk_mrr"
+
+      # chunk_ndcg — Chunk级归一化折损累积增益
+      #   与 ndcg 相同逻辑，但匹配粒度从文档细化到chunk
+      - "chunk_ndcg"
+
+      # --- 去重后排序指标 ---
+      #   判定逻辑：先将检索结果按文档去重（只保留每个文档的最优chunk），
+      #   再按文档级逻辑计算。消除了同一文档多个chunk命中带来的虚高。
+
+      # dedup_hit_rate — 去重后命中率
+      - "dedup_hit_rate"
+
+      # dedup_mrr — 去重后平均倒数排名
+      - "dedup_mrr"
+
+      # dedup_ndcg — 去重后归一化折损累积增益
+      - "dedup_ndcg"
+
+      # --- 误检率 ---
+      # false_positive_rate — 误检率 (False Positive Rate)
+      #   定义：当问题不应检索到任何文档时（irrelevant类型），
+      #         系统仍然返回的文档数占 top-k 的比例
+      #   公式：FPR = len(top_k_results) / k
+      #   取值：0.0~1.0，越低越好
+      #   解读：0.0 = 正确拒检 | 1.0 = 全部误报
+      #   仅对 irrelevant 类型问题有意义
+      - "false_positive_rate"
+
+      # --- 召回率指标 ---
+      #   定义：在 top-k 检索结果中，找回了多少比例的相关文档
+      #   与 hit_rate 的区别：hit_rate 只看是否命中（二值），
+      #   recall 看命中的比例（当存在多个相关文档时更有区分度）
+
+      # recall_3 — top-3 召回率
+      #   在前3个检索结果中找回的相关文档比例
+      - "recall_3"
+
+      # recall_5 — top-5 召回率
+      #   在前5个检索结果中找回的相关文档比例
+      - "recall_5"
+
+      # recall_10 — top-10 召回率
+      #   在前10个检索结果中找回的相关文档比例
+      - "recall_10"
+
+    # ============================================================
+    # generation — 生成指标
+    # ============================================================
+    #   评估LLM生成的回答质量，需要调用LLM进行评判，成本较高。
+    #   详见：docs/guides/operations/evaluation-metrics.md
+    # ============================================================
+    generation:
+      # faithfulness — 忠实度
+      #   定义：生成的回答是否仅基于检索到的上下文，没有编造信息
+      #   取值：0.0~1.0，越高越好
+      #   解读：衡量"幻觉"程度——低分意味着回答中包含上下文未提及的内容
+      #   需要：question + context + answer
+      - "faithfulness"
+
+      # answer_relevancy — 回答相关性
+      #   定义：生成的回答与问题的相关程度
+      #   取值：0.0~1.0，越高越好
+      #   解读：低分意味着回答虽然忠实但未切中问题要害
+      #   需要：question + answer（可选 context）
+      - "answer_relevancy"
+
+# ------------------------------------------------------------
+# llm — LLM预设映射
+# ------------------------------------------------------------
+#   为实验的不同阶段指定使用哪套LLM预设。
+#   预设名称对应 config.yaml 中 llm_presets 下的配置项。
+llm:
+  # question_generation — 生成测试问题时使用的LLM预设
+  question_generation: "default"
+
+  # answering — 回答测试问题时使用的LLM预设
+  answering: "default"

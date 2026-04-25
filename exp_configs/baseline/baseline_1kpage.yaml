@@ -1,5 +1,5 @@
 name: "baseline-1kpage"
-description: "1000页PDF性能评估实验 - 完整流程环节拆解与资源消耗分析"
+description: "1000页PDF性能基线实验 - 完整流程环节拆解与资源消耗分析"
 
 data:
   meal: "1kpage"
@@ -20,9 +20,15 @@ variants:
     description: "基线配置 (chunk_size: 512, chunk_overlap: 0)"
     config_overrides: {}
 
+  - name: "with_overlap"
+    description: "加入 chunk_overlap: 50 的对照 (chunk_size: 512, chunk_overlap: 50)"
+    config_overrides:
+      chunker:
+        chunk_overlap: 50
+
 evaluation:
   llm_preset: "default"
-  llm_report: false
+  llm_report: true
   metrics:
     retrieval:
       - "hit_rate"
@@ -35,6 +41,9 @@ evaluation:
       - "dedup_mrr"
       - "dedup_ndcg"
       - "false_positive_rate"
+      - "recall_3"
+      - "recall_5"
+      - "recall_10"
     generation:
       - "faithfulness"
       - "answer_relevancy"
