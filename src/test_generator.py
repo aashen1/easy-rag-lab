@@ -2883,8 +2883,14 @@ class TestSetGenerator:
         matching_chunk_ids: list[str] = []
         for chunk_id in chunk_ids:
             chunk_text = chunk_id_to_text.get(chunk_id, "")
+            if not chunk_text:
+                continue
             if quote in chunk_text:
                 matching_chunk_ids.append(chunk_id)
+            else:
+                verification = self._verify_quote_in_segment(quote, chunk_text)
+                if verification["found"]:
+                    matching_chunk_ids.append(chunk_id)
 
         if not matching_chunk_ids:
             logger.debug(
