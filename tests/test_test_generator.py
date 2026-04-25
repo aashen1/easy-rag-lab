@@ -276,10 +276,21 @@ class TestLoadMealChunks:
                 MealFile(path="reports/report_0.pdf", sha256="abc", size_bytes=100)
             ],
             stats={"total_pdfs": 1, "total_pages": 50, "total_chunks": 2},
+            config_hashes={"chunker": "testchk1"},
         )
 
+        artifacts_dir = tmp_path / "artifacts"
+        group_dir = artifacts_dir / "abc1230000000000"
+        artifact_chunks_dir = group_dir / "chunks_testchk1" / "reports"
+        artifact_chunks_dir.mkdir(parents=True)
+
+        import shutil
+
+        shutil.copytree(str(reports_dir), str(artifact_chunks_dir), dirs_exist_ok=True)
+
         config = {
-            "chunker": {"output_dir": str(chunks_dir)},
+            "artifacts": {"dir": str(artifacts_dir)},
+            "parser": {"input_dir": str(tmp_path / "raw")},
             "test_generation": {"max_retries": 3},
         }
         generator = TestSetGenerator(config)
@@ -365,7 +376,7 @@ class TestLocateAnswerChunks:
         assert len(result) > 0
         assert "report_0::chunk::000" in result
 
-    def test_locate_without_meal_config_falls_back_to_config(self, tmp_path):
+    def test_locate_with_explicit_chunks_dir(self, tmp_path):
         chunks_dir = tmp_path / "chunks"
         chunks_dir.mkdir()
         source_dir = chunks_dir / "reports"
@@ -384,7 +395,6 @@ class TestLocateAnswerChunks:
                 f.write(json.dumps(chunk, ensure_ascii=False) + "\n")
 
         config = {
-            "chunker": {"output_dir": str(chunks_dir)},
             "test_generation": {"max_retries": 3},
         }
         generator = TestSetGenerator(config)
@@ -392,13 +402,13 @@ class TestLocateAnswerChunks:
         result = generator._locate_answer_chunks(
             answer="净利润12.75%",
             source_path="reports/doc.pages.json",
+            chunks_dir=chunks_dir,
         )
 
         assert len(result) > 0
 
     def test_locate_returns_empty_when_no_chunks_dir(self):
         config = {
-            "chunker": {"output_dir": "/nonexistent/path"},
             "test_generation": {"max_retries": 3},
         }
         generator = TestSetGenerator(config)
@@ -444,7 +454,6 @@ class TestLocateAnswerChunks:
                 f.write(json.dumps(chunk, ensure_ascii=False) + "\n")
 
         config = {
-            "chunker": {"output_dir": str(chunks_dir)},
             "test_generation": {"max_retries": 3},
         }
         generator = TestSetGenerator(config)
@@ -452,12 +461,14 @@ class TestLocateAnswerChunks:
         result_no_expand = generator._locate_answer_chunks(
             answer="营收增长9.53%",
             source_path="reports/doc.md",
+            chunks_dir=chunks_dir,
             adjacent_tolerance=0,
         )
 
         result_expand = generator._locate_answer_chunks(
             answer="营收增长9.53%",
             source_path="reports/doc.md",
+            chunks_dir=chunks_dir,
             adjacent_tolerance=1,
         )
 
@@ -1023,6 +1034,21 @@ class TestDocumentBasedQuestionsSourceFiles:
         md_file = sub_dir / "光模块行业分析.md"
         md_file.write_text("光模块行业内容" * 100, encoding="utf-8")
 
+        chunks_dir = tmp_path / "chunks"
+        chunks_source_dir = chunks_dir / "research_reports"
+        chunks_source_dir.mkdir(parents=True)
+        chunk_data = {
+            "chunk_id": "光模块行业分析_000",
+            "text": "光模块行业内容" * 100,
+            "metadata": {
+                "source": "research_reports/光模块行业分析.md",
+                "chunk_index": 0,
+            },
+        }
+        jsonl_file = chunks_source_dir / "光模块行业分析.jsonl"
+        with open(jsonl_file, "w", encoding="utf-8") as f:
+            f.write(json.dumps(chunk_data, ensure_ascii=False) + "\n")
+
         meal_config = MagicMock()
         meal_config.data_id = "test_data_id"
         meal_config.pdf_files = [MagicMock(path="research_reports/光模块行业分析.pdf")]
@@ -1047,6 +1073,9 @@ class TestDocumentBasedQuestionsSourceFiles:
         with (
             patch.object(
                 self.generator, "_resolve_parsed_dir", return_value=parsed_dir
+            ),
+            patch.object(
+                self.generator, "_resolve_chunks_dir", return_value=chunks_dir
             ),
             patch("src.test_generator.MealManager", return_value=mock_meal_manager),
             patch("src.test_generator.Generator", return_value=mock_generator),
