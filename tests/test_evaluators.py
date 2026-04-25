@@ -276,7 +276,9 @@ class TestBuiltinEvaluator:
 
     @patch("eval.evaluators.builtin_evaluator.calculate_context_precision")
     @patch("eval.evaluators.builtin_evaluator.calculate_context_recall")
-    def test_evaluate_single_context_precision_recall(self, mock_recall, mock_precision):
+    def test_evaluate_single_context_precision_recall(
+        self, mock_recall, mock_precision
+    ):
         """Test evaluating with context precision and recall metrics."""
         mock_precision.return_value = 0.85
         mock_recall.return_value = 0.72
@@ -408,7 +410,9 @@ class TestBuiltinEvaluator:
             "model_name": "test-model",
         }
 
-        with patch("eval.evaluators.builtin_evaluator.calculate_faithfulness") as mock_faith:
+        with patch(
+            "eval.evaluators.builtin_evaluator.calculate_faithfulness"
+        ) as mock_faith:
             mock_faith.return_value = 0.9
 
             result = evaluator.evaluate_single(
@@ -428,7 +432,9 @@ class TestBuiltinEvaluator:
             assert call_kwargs["contexts"] != ["doc1.pdf", "doc2.pdf"]
             assert result.generation_metrics["faithfulness"] == 0.9
 
-    def test_backward_compat_contexts_used_for_retrieval_without_retrieved_sources(self):
+    def test_backward_compat_contexts_used_for_retrieval_without_retrieved_sources(
+        self,
+    ):
         """Test backward compatibility: contexts is used for retrieval when retrieved_sources is not provided."""
         evaluator = BuiltinEvaluator()
 
@@ -445,7 +451,9 @@ class TestBuiltinEvaluator:
 
     @patch("eval.evaluators.builtin_evaluator.calculate_context_precision")
     @patch("eval.evaluators.builtin_evaluator.calculate_context_recall")
-    def test_contexts_used_for_context_precision_recall_not_sources(self, mock_recall, mock_precision):
+    def test_contexts_used_for_context_precision_recall_not_sources(
+        self, mock_recall, mock_precision
+    ):
         """Test that contexts (text) is used for context_precision/recall, not retrieved_sources (paths)."""
         mock_precision.return_value = 0.85
         mock_recall.return_value = 0.72
@@ -550,7 +558,6 @@ class TestBuiltinEvaluator:
         assert "hit_rate" in results[0].retrieval_metrics
         assert results[0].retrieval_metrics["hit_rate"] == 1.0
         assert "false_positive_rate" in results[1].retrieval_metrics
-
 
     def test_missing_type_computes_fpr_not_doc_metrics(self):
         """Test that missing type questions compute FPR but not doc-level metrics."""
@@ -715,8 +722,15 @@ class TestRagasEvaluatorConfigReading:
         evaluator = RagasEvaluator(config=config)
 
         assert evaluator._ragas_config == config["ragas"]
-        assert evaluator._run_config == {"max_workers": 3, "timeout": 45, "max_retries": 1}
-        assert evaluator._embedding_config == {"model_name": "custom-model", "device": "cpu"}
+        assert evaluator._run_config == {
+            "max_workers": 3,
+            "timeout": 45,
+            "max_retries": 1,
+        }
+        assert evaluator._embedding_config == {
+            "model_name": "custom-model",
+            "device": "cpu",
+        }
 
     def test_ragas_config_defaults_when_no_config(self):
         """Test that defaults are used when no config is provided."""
@@ -772,7 +786,7 @@ class TestRagasEvaluatorConfigReading:
 
         mock_run_config = MagicMock()
         with patch("ragas.RunConfig", return_value=mock_run_config) as mock_cls:
-            result = evaluator._build_run_config()
+            _ = evaluator._build_run_config()
 
             mock_cls.assert_called_once_with(max_workers=8, timeout=60, max_retries=3)
 
@@ -796,7 +810,9 @@ class TestRagasEvaluatorConfigReading:
         evaluator = RagasEvaluator(config=config)
 
         mock_ragas_embeddings = MagicMock()
-        with patch("ragas.embeddings.HuggingFaceEmbeddings", return_value=mock_ragas_embeddings) as mock_cls:
+        with patch(
+            "ragas.embeddings.HuggingFaceEmbeddings", return_value=mock_ragas_embeddings
+        ) as mock_cls:
             result = evaluator._create_embeddings(config)
 
             mock_cls.assert_called_once_with(
@@ -816,7 +832,9 @@ class TestRagasEvaluatorConfigReading:
         evaluator = RagasEvaluator(config=config)
 
         mock_ragas_embeddings = MagicMock()
-        with patch("ragas.embeddings.HuggingFaceEmbeddings", return_value=mock_ragas_embeddings) as mock_cls:
+        with patch(
+            "ragas.embeddings.HuggingFaceEmbeddings", return_value=mock_ragas_embeddings
+        ) as mock_cls:
             result = evaluator._create_embeddings(config)
 
             mock_cls.assert_called_once_with(
@@ -837,7 +855,9 @@ class TestRagasEvaluatorConfigReading:
         evaluator = RagasEvaluator(config=config)
 
         mock_ragas_embeddings = MagicMock()
-        with patch("ragas.embeddings.HuggingFaceEmbeddings", return_value=mock_ragas_embeddings) as mock_cls:
+        with patch(
+            "ragas.embeddings.HuggingFaceEmbeddings", return_value=mock_ragas_embeddings
+        ) as mock_cls:
             result = evaluator._create_embeddings(config)
 
             mock_cls.assert_called_once_with(
@@ -851,7 +871,9 @@ class TestRagasEvaluatorConfigReading:
         evaluator = RagasEvaluator(config={})
 
         mock_ragas_embeddings = MagicMock()
-        with patch("ragas.embeddings.HuggingFaceEmbeddings", return_value=mock_ragas_embeddings) as mock_cls:
+        with patch(
+            "ragas.embeddings.HuggingFaceEmbeddings", return_value=mock_ragas_embeddings
+        ) as mock_cls:
             result = evaluator._create_embeddings({})
 
             mock_cls.assert_called_once_with(
@@ -868,7 +890,9 @@ class TestRagasEvaluatorConfigReading:
         }
 
         mock_ragas_embeddings = MagicMock()
-        with patch("ragas.embeddings.HuggingFaceEmbeddings", return_value=mock_ragas_embeddings) as mock_cls:
+        with patch(
+            "ragas.embeddings.HuggingFaceEmbeddings", return_value=mock_ragas_embeddings
+        ) as mock_cls:
             result = evaluator._create_embeddings(system_config)
 
             mock_cls.assert_called_once_with(
@@ -953,20 +977,29 @@ class TestRagasEvaluatorMocked:
         mock_result = MagicMock()
         mock_result.scores = [{"faithfulness": 0.85, "answer_relevancy": 0.72}]
 
-        with patch.object(RagasEvaluator, "_create_llm", return_value=MagicMock()), \
-             patch.object(RagasEvaluator, "_create_embeddings", return_value=MagicMock()), \
-             patch.object(RagasEvaluator, "_create_metrics", return_value=[MagicMock()]), \
-             patch.object(RagasEvaluator, "_build_ragas_dataset", return_value=MagicMock()), \
-             patch.object(RagasEvaluator, "_build_run_config", return_value=MagicMock()), \
-             patch("ragas.evaluate", return_value=mock_result):
-
+        with (
+            patch.object(RagasEvaluator, "_create_llm", return_value=MagicMock()),
+            patch.object(
+                RagasEvaluator, "_create_embeddings", return_value=MagicMock()
+            ),
+            patch.object(RagasEvaluator, "_create_metrics", return_value=[MagicMock()]),
+            patch.object(
+                RagasEvaluator, "_build_ragas_dataset", return_value=MagicMock()
+            ),
+            patch.object(RagasEvaluator, "_build_run_config", return_value=MagicMock()),
+            patch("ragas.evaluate", return_value=mock_result),
+        ):
             result = evaluator.evaluate_single(
                 question_id="q1",
                 question="What is RAG?",
                 answer="RAG is retrieval-augmented generation.",
                 contexts=["RAG combines retrieval and generation."],
                 expected_answer="RAG is a technique that combines retrieval with generation.",
-                llm_config={"api_key": "test", "base_url": "http://test", "model_name": "test-model"},
+                llm_config={
+                    "api_key": "test",
+                    "base_url": "http://test",
+                    "model_name": "test-model",
+                },
                 generation_metrics=["faithfulness", "answer_relevancy"],
             )
 
@@ -990,16 +1023,25 @@ class TestRagasEvaluatorMocked:
             {"question_id": "q2", "question": "Q2", "answer": "A2", "contexts": ["C2"]},
         ]
 
-        with patch.object(RagasEvaluator, "_create_llm", return_value=MagicMock()), \
-             patch.object(RagasEvaluator, "_create_embeddings", return_value=MagicMock()), \
-             patch.object(RagasEvaluator, "_create_metrics", return_value=[MagicMock()]), \
-             patch.object(RagasEvaluator, "_build_ragas_dataset", return_value=MagicMock()), \
-             patch.object(RagasEvaluator, "_build_run_config", return_value=MagicMock()), \
-             patch("ragas.evaluate", return_value=mock_result):
-
+        with (
+            patch.object(RagasEvaluator, "_create_llm", return_value=MagicMock()),
+            patch.object(
+                RagasEvaluator, "_create_embeddings", return_value=MagicMock()
+            ),
+            patch.object(RagasEvaluator, "_create_metrics", return_value=[MagicMock()]),
+            patch.object(
+                RagasEvaluator, "_build_ragas_dataset", return_value=MagicMock()
+            ),
+            patch.object(RagasEvaluator, "_build_run_config", return_value=MagicMock()),
+            patch("ragas.evaluate", return_value=mock_result),
+        ):
             results = evaluator.evaluate_batch(
                 samples=samples,
-                llm_config={"api_key": "test", "base_url": "http://test", "model_name": "test-model"},
+                llm_config={
+                    "api_key": "test",
+                    "base_url": "http://test",
+                    "model_name": "test-model",
+                },
                 generation_metrics=["faithfulness", "answer_relevancy"],
             )
 
@@ -1023,9 +1065,7 @@ class TestRagasEvaluatorMocked:
         """Test that unsupported metrics are caught."""
         evaluator = RagasEvaluator(config={})
 
-        errors = evaluator.validate_metrics(
-            generation_metrics=["nonexistent_metric"]
-        )
+        errors = evaluator.validate_metrics(generation_metrics=["nonexistent_metric"])
         assert len(errors) > 0
 
 

@@ -97,7 +97,9 @@ class TestVerifyExperimentAssets:
             exp_dir = self._create_experiment_dir(temp_path)
             system_config = {"parser": {"input_dir": "data/raw"}}
 
-            result = verify_experiment_assets(exp_dir, system_config, verify_pdf_hashes=False)
+            result = verify_experiment_assets(
+                exp_dir, system_config, verify_pdf_hashes=False
+            )
 
             assert result.valid is True
             assert result.missing_files == []
@@ -111,7 +113,9 @@ class TestVerifyExperimentAssets:
             exp_dir = self._create_experiment_dir(temp_path, include_manifest=False)
             system_config = {"parser": {"input_dir": "data/raw"}}
 
-            result = verify_experiment_assets(exp_dir, system_config, verify_pdf_hashes=False)
+            result = verify_experiment_assets(
+                exp_dir, system_config, verify_pdf_hashes=False
+            )
 
             assert result.valid is False
             assert "manifest.json" in result.missing_files
@@ -124,7 +128,9 @@ class TestVerifyExperimentAssets:
             exp_dir = self._create_experiment_dir(temp_path, include_config=False)
             system_config = {"parser": {"input_dir": "data/raw"}}
 
-            result = verify_experiment_assets(exp_dir, system_config, verify_pdf_hashes=False)
+            result = verify_experiment_assets(
+                exp_dir, system_config, verify_pdf_hashes=False
+            )
 
             assert result.valid is False
             assert "config_snapshot.yaml" in result.missing_files
@@ -137,7 +143,9 @@ class TestVerifyExperimentAssets:
             exp_dir = self._create_experiment_dir(temp_path, include_meal=False)
             system_config = {"parser": {"input_dir": "data/raw"}}
 
-            result = verify_experiment_assets(exp_dir, system_config, verify_pdf_hashes=False)
+            result = verify_experiment_assets(
+                exp_dir, system_config, verify_pdf_hashes=False
+            )
 
             assert result.valid is False
             assert "meal_snapshot.json" in result.missing_files
@@ -150,7 +158,9 @@ class TestVerifyExperimentAssets:
             exp_dir = self._create_experiment_dir(temp_path, valid_manifest=False)
             system_config = {"parser": {"input_dir": "data/raw"}}
 
-            result = verify_experiment_assets(exp_dir, system_config, verify_pdf_hashes=False)
+            result = verify_experiment_assets(
+                exp_dir, system_config, verify_pdf_hashes=False
+            )
 
             assert result.valid is False
             assert "manifest.json" in result.invalid_files
@@ -163,7 +173,9 @@ class TestVerifyExperimentAssets:
             exp_dir = self._create_experiment_dir(temp_path, valid_config=False)
             system_config = {"parser": {"input_dir": "data/raw"}}
 
-            result = verify_experiment_assets(exp_dir, system_config, verify_pdf_hashes=False)
+            result = verify_experiment_assets(
+                exp_dir, system_config, verify_pdf_hashes=False
+            )
 
             assert result.valid is False
             assert "config_snapshot.yaml" in result.invalid_files
@@ -176,7 +188,9 @@ class TestVerifyExperimentAssets:
             exp_dir = self._create_experiment_dir(temp_path, valid_meal=False)
             system_config = {"parser": {"input_dir": "data/raw"}}
 
-            result = verify_experiment_assets(exp_dir, system_config, verify_pdf_hashes=False)
+            result = verify_experiment_assets(
+                exp_dir, system_config, verify_pdf_hashes=False
+            )
 
             assert result.valid is False
             assert "meal_snapshot.json" in result.invalid_files
@@ -189,7 +203,9 @@ class TestVerifyExperimentAssets:
             exp_dir = temp_path / "nonexistent"
             system_config = {"parser": {"input_dir": "data/raw"}}
 
-            with pytest.raises(ConfigurationError, match="Experiment directory not found"):
+            with pytest.raises(
+                ConfigurationError, match="Experiment directory not found"
+            ):
                 verify_experiment_assets(exp_dir, system_config)
 
     def test_verify_pdf_not_found(self):
@@ -208,11 +224,7 @@ class TestVerifyExperimentAssets:
             with open(exp_dir / "config_snapshot.yaml", "w", encoding="utf-8") as f:
                 yaml.dump(config, f)
 
-            meal = {
-                "pdf_files": [
-                    {"path": "missing.pdf", "sha256": "abc123"}
-                ]
-            }
+            meal = {"pdf_files": [{"path": "missing.pdf", "sha256": "abc123"}]}
             with open(exp_dir / "meal_snapshot.json", "w", encoding="utf-8") as f:
                 json.dump(meal, f)
 
@@ -220,7 +232,9 @@ class TestVerifyExperimentAssets:
             raw_dir.mkdir()
             system_config = {"parser": {"input_dir": str(raw_dir)}}
 
-            result = verify_experiment_assets(exp_dir, system_config, verify_pdf_hashes=True)
+            result = verify_experiment_assets(
+                exp_dir, system_config, verify_pdf_hashes=True
+            )
 
             assert result.valid is False
             assert "missing.pdf" in result.pdf_issues
@@ -431,7 +445,10 @@ class TestExtractCategoryMetrics:
         variant_result = {
             "results": [
                 {"category": "factual"},
-                {"category": "factual", "retrieval": {"hit_rate": 0.8, "mrr": 0.7, "ndcg": 0.75}},
+                {
+                    "category": "factual",
+                    "retrieval": {"hit_rate": 0.8, "mrr": 0.7, "ndcg": 0.75},
+                },
             ]
         }
 
@@ -539,8 +556,18 @@ class TestGenerateComparisonReport:
                             "metrics": {"hit_rate": 0.85, "mrr": 0.72, "ndcg": 0.78},
                             "avg_time_per_question": 2.5,
                             "category_metrics": {
-                                "factual": {"hit_rate": 0.9, "mrr": 0.8, "ndcg": 0.85, "count": 10},
-                                "boundary": {"hit_rate": 0.6, "mrr": 0.5, "ndcg": 0.55, "count": 5},
+                                "factual": {
+                                    "hit_rate": 0.9,
+                                    "mrr": 0.8,
+                                    "ndcg": 0.85,
+                                    "count": 10,
+                                },
+                                "boundary": {
+                                    "hit_rate": 0.6,
+                                    "mrr": 0.5,
+                                    "ndcg": 0.55,
+                                    "count": 5,
+                                },
                             },
                         }
                     ],
@@ -596,7 +623,9 @@ class TestCLITestSetGeneration:
             _handle_generate_test_set(mock_meal_manager, config, args)
 
             mock_generator.generate_document_based_questions.assert_called_once()
-            call_kwargs = mock_generator.generate_document_based_questions.call_args.kwargs
+            call_kwargs = (
+                mock_generator.generate_document_based_questions.call_args.kwargs
+            )
             assert call_kwargs["name"] == "custom_test_set"
             assert call_kwargs["meal_name"] == "test_meal"
             assert call_kwargs["num_questions"] == 10
@@ -631,7 +660,9 @@ class TestCLITestSetGeneration:
             _handle_generate_test_set(mock_meal_manager, config, args)
 
             mock_generator.generate_document_based_questions.assert_called_once()
-            call_kwargs = mock_generator.generate_document_based_questions.call_args.kwargs
+            call_kwargs = (
+                mock_generator.generate_document_based_questions.call_args.kwargs
+            )
             assert call_kwargs["name"] is None
 
     def test_cli_legacy_strategy(self):
@@ -719,20 +750,36 @@ class TestMetricNamespacePrefix:
     @patch("eval.run_experiment._create_evaluators")
     @patch("eval.run_experiment.get_llm_config")
     def test_single_backend_no_prefix(
-        self, mock_llm_config, mock_create_evaluators, mock_collect,
-        mock_ragas, mock_builtin,
+        self,
+        mock_llm_config,
+        mock_create_evaluators,
+        mock_collect,
+        mock_ragas,
+        mock_builtin,
     ):
         mock_llm_config.return_value = {"api_key": "test"}
         mock_evaluator = MagicMock()
-        mock_evaluator.supported_generation_metrics = ["faithfulness", "answer_relevancy"]
+        mock_evaluator.supported_generation_metrics = [
+            "faithfulness",
+            "answer_relevancy",
+        ]
         mock_create_evaluators.return_value = {"builtin": mock_evaluator}
         mock_collect.return_value = [
-            {"question_id": "q1", "question": "Q1?", "answer": "A1", "contexts": ["c1"]},
+            {
+                "question_id": "q1",
+                "question": "Q1?",
+                "answer": "A1",
+                "contexts": ["c1"],
+            },
         ]
         mock_builtin.return_value = [
-            {"id": "q1", "question": "Q1?", "answer": "A1",
-             "retrieval": {"hit_rate": 0.8, "mrr": 0.7, "ndcg": 0.75},
-             "generation": {"faithfulness": 0.9, "answer_relevancy": 0.8}},
+            {
+                "id": "q1",
+                "question": "Q1?",
+                "answer": "A1",
+                "retrieval": {"hit_rate": 0.8, "mrr": 0.7, "ndcg": 0.75},
+                "generation": {"faithfulness": 0.9, "answer_relevancy": 0.8},
+            },
         ]
 
         exp_config = self._make_exp_config(backends=["builtin"])
@@ -753,31 +800,57 @@ class TestMetricNamespacePrefix:
     @patch("eval.run_experiment._create_evaluators")
     @patch("eval.run_experiment.get_llm_config")
     def test_dual_backends_have_prefix(
-        self, mock_llm_config, mock_create_evaluators, mock_collect,
-        mock_ragas, mock_builtin,
+        self,
+        mock_llm_config,
+        mock_create_evaluators,
+        mock_collect,
+        mock_ragas,
+        mock_builtin,
     ):
         mock_llm_config.return_value = {"api_key": "test"}
         mock_builtin_evaluator = MagicMock()
-        mock_builtin_evaluator.supported_generation_metrics = ["faithfulness", "answer_relevancy"]
+        mock_builtin_evaluator.supported_generation_metrics = [
+            "faithfulness",
+            "answer_relevancy",
+        ]
         mock_ragas_evaluator = MagicMock()
         mock_ragas_evaluator.supported_generation_metrics = [
-            "faithfulness", "answer_relevancy", "context_precision",
+            "faithfulness",
+            "answer_relevancy",
+            "context_precision",
         ]
         mock_create_evaluators.return_value = {
             "builtin": mock_builtin_evaluator,
             "ragas": mock_ragas_evaluator,
         }
         mock_collect.return_value = [
-            {"question_id": "q1", "question": "Q1?", "answer": "A1", "contexts": ["c1"]},
+            {
+                "question_id": "q1",
+                "question": "Q1?",
+                "answer": "A1",
+                "contexts": ["c1"],
+            },
         ]
         mock_builtin.return_value = [
-            {"id": "q1", "question": "Q1?", "answer": "A1",
-             "retrieval": {"hit_rate": 0.8, "mrr": 0.7, "ndcg": 0.75},
-             "generation": {"faithfulness": 0.9, "answer_relevancy": 0.8}},
+            {
+                "id": "q1",
+                "question": "Q1?",
+                "answer": "A1",
+                "retrieval": {"hit_rate": 0.8, "mrr": 0.7, "ndcg": 0.75},
+                "generation": {"faithfulness": 0.9, "answer_relevancy": 0.8},
+            },
         ]
         mock_ragas.return_value = [
-            {"id": "q1", "question": "Q1?", "answer": "A1",
-             "generation": {"faithfulness": 0.85, "answer_relevancy": 0.75, "context_precision": 0.7}},
+            {
+                "id": "q1",
+                "question": "Q1?",
+                "answer": "A1",
+                "generation": {
+                    "faithfulness": 0.85,
+                    "answer_relevancy": 0.75,
+                    "context_precision": 0.7,
+                },
+            },
         ]
 
         exp_config = self._make_exp_config(backends=["builtin", "ragas"])
@@ -804,28 +877,51 @@ class TestMetricNamespacePrefix:
     @patch("eval.run_experiment._create_evaluators")
     @patch("eval.run_experiment.get_llm_config")
     def test_dual_backends_builtin_computes_all_supported(
-        self, mock_llm_config, mock_create_evaluators, mock_collect,
-        mock_ragas, mock_builtin,
+        self,
+        mock_llm_config,
+        mock_create_evaluators,
+        mock_collect,
+        mock_ragas,
+        mock_builtin,
     ):
         mock_llm_config.return_value = {"api_key": "test"}
         mock_builtin_evaluator = MagicMock()
-        mock_builtin_evaluator.supported_generation_metrics = ["faithfulness", "answer_relevancy"]
+        mock_builtin_evaluator.supported_generation_metrics = [
+            "faithfulness",
+            "answer_relevancy",
+        ]
         mock_ragas_evaluator = MagicMock()
-        mock_ragas_evaluator.supported_generation_metrics = ["faithfulness", "answer_relevancy"]
+        mock_ragas_evaluator.supported_generation_metrics = [
+            "faithfulness",
+            "answer_relevancy",
+        ]
         mock_create_evaluators.return_value = {
             "builtin": mock_builtin_evaluator,
             "ragas": mock_ragas_evaluator,
         }
         mock_collect.return_value = [
-            {"question_id": "q1", "question": "Q1?", "answer": "A1", "contexts": ["c1"]},
+            {
+                "question_id": "q1",
+                "question": "Q1?",
+                "answer": "A1",
+                "contexts": ["c1"],
+            },
         ]
         mock_builtin.return_value = [
-            {"id": "q1", "question": "Q1?", "answer": "A1",
-             "generation": {"faithfulness": 0.9, "answer_relevancy": 0.8}},
+            {
+                "id": "q1",
+                "question": "Q1?",
+                "answer": "A1",
+                "generation": {"faithfulness": 0.9, "answer_relevancy": 0.8},
+            },
         ]
         mock_ragas.return_value = [
-            {"id": "q1", "question": "Q1?", "answer": "A1",
-             "generation": {"faithfulness": 0.85, "answer_relevancy": 0.75}},
+            {
+                "id": "q1",
+                "question": "Q1?",
+                "answer": "A1",
+                "generation": {"faithfulness": 0.85, "answer_relevancy": 0.75},
+            },
         ]
 
         exp_config = self._make_exp_config(backends=["builtin", "ragas"])
@@ -837,7 +933,10 @@ class TestMetricNamespacePrefix:
         )
 
         call_args = mock_builtin.call_args
-        assert call_args.kwargs["generation_metrics"] == ["faithfulness", "answer_relevancy"]
+        assert call_args.kwargs["generation_metrics"] == [
+            "faithfulness",
+            "answer_relevancy",
+        ]
 
     def test_compute_aggregate_with_prefixed_metrics(self):
         results = [
@@ -894,11 +993,19 @@ class TestMetricNamespacePrefix:
         results = [
             {
                 "id": "q1",
-                "generation": {"faithfulness": 0.9, "context_precision": 0.8, "context_recall": 0.7},
+                "generation": {
+                    "faithfulness": 0.9,
+                    "context_precision": 0.8,
+                    "context_recall": 0.7,
+                },
             },
             {
                 "id": "q2",
-                "generation": {"faithfulness": 0.7, "context_precision": 0.6, "context_recall": 0.5},
+                "generation": {
+                    "faithfulness": 0.7,
+                    "context_precision": 0.6,
+                    "context_recall": 0.5,
+                },
             },
         ]
 
@@ -954,23 +1061,37 @@ class TestMetricNamespacePrefix:
     @patch("eval.run_experiment._create_evaluators")
     @patch("eval.run_experiment.get_llm_config")
     def test_single_ragas_backend_no_prefix(
-        self, mock_llm_config, mock_create_evaluators, mock_collect,
+        self,
+        mock_llm_config,
+        mock_create_evaluators,
+        mock_collect,
         mock_builtin,
     ):
         mock_llm_config.return_value = {"api_key": "test"}
         mock_ragas_evaluator = MagicMock()
         mock_ragas_evaluator.supported_generation_metrics = [
-            "faithfulness", "answer_relevancy", "context_precision",
+            "faithfulness",
+            "answer_relevancy",
+            "context_precision",
         ]
         mock_create_evaluators.return_value = {"ragas": mock_ragas_evaluator}
         mock_collect.return_value = [
-            {"question_id": "q1", "question": "Q1?", "answer": "A1", "contexts": ["c1"]},
+            {
+                "question_id": "q1",
+                "question": "Q1?",
+                "answer": "A1",
+                "contexts": ["c1"],
+            },
         ]
 
         with patch("eval.run_experiment._evaluate_with_ragas") as mock_ragas:
             mock_ragas.return_value = [
-                {"id": "q1", "question": "Q1?", "answer": "A1",
-                 "generation": {"faithfulness": 0.85, "answer_relevancy": 0.75}},
+                {
+                    "id": "q1",
+                    "question": "Q1?",
+                    "answer": "A1",
+                    "generation": {"faithfulness": 0.85, "answer_relevancy": 0.75},
+                },
             ]
 
             exp_config = self._make_exp_config(backends=["ragas"])
@@ -999,7 +1120,10 @@ class TestDualBackendEvaluation:
             "question": "What is RAG?",
             "answer": "RAG is retrieval-augmented generation.",
             "retrieval": {"hit_rate": 1.0, "mrr": 1.0, "ndcg": 1.0},
-            "generation": {"builtin_faithfulness": 0.8, "builtin_answer_relevancy": 0.7},
+            "generation": {
+                "builtin_faithfulness": 0.8,
+                "builtin_answer_relevancy": 0.7,
+            },
             "sources": ["doc1.pdf"],
             "expected_sources": ["doc1.pdf"],
         }
@@ -1063,11 +1187,15 @@ class TestEvaluateWithBuiltinContextsSourcesSeparation:
             },
         ]
 
-        with patch.object(evaluator, "evaluate_single", return_value=MagicMock(
-            retrieval_metrics={"hit_rate": 1.0, "mrr": 1.0, "ndcg": 1.0},
-            generation_metrics={},
-            error=None,
-        )) as mock_eval:
+        with patch.object(
+            evaluator,
+            "evaluate_single",
+            return_value=MagicMock(
+                retrieval_metrics={"hit_rate": 1.0, "mrr": 1.0, "ndcg": 1.0},
+                generation_metrics={},
+                error=None,
+            ),
+        ) as mock_eval:
             _evaluate_with_builtin(
                 samples=samples,
                 evaluator=evaluator,
@@ -1076,7 +1204,10 @@ class TestEvaluateWithBuiltinContextsSourcesSeparation:
 
             mock_eval.assert_called_once()
             call_kwargs = mock_eval.call_args.kwargs
-            assert call_kwargs["contexts"] == ["Revenue was $1M in 2023.", "Profit was $500K."]
+            assert call_kwargs["contexts"] == [
+                "Revenue was $1M in 2023.",
+                "Profit was $500K.",
+            ]
             assert call_kwargs["retrieved_sources"] == ["doc1.pdf", "doc2.pdf"]
             assert call_kwargs["contexts"] != call_kwargs["retrieved_sources"]
 
@@ -1104,11 +1235,15 @@ class TestEvaluateWithBuiltinContextsSourcesSeparation:
             },
         ]
 
-        with patch.object(evaluator, "evaluate_single", return_value=MagicMock(
-            retrieval_metrics={"hit_rate": 1.0},
-            generation_metrics={},
-            error=None,
-        )) as mock_eval:
+        with patch.object(
+            evaluator,
+            "evaluate_single",
+            return_value=MagicMock(
+                retrieval_metrics={"hit_rate": 1.0},
+                generation_metrics={},
+                error=None,
+            ),
+        ) as mock_eval:
             _evaluate_with_builtin(
                 samples=samples,
                 evaluator=evaluator,
@@ -1148,14 +1283,15 @@ class TestEvaluateWithBuiltinContextsSourcesSeparation:
 
 
 class TestGenerateLlmReportOnly:
-
     def test_nonexistent_directory_raises(self, tmp_path):
         from eval.run_experiment import generate_llm_report_only
+
         with pytest.raises(ConfigurationError, match="Experiment directory not found"):
             generate_llm_report_only(str(tmp_path / "nonexistent"))
 
     def test_missing_manifest_raises(self, tmp_path):
         from eval.run_experiment import generate_llm_report_only
+
         exp_dir = tmp_path / "exp_test"
         exp_dir.mkdir()
         with pytest.raises(ConfigurationError, match="Manifest file not found"):
@@ -1182,16 +1318,25 @@ class TestGenerateLlmReportOnly:
 
 
 class TestComputeAggregateMetricsEnhanced:
-
     def test_diversity_aggregation(self):
         results = [
             {
                 "id": "q1",
-                "retrieval": {"hit_rate": 1.0, "mrr": 1.0, "ndcg": 1.0, "retrieval_diversity": 0.4},
+                "retrieval": {
+                    "hit_rate": 1.0,
+                    "mrr": 1.0,
+                    "ndcg": 1.0,
+                    "retrieval_diversity": 0.4,
+                },
             },
             {
                 "id": "q2",
-                "retrieval": {"hit_rate": 0.0, "mrr": 0.0, "ndcg": 0.0, "retrieval_diversity": 0.8},
+                "retrieval": {
+                    "hit_rate": 0.0,
+                    "mrr": 0.0,
+                    "ndcg": 0.0,
+                    "retrieval_diversity": 0.8,
+                },
             },
         ]
         metrics = compute_aggregate_metrics(results)
@@ -1244,8 +1389,12 @@ class TestComputeAggregateMetricsEnhanced:
         assert "single_fact" in metrics["by_question_type"]
         assert "reasoning" in metrics["by_question_type"]
         assert metrics["by_question_type"]["single_fact"]["count"] == 2
-        assert metrics["by_question_type"]["single_fact"]["avg_hit_rate"] == pytest.approx(0.5)
-        assert metrics["by_question_type"]["reasoning"]["avg_hit_rate"] == pytest.approx(0.5)
+        assert metrics["by_question_type"]["single_fact"][
+            "avg_hit_rate"
+        ] == pytest.approx(0.5)
+        assert metrics["by_question_type"]["reasoning"][
+            "avg_hit_rate"
+        ] == pytest.approx(0.5)
 
     def test_chunk_dedup_fpr_from_separate_keys(self):
         results = [
@@ -1268,15 +1417,21 @@ class TestComputeAggregateMetricsEnhanced:
 
 
 class TestRunExperimentBoundaryConditions:
-
     def _make_exp_config(self, **overrides) -> dict:
         defaults = {
             "name": "test_exp",
             "description": "test",
             "data": {"meal": "test"},
-            "test_sets": [{"name": "test_set_1", "generation": {"strategy": "document", "num_questions": 5}}],
+            "test_sets": [
+                {
+                    "name": "test_set_1",
+                    "generation": {"strategy": "document", "num_questions": 5},
+                }
+            ],
             "variants": [{"name": "v1"}],
-            "evaluation": {"metrics": {"retrieval": ["hit_rate"], "generation": ["faithfulness"]}},
+            "evaluation": {
+                "metrics": {"retrieval": ["hit_rate"], "generation": ["faithfulness"]}
+            },
         }
         defaults.update(overrides)
         return defaults
@@ -1290,8 +1445,18 @@ class TestRunExperimentBoundaryConditions:
     @pytest.mark.unit
     def test_compute_aggregate_all_errors(self):
         results = [
-            {"id": "q1", "error": "API error", "time_seconds": 1.0, "question_type": "factual"},
-            {"id": "q2", "error": "Timeout", "time_seconds": 2.0, "question_type": "factual"},
+            {
+                "id": "q1",
+                "error": "API error",
+                "time_seconds": 1.0,
+                "question_type": "factual",
+            },
+            {
+                "id": "q2",
+                "error": "Timeout",
+                "time_seconds": 2.0,
+                "question_type": "factual",
+            },
         ]
         metrics = compute_aggregate_metrics(results)
         assert metrics.get("avg_hit_rate") == 0.0
@@ -1317,15 +1482,15 @@ class TestRunExperimentBoundaryConditions:
     @pytest.mark.unit
     def test_sanitize_config_api_key_in_model_kwargs(self):
         config = {
-            "llm_presets": {
-                "default": {
-                    "model_kwargs": {"api_key": "sk-secret-123"}
-                }
-            }
+            "llm_presets": {"default": {"model_kwargs": {"api_key": "sk-secret-123"}}}
         }
         result = sanitize_config(config)
-        assert "model_kwargs" not in result["llm_presets"]["default"] or \
-               result["llm_presets"]["default"].get("model_kwargs", {}).get("api_key", "***") in ["***", "sk-secret-123"]
+        assert "model_kwargs" not in result["llm_presets"]["default"] or result[
+            "llm_presets"
+        ]["default"].get("model_kwargs", {}).get("api_key", "***") in [
+            "***",
+            "sk-secret-123",
+        ]
 
     @pytest.mark.unit
     def test_compute_aggregate_partial_missing_metrics(self):
@@ -1359,27 +1524,27 @@ class TestRunExperimentBoundaryConditions:
 
     @pytest.mark.unit
     def test_sanitize_config_non_string_api_key(self):
-        config = {
-            "llm_presets": {
-                "default": {
-                    "api_key": 12345
-                }
-            }
-        }
+        config = {"llm_presets": {"default": {"api_key": 12345}}}
         result = sanitize_config(config)
         assert result["llm_presets"]["default"]["api_key"] == "***"
 
 
 class TestRunExperimentExceptionPaths:
-
     def _make_exp_config(self, **overrides) -> dict:
         defaults = {
             "name": "test_exp",
             "description": "test",
             "data": {"meal": "test"},
-            "test_sets": [{"name": "test_set_1", "generation": {"strategy": "document", "num_questions": 5}}],
+            "test_sets": [
+                {
+                    "name": "test_set_1",
+                    "generation": {"strategy": "document", "num_questions": 5},
+                }
+            ],
             "variants": [{"name": "v1"}],
-            "evaluation": {"metrics": {"retrieval": ["hit_rate"], "generation": ["faithfulness"]}},
+            "evaluation": {
+                "metrics": {"retrieval": ["hit_rate"], "generation": ["faithfulness"]}
+            },
         }
         defaults.update(overrides)
         return defaults
@@ -1408,37 +1573,37 @@ class TestRunExperimentExceptionPaths:
 
     @pytest.mark.unit
     def test_verify_experiment_assets_corrupted_pdf_hash(self, tmp_path):
-        import hashlib
-        exp_config = self._make_exp_config()
         exp_dir = tmp_path / "exp_corrupted_pdf"
         exp_dir.mkdir()
-        (exp_dir / "manifest.json").write_text('{"name": "test_exp", "status": "running", "variants": ["v1"], "created_at": "2026-01-01"}', encoding="utf-8")
+        (exp_dir / "manifest.json").write_text(
+            '{"name": "test_exp", "status": "running", "variants": ["v1"], "created_at": "2026-01-01"}',
+            encoding="utf-8",
+        )
         (exp_dir / "config_snapshot.yaml").write_text("name: test", encoding="utf-8")
 
         fake_pdf = tmp_path / "fake.pdf"
         fake_pdf.write_bytes(b"fake pdf content")
-        pdf_hash = hashlib.sha256(fake_pdf.read_bytes()).hexdigest()
 
         raw_dir = tmp_path / "data" / "raw"
         raw_dir.mkdir(parents=True)
         (raw_dir / "fake.pdf").write_bytes(b"fake pdf content")
 
         with open(exp_dir / "meal_snapshot.json", "w", encoding="utf-8") as f:
-            json.dump({
-                "pdf_files": [
-                    {"path": "fake.pdf", "sha256": "0" * 64}
-                ]
-            }, f)
+            json.dump({"pdf_files": [{"path": "fake.pdf", "sha256": "0" * 64}]}, f)
 
         config_with_raw = self._make_exp_config()
         config_with_raw["parser"] = {"input_dir": str(raw_dir)}
-        result = verify_experiment_assets(exp_dir, config_with_raw, verify_pdf_hashes=True)
+        result = verify_experiment_assets(
+            exp_dir, config_with_raw, verify_pdf_hashes=True
+        )
         assert result.pdf_issues
         assert "fake.pdf" in result.pdf_issues
 
     @pytest.mark.unit
     def test_evaluate_test_set_missing_exp_config(self):
-        with pytest.raises(ConfigurationError, match="exp_config and system_config are required"):
+        with pytest.raises(
+            ConfigurationError, match="exp_config and system_config are required"
+        ):
             evaluate_test_set(
                 pipeline=MagicMock(),
                 test_set={"questions": []},
@@ -1447,7 +1612,9 @@ class TestRunExperimentExceptionPaths:
 
     @pytest.mark.unit
     def test_evaluate_test_set_missing_system_config(self):
-        with pytest.raises(ConfigurationError, match="exp_config and system_config are required"):
+        with pytest.raises(
+            ConfigurationError, match="exp_config and system_config are required"
+        ):
             evaluate_test_set(
                 pipeline=MagicMock(),
                 test_set={"questions": []},
@@ -1456,7 +1623,9 @@ class TestRunExperimentExceptionPaths:
 
     @patch("eval.run_experiment._create_evaluators")
     @patch("eval.run_experiment.get_llm_config")
-    def test_evaluate_test_set_evaluator_creation_fails(self, mock_llm_config, mock_create):
+    def test_evaluate_test_set_evaluator_creation_fails(
+        self, mock_llm_config, mock_create
+    ):
         mock_llm_config.return_value = {"api_key": "test"}
         mock_create.side_effect = Exception("Failed to create evaluator")
 
@@ -1471,7 +1640,9 @@ class TestRunExperimentExceptionPaths:
 
     @patch("eval.run_experiment._create_evaluators")
     @patch("eval.run_experiment.get_llm_config")
-    def test_evaluate_test_set_empty_questions(self, mock_llm_config, mock_create_evaluators):
+    def test_evaluate_test_set_empty_questions(
+        self, mock_llm_config, mock_create_evaluators
+    ):
         mock_llm_config.return_value = {"api_key": "test"}
         mock_evaluator = MagicMock()
         mock_evaluator.supported_generation_metrics = []
@@ -1498,7 +1669,13 @@ class TestRunExperimentExceptionPaths:
                 {"id": "q3", "question": "Valid?", "test_set": "t1"},
             ],
         }
-        pipeline.run.return_value = {"answer": "A3", "contexts": ["c3"], "sources": ["s3"], "time_seconds": 0.5, "token_usage": None}
+        pipeline.run.return_value = {
+            "answer": "A3",
+            "contexts": ["c3"],
+            "sources": ["s3"],
+            "time_seconds": 0.5,
+            "token_usage": None,
+        }
 
         samples = _collect_rag_samples(pipeline, test_set, {})
 

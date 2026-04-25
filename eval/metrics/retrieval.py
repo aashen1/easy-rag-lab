@@ -8,7 +8,7 @@ def calculate_hit_rate(
     retrieved_sources: list[str],
     expected_sources: list[str],
     k: int = 5,
-    mode: str = "standard"
+    mode: str = "standard",
 ) -> float:
     """Calculate hit rate for retrieval evaluation.
 
@@ -36,32 +36,29 @@ def calculate_hit_rate(
         ValueError: If mode is not 'standard' or 'recall'.
     """
     if mode not in ("standard", "recall"):
-        raise EvaluationError(
-            f"mode must be 'standard' or 'recall', got '{mode}'")
+        raise EvaluationError(f"mode must be 'standard' or 'recall', got '{mode}'")
 
     if not expected_sources:
         return 0.0
 
     if mode == "standard":
         top_k = retrieved_sources[:k]
-        top_k_set = set(normalize_source(s, include_parent=True)
-                        for s in top_k)
-        expected_set = set(normalize_source(s, include_parent=True)
-                           for s in expected_sources)
+        top_k_set = set(normalize_source(s, include_parent=True) for s in top_k)
+        expected_set = set(
+            normalize_source(s, include_parent=True) for s in expected_sources
+        )
         return 1.0 if top_k_set & expected_set else 0.0
 
     top_k = retrieved_sources[:k]
-    top_k_set = set(normalize_source(s, include_parent=True)
-                    for s in top_k)
-    expected_set = set(normalize_source(s, include_parent=True)
-                       for s in expected_sources)
+    top_k_set = set(normalize_source(s, include_parent=True) for s in top_k)
+    expected_set = set(
+        normalize_source(s, include_parent=True) for s in expected_sources
+    )
     hits = len(top_k_set & expected_set)
     return hits / len(expected_set)
 
 
-def calculate_mrr(
-    retrieved_sources: list[str], expected_sources: list[str]
-) -> float:
+def calculate_mrr(retrieved_sources: list[str], expected_sources: list[str]) -> float:
     """Calculate Reciprocal Rank (RR) for a single query.
 
     This function computes the Reciprocal Rank for a single query, which is
@@ -94,8 +91,9 @@ def calculate_mrr(
     if not expected_sources:
         return 0.0
 
-    expected_set = set(normalize_source(s, include_parent=True)
-                       for s in expected_sources)
+    expected_set = set(
+        normalize_source(s, include_parent=True) for s in expected_sources
+    )
 
     for i, source in enumerate(retrieved_sources):
         if normalize_source(source, include_parent=True) in expected_set:
@@ -149,16 +147,19 @@ def calculate_ndcg(
     if not expected_sources:
         return 0.0
 
-    expected_normalized = [normalize_source(
-        s, include_parent=True) for s in expected_sources]
+    expected_normalized = [
+        normalize_source(s, include_parent=True) for s in expected_sources
+    ]
     expected_set = set(expected_normalized)
 
     if relevance_scores is None:
-        relevance_scores = {normalize_source(
-            s, include_parent=True): 1 for s in expected_sources}
+        relevance_scores = {
+            normalize_source(s, include_parent=True): 1 for s in expected_sources
+        }
 
-    retrieved_normalized = [normalize_source(
-        s, include_parent=True) for s in retrieved_sources[:k]]
+    retrieved_normalized = [
+        normalize_source(s, include_parent=True) for s in retrieved_sources[:k]
+    ]
 
     seen: set = set()
     unique_retrieved: list[str] = []

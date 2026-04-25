@@ -8,8 +8,10 @@ from src.exceptions import EvaluationError
 
 try:
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
+
     HAS_MATPLOTLIB = True
 except ImportError:
     HAS_MATPLOTLIB = False
@@ -113,7 +115,9 @@ def plot_metrics_comparison(
         ImportError: If matplotlib is not available.
     """
     if not HAS_MATPLOTLIB:
-        logger.error("matplotlib is required for visualization. Install with: pixi add matplotlib")
+        logger.error(
+            "matplotlib is required for visualization. Install with: pixi add matplotlib"
+        )
         raise EvaluationError("matplotlib is not available")
 
     output_path = Path(output_dir)
@@ -148,7 +152,9 @@ def plot_metrics_comparison(
             values_dict = dict(cat_metrics[metric_name])
             values = [values_dict.get(v, 0) for v in variant_names]
 
-            bars = ax.bar(range(n_variants), values, color=plt.cm.Set2(range(n_variants)))
+            bars = ax.bar(
+                range(n_variants), values, color=plt.cm.Set2(range(n_variants))
+            )
 
             ax.set_title(metric_name, fontsize=11)
             ax.set_xticks(range(n_variants))
@@ -233,7 +239,11 @@ def plot_metric_trend(
                 linewidth=2,
             )
 
-        ax.set_title(f"{exp_name} - {category.title()} Metrics Trend", fontsize=14, fontweight="bold")
+        ax.set_title(
+            f"{exp_name} - {category.title()} Metrics Trend",
+            fontsize=14,
+            fontweight="bold",
+        )
         ax.set_xticks(range(len(x_labels)))
         ax.set_xticklabels(x_labels, rotation=45, ha="right", fontsize=9)
         ax.set_ylabel("Score")
@@ -279,7 +289,9 @@ def visualize_experiment(
     saved.extend(plot_metrics_comparison(metrics, output_dir, exp_data["exp_name"]))
     saved.extend(plot_metric_trend(metrics, output_dir, exp_data["exp_name"]))
 
-    logger.success(f"Generated {len(saved)} charts for experiment: {exp_data['exp_name']}")
+    logger.success(
+        f"Generated {len(saved)} charts for experiment: {exp_data['exp_name']}"
+    )
     return saved
 
 

@@ -20,12 +20,18 @@ class TestBM25Retriever:
             {
                 "chunk_id": "doc2::chunk::000",
                 "text": "五粮液2023年实现营业收入832亿元，净利润302亿元",
-                "metadata": {"source": "wuliangye_2023.md", "category": "annual_report"},
+                "metadata": {
+                    "source": "wuliangye_2023.md",
+                    "category": "annual_report",
+                },
             },
             {
                 "chunk_id": "doc3::chunk::000",
                 "text": "白酒行业整体增速放缓，高端白酒市场格局稳定",
-                "metadata": {"source": "industry_2023.md", "category": "research_report"},
+                "metadata": {
+                    "source": "industry_2023.md",
+                    "category": "research_report",
+                },
             },
         ]
 
@@ -169,7 +175,5 @@ class TestBM25Retriever:
         assert len(results_no_norm) > 0
 
         if len(results_default) > 1 and len(results_no_norm) > 1:
-            scores_differ = (
-                results_default[0]["score"] != results_no_norm[0]["score"]
-            )
+            scores_differ = results_default[0]["score"] != results_no_norm[0]["score"]
             assert scores_differ

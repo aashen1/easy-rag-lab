@@ -47,9 +47,7 @@ class VectorIndexer:
             logger.error(error_msg)
             raise IndexingError(error_msg) from e
 
-    def create_collection(
-        self, vector_size: int, recreate: bool = False
-    ) -> None:
+    def create_collection(self, vector_size: int, recreate: bool = False) -> None:
         """Create a Qdrant collection with the specified vector size.
 
         If the collection already exists and ``recreate`` is False, this
@@ -70,12 +68,10 @@ class VectorIndexer:
 
             if self.collection_name in collection_names:
                 if recreate:
-                    logger.info(
-                        f"Deleting existing collection: {self.collection_name}")
+                    logger.info(f"Deleting existing collection: {self.collection_name}")
                     self.client.delete_collection(self.collection_name)
                 else:
-                    logger.info(
-                        f"Collection {self.collection_name} already exists")
+                    logger.info(f"Collection {self.collection_name} already exists")
                     return
 
             distance_map = {
@@ -98,8 +94,7 @@ class VectorIndexer:
                 ),
             )
 
-            logger.success(
-                f"Collection {self.collection_name} created successfully")
+            logger.success(f"Collection {self.collection_name} created successfully")
 
         except Exception as e:
             error_msg = f"Failed to create collection: {str(e)}"
@@ -107,7 +102,10 @@ class VectorIndexer:
             raise IndexingError(error_msg) from e
 
     def index_chunks(
-        self, chunks: list[dict[str, Any]], embeddings: np.ndarray, batch_size: int = 100
+        self,
+        chunks: list[dict[str, Any]],
+        embeddings: np.ndarray,
+        batch_size: int = 100,
     ) -> None:
         """Insert document chunks and their embeddings into the Qdrant collection.
 
@@ -136,7 +134,9 @@ class VectorIndexer:
             logger.info(f"Indexing {len(chunks)} chunks")
 
             points = []
-            for i, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=False)):
+            for i, (chunk, embedding) in enumerate(
+                zip(chunks, embeddings, strict=False)
+            ):
                 point = PointStruct(
                     id=i,
                     vector=embedding.tolist(),
@@ -149,13 +149,14 @@ class VectorIndexer:
                 points.append(point)
 
             for i in range(0, len(points), batch_size):
-                batch = points[i: i + batch_size]
+                batch = points[i : i + batch_size]
                 self.client.upsert(
                     collection_name=self.collection_name,
                     points=batch,
                 )
                 logger.debug(
-                    f"Indexed batch {i // batch_size + 1}/{(len(points) - 1) // batch_size + 1}")
+                    f"Indexed batch {i // batch_size + 1}/{(len(points) - 1) // batch_size + 1}"
+                )
 
             logger.success(f"Successfully indexed {len(chunks)} chunks")
 
@@ -207,7 +208,9 @@ class VectorIndexer:
         if source_filter is not None:
             original_count = len(jsonl_files)
             jsonl_files = [
-                f for f in jsonl_files if f.relative_to(chunks_path).as_posix() in source_filter
+                f
+                for f in jsonl_files
+                if f.relative_to(chunks_path).as_posix() in source_filter
             ]
             logger.info(
                 f"Source filter applied: {len(jsonl_files)}/{original_count} files matched"
@@ -258,7 +261,9 @@ class VectorIndexer:
                 "status": info.status.value,
             }
         except Exception as e:
-            logger.warning(f"Collection not found or unavailable: {self.collection_name} ({str(e)})")
+            logger.warning(
+                f"Collection not found or unavailable: {self.collection_name} ({str(e)})"
+            )
             return None
 
     def delete_collection(self) -> None:
@@ -270,8 +275,7 @@ class VectorIndexer:
         try:
             logger.info(f"Deleting collection: {self.collection_name}")
             self.client.delete_collection(self.collection_name)
-            logger.success(
-                f"Collection {self.collection_name} deleted successfully")
+            logger.success(f"Collection {self.collection_name} deleted successfully")
         except Exception as e:
             error_msg = f"Failed to delete collection: {str(e)}"
             logger.error(error_msg)
@@ -280,9 +284,11 @@ class VectorIndexer:
     def close(self) -> None:
         """Close the Qdrant client and release associated resources."""
         try:
-            if hasattr(self, 'client') and self.client is not None:
+            if hasattr(self, "client") and self.client is not None:
                 self.client.close()
-                logger.info(f"Qdrant client closed for collection: {self.collection_name}")
+                logger.info(
+                    f"Qdrant client closed for collection: {self.collection_name}"
+                )
         except Exception as e:
             logger.warning(f"Error closing Qdrant client: {str(e)}")
 

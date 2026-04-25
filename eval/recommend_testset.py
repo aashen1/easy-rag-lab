@@ -90,18 +90,22 @@ def analyze_meal(meal: MealConfig, parsed_dir: Path) -> list[dict]:
         size_tier = classify_size(text_kb)
 
         pdf_path_str = Path(pdf_file.path).as_posix()
-        category = "annual_report" if "annual_reports" in pdf_path_str else "research_report"
+        category = (
+            "annual_report" if "annual_reports" in pdf_path_str else "research_report"
+        )
 
-        results.append({
-            "pdf_path": pdf_path_str,
-            "md_path": md_path.as_posix(),
-            "md_name": md_path.stem,
-            "display_name": f"{md_path.parent.name}/{md_path.stem}",
-            "text_kb": round(text_kb, 1),
-            "text_chars": len(text),
-            "size_tier": size_tier,
-            "category": category,
-        })
+        results.append(
+            {
+                "pdf_path": pdf_path_str,
+                "md_path": md_path.as_posix(),
+                "md_name": md_path.stem,
+                "display_name": f"{md_path.parent.name}/{md_path.stem}",
+                "text_kb": round(text_kb, 1),
+                "text_chars": len(text),
+                "size_tier": size_tier,
+                "category": category,
+            }
+        )
     return results
 
 
@@ -115,7 +119,9 @@ def _allocate_type_counts(
 
     diff = num_questions - sum(type_counts.values())
     if diff != 0:
-        sorted_types = sorted(type_counts.keys(), key=lambda t: type_counts[t], reverse=True)
+        sorted_types = sorted(
+            type_counts.keys(), key=lambda t: type_counts[t], reverse=True
+        )
         for i in range(abs(diff)):
             if diff > 0:
                 type_counts[sorted_types[i % len(sorted_types)]] += 1
@@ -155,7 +161,9 @@ def distribute_questions(
     for d in doc_info:
         d["raw_allocation"] = d["raw_allocation"] / raw_total * doc_bound_count
 
-    tier_limits = {tier: cfg["max_questions_per_doc"] for tier, cfg in SIZE_TIERS.items()}
+    tier_limits = {
+        tier: cfg["max_questions_per_doc"] for tier, cfg in SIZE_TIERS.items()
+    }
     for d in doc_info:
         cap = tier_limits[d["size_tier"]]
         d["capped_allocation"] = min(d["raw_allocation"], cap)
@@ -163,7 +171,11 @@ def distribute_questions(
     overflow = doc_bound_count - sum(d["capped_allocation"] for d in doc_info)
     if overflow > 0:
         uncapped = sorted(
-            [d for d in doc_info if d["capped_allocation"] < tier_limits[d["size_tier"]]],
+            [
+                d
+                for d in doc_info
+                if d["capped_allocation"] < tier_limits[d["size_tier"]]
+            ],
             key=lambda d: d["weight"],
             reverse=True,
         )
@@ -201,7 +213,10 @@ def distribute_questions(
         if d["num_questions"] <= 0:
             continue
 
-        affinity = CATEGORY_TYPE_AFFINITY.get(d["category"], {k: v for k, v in type_distribution.items() if k in DOC_BOUND_TYPES})
+        affinity = CATEGORY_TYPE_AFFINITY.get(
+            d["category"],
+            {k: v for k, v in type_distribution.items() if k in DOC_BOUND_TYPES},
+        )
         doc_types = {}
         remaining = d["num_questions"]
         for qtype, aff_ratio in affinity.items():
@@ -210,7 +225,9 @@ def distribute_questions(
             remaining -= alloc
 
         if remaining != 0:
-            sorted_aff = sorted(affinity.keys(), key=lambda t: affinity[t], reverse=True)
+            sorted_aff = sorted(
+                affinity.keys(), key=lambda t: affinity[t], reverse=True
+            )
             for i in range(abs(remaining)):
                 if remaining > 0:
                     doc_types[sorted_aff[i % len(sorted_aff)]] += 1
@@ -222,16 +239,18 @@ def distribute_questions(
                 if remaining == 0:
                     break
 
-        recommendations.append({
-            "pdf_path": d["pdf_path"],
-            "md_name": d["md_name"],
-            "display_name": d["display_name"],
-            "text_kb": d["text_kb"],
-            "size_tier": d["size_tier"],
-            "category": d["category"],
-            "num_questions": d["num_questions"],
-            "question_types": {k: v for k, v in doc_types.items() if v > 0},
-        })
+        recommendations.append(
+            {
+                "pdf_path": d["pdf_path"],
+                "md_name": d["md_name"],
+                "display_name": d["display_name"],
+                "text_kb": d["text_kb"],
+                "size_tier": d["size_tier"],
+                "category": d["category"],
+                "num_questions": d["num_questions"],
+                "question_types": {k: v for k, v in doc_types.items() if v > 0},
+            }
+        )
 
     return recommendations, type_counts
 
@@ -259,12 +278,20 @@ def format_recommendation(
     lines.append(f"**Document-bound questions**: {num_questions - free_total}")
     lines.append(f"**Free-floating questions** (missing/irrelevant): {free_total}")
     lines.append("")
-    lines.append("> missing/irrelevant questions do not need to be tied to a specific document.")
+    lines.append(
+        "> missing/irrelevant questions do not need to be tied to a specific document."
+    )
     lines.append("> For missing: pick a document, ask about info it does NOT contain.")
-    lines.append("> For irrelevant: ask something completely unrelated to any document.")
+    lines.append(
+        "> For irrelevant: ask something completely unrelated to any document."
+    )
     lines.append("")
 
-    tier_order = {"large": "Large (>=200KB)", "medium": "Medium (50-200KB)", "small": "Small (<50KB)"}
+    tier_order = {
+        "large": "Large (>=200KB)",
+        "medium": "Medium (50-200KB)",
+        "small": "Small (<50KB)",
+    }
     for tier_key, tier_label in tier_order.items():
         tier_docs = [r for r in recommendations if r["size_tier"] == tier_key]
         if not tier_docs:
@@ -274,7 +301,9 @@ def format_recommendation(
         lines.append("")
         lines.append("| # | Document | Text Size | Category | Questions | Types |")
         lines.append("|---|----------|-----------|----------|-----------|-------|")
-        for i, r in enumerate(sorted(tier_docs, key=lambda x: x["text_kb"], reverse=True), 1):
+        for i, r in enumerate(
+            sorted(tier_docs, key=lambda x: x["text_kb"], reverse=True), 1
+        ):
             types_str = ", ".join(f"{k}:{v}" for k, v in r["question_types"].items())
             lines.append(
                 f"| {i} | {r['display_name'][:50]} | {r['text_kb']:.0f}KB | {r['category']} | {r['num_questions']} | {types_str} |"
@@ -300,8 +329,12 @@ def format_recommendation(
 def main():
     parser = argparse.ArgumentParser(description="Generate test set recommendations")
     parser.add_argument("--meal", required=True, help="Meal name (e.g. 5kpage)")
-    parser.add_argument("--num-questions", type=int, default=50, help="Target number of questions")
-    parser.add_argument("--output", default=None, help="Output file path (default: stdout)")
+    parser.add_argument(
+        "--num-questions", type=int, default=50, help="Target number of questions"
+    )
+    parser.add_argument(
+        "--output", default=None, help="Output file path (default: stdout)"
+    )
     args = parser.parse_args()
 
     meals_dir = Path("data/meals")
@@ -336,7 +369,10 @@ def main():
         Path(args.output).write_text(output, encoding="utf-8")
         logger.success(f"Recommendation written to {args.output}")
     else:
-        out_path = Path("data/exp_reports") / f"testset_recommendation_{args.meal}_n{args.num_questions}.md"
+        out_path = (
+            Path("data/exp_reports")
+            / f"testset_recommendation_{args.meal}_n{args.num_questions}.md"
+        )
         out_path.write_text(output, encoding="utf-8")
         logger.success(f"Recommendation written to {out_path}")
 

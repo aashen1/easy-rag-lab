@@ -191,7 +191,10 @@ class ProfilerVisualizer:
 
         ax.set_xticks(x)
         ax.set_xticklabels(
-            [f"{sid}\n{sname}" for sid, sname in zip(stage_ids, stage_names, strict=False)],
+            [
+                f"{sid}\n{sname}"
+                for sid, sname in zip(stage_ids, stage_names, strict=False)
+            ],
             fontsize=9,
         )
 
@@ -240,7 +243,9 @@ class ProfilerVisualizer:
             input_tokens.append(data.get("input_tokens", 0))
             output_tokens.append(data.get("output_tokens", 0))
 
-        if not stage_ids or (all(t == 0 for t in input_tokens) and all(t == 0 for t in output_tokens)):
+        if not stage_ids or (
+            all(t == 0 for t in input_tokens) and all(t == 0 for t in output_tokens)
+        ):
             return None
 
         fig, ax = plt.subplots(figsize=(10, 6))

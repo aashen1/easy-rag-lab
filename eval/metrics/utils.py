@@ -109,7 +109,7 @@ def _parse_chunk_id(chunk_id: str) -> tuple:
     if last_underscore == -1:
         return (chunk_id, -1)
     doc_stem = chunk_id[:last_underscore]
-    suffix = chunk_id[last_underscore + 1:]
+    suffix = chunk_id[last_underscore + 1 :]
     try:
         chunk_index = int(suffix)
         return (doc_stem, chunk_index)

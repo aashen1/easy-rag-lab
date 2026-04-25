@@ -178,9 +178,24 @@ if __name__ == "__main__":
 
     query = "贵州茅台2023年的营业收入是多少？"
     mock_results = [
-        {"chunk_id": "c1", "text": "贵州茅台2023年营业收入达到1500亿元", "metadata": {"source": "moutai.md"}, "score": 0.95},
-        {"chunk_id": "c2", "text": "五粮液2023年实现营业收入832亿元", "metadata": {"source": "wuliangye.md"}, "score": 0.80},
-        {"chunk_id": "c3", "text": "白酒行业整体增速放缓", "metadata": {"source": "industry.md"}, "score": 0.60},
+        {
+            "chunk_id": "c1",
+            "text": "贵州茅台2023年营业收入达到1500亿元",
+            "metadata": {"source": "moutai.md"},
+            "score": 0.95,
+        },
+        {
+            "chunk_id": "c2",
+            "text": "五粮液2023年实现营业收入832亿元",
+            "metadata": {"source": "wuliangye.md"},
+            "score": 0.80,
+        },
+        {
+            "chunk_id": "c3",
+            "text": "白酒行业整体增速放缓",
+            "metadata": {"source": "industry.md"},
+            "score": 0.60,
+        },
     ]
 
     reranked = reranker.rerank(query, mock_results, top_n=2)

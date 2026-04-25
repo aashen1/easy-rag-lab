@@ -133,7 +133,9 @@ class HybridRetriever:
 
         for rank, result in enumerate(vector_results, 1):
             chunk_id = result["chunk_id"]
-            rrf_scores[chunk_id] = rrf_scores.get(chunk_id, 0.0) + 1.0 / (self.rrf_k + rank)
+            rrf_scores[chunk_id] = rrf_scores.get(chunk_id, 0.0) + 1.0 / (
+                self.rrf_k + rank
+            )
             if chunk_id not in doc_data:
                 doc_data[chunk_id] = {
                     "chunk_id": chunk_id,
@@ -143,7 +145,9 @@ class HybridRetriever:
 
         for rank, result in enumerate(bm25_results, 1):
             chunk_id = result["chunk_id"]
-            rrf_scores[chunk_id] = rrf_scores.get(chunk_id, 0.0) + 1.0 / (self.rrf_k + rank)
+            rrf_scores[chunk_id] = rrf_scores.get(chunk_id, 0.0) + 1.0 / (
+                self.rrf_k + rank
+            )
             if chunk_id not in doc_data:
                 doc_data[chunk_id] = {
                     "chunk_id": chunk_id,
@@ -151,7 +155,9 @@ class HybridRetriever:
                     "metadata": result["metadata"],
                 }
 
-        sorted_ids = sorted(rrf_scores.keys(), key=lambda x: rrf_scores[x], reverse=True)
+        sorted_ids = sorted(
+            rrf_scores.keys(), key=lambda x: rrf_scores[x], reverse=True
+        )
 
         results = []
         for chunk_id in sorted_ids[: self.top_k]:
@@ -213,7 +219,9 @@ class HybridRetriever:
                     "metadata": result["metadata"],
                 }
 
-        sorted_ids = sorted(combined_scores.keys(), key=lambda x: combined_scores[x], reverse=True)
+        sorted_ids = sorted(
+            combined_scores.keys(), key=lambda x: combined_scores[x], reverse=True
+        )
 
         results = []
         for chunk_id in sorted_ids[: self.top_k]:

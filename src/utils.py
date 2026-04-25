@@ -214,7 +214,9 @@ def create_llm_client(
         )
         return LangchainLLMWrapper(chat_model)
     else:
-        raise ConfigurationError(f"Unsupported LLM client mode: {mode}. Use 'sdk' or 'langchain'.")
+        raise ConfigurationError(
+            f"Unsupported LLM client mode: {mode}. Use 'sdk' or 'langchain'."
+        )
 
 
 def get_env_var(key: str, default: str = None, required: bool = False) -> str:
@@ -239,7 +241,9 @@ def get_env_var(key: str, default: str = None, required: bool = False) -> str:
         raise ConfigurationError(error_msg)
 
     if value is None:
-        logger.warning(f"Environment variable '{key}' not set, using default: {default}")
+        logger.warning(
+            f"Environment variable '{key}' not set, using default: {default}"
+        )
 
     return value
 
@@ -288,7 +292,9 @@ def detect_document_category(
         The detected category string, or ``"unknown"`` if no keyword
         matches.
     """
-    mapping = category_mapping if category_mapping is not None else DEFAULT_CATEGORY_MAPPING
+    mapping = (
+        category_mapping if category_mapping is not None else DEFAULT_CATEGORY_MAPPING
+    )
     for key, category in mapping.items():
         if key in str(file_path):
             return category

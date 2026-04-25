@@ -225,13 +225,13 @@ class Generator:
             if sources:
                 context_text = "\n\n".join(
                     [
-                        f"参考资料 {i+1}（来源：{clean_source_name(sources[i]) if i < len(sources) else '未知'}）:\n{ctx}"
+                        f"参考资料 {i + 1}（来源：{clean_source_name(sources[i]) if i < len(sources) else '未知'}）:\n{ctx}"
                         for i, ctx in enumerate(contexts)
                     ]
                 )
             else:
                 context_text = "\n\n".join(
-                    [f"参考资料 {i+1}:\n{ctx}" for i, ctx in enumerate(contexts)]
+                    [f"参考资料 {i + 1}:\n{ctx}" for i, ctx in enumerate(contexts)]
                 )
 
             user_message = f"""{context_text}

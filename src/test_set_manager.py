@@ -96,9 +96,7 @@ class TestSetManager:
         file_path = golden_dir / f"{name}.json"
 
         if not file_path.exists():
-            raise TestSetError(
-                f"Golden test set '{name}' not found at {file_path}"
-            )
+            raise TestSetError(f"Golden test set '{name}' not found at {file_path}")
 
         try:
             with open(file_path, encoding="utf-8") as f:
@@ -151,7 +149,9 @@ class TestSetManager:
                 data = json.load(f)
             return self._migrate_test_set(data)
         except Exception as e:
-            logger.error(f"Failed to load test set '{test_set_name}' from meal '{meal_name}': {str(e)}")
+            logger.error(
+                f"Failed to load test set '{test_set_name}' from meal '{meal_name}': {str(e)}"
+            )
             return None
 
     def save_test_set(self, meal_name: str, test_set_data: dict[str, Any]) -> Path:
@@ -184,7 +184,9 @@ class TestSetManager:
             logger.info(f"Saved test set '{test_set_name}' to meal '{meal_name}'")
             return file_path
         except Exception as e:
-            logger.error(f"Failed to save test set '{test_set_name}' to meal '{meal_name}': {str(e)}")
+            logger.error(
+                f"Failed to save test set '{test_set_name}' to meal '{meal_name}': {str(e)}"
+            )
             raise
 
     def load_test_set(self, meal_name: str, test_set_name: str) -> dict[str, Any]:
@@ -213,7 +215,9 @@ class TestSetManager:
                 data = json.load(f)
             return self._migrate_test_set(data)
         except Exception as e:
-            logger.error(f"Failed to load test set '{test_set_name}' from meal '{meal_name}': {str(e)}")
+            logger.error(
+                f"Failed to load test set '{test_set_name}' from meal '{meal_name}': {str(e)}"
+            )
             raise
 
     def _migrate_test_set(self, test_set_data: dict[str, Any]) -> dict[str, Any]:
@@ -270,10 +274,12 @@ class TestSetManager:
             try:
                 with open(json_file, encoding="utf-8") as f:
                     data = json.load(f)
-                results.append({
-                    "name": data.get("metadata", {}).get("name", json_file.stem),
-                    "metadata": data.get("metadata", {}),
-                })
+                results.append(
+                    {
+                        "name": data.get("metadata", {}).get("name", json_file.stem),
+                        "metadata": data.get("metadata", {}),
+                    }
+                )
             except Exception as e:
                 logger.warning(f"Failed to load test set from {json_file}: {str(e)}")
 
@@ -301,7 +307,9 @@ class TestSetManager:
             file_path.unlink()
             logger.info(f"Deleted test set '{test_set_name}' from meal '{meal_name}'")
         except Exception as e:
-            logger.error(f"Failed to delete test set '{test_set_name}' from meal '{meal_name}': {str(e)}")
+            logger.error(
+                f"Failed to delete test set '{test_set_name}' from meal '{meal_name}': {str(e)}"
+            )
             raise
 
     def test_set_exists(self, meal_name: str, test_set_name: str) -> bool:
@@ -571,7 +579,8 @@ class TestSetManager:
 
         invalid_ids = {q.get("id") for q in invalid_questions}
         test_set_data["questions"] = [
-            q for q in test_set_data.get("questions", [])
+            q
+            for q in test_set_data.get("questions", [])
             if q.get("id") not in invalid_ids
         ]
 
@@ -646,7 +655,8 @@ class TestSetManager:
         all_were_invalid = len(invalid_questions) == original_count
 
         test_set_data["questions"] = [
-            q for q in test_set_data.get("questions", [])
+            q
+            for q in test_set_data.get("questions", [])
             if q.get("id") not in invalid_ids
         ]
 
@@ -712,7 +722,7 @@ class TestSetManager:
                 return (
                     True,
                     f"Test set was previously trimmed at {timestamp}. "
-                    f"{removed_count} questions were removed."
+                    f"{removed_count} questions were removed.",
                 )
             elif action == "regenerated":
                 timestamp = entry.get("timestamp", "unknown time")
@@ -720,14 +730,14 @@ class TestSetManager:
                     return (
                         True,
                         f"Test set underwent full regeneration at {timestamp}. "
-                        "All questions were replaced."
+                        "All questions were replaced.",
                     )
                 else:
                     removed_count = entry.get("removed_count", 0)
                     return (
                         True,
                         f"Test set was previously regenerated at {timestamp}. "
-                        f"{removed_count} questions were replaced."
+                        f"{removed_count} questions were replaced.",
                     )
 
         return (False, "")
@@ -931,13 +941,17 @@ class TestSetManager:
 
         invalid_ids = {q.get("id") for q in invalid_questions}
         test_set_data["questions"] = [
-            q for q in test_set_data.get("questions", [])
+            q
+            for q in test_set_data.get("questions", [])
             if q.get("id") not in invalid_ids
         ]
 
         stored_generation_config = test_set_data["metadata"].get("generation")
 
-        if generation_config is not None and stored_generation_config != generation_config:
+        if (
+            generation_config is not None
+            and stored_generation_config != generation_config
+        ):
             logger.warning(
                 f"Generation config mismatch for test set '{test_set_data['metadata']['name']}'. "
                 f"Using experiment config instead of stored config."
@@ -962,7 +976,9 @@ class TestSetManager:
                     token_tracker=token_tracker,
                     chunks_dir=chunks_dir,
                 )
-                added_count = len(test_set_data.get("questions", [])) - (original_count - len(invalid_questions))
+                added_count = len(test_set_data.get("questions", [])) - (
+                    original_count - len(invalid_questions)
+                )
                 if added_count < 0:
                     added_count = 0
                 logger.info(
@@ -1041,7 +1057,9 @@ class TestSetManager:
                 test_set_data = self.load_test_set(source_meal, source_test_set)
                 questions = test_set_data.get("questions", [])
                 all_questions.extend(questions)
-                loaded_sources.append({"meal": source_meal, "test_set": source_test_set})
+                loaded_sources.append(
+                    {"meal": source_meal, "test_set": source_test_set}
+                )
                 logger.info(
                     f"Loaded {len(questions)} questions from "
                     f"meal='{source_meal}', test_set='{source_test_set}'"

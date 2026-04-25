@@ -1,6 +1,6 @@
 import argparse
 import sys
-from typing import Any, Dict
+from typing import Any
 
 from loguru import logger
 
@@ -13,11 +13,9 @@ from src.utils import load_config, setup_logger
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="RAG System - Financial Report Q&A")
+    parser = argparse.ArgumentParser(description="RAG System - Financial Report Q&A")
     parser.add_argument("--query", type=str, help="Query question")
-    parser.add_argument("--build-index", action="store_true",
-                        help="Build vector index")
+    parser.add_argument("--build-index", action="store_true", help="Build vector index")
     parser.add_argument(
         "--rebuild", action="store_true", help="Rebuild index from scratch"
     )
@@ -26,9 +24,7 @@ def main():
         action="store_true",
         help="Force re-parse PDFs even if output exists",
     )
-    parser.add_argument(
-        "--sample-count", type=int, help="Sample N PDFs for testing"
-    )
+    parser.add_argument("--sample-count", type=int, help="Sample N PDFs for testing")
     parser.add_argument(
         "--sample-pages", type=int, help="Sample PDFs until total pages reach N"
     )
@@ -47,74 +43,86 @@ def main():
 
     meal_group = parser.add_argument_group("Meal (dataset profile) commands")
     meal_group.add_argument(
-        "--create-meal", nargs="?", const="__auto__", default=None,
-        help="Create a meal with optional name (auto-generated if omitted)"
+        "--create-meal",
+        nargs="?",
+        const="__auto__",
+        default=None,
+        help="Create a meal with optional name (auto-generated if omitted)",
     )
-    meal_group.add_argument(
-        "--meal", type=str, help="Use specified meal for Q&A"
-    )
+    meal_group.add_argument("--meal", type=str, help="Use specified meal for Q&A")
     meal_group.add_argument(
         "--list-meals", action="store_true", help="List all meals with status"
     )
     meal_group.add_argument(
         "--meal-info", type=str, help="Show detailed info for a meal"
     )
+    meal_group.add_argument("--delete-meal", type=str, help="Delete specified meal")
     meal_group.add_argument(
-        "--delete-meal", type=str, help="Delete specified meal"
+        "--rename-meal", nargs=2, metavar=("OLD", "NEW"), help="Rename a meal"
     )
     meal_group.add_argument(
-        "--rename-meal", nargs=2, metavar=("OLD", "NEW"),
-        help="Rename a meal"
-    )
-    meal_group.add_argument(
-        "--copy-meal", nargs=2, metavar=("SOURCE", "TARGET"),
-        help="Copy a meal (shallow copy, shared vector index)"
+        "--copy-meal",
+        nargs=2,
+        metavar=("SOURCE", "TARGET"),
+        help="Copy a meal (shallow copy, shared vector index)",
     )
     meal_group.add_argument(
         "--repair-meal", type=str, help="Repair an unavailable meal"
     )
     meal_group.add_argument(
-        "--merge-meals", nargs="+", metavar="MEAL",
-        help="Merge multiple meals into a new meal"
+        "--merge-meals",
+        nargs="+",
+        metavar="MEAL",
+        help="Merge multiple meals into a new meal",
     )
     meal_group.add_argument(
-        "--extend-meal", metavar="MEAL",
-        help="Extend a meal by adding new PDF files"
+        "--extend-meal", metavar="MEAL", help="Extend a meal by adding new PDF files"
     )
     meal_group.add_argument(
-        "--add-pdfs", nargs="+", metavar="PDF",
-        help="PDF files to add (used with --extend-meal)"
+        "--add-pdfs",
+        nargs="+",
+        metavar="PDF",
+        help="PDF files to add (used with --extend-meal)",
     )
 
     testset_group = parser.add_argument_group("Test set management")
     testset_group.add_argument(
-        "--merge-test-sets", nargs="+", metavar="SPEC",
-        help="Merge multiple test sets (format: meal:test_set)"
+        "--merge-test-sets",
+        nargs="+",
+        metavar="SPEC",
+        help="Merge multiple test sets (format: meal:test_set)",
     )
 
     testgen_group = parser.add_argument_group("Test set generation")
     testgen_group.add_argument(
-        "--generate-test-set", type=str,
-        help="Generate test set for specified meal"
+        "--generate-test-set", type=str, help="Generate test set for specified meal"
     )
     testgen_group.add_argument(
-        "--strategy", type=str, default="factual",
+        "--strategy",
+        type=str,
+        default="factual",
         choices=["factual", "boundary", "multi_hop", "document"],
-        help="Test generation strategy (default: factual)"
+        help="Test generation strategy (default: factual)",
     )
     testgen_group.add_argument(
-        "--num-questions", type=int, default=20,
-        help="Number of questions to generate (default: 20)"
+        "--num-questions",
+        type=int,
+        default=20,
+        help="Number of questions to generate (default: 20)",
     )
     testgen_group.add_argument(
-        "--name", type=str, default=None,
+        "--name",
+        type=str,
+        default=None,
         help="Name for the test set (new format)",
     )
 
     report_group = parser.add_argument_group("Report generation")
     report_group.add_argument(
-        "--llm-report-only", type=str, metavar="EXP_DIR",
-        help="Generate LLM report for a completed experiment directory"
+        "--llm-report-only",
+        type=str,
+        metavar="EXP_DIR",
+        help="Generate LLM report for a completed experiment directory",
     )
 
     args = parser.parse_args()
@@ -160,8 +168,7 @@ def main():
         return
 
     if args.rename_meal:
-        _handle_rename_meal(
-            meal_manager, args.rename_meal[0], args.rename_meal[1])
+        _handle_rename_meal(meal_manager, args.rename_meal[0], args.rename_meal[1])
         return
 
     if args.copy_meal:
@@ -183,6 +190,7 @@ def main():
     if args.llm_report_only:
         try:
             from eval.run_experiment import generate_llm_report_only
+
             generate_llm_report_only(args.llm_report_only, args.config)
         except ConfigurationError as e:
             logger.error(str(e))
@@ -214,8 +222,7 @@ def main():
 
     if args.build_index or args.rebuild:
         sampling_config = _build_sampling_config(args)
-        pipeline = RAGPipeline(config_path=args.config,
-                               llm_preset=args.llm_preset)
+        pipeline = RAGPipeline(config_path=args.config, llm_preset=args.llm_preset)
         pipeline.build_index(
             rebuild=args.rebuild,
             force_parse=args.force_parse,
@@ -243,8 +250,7 @@ def main():
         else:
             _interactive_qa(pipeline, args.meal)
     elif args.query:
-        pipeline = RAGPipeline(config_path=args.config,
-                               llm_preset=args.llm_preset)
+        pipeline = RAGPipeline(config_path=args.config, llm_preset=args.llm_preset)
         result = pipeline.query(args.query)
         _print_query_result(result)
 
@@ -277,25 +283,25 @@ def _handle_meal_info(meal_manager: MealManager, name: str) -> None:
     meal = meal_manager.load_meal(name)
     status, issues = meal_manager.check_meal_status(name)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Meal: {meal.name}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"Data ID:       {meal.data_id}")
     print(f"Collection:    {meal.collection_name}")
     print(f"Status:        {status.value}")
     print(f"Created:       {meal.created_at}")
 
     if meal.config_snapshot:
-        print(f"\nConfig Snapshot:")
+        print("\nConfig Snapshot:")
         for stage, cfg in meal.config_snapshot.items():
             print(f"  {stage}: {cfg}")
 
     if meal.config_hashes:
-        print(f"\nConfig Hashes:")
+        print("\nConfig Hashes:")
         for stage, h in meal.config_hashes.items():
             print(f"  {stage}: {h}")
 
-    print(f"\nStats:")
+    print("\nStats:")
     for k, v in meal.stats.items():
         print(f"  {k}: {v}")
 
@@ -305,21 +311,22 @@ def _handle_meal_info(meal_manager: MealManager, name: str) -> None:
         exists = file_path.exists()
         status_icon = "✅" if exists else "❌"
         print(
-            f"  {status_icon} {mf.path}  (sha256: {mf.sha256[:16]}..., size: {mf.size_bytes} bytes)")
+            f"  {status_icon} {mf.path}  (sha256: {mf.sha256[:16]}..., size: {mf.size_bytes} bytes)"
+        )
 
     if issues:
-        print(f"\nIssues:")
+        print("\nIssues:")
         for issue in issues:
             print(f"  ⚠️ {issue}")
 
     equivalents = meal_manager.find_equivalent_meals(meal.data_id)
     other_equivalents = [m for m in equivalents if m.name != meal.name]
     if other_equivalents:
-        print(f"\nEquivalent meals (same data_id):")
+        print("\nEquivalent meals (same data_id):")
         for eq in other_equivalents:
             print(f"  - {eq.name} (collection: {eq.collection_name})")
     else:
-        print(f"\nNo other meals share this data group.")
+        print("\nNo other meals share this data group.")
 
     print()
 
@@ -331,11 +338,14 @@ def _handle_list_meals(meal_manager: MealManager) -> None:
         return
 
     from collections import defaultdict
+
     data_groups = defaultdict(list)
     for meal in meals:
         data_groups[meal.data_id].append(meal)
 
-    print(f"\n{'Name':<20} {'DataID':<14} {'Status':<16} {'PDFs':>5} {'Pages':>7} {'Chunks':>8} {'Config':<20} {'Created'}")
+    print(
+        f"\n{'Name':<20} {'DataID':<14} {'Status':<16} {'PDFs':>5} {'Pages':>7} {'Chunks':>8} {'Config':<20} {'Created'}"
+    )
     print("-" * 115)
 
     for data_id, group_meals in data_groups.items():
@@ -354,7 +364,9 @@ def _handle_list_meals(meal_manager: MealManager) -> None:
             config_str = ""
             if meal.config_snapshot and "chunker" in meal.config_snapshot:
                 cs = meal.config_snapshot["chunker"]
-                config_str = f"sz={cs.get('chunk_size', '?')} ov={cs.get('overlap', '?')}"
+                config_str = (
+                    f"sz={cs.get('chunk_size', '?')} ov={cs.get('overlap', '?')}"
+                )
 
             data_id_str = data_id[:12]
             if len(group_meals) > 1 and i > 0:
@@ -371,7 +383,8 @@ def _handle_list_meals(meal_manager: MealManager) -> None:
 
         if len(group_meals) > 1:
             print(
-                f"  ↳ Same data group ({len(group_meals)} meals share data_id={data_id[:12]})")
+                f"  ↳ Same data group ({len(group_meals)} meals share data_id={data_id[:12]})"
+            )
 
     print()
 
@@ -384,7 +397,9 @@ def _handle_delete_meal(meal_manager: MealManager, name: str) -> None:
     logger.success(f"Meal '{name}' deleted")
 
 
-def _handle_rename_meal(meal_manager: MealManager, old_name: str, new_name: str) -> None:
+def _handle_rename_meal(
+    meal_manager: MealManager, old_name: str, new_name: str
+) -> None:
     if not validate_meal_name(new_name):
         logger.error(
             f"Invalid meal name '{new_name}'. "
@@ -408,7 +423,8 @@ def _handle_create_meal(meal_manager: MealManager, args: argparse.Namespace) -> 
     sampling_config = _build_sampling_config(args)
     if sampling_config is None:
         logger.error(
-            "Sampling configuration required for meal creation (--sample-count/pages/ratio)")
+            "Sampling configuration required for meal creation (--sample-count/pages/ratio)"
+        )
         sys.exit(1)
 
     name = args.create_meal
@@ -451,6 +467,7 @@ def _handle_repair_meal(meal_manager: MealManager, name: str) -> None:
             print(f"  ❌ {mf.path}  (file not found)")
         else:
             from src.meal import compute_file_sha256
+
             current = compute_file_sha256(file_path)
             if current == mf.sha256:
                 print(f"  ✅ {mf.path}  (SHA256 matches)")
@@ -479,6 +496,7 @@ def _handle_repair_meal(meal_manager: MealManager, name: str) -> None:
                     replacements[mf.path] = new_path
             else:
                 from src.meal import compute_file_sha256
+
                 current = compute_file_sha256(file_path)
                 if current != mf.sha256:
                     new_path = input(
@@ -497,8 +515,7 @@ def _handle_repair_meal(meal_manager: MealManager, name: str) -> None:
     new_name = None
     if create_new:
         default_name = f"{name}_repaired"
-        new_name = input(
-            f"New meal name [{default_name}]: ").strip() or default_name
+        new_name = input(f"New meal name [{default_name}]: ").strip() or default_name
 
     try:
         repaired = meal_manager.repair_meal(
@@ -516,7 +533,9 @@ def _handle_repair_meal(meal_manager: MealManager, name: str) -> None:
         sys.exit(1)
 
 
-def _handle_generate_test_set(meal_manager: MealManager, config: Dict[str, Any], args: argparse.Namespace) -> None:
+def _handle_generate_test_set(
+    meal_manager: MealManager, config: dict[str, Any], args: argparse.Namespace
+) -> None:
     if not meal_manager.meal_exists(args.generate_test_set):
         logger.error(f"Meal '{args.generate_test_set}' not found")
         sys.exit(1)
@@ -528,7 +547,7 @@ def _handle_generate_test_set(meal_manager: MealManager, config: Dict[str, Any],
         if args.strategy == "document":
             test_set = generator.generate_document_based_questions(
                 meal_name=args.generate_test_set,
-                name=getattr(args, 'name', None),
+                name=getattr(args, "name", None),
                 num_questions=args.num_questions,
                 llm_preset=args.llm_preset or "default",
             )
@@ -549,24 +568,24 @@ def _handle_generate_test_set(meal_manager: MealManager, config: Dict[str, Any],
         sys.exit(1)
 
 
-def _print_query_result(result: Dict[str, Any]) -> None:
-    print(f"\n{'='*60}")
+def _print_query_result(result: dict[str, Any]) -> None:
+    print(f"\n{'=' * 60}")
     print(f"Question: {result['question']}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"\nAnswer:\n{result['answer']}")
     if "contexts" in result:
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("Sources:")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         for i, (source, score) in enumerate(
-            zip(result["sources"], result["scores"]), 1
+            zip(result["sources"], result["scores"], strict=False), 1
         ):
             print(f"{i}. {source} (relevance: {score:.4f})")
     if "token_usage" in result and result["token_usage"]:
         tu = result["token_usage"]
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("Token Usage:")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         print(f"  Input:  {tu['input_tokens']:,}")
         print(f"  Output: {tu['output_tokens']:,}")
         print(f"  Total:  {tu['total_tokens']:,}")
@@ -594,7 +613,8 @@ def _interactive_qa(pipeline: RAGPipeline, meal_name: str) -> None:
             if tracker and tracker.record_count > 0:
                 total = tracker.get_total()
                 print(
-                    f"\nSession Token Usage: in={total.input_tokens:,} out={total.output_tokens:,} total={total.total_tokens:,}")
+                    f"\nSession Token Usage: in={total.input_tokens:,} out={total.output_tokens:,} total={total.total_tokens:,}"
+                )
             print("Exiting.")
             break
 
@@ -604,12 +624,13 @@ def _interactive_qa(pipeline: RAGPipeline, meal_name: str) -> None:
             if "token_usage" in result and result["token_usage"]:
                 tu = result["token_usage"]
                 print(
-                    f"  Tokens: in={tu['input_tokens']:,} out={tu['output_tokens']:,} total={tu['total_tokens']:,}")
+                    f"  Tokens: in={tu['input_tokens']:,} out={tu['output_tokens']:,} total={tu['total_tokens']:,}"
+                )
             if "sources" in result:
                 sources = result["sources"]
                 scores = result["scores"]
-                print(f"\n  Sources:")
-                for i, (src, sc) in enumerate(zip(sources, scores), 1):
+                print("\n  Sources:")
+                for i, (src, sc) in enumerate(zip(sources, scores, strict=False), 1):
                     print(f"    {i}. {src} ({sc:.4f})")
             print()
         except Exception as e:
@@ -672,7 +693,7 @@ def _handle_extend_meal(
 
 def _handle_merge_test_sets(
     meal_manager: MealManager,
-    config: Dict[str, Any],
+    config: dict[str, Any],
     source_specs: list[str],
     target_meal: str,
     name: str | None,
@@ -700,7 +721,6 @@ def _handle_merge_test_sets(
             name=name,
         )
         composition = result["metadata"].get("composition", {})
-        original_count = composition.get("original_count", 0)
         dedup_count = composition.get("dedup_count", 0)
         final_count = composition.get("final_count", 0)
         sources = composition.get("sources", [])
@@ -711,7 +731,7 @@ def _handle_merge_test_sets(
         print(f"\n  Total questions: {final_count}")
         if dedup_count > 0:
             print(f"  Duplicates removed: {dedup_count}")
-        print(f"  Sources:")
+        print("  Sources:")
         for src in sources:
             print(f"    - {src['meal']}:{src['test_set']}")
         print()

@@ -16,25 +16,29 @@ from loguru import logger
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
-import contextlib
+import contextlib  # noqa: E402
 
-from eval.evaluators.base import BaseEvaluator
-from eval.evaluators.builtin_evaluator import BuiltinEvaluator
-from eval.evaluators.ragas_evaluator import RagasEvaluator
-from eval.experiment_reporter import ExperimentReporter
-from eval.pipeline_profiler import PipelineProfiler
-from eval.visualize_profiler import generate_profiler_charts
-from src.exceptions import ConfigurationError, EvaluationError, TestSetError
-from src.experiment import (
+from eval.evaluators.base import BaseEvaluator  # noqa: E402
+from eval.evaluators.builtin_evaluator import BuiltinEvaluator  # noqa: E402
+from eval.evaluators.ragas_evaluator import RagasEvaluator  # noqa: E402
+from eval.experiment_reporter import ExperimentReporter  # noqa: E402
+from eval.pipeline_profiler import PipelineProfiler  # noqa: E402
+from eval.visualize_profiler import generate_profiler_charts  # noqa: E402
+from src.exceptions import (  # noqa: E402
+    ConfigurationError,
+    EvaluationError,
+    TestSetError,
+)
+from src.experiment import (  # noqa: E402
     ExperimentConfig,
     ExperimentManager,
     is_new_format,
     load_experiment_config,
     merge_config,
 )
-from src.generator import Generator
-from src.hybrid_retriever import HybridRetriever
-from src.meal import (
+from src.generator import Generator  # noqa: E402
+from src.hybrid_retriever import HybridRetriever  # noqa: E402
+from src.meal import (  # noqa: E402
     ArtifactCache,
     MealManager,
     MealStatus,
@@ -45,12 +49,12 @@ from src.meal import (
     compute_index_key,
     generate_collection_name,
 )
-from src.pipeline import RAGPipeline
-from src.sampler import SamplingConfig
-from src.test_generator import TestSetGenerator
-from src.test_set_manager import TestSetManager
-from src.token_tracker import TokenTracker
-from src.utils import get_llm_config, load_config, setup_logger
+from src.pipeline import RAGPipeline  # noqa: E402
+from src.sampler import SamplingConfig  # noqa: E402
+from src.test_generator import TestSetGenerator  # noqa: E402
+from src.test_set_manager import TestSetManager  # noqa: E402
+from src.token_tracker import TokenTracker  # noqa: E402
+from src.utils import get_llm_config, load_config, setup_logger  # noqa: E402
 
 if TYPE_CHECKING:
     from src.indexer import VectorIndexer
@@ -972,7 +976,9 @@ def _evaluate_with_builtin(
             results.append(result)
             continue
 
-        expected_answer = sample.get("ground_truth_excerpt") or sample.get("expected_answer")
+        expected_answer = sample.get("ground_truth_excerpt") or sample.get(
+            "expected_answer"
+        )
 
         eval_result = evaluator.evaluate_single(
             question_id=question_id,
@@ -1854,7 +1860,9 @@ def run_experiment(
             experiment_name=exp_config.name,
             total_pages=0,
             total_questions=sum(
-                ts.get("generation", {}).get("num_questions", ts.get("num_questions", 10))
+                ts.get("generation", {}).get(
+                    "num_questions", ts.get("num_questions", 10)
+                )
                 for ts in exp_config.test_sets
             ),
             monitor_interval=profiling_config.get("monitor_interval", 0.5),
@@ -2056,9 +2064,13 @@ def run_experiment(
 
             if profiling_config.get("generate_charts", True):
                 try:
-                    chart_files = generate_profiler_charts(profiler, profiling_dir / "charts")
+                    chart_files = generate_profiler_charts(
+                        profiler, profiling_dir / "charts"
+                    )
                     if chart_files:
-                        logger.success(f"Generated {len(chart_files)} performance charts")
+                        logger.success(
+                            f"Generated {len(chart_files)} performance charts"
+                        )
                 except Exception as e:
                     logger.warning(f"Failed to generate performance charts: {str(e)}")
 

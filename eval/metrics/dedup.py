@@ -1,4 +1,3 @@
-
 from eval.metrics.retrieval import calculate_hit_rate, calculate_mrr, calculate_ndcg
 from eval.metrics.utils import _parse_chunk_id, normalize_source
 
@@ -128,4 +127,6 @@ def calculate_dedup_ndcg(
     """
     keep_indices = deduplicate_by_document(retrieved_sources, retrieved_chunk_ids)
     deduped_sources = [retrieved_sources[i] for i in keep_indices]
-    return calculate_ndcg(deduped_sources, expected_sources, k=k, relevance_scores=relevance_scores)
+    return calculate_ndcg(
+        deduped_sources, expected_sources, k=k, relevance_scores=relevance_scores
+    )

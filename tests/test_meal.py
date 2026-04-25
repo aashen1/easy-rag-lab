@@ -41,9 +41,7 @@ class TestMealConfig:
             "created_at": "2026-04-16T14:30:00",
             "sampling_config": {"mode": "count", "value": 10, "seed": 42},
             "collection_name": "m_a1b2c3d4e5f6",
-            "pdf_files": [
-                MealFile(path="test.pdf", sha256="abc123", size_bytes=1024)
-            ],
+            "pdf_files": [MealFile(path="test.pdf", sha256="abc123", size_bytes=1024)],
             "config_snapshot": {
                 "parser": {"algorithm": "pymupdf4llm"},
                 "chunker": {"chunk_size": 512, "overlap": 0},
@@ -62,7 +60,10 @@ class TestMealConfig:
     def test_to_dict(self):
         config = self._make_config()
         d = config.to_dict()
-        assert d["data_id"] == "a1b2c3d4e5f6789012345678abcdef1234567890abcdef1234567890abcdef12"
+        assert (
+            d["data_id"]
+            == "a1b2c3d4e5f6789012345678abcdef1234567890abcdef1234567890abcdef12"
+        )
         assert d["name"] == "test_meal"
         assert len(d["pdf_files"]) == 1
         assert d["pdf_files"][0]["path"] == "test.pdf"
@@ -76,15 +77,16 @@ class TestMealConfig:
             "created_at": "2026-04-16T14:30:00",
             "sampling_config": {"mode": "count", "value": 10, "seed": 42},
             "collection_name": "m_a1b2c3d4e5f6",
-            "pdf_files": [
-                {"path": "test.pdf", "sha256": "abc123", "size_bytes": 1024}
-            ],
+            "pdf_files": [{"path": "test.pdf", "sha256": "abc123", "size_bytes": 1024}],
             "config_snapshot": {"chunker": {"chunk_size": 512}},
             "config_hashes": {"chunker": "c5d6e7f8"},
             "stats": {"total_pdfs": 1, "total_pages": 50, "total_chunks": 200},
         }
         config = MealConfig.from_dict(data)
-        assert config.data_id == "a1b2c3d4e5f6789012345678abcdef1234567890abcdef1234567890abcdef12"
+        assert (
+            config.data_id
+            == "a1b2c3d4e5f6789012345678abcdef1234567890abcdef1234567890abcdef12"
+        )
         assert config.name == "test_meal"
         assert len(config.pdf_files) == 1
         assert isinstance(config.pdf_files[0], MealFile)
@@ -146,9 +148,7 @@ class TestMealConfig:
             "created_at": "2026-04-16T14:30:00",
             "sampling_config": {"mode": "count", "value": 10, "seed": 42},
             "collection_name": "m_a1b2c3d4e5f6",
-            "pdf_files": [
-                {"path": "test.pdf", "sha256": "abc123", "size_bytes": 1024}
-            ],
+            "pdf_files": [{"path": "test.pdf", "sha256": "abc123", "size_bytes": 1024}],
             "composition": {
                 "type": "extended",
                 "base_meal": "meal_a",
@@ -168,9 +168,7 @@ class TestMealConfig:
             "created_at": "2026-04-16T14:30:00",
             "sampling_config": None,
             "collection_name": "m_a1b2c3d4e5f6",
-            "pdf_files": [
-                {"path": "test.pdf", "sha256": "abc123", "size_bytes": 1024}
-            ],
+            "pdf_files": [{"path": "test.pdf", "sha256": "abc123", "size_bytes": 1024}],
         }
         config = MealConfig.from_dict(data)
         assert config.composition == {}
@@ -282,7 +280,9 @@ class TestConfigHashes:
         }
         h_fixed = compute_chunker_config_hash(config_fixed)
         h_semantic = compute_chunker_config_hash(config_semantic)
-        assert h_fixed != h_semantic, "Different strategies should produce different hashes"
+        assert h_fixed != h_semantic, (
+            "Different strategies should produce different hashes"
+        )
 
     def test_chunker_config_hash_semantic_different_thresholds(self):
         config_a = {
@@ -301,7 +301,9 @@ class TestConfigHashes:
         }
         h_a = compute_chunker_config_hash(config_a)
         h_b = compute_chunker_config_hash(config_b)
-        assert h_a != h_b, "Different semantic thresholds should produce different hashes"
+        assert h_a != h_b, (
+            "Different semantic thresholds should produce different hashes"
+        )
 
     def test_chunker_config_hash_semantic_different_percentiles(self):
         config_a = {
@@ -320,7 +322,9 @@ class TestConfigHashes:
         }
         h_a = compute_chunker_config_hash(config_a)
         h_b = compute_chunker_config_hash(config_b)
-        assert h_a != h_b, "Different breakpoint percentiles should produce different hashes"
+        assert h_a != h_b, (
+            "Different breakpoint percentiles should produce different hashes"
+        )
 
     def test_chunker_config_hash_default_strategy_is_fixed(self):
         config_no_strategy = {
@@ -346,7 +350,9 @@ class TestConfigHashes:
     def test_embedding_config_hash_different_models(self):
         config_a = {"model_name": "BAAI/bge-large-zh-v1.5"}
         config_b = {"model_name": "text-embedding-3-small"}
-        assert compute_embedding_config_hash(config_a) != compute_embedding_config_hash(config_b)
+        assert compute_embedding_config_hash(config_a) != compute_embedding_config_hash(
+            config_b
+        )
 
     def test_index_key_combines_all(self):
         data_id = "abc123"
@@ -416,7 +422,9 @@ class TestComputeFileSha256:
         test_file = tmp_path / "empty.txt"
         test_file.write_bytes(b"")
         result = compute_file_sha256(test_file)
-        assert result == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        assert (
+            result == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        )
 
     def test_consistent(self, tmp_path):
         test_file = tmp_path / "test.txt"
@@ -592,7 +600,10 @@ class TestMealManager:
         self._save_meal(manager, meal)
 
         loaded = manager.load_meal("test_meal")
-        assert loaded.data_id == "a1b2c3d4e5f6789012345678abcdef1234567890abcdef1234567890abcdef12"
+        assert (
+            loaded.data_id
+            == "a1b2c3d4e5f6789012345678abcdef1234567890abcdef1234567890abcdef12"
+        )
         assert loaded.name == "test_meal"
         assert len(loaded.pdf_files) == 1
         assert loaded.pdf_files[0].path == "reports/report_0.pdf"
@@ -659,7 +670,10 @@ class TestMealManager:
 
         result = manager.rename_meal("old_name", "new_name")
         assert result.name == "new_name"
-        assert result.data_id == "a1b2c3d4e5f6789012345678abcdef1234567890abcdef1234567890abcdef12"
+        assert (
+            result.data_id
+            == "a1b2c3d4e5f6789012345678abcdef1234567890abcdef1234567890abcdef12"
+        )
         assert not manager.meal_exists("old_name")
         assert manager.meal_exists("new_name")
 
@@ -979,9 +993,11 @@ class TestMergeMeals:
         self._save_meal(manager, meal_a)
         self._save_meal(manager, meal_b)
 
-        with patch("src.meal.build_index_from_chunks") as mock_build_index, \
-             patch("src.meal.build_chunks_if_needed"), \
-             patch("src.sampler.count_pdf_pages", return_value=10):
+        with (
+            patch("src.meal.build_index_from_chunks") as mock_build_index,
+            patch("src.meal.build_chunks_if_needed"),
+            patch("src.sampler.count_pdf_pages", return_value=10),
+        ):
             mock_build_index.return_value = MagicMock()
 
             result = manager.merge_meals(["meal_a", "meal_b"], name="merged_meal")
@@ -1021,9 +1037,11 @@ class TestMergeMeals:
         self._save_meal(manager, meal_a)
         self._save_meal(manager, meal_b)
 
-        with patch("src.meal.build_index_from_chunks") as mock_build_index, \
-             patch("src.meal.build_chunks_if_needed"), \
-             patch("src.sampler.count_pdf_pages", return_value=10):
+        with (
+            patch("src.meal.build_index_from_chunks") as mock_build_index,
+            patch("src.meal.build_chunks_if_needed"),
+            patch("src.sampler.count_pdf_pages", return_value=10),
+        ):
             mock_build_index.return_value = MagicMock()
 
             result = manager.merge_meals(["meal_a", "meal_b"], name="merged_meal")
@@ -1062,9 +1080,11 @@ class TestMergeMeals:
         self._save_meal(manager, meal_a)
         self._save_meal(manager, meal_b)
 
-        with patch("src.meal.build_index_from_chunks") as mock_build_index, \
-             patch("src.meal.build_chunks_if_needed"), \
-             patch("src.sampler.count_pdf_pages", return_value=10):
+        with (
+            patch("src.meal.build_index_from_chunks") as mock_build_index,
+            patch("src.meal.build_chunks_if_needed"),
+            patch("src.sampler.count_pdf_pages", return_value=10),
+        ):
             mock_build_index.return_value = MagicMock()
 
             result = manager.merge_meals(["meal_a", "meal_b"], name="merged_meal")
@@ -1092,9 +1112,11 @@ class TestMergeMeals:
         )
         self._save_meal(manager, meal_a)
 
-        with patch("src.meal.build_index_from_chunks") as mock_build_index, \
-             patch("src.meal.build_chunks_if_needed"), \
-             patch("src.sampler.count_pdf_pages", return_value=10):
+        with (
+            patch("src.meal.build_index_from_chunks") as mock_build_index,
+            patch("src.meal.build_chunks_if_needed"),
+            patch("src.sampler.count_pdf_pages", return_value=10),
+        ):
             mock_build_index.return_value = MagicMock()
 
             result = manager.merge_meals(["meal_a"])
@@ -1117,9 +1139,11 @@ class TestMergeMeals:
         )
         self._save_meal(manager, meal_a)
 
-        with patch("src.meal.build_index_from_chunks") as mock_build_index, \
-             patch("src.meal.build_chunks_if_needed"), \
-             patch("src.sampler.count_pdf_pages", return_value=10):
+        with (
+            patch("src.meal.build_index_from_chunks") as mock_build_index,
+            patch("src.meal.build_chunks_if_needed"),
+            patch("src.sampler.count_pdf_pages", return_value=10),
+        ):
             mock_build_index.return_value = MagicMock()
 
             result = manager.merge_meals(["meal_a"], name="merged_meal")
@@ -1274,13 +1298,11 @@ class TestExtendMeal:
         )
         self._save_meal(manager, source_meal)
 
-        with patch.object(
-            manager, "_parse_pdfs_with_registry"
-        ) as mock_parse, patch(
-            "src.meal.build_chunks_if_needed"
-        ) as mock_chunk, patch(
-            "src.meal.build_index_from_chunks"
-        ) as mock_index:
+        with (
+            patch.object(manager, "_parse_pdfs_with_registry") as mock_parse,
+            patch("src.meal.build_chunks_if_needed") as mock_chunk,
+            patch("src.meal.build_index_from_chunks") as mock_index,
+        ):
             result = manager.extend_meal(
                 "source_meal", ["reports/report_1.pdf"], name="extended_meal"
             )
@@ -1316,12 +1338,10 @@ class TestExtendMeal:
         )
         self._save_meal(manager, source_meal)
 
-        with patch.object(
-            manager, "_parse_pdfs_with_registry"
-        ) as mock_parse, patch(
-            "src.meal.build_chunks_if_needed"
-        ), patch(
-            "src.meal.build_index_from_chunks"
+        with (
+            patch.object(manager, "_parse_pdfs_with_registry") as mock_parse,
+            patch("src.meal.build_chunks_if_needed"),
+            patch("src.meal.build_index_from_chunks"),
         ):
             result = manager.extend_meal(
                 "source_meal",
@@ -1355,10 +1375,10 @@ class TestExtendMeal:
         )
         self._save_meal(manager, source_meal)
 
-        with patch.object(
-            manager, "_parse_pdfs_with_registry"
-        ), patch("src.meal.build_chunks_if_needed"), patch(
-            "src.meal.build_index_from_chunks"
+        with (
+            patch.object(manager, "_parse_pdfs_with_registry"),
+            patch("src.meal.build_chunks_if_needed"),
+            patch("src.meal.build_index_from_chunks"),
         ):
             result = manager.extend_meal(
                 "source_meal", ["reports/report_1.pdf"], name="extended_meal"
@@ -1393,7 +1413,9 @@ class TestExtendMeal:
         parser_hash = config_hashes["parser"]
         chunker_hash = config_hashes["chunker"]
 
-        source_parsed_dir = manager.cache.get_parsed_dir(source_meal.data_id, parser_hash)
+        source_parsed_dir = manager.cache.get_parsed_dir(
+            source_meal.data_id, parser_hash
+        )
         source_parsed_dir.mkdir(parents=True, exist_ok=True)
         (source_parsed_dir / "report_0.md").write_text("# Source content")
 
@@ -1403,19 +1425,17 @@ class TestExtendMeal:
         source_chunks_dir.mkdir(parents=True, exist_ok=True)
         (source_chunks_dir / "report_0.jsonl").write_text('{"chunk": "data"}')
 
-        with patch.object(
-            manager, "_parse_pdfs_with_registry"
-        ), patch("src.meal.build_chunks_if_needed"), patch(
-            "src.meal.build_index_from_chunks"
+        with (
+            patch.object(manager, "_parse_pdfs_with_registry"),
+            patch("src.meal.build_chunks_if_needed"),
+            patch("src.meal.build_index_from_chunks"),
         ):
             result = manager.extend_meal(
                 "source_meal", ["reports/report_1.pdf"], name="extended_meal"
             )
 
             new_parsed_dir = manager.cache.get_parsed_dir(result.data_id, parser_hash)
-            new_chunks_dir = manager.cache.get_chunks_dir(
-                result.data_id, chunker_hash
-            )
+            new_chunks_dir = manager.cache.get_chunks_dir(result.data_id, chunker_hash)
 
             assert (new_parsed_dir / "report_0.md").exists()
             assert (new_chunks_dir / "report_0.jsonl").exists()
@@ -1442,10 +1462,10 @@ class TestExtendMeal:
 
         pdf_path_1 = Path(temp_dirs["parser"]["input_dir"]) / "reports" / "report_1.pdf"
 
-        with patch.object(
-            manager, "_parse_pdfs_with_registry"
-        ), patch("src.meal.build_chunks_if_needed"), patch(
-            "src.meal.build_index_from_chunks"
+        with (
+            patch.object(manager, "_parse_pdfs_with_registry"),
+            patch("src.meal.build_chunks_if_needed"),
+            patch("src.meal.build_index_from_chunks"),
         ):
             result = manager.extend_meal(
                 "source_meal", [pdf_path_1], name="extended_meal"
@@ -1475,10 +1495,10 @@ class TestExtendMeal:
         )
         self._save_meal(manager, source_meal)
 
-        with patch.object(
-            manager, "_parse_pdfs_with_registry"
-        ), patch("src.meal.build_chunks_if_needed"), patch(
-            "src.meal.build_index_from_chunks"
+        with (
+            patch.object(manager, "_parse_pdfs_with_registry"),
+            patch("src.meal.build_chunks_if_needed"),
+            patch("src.meal.build_index_from_chunks"),
         ):
             result = manager.extend_meal(
                 "source_meal", [P("reports/report_1.pdf")], name="extended_meal"
@@ -1506,10 +1526,10 @@ class TestExtendMeal:
         )
         self._save_meal(manager, source_meal)
 
-        with patch.object(
-            manager, "_parse_pdfs_with_registry"
-        ), patch("src.meal.build_chunks_if_needed"), patch(
-            "src.meal.build_index_from_chunks"
+        with (
+            patch.object(manager, "_parse_pdfs_with_registry"),
+            patch("src.meal.build_chunks_if_needed"),
+            patch("src.meal.build_index_from_chunks"),
         ):
             result = manager.extend_meal("source_meal", ["reports/report_1.pdf"])
 

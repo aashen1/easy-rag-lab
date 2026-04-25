@@ -82,7 +82,9 @@ class TestCountPdfPages:
 class TestDetermineSample:
     def test_empty_pdf_list_raises(self):
         config = SamplingConfig(mode="count", value=5)
-        with pytest.raises(ConfigurationError, match="Cannot sample from an empty list"):
+        with pytest.raises(
+            ConfigurationError, match="Cannot sample from an empty list"
+        ):
             determine_sample([], config)
 
     def test_count_mode_basic(self):

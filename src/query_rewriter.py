@@ -70,7 +70,10 @@ class QueryRewriter:
         """
         if self._client is None:
             from anthropic import Anthropic
-            self._client = Anthropic(api_key=self.llm_api_key, base_url=self.llm_base_url)
+
+            self._client = Anthropic(
+                api_key=self.llm_api_key, base_url=self.llm_base_url
+            )
         return self._client
 
     def rewrite(self, query: str) -> dict[str, Any]:
@@ -170,9 +173,7 @@ class QueryRewriter:
         response_text, token_usage = self._call_llm(prompt)
 
         sub_queries = [
-            line.strip()
-            for line in response_text.strip().split("\n")
-            if line.strip()
+            line.strip() for line in response_text.strip().split("\n") if line.strip()
         ]
 
         sub_queries = [q.lstrip("0123456789.-) ") for q in sub_queries]

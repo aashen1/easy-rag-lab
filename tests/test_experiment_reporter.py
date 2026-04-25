@@ -232,7 +232,9 @@ class TestExperimentReporter:
         assert reporter.llm_model_name == "test-model"
 
     @pytest.mark.unit
-    def test_generate_markdown_report_contains_all_sections(self, sample_result, tmp_path):
+    def test_generate_markdown_report_contains_all_sections(
+        self, sample_result, tmp_path
+    ):
         reporter = ExperimentReporter()
         report = reporter.generate_markdown_report(
             exp_dir=tmp_path,
@@ -285,7 +287,9 @@ class TestExperimentReporter:
         assert saved_content == report
 
     @pytest.mark.unit
-    def test_generate_markdown_report_creates_parent_dirs(self, sample_result, tmp_path):
+    def test_generate_markdown_report_creates_parent_dirs(
+        self, sample_result, tmp_path
+    ):
         reporter = ExperimentReporter()
         nested_dir = tmp_path / "nested" / "path"
 
@@ -384,7 +388,11 @@ class TestVariantResult:
         data = {
             "variant_name": "baseline",
             "variant_description": "Baseline configuration",
-            "retrieval_metrics": {"avg_hit_rate": 0.75, "avg_mrr": 0.55, "avg_ndcg": 0.65},
+            "retrieval_metrics": {
+                "avg_hit_rate": 0.75,
+                "avg_mrr": 0.55,
+                "avg_ndcg": 0.65,
+            },
             "config_snapshot": {"chunker": {"chunk_size": 256}},
             "total_questions": 15,
             "total_time_seconds": 25.0,
@@ -504,7 +512,9 @@ class TestMultiVariantComparison:
         assert "0.70" in report
 
     @pytest.mark.unit
-    def test_generate_variant_comparison_report(self, sample_variant_results, sample_meal_info, sample_config_snapshot, tmp_path):
+    def test_generate_variant_comparison_report(
+        self, sample_variant_results, sample_meal_info, sample_config_snapshot, tmp_path
+    ):
         reporter = ExperimentReporter()
         report = reporter.generate_variant_comparison_report(
             exp_dir=tmp_path,
@@ -537,7 +547,11 @@ class TestMultiVariantComparison:
             {
                 "variant_name": "success",
                 "variant_description": "Successful variant",
-                "retrieval_metrics": {"avg_hit_rate": 0.7, "avg_mrr": 0.6, "avg_ndcg": 0.65},
+                "retrieval_metrics": {
+                    "avg_hit_rate": 0.7,
+                    "avg_mrr": 0.6,
+                    "avg_ndcg": 0.65,
+                },
                 "total_questions": 10,
                 "total_time_seconds": 15.0,
             },
@@ -582,7 +596,11 @@ class TestMultiVariantComparison:
             {
                 "variant_name": "low_perf",
                 "variant_description": "Low performance variant",
-                "retrieval_metrics": {"avg_hit_rate": 0.3, "avg_mrr": 0.3, "avg_ndcg": 0.3},
+                "retrieval_metrics": {
+                    "avg_hit_rate": 0.3,
+                    "avg_mrr": 0.3,
+                    "avg_ndcg": 0.3,
+                },
                 "total_questions": 10,
                 "total_time_seconds": 15.0,
             },
@@ -605,7 +623,11 @@ class TestMultiVariantComparison:
             {
                 "variant_name": "high_perf",
                 "variant_description": "High performance variant",
-                "retrieval_metrics": {"avg_hit_rate": 0.9, "avg_mrr": 0.85, "avg_ndcg": 0.88},
+                "retrieval_metrics": {
+                    "avg_hit_rate": 0.9,
+                    "avg_mrr": 0.85,
+                    "avg_ndcg": 0.88,
+                },
                 "total_questions": 10,
                 "total_time_seconds": 15.0,
             },
@@ -691,7 +713,9 @@ class TestGenerationMetrics:
         assert result.results[0].generation["answer_relevancy"] == 0.8
 
     @pytest.mark.unit
-    def test_report_contains_generation_metrics_section(self, sample_result_with_generation, tmp_path):
+    def test_report_contains_generation_metrics_section(
+        self, sample_result_with_generation, tmp_path
+    ):
         reporter = ExperimentReporter()
         report = reporter.generate_markdown_report(
             exp_dir=tmp_path,
@@ -706,7 +730,9 @@ class TestGenerationMetrics:
         assert "0.75" in report
 
     @pytest.mark.unit
-    def test_report_comparison_table_with_generation(self, sample_result_with_generation, tmp_path):
+    def test_report_comparison_table_with_generation(
+        self, sample_result_with_generation, tmp_path
+    ):
         reporter = ExperimentReporter()
         report = reporter.generate_markdown_report(
             exp_dir=tmp_path,
@@ -718,7 +744,9 @@ class TestGenerationMetrics:
         assert "Relevancy" in report
 
     @pytest.mark.unit
-    def test_report_conclusion_with_generation_analysis(self, sample_result_with_generation, tmp_path):
+    def test_report_conclusion_with_generation_analysis(
+        self, sample_result_with_generation, tmp_path
+    ):
         reporter = ExperimentReporter()
         report = reporter.generate_markdown_report(
             exp_dir=tmp_path,
@@ -735,7 +763,10 @@ class TestGenerationMetrics:
             "variant_name": "test_variant",
             "variant_description": "Test variant with generation metrics",
             "retrieval_metrics": {"avg_hit_rate": 0.8, "avg_mrr": 0.6, "avg_ndcg": 0.7},
-            "generation_metrics": {"avg_faithfulness": 0.85, "avg_answer_relevancy": 0.75},
+            "generation_metrics": {
+                "avg_faithfulness": 0.85,
+                "avg_answer_relevancy": 0.75,
+            },
             "total_questions": 10,
             "total_time_seconds": 30.0,
         }
@@ -750,16 +781,30 @@ class TestGenerationMetrics:
             {
                 "variant_name": "baseline",
                 "variant_description": "Baseline variant",
-                "retrieval_metrics": {"avg_hit_rate": 0.75, "avg_mrr": 0.60, "avg_ndcg": 0.65},
-                "generation_metrics": {"avg_faithfulness": 0.80, "avg_answer_relevancy": 0.70},
+                "retrieval_metrics": {
+                    "avg_hit_rate": 0.75,
+                    "avg_mrr": 0.60,
+                    "avg_ndcg": 0.65,
+                },
+                "generation_metrics": {
+                    "avg_faithfulness": 0.80,
+                    "avg_answer_relevancy": 0.70,
+                },
                 "total_questions": 20,
                 "total_time_seconds": 30.0,
             },
             {
                 "variant_name": "optimized",
                 "variant_description": "Optimized variant",
-                "retrieval_metrics": {"avg_hit_rate": 0.85, "avg_mrr": 0.70, "avg_ndcg": 0.75},
-                "generation_metrics": {"avg_faithfulness": 0.90, "avg_answer_relevancy": 0.80},
+                "retrieval_metrics": {
+                    "avg_hit_rate": 0.85,
+                    "avg_mrr": 0.70,
+                    "avg_ndcg": 0.75,
+                },
+                "generation_metrics": {
+                    "avg_faithfulness": 0.90,
+                    "avg_answer_relevancy": 0.80,
+                },
                 "total_questions": 20,
                 "total_time_seconds": 35.0,
             },
@@ -784,8 +829,15 @@ class TestGenerationMetrics:
             {
                 "variant_name": "low_gen_quality",
                 "variant_description": "Low generation quality variant",
-                "retrieval_metrics": {"avg_hit_rate": 0.8, "avg_mrr": 0.6, "avg_ndcg": 0.7},
-                "generation_metrics": {"avg_faithfulness": 0.4, "avg_answer_relevancy": 0.3},
+                "retrieval_metrics": {
+                    "avg_hit_rate": 0.8,
+                    "avg_mrr": 0.6,
+                    "avg_ndcg": 0.7,
+                },
+                "generation_metrics": {
+                    "avg_faithfulness": 0.4,
+                    "avg_answer_relevancy": 0.3,
+                },
                 "total_questions": 10,
                 "total_time_seconds": 15.0,
             },
@@ -798,7 +850,9 @@ class TestGenerationMetrics:
             output_filename="test_report.md",
         )
 
-        assert "hallucinations" in report.lower() or "prompt engineering" in report.lower()
+        assert (
+            "hallucinations" in report.lower() or "prompt engineering" in report.lower()
+        )
 
     @pytest.mark.unit
     def test_backward_compatibility_without_generation_metrics(self, tmp_path):
@@ -852,8 +906,16 @@ class TestGenerationMetricDescription:
     @pytest.mark.unit
     def test_unprefixed_metric_descriptions(self):
         reporter = ExperimentReporter()
-        assert "grounded" in reporter._get_generation_metric_description("avg_faithfulness").lower()
-        assert "relevant" in reporter._get_generation_metric_description("avg_answer_relevancy").lower()
+        assert (
+            "grounded"
+            in reporter._get_generation_metric_description("avg_faithfulness").lower()
+        )
+        assert (
+            "relevant"
+            in reporter._get_generation_metric_description(
+                "avg_answer_relevancy"
+            ).lower()
+        )
 
     @pytest.mark.unit
     def test_builtin_prefixed_metric_descriptions(self):
@@ -862,7 +924,9 @@ class TestGenerationMetricDescription:
         assert "Builtin" in desc
         assert "grounded" in desc.lower()
 
-        desc = reporter._get_generation_metric_description("avg_builtin_answer_relevancy")
+        desc = reporter._get_generation_metric_description(
+            "avg_builtin_answer_relevancy"
+        )
         assert "Builtin" in desc
         assert "relevant" in desc.lower()
 
@@ -877,7 +941,9 @@ class TestGenerationMetricDescription:
         assert "RAGAS" in desc
         assert "relevant" in desc.lower()
 
-        desc = reporter._get_generation_metric_description("avg_ragas_context_precision")
+        desc = reporter._get_generation_metric_description(
+            "avg_ragas_context_precision"
+        )
         assert "RAGAS" in desc
         assert "precise" in desc.lower()
 
@@ -885,7 +951,9 @@ class TestGenerationMetricDescription:
         assert "RAGAS" in desc
         assert "completely" in desc.lower()
 
-        desc = reporter._get_generation_metric_description("avg_ragas_answer_correctness")
+        desc = reporter._get_generation_metric_description(
+            "avg_ragas_answer_correctness"
+        )
         assert "RAGAS" in desc
         assert "correct" in desc.lower()
 
@@ -895,7 +963,9 @@ class TestGenerationMetricDescription:
         desc = reporter._get_generation_metric_description("avg_ragas_some_new_metric")
         assert "RAGAS" in desc
 
-        desc = reporter._get_generation_metric_description("avg_builtin_some_new_metric")
+        desc = reporter._get_generation_metric_description(
+            "avg_builtin_some_new_metric"
+        )
         assert "BUILTIN" in desc
 
     @pytest.mark.unit

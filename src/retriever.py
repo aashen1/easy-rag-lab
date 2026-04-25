@@ -55,7 +55,9 @@ class Retriever:
             raise RetrievalError(error_msg)
 
         try:
-            logger.info(f"Retrieving top-{self.top_k} results for query: {query[:50]}...")
+            logger.info(
+                f"Retrieving top-{self.top_k} results for query: {query[:50]}..."
+            )
 
             query_embedding = self.embedder.embed_query(query)
 

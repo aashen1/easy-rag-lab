@@ -77,13 +77,19 @@ Linter 是**静态分析**工具——它只读代码，不运行代码。所以
 | B | flake8-bugbear | 常见 bug 模式 |
 | SIM | flake8-simplify | 代码简化建议 |
 
-**暂时忽略的规则**：
+**全局忽略的规则**：
 
 | 规则 | 原因 |
 |------|------|
 | E501 (行过长) | Formatter 会自动处理折行 |
 | B008 (默认参数调用函数) | FastAPI 常用模式 |
-| SIM108 (三元表达式) | 有时可读性更差 |
+
+**按需行级忽略的规则**（不全局忽略，在具体行用 `# noqa: 规则名` 豁免）：
+
+| 规则 | 说明 | 典型场景 |
+|------|------|----------|
+| SIM108 (三元表达式) | 有时可读性更差 | 复杂条件分支用 if-else 更清晰时 |
+| E402 (import 不在文件顶部) | `sys.path.insert` 或 `warnings.warn` 后的 import 必须延迟 | `run_eval.py`、`run_experiment.py` |
 
 ### 日常使用
 
@@ -119,9 +125,11 @@ Found 982 errors.
 
 ## 3. pre-commit 是什么？
 
-**一句话**：pre-commit 是 Git 钩子管理器，在你 `git commit` 之前自动运行检查。
+**一句话**：pre-commit 是 Git 钩子管理器，在你 `git commit` 之前和 `git merge` 之后自动运行检查。
 
 ### 工作流程
+
+#### commit 前检查（防止坏代码提交）
 
 ```
 你执行 git commit
@@ -141,9 +149,32 @@ commit   commit 被阻止
           再次 git commit
 ```
 
+#### merge 后检查（确认合并没闯祸）
+
+```
+你在 dev/main 分支执行 git merge feature-xxx
+       ↓
+   合并成功完成
+       ↓
+post-merge 钩子自动触发
+       ↓
+   运行 pytest 单元测试
+       ↓
+  ┌────┴────┐
+  ↓         ↓
+通过      不通过
+  ↓         ↓
+一切正常   打印失败信息
+继续工作    提示 git reset --hard ORIG_HEAD 回滚
+```
+
+**为什么合并后需要单独跑测试？** 两个功能分支各自测试都通过，但合到一起可能出问题——比如分支 A 改了某个函数的接口，分支 B 还在用旧接口调用。commit 前的 lint/format 检查抓不到这种问题，只有跑测试才能发现。
+
 ### 本项目配置的钩子
 
 配置文件：`.pre-commit-config.yaml`
+
+#### commit 前钩子（`git commit` 时自动触发）
 
 | 钩子 | 做什么 | 为什么需要 |
 |------|--------|-----------|
@@ -154,14 +185,29 @@ commit   commit 被阻止
 | check-yaml | 验证 YAML 语法 | 防止配置文件写错 |
 | check-merge-conflict | 检测未解决的合并冲突 | 防止冲突标记入库 |
 
+> **注意**：ruff 钩子使用 `repo: local` 配置，直接用 pixi 环境里的 ruff，
+> 不需要连 GitHub，commit 速度快（毫秒级）。版本由 `pixi.toml` 控制。
+
+#### merge 后钩子（`git merge` 完成后自动触发）
+
+| 钩子 | 做什么 | 为什么需要 |
+|------|--------|-----------|
+| post-merge-test | 跑 pytest 单元测试（跳过 integration 测试） | 确认合并后的代码整体没闯祸 |
+
 ### 日常使用
 
 ```bash
-# 首次安装（只需一次，以后 commit 自动触发）
+# 首次安装（只需一次，以后 commit 和 merge 自动触发）
 pixi run pre-commit-install
 
 # 手动运行所有钩子（不 commit 也能检查）
 pixi run pre-commit-run
+
+# 手动跑单元测试（跳过需要外部 API 的 integration 测试）
+pixi run test
+
+# 手动跑全部测试（包括 integration）
+pixi run test-all
 
 # 紧急跳过钩子（只在紧急情况使用！）
 git commit --no-verify -m "emergency fix"
@@ -170,6 +216,8 @@ git commit --no-verify -m "emergency fix"
 ---
 
 ## 4. 两者配合的效果
+
+### commit 前：格式与语法防线
 
 ```
 写代码 → git add → git commit
@@ -195,7 +243,26 @@ git commit --no-verify -m "emergency fix"
               重新add再提交
 ```
 
-**核心价值**：代码库中永远不会有明显错误和风格不统一的代码。
+### merge 后：功能正确性防线
+
+```
+功能分支各自开发、各自测试通过
+                ↓
+     git merge 合并到 dev/main
+                ↓
+        post-merge 钩子自动触发
+                ↓
+          运行 pytest 单元测试
+                ↓
+         ┌──────┴──────┐
+         ↓             ↓
+       通过          不通过
+         ↓             ↓
+     一切正常     提示回滚命令
+     继续工作     git reset --hard ORIG_HEAD
+```
+
+**核心价值**：commit 前管格式和语法，merge 后管功能正确性，两层防线各管一段。
 
 ---
 
@@ -212,6 +279,26 @@ pixi run ruff check --fix src/ eval/ tests/
 ### Q: pre-commit 太慢了怎么办？
 
 Ruff 的速度是毫秒级的，通常不会感觉慢。如果确实慢，检查是不是钩子配置太多了。
+
+### Q: `repo: local` 和 `repo: https://...` 有什么区别？
+
+pre-commit 的钩子有两种来源方式：
+
+| | 远程 repo | `repo: local` |
+|---|---------|-------------|
+| 配置 | 指向 GitHub 仓库 | 直接运行本地命令 |
+| 速度 | 每次先 `git fetch` 检查版本，慢几秒 | 直接执行，毫秒级 |
+| 网络 | 需要能连 GitHub | 不需要网络 |
+| 隔离性 | 钩子用独立 venv 环境 | 用项目当前环境 |
+| 适用场景 | 多人协作项目，版本锁定 | 个人项目 / AI 开发 |
+
+本项目使用 `repo: local`，因为：
+1. 个人项目 + AI 开发，高频 commit 需要速度快
+2. ruff 版本已由 pixi 管理，不需要钩子再维护一份
+3. 不依赖 GitHub 网络，断网也能正常 commit
+
+如果你想切回远程 repo 方式（比如项目开源后需要版本锁定），把 ruff 钩子
+改回 `repo: https://github.com/astral-sh/ruff-pre-commit` 即可。
 
 ### Q: 我只想检查我改的文件，不想检查整个项目？
 

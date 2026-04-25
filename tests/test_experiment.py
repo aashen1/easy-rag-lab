@@ -150,9 +150,7 @@ class TestExperimentConfig:
     @pytest.mark.unit
     def test_valid_metrics_with_retrieval_only(self):
         data = self._make_config_dict()
-        data["evaluation"]["metrics"] = {
-            "retrieval": ["hit_rate", "mrr", "ndcg"]
-        }
+        data["evaluation"]["metrics"] = {"retrieval": ["hit_rate", "mrr", "ndcg"]}
         config = ExperimentConfig.from_dict(data)
         errors = config.validate()
         assert not any("metrics" in e.lower() for e in errors)
@@ -162,7 +160,7 @@ class TestExperimentConfig:
         data = self._make_config_dict()
         data["evaluation"]["metrics"] = {
             "retrieval": ["hit_rate", "mrr"],
-            "generation": ["faithfulness", "answer_relevancy"]
+            "generation": ["faithfulness", "answer_relevancy"],
         }
         config = ExperimentConfig.from_dict(data)
         errors = config.validate()
@@ -184,7 +182,7 @@ class TestExperimentConfig:
         data = self._make_config_dict()
         data["evaluation"]["metrics"] = {
             "retrieval": ["hit_rate"],
-            "generation": ["faithfulness", "invalid_gen_metric"]
+            "generation": ["faithfulness", "invalid_gen_metric"],
         }
         config = ExperimentConfig.from_dict(data)
         errors = config.validate()
@@ -202,9 +200,7 @@ class TestExperimentConfig:
     @pytest.mark.unit
     def test_retrieval_not_list(self):
         data = self._make_config_dict()
-        data["evaluation"]["metrics"] = {
-            "retrieval": "hit_rate"
-        }
+        data["evaluation"]["metrics"] = {"retrieval": "hit_rate"}
         config = ExperimentConfig.from_dict(data)
         errors = config.validate()
         assert any("Retrieval metrics must be a list" in e for e in errors)
@@ -214,7 +210,7 @@ class TestExperimentConfig:
         data = self._make_config_dict()
         data["evaluation"]["metrics"] = {
             "retrieval": ["hit_rate"],
-            "generation": "faithfulness"
+            "generation": "faithfulness",
         }
         config = ExperimentConfig.from_dict(data)
         errors = config.validate()
@@ -223,9 +219,7 @@ class TestExperimentConfig:
     @pytest.mark.unit
     def test_missing_retrieval_field(self):
         data = self._make_config_dict()
-        data["evaluation"]["metrics"] = {
-            "generation": ["faithfulness"]
-        }
+        data["evaluation"]["metrics"] = {"generation": ["faithfulness"]}
         config = ExperimentConfig.from_dict(data)
         errors = config.validate()
         assert any("must include 'retrieval' field" in e for e in errors)
@@ -233,12 +227,21 @@ class TestExperimentConfig:
     @pytest.mark.unit
     def test_valid_metrics_constants(self):
         assert {
-            "hit_rate", "mrr", "ndcg",
-            "chunk_hit_rate", "chunk_mrr", "chunk_ndcg",
-            "dedup_hit_rate", "dedup_mrr", "dedup_ndcg",
+            "hit_rate",
+            "mrr",
+            "ndcg",
+            "chunk_hit_rate",
+            "chunk_mrr",
+            "chunk_ndcg",
+            "dedup_hit_rate",
+            "dedup_mrr",
+            "dedup_ndcg",
             "false_positive_rate",
-            "context_precision", "context_recall",
-            "recall_3", "recall_5", "recall_10",
+            "context_precision",
+            "context_recall",
+            "recall_3",
+            "recall_5",
+            "recall_10",
         } == VALID_RETRIEVAL_METRICS
         assert {"faithfulness", "answer_relevancy"} == VALID_GENERATION_METRICS
 
@@ -461,7 +464,9 @@ class TestLoadExperimentConfig:
             "evaluation": {"metrics": {"retrieval": ["hit_rate"]}},
         }
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False, encoding="utf-8"
+        ) as f:
             yaml.dump(config_data, f)
             temp_path = f.name
 
@@ -479,7 +484,9 @@ class TestLoadExperimentConfig:
 
     @pytest.mark.unit
     def test_load_invalid_yaml(self):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False, encoding="utf-8"
+        ) as f:
             f.write("invalid: yaml: content: [")
             temp_path = f.name
 
@@ -491,7 +498,9 @@ class TestLoadExperimentConfig:
 
     @pytest.mark.unit
     def test_load_empty_file(self):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False, encoding="utf-8"
+        ) as f:
             f.write("")
             temp_path = f.name
 
@@ -503,7 +512,9 @@ class TestLoadExperimentConfig:
 
     @pytest.mark.unit
     def test_load_non_dict_config(self):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False, encoding="utf-8"
+        ) as f:
             yaml.dump(["item1", "item2"], f)
             temp_path = f.name
 
@@ -524,7 +535,9 @@ class TestLoadExperimentConfig:
             "evaluation": {"metrics": {"retrieval": ["hit_rate"]}},
         }
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False, encoding="utf-8"
+        ) as f:
             yaml.dump(config_data, f)
             temp_path = f.name
 
@@ -553,7 +566,9 @@ class TestGetVariantConfig:
                 },
                 {
                     "name": "variant_b",
-                    "config_overrides": {"chunker": {"chunk_size": 1024, "chunk_overlap": 100}},
+                    "config_overrides": {
+                        "chunker": {"chunk_size": 1024, "chunk_overlap": 100}
+                    },
                 },
             ],
             evaluation={"metrics": {"retrieval": ["hit_rate"]}},
@@ -961,9 +976,7 @@ class TestExperimentManager:
             config = self._make_config()
 
             exp_dir1 = manager.create_experiment_dir(config)
-            manager.save_snapshots(
-                exp_dir1, config, {}, [], {}
-            )
+            manager.save_snapshots(exp_dir1, config, {}, [], {})
 
             config2 = ExperimentConfig(
                 name="second_experiment",
@@ -974,9 +987,7 @@ class TestExperimentManager:
                 evaluation={"metrics": {}},
             )
             exp_dir2 = manager.create_experiment_dir(config2)
-            manager.save_snapshots(
-                exp_dir2, config2, {}, [], {}
-            )
+            manager.save_snapshots(exp_dir2, config2, {}, [], {})
 
             experiments = manager.list_experiments()
 
@@ -991,9 +1002,7 @@ class TestExperimentManager:
             config = self._make_config()
 
             exp_dir = manager.create_experiment_dir(config)
-            manager.save_snapshots(
-                exp_dir, config, {"meal_id": "test"}, [], {}
-            )
+            manager.save_snapshots(exp_dir, config, {"meal_id": "test"}, [], {})
 
             info = manager.get_experiment_info(exp_dir.name)
 
@@ -1079,7 +1088,9 @@ class TestExperimentManager:
 
             result = {"metrics": {}}
 
-            result_path = manager.save_variant_result(exp_dir, "Variant-A Test!", result)
+            result_path = manager.save_variant_result(
+                exp_dir, "Variant-A Test!", result
+            )
 
             assert result_path.exists()
             assert "!" not in result_path.name
@@ -1088,7 +1099,10 @@ class TestExperimentManager:
 class TestIsNewFormat:
     @pytest.mark.unit
     def test_new_format_with_name(self):
-        config = {"name": "my_test_set", "generation": {"strategy": "document", "num_questions": 10}}
+        config = {
+            "name": "my_test_set",
+            "generation": {"strategy": "document", "num_questions": 10},
+        }
         assert is_new_format(config) is True
 
     @pytest.mark.unit
@@ -1109,7 +1123,10 @@ class TestIsNewFormat:
 class TestGetTestSetName:
     @pytest.mark.unit
     def test_new_format_returns_name(self):
-        config = {"name": "custom_name", "generation": {"strategy": "document", "num_questions": 10}}
+        config = {
+            "name": "custom_name",
+            "generation": {"strategy": "document", "num_questions": 10},
+        }
         assert get_test_set_name(config) == "custom_name"
 
     @pytest.mark.unit
@@ -1139,22 +1156,34 @@ class TestGetTestSetName:
 
     @pytest.mark.unit
     def test_new_format_name_empty_string_auto_generates(self):
-        config = {"name": "", "generation": {"strategy": "document", "num_questions": 10}}
+        config = {
+            "name": "",
+            "generation": {"strategy": "document", "num_questions": 10},
+        }
         assert get_test_set_name(config) == "document_level_n10"
 
     @pytest.mark.unit
     def test_new_format_name_none_auto_generates(self):
-        config = {"name": None, "generation": {"strategy": "document", "num_questions": 10}}
+        config = {
+            "name": None,
+            "generation": {"strategy": "document", "num_questions": 10},
+        }
         assert get_test_set_name(config) == "document_level_n10"
 
     @pytest.mark.unit
     def test_new_format_name_whitespace_only_auto_generates(self):
-        config = {"name": "   ", "generation": {"strategy": "document", "num_questions": 10}}
+        config = {
+            "name": "   ",
+            "generation": {"strategy": "document", "num_questions": 10},
+        }
         assert get_test_set_name(config) == "document_level_n10"
 
     @pytest.mark.unit
     def test_new_format_name_provided_with_whitespace_trimmed(self):
-        config = {"name": "  custom_name  ", "generation": {"strategy": "document", "num_questions": 10}}
+        config = {
+            "name": "  custom_name  ",
+            "generation": {"strategy": "document", "num_questions": 10},
+        }
         assert get_test_set_name(config) == "custom_name"
 
 
@@ -1197,7 +1226,9 @@ class TestNewFormatValidation:
     @pytest.mark.unit
     def test_new_format_empty_name(self):
         data = self._make_config_dict()
-        data["test_sets"] = [{"name": "", "generation": {"strategy": "document", "num_questions": 10}}]
+        data["test_sets"] = [
+            {"name": "", "generation": {"strategy": "document", "num_questions": 10}}
+        ]
         config = ExperimentConfig.from_dict(data)
         errors = config.validate()
         test_set_errors = [e for e in errors if "Test set" in e]
@@ -1206,7 +1237,9 @@ class TestNewFormatValidation:
     @pytest.mark.unit
     def test_new_format_whitespace_name(self):
         data = self._make_config_dict()
-        data["test_sets"] = [{"name": "   ", "generation": {"strategy": "document", "num_questions": 10}}]
+        data["test_sets"] = [
+            {"name": "   ", "generation": {"strategy": "document", "num_questions": 10}}
+        ]
         config = ExperimentConfig.from_dict(data)
         errors = config.validate()
         test_set_errors = [e for e in errors if "Test set" in e]
@@ -1215,7 +1248,9 @@ class TestNewFormatValidation:
     @pytest.mark.unit
     def test_new_format_none_name(self):
         data = self._make_config_dict()
-        data["test_sets"] = [{"name": None, "generation": {"strategy": "document", "num_questions": 10}}]
+        data["test_sets"] = [
+            {"name": None, "generation": {"strategy": "document", "num_questions": 10}}
+        ]
         config = ExperimentConfig.from_dict(data)
         errors = config.validate()
         test_set_errors = [e for e in errors if "Test set" in e]
@@ -1224,7 +1259,13 @@ class TestNewFormatValidation:
     @pytest.mark.unit
     def test_new_format_invalid_on_missing(self):
         data = self._make_config_dict()
-        data["test_sets"] = [{"name": "test", "on_missing": "invalid_value", "generation": {"strategy": "document", "num_questions": 10}}]
+        data["test_sets"] = [
+            {
+                "name": "test",
+                "on_missing": "invalid_value",
+                "generation": {"strategy": "document", "num_questions": 10},
+            }
+        ]
         config = ExperimentConfig.from_dict(data)
         errors = config.validate()
         assert any("invalid 'on_missing' value" in e for e in errors)
@@ -1261,39 +1302,22 @@ class TestNewFormatValidation:
     def test_new_format_all_valid_on_missing_values(self):
         for on_missing_val in ["auto", "clean_only", "strict"]:
             data = self._make_config_dict()
-            data["test_sets"] = [{"name": "test", "on_missing": on_missing_val, "generation": {"strategy": "document", "num_questions": 10}}]
+            data["test_sets"] = [
+                {
+                    "name": "test",
+                    "on_missing": on_missing_val,
+                    "generation": {"strategy": "document", "num_questions": 10},
+                }
+            ]
             config = ExperimentConfig.from_dict(data)
             errors = config.validate()
             test_set_errors = [e for e in errors if "on_missing" in e]
-            assert test_set_errors == [], f"Unexpected error for on_missing='{on_missing_val}'"
-
-
-class TestOldFormatDeprecation:
-    def _make_config_dict(self, **overrides) -> dict:
-        defaults = {
-            "name": "test_experiment",
-            "description": "Test experiment description",
-            "data": {"meal": "meal_baseline"},
-            "test_sets": [{"strategy": "factual", "num_questions": 20}],
-            "variants": [{"name": "v1"}],
-            "evaluation": {"metrics": {"retrieval": ["hit_rate"]}},
-        }
-        defaults.update(overrides)
-        return defaults
-
-    @pytest.mark.unit
-    def test_old_format_emits_deprecation_warning(self):
-        data = self._make_config_dict()
-        config = ExperimentConfig.from_dict(data)
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            config.validate()
-            deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
-            assert len(deprecation_warnings) == 1
+            assert test_set_errors == [], (
+                f"Unexpected error for on_missing='{on_missing_val}'"
+            )
 
 
 class TestExperimentBoundaryConditions:
-
     def _make_config_dict(self, **overrides) -> dict:
         defaults = {
             "name": "test_experiment",
@@ -1344,13 +1368,17 @@ class TestExperimentBoundaryConditions:
         assert result["items"] == [4, 5]
 
     @pytest.mark.unit
-    def test_experiment_manager_list_experiments_corrupted_manifest(self, temp_project_dir):
+    def test_experiment_manager_list_experiments_corrupted_manifest(
+        self, temp_project_dir
+    ):
         exp_dir = temp_project_dir / "data" / "exp_reports" / "exp_test_corrupted"
         exp_dir.mkdir(parents=True)
         with open(exp_dir / "manifest.json", "w", encoding="utf-8") as f:
             f.write("invalid json content [")
 
-        system_config = {"experiments": {"dir": str(temp_project_dir / "data" / "exp_reports")}}
+        system_config = {
+            "experiments": {"dir": str(temp_project_dir / "data" / "exp_reports")}
+        }
         manager = ExperimentManager(system_config)
         experiments = manager.list_experiments()
 
@@ -1408,7 +1436,13 @@ class TestExperimentBoundaryConditions:
             f.write("invalid json")
 
         with open(exp_dir / "config_snapshot.yaml", "w", encoding="utf-8") as f:
-            yaml.dump({"data": {"meal": "test"}, "evaluation": {"metrics": {"retrieval": ["hit_rate"]}}}, f)
+            yaml.dump(
+                {
+                    "data": {"meal": "test"},
+                    "evaluation": {"metrics": {"retrieval": ["hit_rate"]}},
+                },
+                f,
+            )
 
         manager = ExperimentManager({})
         result = manager.load_experiment_result(exp_dir)
@@ -1454,10 +1488,11 @@ class TestExperimentBoundaryConditions:
 
 
 class TestExperimentExceptionPaths:
-
     @pytest.mark.unit
     def test_load_experiment_config_not_dict(self):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False, encoding="utf-8"
+        ) as f:
             yaml.dump(["item1", "item2", "item3"], f)
             temp_path = f.name
 
@@ -1478,7 +1513,9 @@ class TestExperimentExceptionPaths:
             "evaluation": {"metrics": {"retrieval": ["hit_rate"]}},
         }
 
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False, encoding="utf-8"
+        ) as f:
             yaml.dump(config_data, f)
             temp_path = f.name
 
@@ -1503,9 +1540,11 @@ class TestExperimentExceptionPaths:
             {"experiments": {"dir": str(temp_project_dir / "data" / "exp_reports")}}
         )
 
-        with patch.object(Path, "mkdir", side_effect=OSError("Permission denied")):
-            with pytest.raises(OSError, match="Permission denied"):
-                manager.create_experiment_dir(config)
+        with (
+            patch.object(Path, "mkdir", side_effect=OSError("Permission denied")),
+            pytest.raises(OSError, match="Permission denied"),
+        ):
+            manager.create_experiment_dir(config)
 
     @pytest.mark.unit
     def test_experiment_manager_save_snapshots_os_error(self, temp_project_dir):
@@ -1523,10 +1562,12 @@ class TestExperimentExceptionPaths:
             evaluation={"metrics": {"retrieval": ["hit_rate"]}},
         )
 
-        with patch("builtins.open", side_effect=OSError("Disk full")):
-            with pytest.raises(OSError, match="Disk full"):
-                manager = ExperimentManager({})
-                manager.save_snapshots(exp_dir, config, {}, [], {})
+        with (
+            patch("builtins.open", side_effect=OSError("Disk full")),
+            pytest.raises(OSError, match="Disk full"),
+        ):
+            manager = ExperimentManager({})
+            manager.save_snapshots(exp_dir, config, {}, [], {})
 
     @pytest.mark.unit
     def test_experiment_manager_save_variant_result_os_error(self, temp_project_dir):
@@ -1535,10 +1576,12 @@ class TestExperimentExceptionPaths:
         results_dir = exp_dir / "results"
         results_dir.mkdir()
 
-        with patch("builtins.open", side_effect=OSError("Permission denied")):
-            with pytest.raises(OSError, match="Permission denied"):
-                manager = ExperimentManager({})
-                manager.save_variant_result(exp_dir, "v1", {"metrics": {}})
+        with (
+            patch("builtins.open", side_effect=OSError("Permission denied")),
+            pytest.raises(OSError, match="Permission denied"),
+        ):
+            manager = ExperimentManager({})
+            manager.save_variant_result(exp_dir, "v1", {"metrics": {}})
 
     @pytest.mark.unit
     def test_experiment_manager_update_manifest_json_error(self, temp_project_dir):
@@ -1549,12 +1592,14 @@ class TestExperimentExceptionPaths:
             f.write("invalid json")
 
         manager = ExperimentManager({})
-        with pytest.raises(Exception):
+        with pytest.raises(json.JSONDecodeError):
             manager.update_manifest_status(exp_dir, "completed")
 
     @pytest.mark.unit
     def test_load_experiment_config_malformed_yaml(self):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False, encoding="utf-8") as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False, encoding="utf-8"
+        ) as f:
             f.write(": :\n  - [\ninvalid: yaml: [")
             temp_path = f.name
 
@@ -1585,9 +1630,13 @@ class TestOldFormatDeprecation:
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             config.validate()
-            deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
+            deprecation_warnings = [
+                x for x in w if issubclass(x.category, DeprecationWarning)
+            ]
             assert len(deprecation_warnings) == 1
-            assert "deprecated configuration format" in str(deprecation_warnings[0].message)
+            assert "deprecated configuration format" in str(
+                deprecation_warnings[0].message
+            )
 
     @pytest.mark.unit
     def test_old_format_still_validates(self):
@@ -1612,24 +1661,36 @@ class TestOldFormatDeprecation:
     @pytest.mark.unit
     def test_new_format_no_deprecation_warning(self):
         data = self._make_config_dict()
-        data["test_sets"] = [{"name": "test", "generation": {"strategy": "document", "num_questions": 10}}]
+        data["test_sets"] = [
+            {
+                "name": "test",
+                "generation": {"strategy": "document", "num_questions": 10},
+            }
+        ]
         config = ExperimentConfig.from_dict(data)
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             config.validate()
-            deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
+            deprecation_warnings = [
+                x for x in w if issubclass(x.category, DeprecationWarning)
+            ]
             assert len(deprecation_warnings) == 0
 
     @pytest.mark.unit
     def test_mixed_formats_emits_warning(self):
         data = self._make_config_dict()
         data["test_sets"] = [
-            {"name": "new_format", "generation": {"strategy": "document", "num_questions": 10}},
+            {
+                "name": "new_format",
+                "generation": {"strategy": "document", "num_questions": 10},
+            },
             {"strategy": "factual", "num_questions": 20},
         ]
         config = ExperimentConfig.from_dict(data)
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             config.validate()
-            deprecation_warnings = [x for x in w if issubclass(x.category, DeprecationWarning)]
+            deprecation_warnings = [
+                x for x in w if issubclass(x.category, DeprecationWarning)
+            ]
             assert len(deprecation_warnings) == 1

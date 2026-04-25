@@ -9,7 +9,6 @@ from src.token_tracker import TokenTracker
 
 @pytest.mark.unit
 class TestGenerator:
-
     @patch("src.llm_client.Anthropic")
     def test_generate_success(self, mock_anthropic_cls, mock_anthropic_client):
         mock_anthropic_cls.return_value = mock_anthropic_client
@@ -36,7 +35,9 @@ class TestGenerator:
             generator.generate(query=123, contexts=["some context"])
 
     @patch("src.llm_client.Anthropic")
-    def test_generate_empty_contexts_warning(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_generate_empty_contexts_warning(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
         with patch("src.generator.logger") as mock_logger:
@@ -53,7 +54,9 @@ class TestGenerator:
             generator.generate(query="What is the revenue?", contexts=["some context"])
 
     @patch("src.llm_client.Anthropic")
-    def test_generate_custom_system_prompt(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_generate_custom_system_prompt(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
         custom_prompt = "You are a helpful assistant."
@@ -66,7 +69,9 @@ class TestGenerator:
         assert call_kwargs.kwargs["system"] == custom_prompt
 
     @patch("src.llm_client.Anthropic")
-    def test_constructor_system_prompt_used_as_default(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_constructor_system_prompt_used_as_default(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         constructor_prompt = "You are a financial analyst."
         generator = Generator(api_key="test-key", system_prompt=constructor_prompt)
@@ -78,7 +83,9 @@ class TestGenerator:
         assert call_kwargs.kwargs["system"] == constructor_prompt
 
     @patch("src.llm_client.Anthropic")
-    def test_null_system_prompt_falls_back_to_hardcoded(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_null_system_prompt_falls_back_to_hardcoded(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key", system_prompt=None)
         generator.generate(
@@ -89,7 +96,9 @@ class TestGenerator:
         assert call_kwargs.kwargs["system"] == Generator.DEFAULT_SYSTEM_PROMPT
 
     @patch("src.llm_client.Anthropic")
-    def test_no_system_prompt_falls_back_to_hardcoded(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_no_system_prompt_falls_back_to_hardcoded(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
         generator.generate(
@@ -100,7 +109,9 @@ class TestGenerator:
         assert call_kwargs.kwargs["system"] == Generator.DEFAULT_SYSTEM_PROMPT
 
     @patch("src.llm_client.Anthropic")
-    def test_generate_param_overrides_constructor_default(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_generate_param_overrides_constructor_default(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         constructor_prompt = "You are a financial analyst."
         override_prompt = "You are a helpful assistant."
@@ -114,7 +125,9 @@ class TestGenerator:
         assert call_kwargs.kwargs["system"] == override_prompt
 
     @patch("src.llm_client.Anthropic")
-    def test_generate_token_tracker_records(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_generate_token_tracker_records(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         tracker = TokenTracker()
         generator = Generator(api_key="test-key", token_tracker=tracker)
@@ -135,7 +148,9 @@ class TestGenerator:
         assert record.metadata["question_id"] == "q1"
 
     @patch("src.llm_client.Anthropic")
-    def test_sources_included_in_context_format(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_sources_included_in_context_format(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
         generator.generate(
@@ -152,7 +167,9 @@ class TestGenerator:
         assert "参考资料 2（来源：贵州茅台2023年报）:" in user_content
 
     @patch("src.llm_client.Anthropic")
-    def test_sources_none_preserves_old_format(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_sources_none_preserves_old_format(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
         generator.generate(
@@ -166,7 +183,9 @@ class TestGenerator:
         assert "来源" not in user_content
 
     @patch("src.llm_client.Anthropic")
-    def test_sources_empty_list_preserves_old_format(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_sources_empty_list_preserves_old_format(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
         generator.generate(
@@ -180,7 +199,9 @@ class TestGenerator:
         assert "来源" not in user_content
 
     @patch("src.llm_client.Anthropic")
-    def test_sources_fewer_than_contexts_uses_unknown(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_sources_fewer_than_contexts_uses_unknown(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
         generator.generate(
@@ -196,9 +217,10 @@ class TestGenerator:
 
 @pytest.mark.unit
 class TestTruncateContexts:
-
     @patch("src.llm_client.Anthropic")
-    def test_truncate_contexts_removes_tail_chunks(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_truncate_contexts_removes_tail_chunks(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key", max_context_tokens=250, max_tokens=10)
         contexts = ["short", "word " * 200, "another " * 200]
@@ -207,7 +229,9 @@ class TestTruncateContexts:
         assert result[0] == "short"
 
     @patch("src.llm_client.Anthropic")
-    def test_truncate_contexts_no_limit_when_null(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_truncate_contexts_no_limit_when_null(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key", max_context_tokens=None)
         contexts = ["a" * 10000, "b" * 10000, "c" * 10000]
@@ -215,15 +239,21 @@ class TestTruncateContexts:
         assert result == contexts
 
     @patch("src.llm_client.Anthropic")
-    def test_truncate_contexts_fits_within_limit(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_truncate_contexts_fits_within_limit(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key", max_context_tokens=100000, max_tokens=1024)
+        generator = Generator(
+            api_key="test-key", max_context_tokens=100000, max_tokens=1024
+        )
         contexts = ["short context", "another short context"]
         result = generator._truncate_contexts(contexts, "system", "query")
         assert result == contexts
 
     @patch("src.llm_client.Anthropic")
-    def test_truncate_contexts_overhead_exceeds_returns_empty(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_truncate_contexts_overhead_exceeds_returns_empty(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key", max_context_tokens=50, max_tokens=10)
         long_system = "x" * 500
@@ -231,7 +261,9 @@ class TestTruncateContexts:
         assert result == []
 
     @patch("src.llm_client.Anthropic")
-    def test_truncate_contexts_logs_warning(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_truncate_contexts_logs_warning(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key", max_context_tokens=250, max_tokens=10)
         with patch("src.generator.logger") as mock_logger:
@@ -241,17 +273,25 @@ class TestTruncateContexts:
             assert any("Context truncated" in c for c in warning_calls)
 
     @patch("src.llm_client.Anthropic")
-    def test_truncate_contexts_available_zero_returns_empty(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_truncate_contexts_available_zero_returns_empty(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key", max_context_tokens=200, max_tokens=1024)
+        generator = Generator(
+            api_key="test-key", max_context_tokens=200, max_tokens=1024
+        )
         result = generator._truncate_contexts(["context"], "system", "query")
         assert result == []
 
     @patch("src.llm_client.Anthropic")
-    def test_generate_with_truncation_uses_truncated_contexts(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_generate_with_truncation_uses_truncated_contexts(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key", max_context_tokens=100, max_tokens=10)
-        with patch.object(generator, "_truncate_contexts", return_value=["truncated"]) as mock_truncate:
+        with patch.object(
+            generator, "_truncate_contexts", return_value=["truncated"]
+        ) as mock_truncate:
             generator.generate(
                 query="What is the revenue?",
                 contexts=["Revenue was 100 billion.", "Profit was 50 billion."],
@@ -265,47 +305,61 @@ class TestTruncateContexts:
 
 @pytest.mark.unit
 class TestCleanSourceName:
-
     def test_pages_json_extension(self):
-        assert clean_source_name(
-            "research_reports/2026现代女性精力管理现状报告.pages.json"
-        ) == "2026现代女性精力管理现状报告"
+        assert (
+            clean_source_name(
+                "research_reports/2026现代女性精力管理现状报告.pages.json"
+            )
+            == "2026现代女性精力管理现状报告"
+        )
 
     def test_md_extension(self):
-        assert clean_source_name(
-            "annual_reports/2023/贵州茅台2023年年度报告.md"
-        ) == "贵州茅台2023年年度报告"
+        assert (
+            clean_source_name("annual_reports/2023/贵州茅台2023年年度报告.md")
+            == "贵州茅台2023年年度报告"
+        )
 
     def test_json_extension(self):
-        assert clean_source_name(
-            "annual_reports/2023/贵州茅台2023年年度报告.json"
-        ) == "贵州茅台2023年年度报告"
+        assert (
+            clean_source_name("annual_reports/2023/贵州茅台2023年年度报告.json")
+            == "贵州茅台2023年年度报告"
+        )
 
     def test_simple_txt_extension(self):
         assert clean_source_name("simple_name.txt") == "simple_name"
 
     def test_pages_json_with_annual_reports(self):
-        assert clean_source_name(
-            "annual_reports/2023/贵州茅台2023年年度报告.pages.json"
-        ) == "贵州茅台2023年年度报告"
+        assert (
+            clean_source_name("annual_reports/2023/贵州茅台2023年年度报告.pages.json")
+            == "贵州茅台2023年年度报告"
+        )
 
     def test_filename_only(self):
         assert clean_source_name("report.pages.json") == "report"
 
     def test_no_extension(self):
-        assert clean_source_name("annual_reports/2023/贵州茅台2023年年度报告") == "贵州茅台2023年年度报告"
+        assert (
+            clean_source_name("annual_reports/2023/贵州茅台2023年年度报告")
+            == "贵州茅台2023年年度报告"
+        )
 
 
 @pytest.mark.unit
 class TestGeneratorBoundaryConditions:
-
     @patch("src.llm_client.Anthropic")
-    def test_allow_no_contexts_no_warning(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_allow_no_contexts_no_warning(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
         with patch("src.generator.logger") as mock_logger:
-            generator.generate(query="What is the revenue?", contexts=[], allow_no_contexts=True)
-            assert not any("No contexts provided" in str(c) for c in mock_logger.warning.call_args_list)
+            generator.generate(
+                query="What is the revenue?", contexts=[], allow_no_contexts=True
+            )
+            assert not any(
+                "No contexts provided" in str(c)
+                for c in mock_logger.warning.call_args_list
+            )
 
     @patch("src.llm_client.Anthropic")
     def test_none_contexts_raises(self, mock_anthropic_cls, mock_anthropic_client):
@@ -315,14 +369,18 @@ class TestGeneratorBoundaryConditions:
             generator.generate(query="What is the revenue?", contexts=None)
 
     @patch("src.llm_client.Anthropic")
-    def test_max_context_tokens_exactly_overhead(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_max_context_tokens_exactly_overhead(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key", max_context_tokens=20, max_tokens=10)
         result = generator._truncate_contexts(["some context"], "system", "query")
         assert result == []
 
     @patch("src.llm_client.Anthropic")
-    def test_single_context_exceeds_limit(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_single_context_exceeds_limit(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key", max_context_tokens=250, max_tokens=10)
         long_context = ["word " * 500]
@@ -338,7 +396,9 @@ class TestGeneratorBoundaryConditions:
         assert result == []
 
     @patch("src.llm_client.Anthropic")
-    def test_sources_longer_than_contexts(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_sources_longer_than_contexts(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
         generator.generate(
@@ -354,7 +414,9 @@ class TestGeneratorBoundaryConditions:
         assert "参考资料 1（来源：2026年光伏行业分析）:" in user_content
 
     @patch("src.llm_client.Anthropic")
-    def test_sources_contains_empty_string(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_sources_contains_empty_string(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
         generator.generate(
@@ -371,7 +433,9 @@ class TestGeneratorBoundaryConditions:
     def test_no_token_tracker_no_error(self, mock_anthropic_cls, mock_anthropic_client):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key", token_tracker=None)
-        answer = generator.generate(query="What is the revenue?", contexts=["Revenue was 100 billion."])
+        answer = generator.generate(
+            query="What is the revenue?", contexts=["Revenue was 100 billion."]
+        )
         assert answer == "This is a test answer from the LLM."
         assert generator.token_tracker is None
 
@@ -389,25 +453,34 @@ class TestGeneratorBoundaryConditions:
 
 @pytest.mark.unit
 class TestGeneratorExceptionPaths:
-
     @patch("src.llm_client.Anthropic")
-    def test_api_timeout_raises_generation_error(self, mock_anthropic_cls, mock_anthropic_client):
-        mock_anthropic_client.messages.create.side_effect = TimeoutError("Connection timed out")
+    def test_api_timeout_raises_generation_error(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
+        mock_anthropic_client.messages.create.side_effect = TimeoutError(
+            "Connection timed out"
+        )
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
         with pytest.raises(GenerationError, match="Failed to generate answer"):
             generator.generate(query="What is the revenue?", contexts=["some context"])
 
     @patch("src.llm_client.Anthropic")
-    def test_auth_failure_raises_generation_error(self, mock_anthropic_cls, mock_anthropic_client):
-        mock_anthropic_client.messages.create.side_effect = Exception("Authentication failed: invalid API key")
+    def test_auth_failure_raises_generation_error(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
+        mock_anthropic_client.messages.create.side_effect = Exception(
+            "Authentication failed: invalid API key"
+        )
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
         with pytest.raises(GenerationError, match="Failed to generate answer"):
             generator.generate(query="What is the revenue?", contexts=["some context"])
 
     @patch("src.llm_client.Anthropic")
-    def test_empty_response_content_raises_generation_error(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_empty_response_content_raises_generation_error(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_content = MagicMock()
         mock_content.text = ""
         mock_message = MagicMock()
@@ -417,26 +490,36 @@ class TestGeneratorExceptionPaths:
         mock_anthropic_client.messages.create.return_value = mock_message
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
-        answer = generator.generate(query="What is the revenue?", contexts=["some context"])
+        answer = generator.generate(
+            query="What is the revenue?", contexts=["some context"]
+        )
         assert answer == ""
 
     @patch("src.llm_client.Anthropic")
-    def test_none_query_raises_generation_error(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_none_query_raises_generation_error(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
         with pytest.raises(GenerationError, match="Query must be a non-empty string"):
             generator.generate(query=None, contexts=["some context"])
 
     @patch("src.llm_client.Anthropic")
-    def test_whitespace_only_query_proceeds(self, mock_anthropic_cls, mock_anthropic_client):
+    def test_whitespace_only_query_proceeds(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
         answer = generator.generate(query="   ", contexts=["some context"])
         assert answer == "This is a test answer from the LLM."
 
     @patch("src.llm_client.Anthropic")
-    def test_rate_limit_raises_generation_error(self, mock_anthropic_cls, mock_anthropic_client):
-        mock_anthropic_client.messages.create.side_effect = Exception("Rate limit exceeded: 429 Too Many Requests")
+    def test_rate_limit_raises_generation_error(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
+        mock_anthropic_client.messages.create.side_effect = Exception(
+            "Rate limit exceeded: 429 Too Many Requests"
+        )
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = Generator(api_key="test-key")
         with pytest.raises(GenerationError, match="Failed to generate answer"):

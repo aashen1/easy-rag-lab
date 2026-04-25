@@ -10,7 +10,7 @@ def interactive_chat(pipeline: RAGPipeline) -> None:
     collection_info = pipeline.indexer.get_collection_info()
     if collection_info:
         chunks_count = collection_info.get("points_count", 0)
-        print(f"\n🤖 RAG 问答系统已启动（输入 'quit' 或 'exit' 退出）")
+        print("\n🤖 RAG 问答系统已启动（输入 'quit' 或 'exit' 退出）")
         print(f"📝 数据库中已有 {chunks_count} 个文档片段\n")
     else:
         print("\n🤖 RAG 问答系统已启动（输入 'quit' 或 'exit' 退出）")
@@ -27,7 +27,9 @@ def interactive_chat(pipeline: RAGPipeline) -> None:
                 tracker = pipeline.token_tracker
                 if tracker and tracker.record_count > 0:
                     total = tracker.get_total()
-                    print(f"\n📊 Session Token Usage: in={total.input_tokens:,} out={total.output_tokens:,} total={total.total_tokens:,}")
+                    print(
+                        f"\n📊 Session Token Usage: in={total.input_tokens:,} out={total.output_tokens:,} total={total.total_tokens:,}"
+                    )
                 print("👋 再见！\n")
                 break
 
@@ -37,12 +39,14 @@ def interactive_chat(pipeline: RAGPipeline) -> None:
 
             if "token_usage" in result and result["token_usage"]:
                 tu = result["token_usage"]
-                print(f"📊 Tokens: in={tu['input_tokens']:,} out={tu['output_tokens']:,} total={tu['total_tokens']:,}\n")
+                print(
+                    f"📊 Tokens: in={tu['input_tokens']:,} out={tu['output_tokens']:,} total={tu['total_tokens']:,}\n"
+                )
 
             if "sources" in result and result["sources"]:
                 print("📚 参考来源：")
                 for i, (source, score) in enumerate(
-                    zip(result["sources"][:3], result["scores"][:3]), 1
+                    zip(result["sources"][:3], result["scores"][:3], strict=False), 1
                 ):
                     source_name = source.split("\\")[-1] if "\\" in source else source
                     print(f"   {i}. {source_name} (相关度: {score:.4f})")

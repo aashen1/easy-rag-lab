@@ -298,8 +298,9 @@ src/cli/
    - 将 `_print_query_result` 和 `_interactive_qa` 提取到 `src/cli/interactive.py`
    - 根目录 `main.py` 变为薄入口脚本
 
-3. **修复 lint 盲区**：
-   - 在 `pixi.toml` 的 ruff task 中加入根目录 .py 文件
+3. ~~**修复 lint 盲区**~~ ✅ 已于 2026-04-25 修复：
+   - 在 `pixi.toml` 的 ruff task 中加入 `main.py interactive.py`
+   - 修复了根目录 .py 文件中的 17 个 lint 错误（F541、UP006、UP035、B905、F841）
 
 **推荐理由**：
 

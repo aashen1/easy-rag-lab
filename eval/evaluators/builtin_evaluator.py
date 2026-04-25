@@ -54,11 +54,19 @@ class BuiltinEvaluator(BaseEvaluator):
         """
         super().__init__(config)
         self._retrieval_metrics = [
-            "hit_rate", "mrr", "ndcg",
-            "chunk_hit_rate", "chunk_mrr", "chunk_ndcg",
-            "dedup_hit_rate", "dedup_mrr", "dedup_ndcg",
-            "false_positive_rate", "retrieval_diversity",
-            "context_precision", "context_recall",
+            "hit_rate",
+            "mrr",
+            "ndcg",
+            "chunk_hit_rate",
+            "chunk_mrr",
+            "chunk_ndcg",
+            "dedup_hit_rate",
+            "dedup_mrr",
+            "dedup_ndcg",
+            "false_positive_rate",
+            "retrieval_diversity",
+            "context_precision",
+            "context_recall",
         ]
         self._generation_metrics = ["faithfulness", "answer_relevancy"]
 
@@ -155,7 +163,9 @@ class BuiltinEvaluator(BaseEvaluator):
         if generation_metrics is None and llm_config:
             generation_metrics = self._generation_metrics
 
-        sources_for_retrieval = retrieved_sources if retrieved_sources is not None else contexts
+        sources_for_retrieval = (
+            retrieved_sources if retrieved_sources is not None else contexts
+        )
 
         retrieval_results = {}
         generation_results = {}
@@ -204,11 +214,27 @@ class BuiltinEvaluator(BaseEvaluator):
 
             if expected_sources and expect_retrieval:
                 if equivalence_groups:
-                    norm_retrieved = [normalize_source_with_equivalence(s, equivalence_groups, include_parent=True) for s in sources_for_retrieval]
-                    norm_expected = [normalize_source_with_equivalence(s, equivalence_groups, include_parent=True) for s in expected_sources]
+                    norm_retrieved = [
+                        normalize_source_with_equivalence(
+                            s, equivalence_groups, include_parent=True
+                        )
+                        for s in sources_for_retrieval
+                    ]
+                    norm_expected = [
+                        normalize_source_with_equivalence(
+                            s, equivalence_groups, include_parent=True
+                        )
+                        for s in expected_sources
+                    ]
                 else:
-                    norm_retrieved = [normalize_source(s, include_parent=True) for s in sources_for_retrieval]
-                    norm_expected = [normalize_source(s, include_parent=True) for s in expected_sources]
+                    norm_retrieved = [
+                        normalize_source(s, include_parent=True)
+                        for s in sources_for_retrieval
+                    ]
+                    norm_expected = [
+                        normalize_source(s, include_parent=True)
+                        for s in expected_sources
+                    ]
 
                 if "dedup_hit_rate" in retrieval_metrics:
                     retrieval_results["dedup_hit_rate"] = calculate_dedup_hit_rate(
@@ -224,13 +250,13 @@ class BuiltinEvaluator(BaseEvaluator):
                     )
 
             if not expect_retrieval and "false_positive_rate" in retrieval_metrics:
-                retrieval_results["false_positive_rate"] = calculate_false_positive_rate(
-                    sources_for_retrieval, k=5
+                retrieval_results["false_positive_rate"] = (
+                    calculate_false_positive_rate(sources_for_retrieval, k=5)
                 )
 
             if "retrieval_diversity" in retrieval_metrics and sources_for_retrieval:
-                retrieval_results["retrieval_diversity"] = calculate_retrieval_diversity(
-                    sources_for_retrieval, k=5
+                retrieval_results["retrieval_diversity"] = (
+                    calculate_retrieval_diversity(sources_for_retrieval, k=5)
                 )
 
             if llm_config and contexts:
@@ -246,7 +272,9 @@ class BuiltinEvaluator(BaseEvaluator):
                         )
                         retrieval_results["context_precision"] = cp_score
                     except Exception as e:
-                        logger.error(f"Failed to calculate context_precision for {question_id}: {str(e)}")
+                        logger.error(
+                            f"Failed to calculate context_precision for {question_id}: {str(e)}"
+                        )
                         retrieval_results["context_precision"] = None
 
                 if "context_recall" in retrieval_metrics:
@@ -261,7 +289,9 @@ class BuiltinEvaluator(BaseEvaluator):
                         )
                         retrieval_results["context_recall"] = cr_score
                     except Exception as e:
-                        logger.error(f"Failed to calculate context_recall for {question_id}: {str(e)}")
+                        logger.error(
+                            f"Failed to calculate context_recall for {question_id}: {str(e)}"
+                        )
                         retrieval_results["context_recall"] = None
 
             if generation_metrics and llm_config:
@@ -340,7 +370,7 @@ class BuiltinEvaluator(BaseEvaluator):
         results = []
         for i, sample in enumerate(samples):
             logger.info(
-                f"Evaluating sample {i+1}/{len(samples)}: {sample.get('question_id', 'unknown')}"
+                f"Evaluating sample {i + 1}/{len(samples)}: {sample.get('question_id', 'unknown')}"
             )
             result = self.evaluate_single(
                 question_id=sample.get("question_id", ""),

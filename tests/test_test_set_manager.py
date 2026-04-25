@@ -144,7 +144,10 @@ class TestTestSetMetadata:
     def test_composition_field_with_data(self):
         composition_data = {
             "type": "merged",
-            "sources": [{"meal": "A", "test_set": "TA"}, {"meal": "B", "test_set": "TB"}],
+            "sources": [
+                {"meal": "A", "test_set": "TA"},
+                {"meal": "B", "test_set": "TB"},
+            ],
             "dedup_count": 5,
             "original_count": 25,
             "final_count": 20,
@@ -488,7 +491,11 @@ class TestValidateTestSet:
             "questions": [
                 {"id": 1, "question": "Q1", "source_files": ["reports/report_0.pdf"]},
                 {"id": 2, "question": "Q2", "source_files": ["reports/report_1.pdf"]},
-                {"id": 3, "question": "Q3", "source_files": ["reports/report_0.pdf", "reports/report_2.pdf"]},
+                {
+                    "id": 3,
+                    "question": "Q3",
+                    "source_files": ["reports/report_0.pdf", "reports/report_2.pdf"],
+                },
             ],
         }
         is_valid, invalid = manager.validate_test_set(test_set_data, meal_config)
@@ -526,7 +533,12 @@ class TestValidateTestSet:
             "questions": [
                 {"id": 1, "question": "Q1"},
                 {"id": 2, "question": "Q2", "source_files": []},
-                {"id": 3, "question": "Q3", "question_type": "irrelevant", "source_files": ["nonexistent.pdf"]},
+                {
+                    "id": 3,
+                    "question": "Q3",
+                    "question_type": "irrelevant",
+                    "source_files": ["nonexistent.pdf"],
+                },
             ],
         }
         is_valid, invalid = manager.validate_test_set(test_set_data, meal_config)
@@ -750,9 +762,13 @@ class TestCleanImmutablePolicy:
                 {"id": 1, "question": "Q1", "source_files": ["missing.pdf"]},
             ],
         }
-        invalid_questions = [{"id": 1, "question": "Q1", "source_files": ["missing.pdf"]}]
+        invalid_questions = [
+            {"id": 1, "question": "Q1", "source_files": ["missing.pdf"]}
+        ]
         with pytest.raises(TestSetError) as exc_info:
-            manager._clean_immutable_policy(test_set_data, meal_config, invalid_questions)
+            manager._clean_immutable_policy(
+                test_set_data, meal_config, invalid_questions
+            )
         assert "immutable policy" in str(exc_info.value).lower()
         assert "1 invalid questions" in str(exc_info.value)
 
@@ -777,7 +793,9 @@ class TestCleanImmutablePolicy:
             {"id": 2, "question": "Q2"},
         ]
         with pytest.raises(TestSetError) as exc_info:
-            manager._clean_immutable_policy(test_set_data, meal_config, invalid_questions)
+            manager._clean_immutable_policy(
+                test_set_data, meal_config, invalid_questions
+            )
         assert "2 invalid questions" in str(exc_info.value)
 
 
@@ -810,8 +828,12 @@ class TestCleanTrimPolicy:
                 {"id": 3, "question": "Q3", "source_files": ["reports/report_0.pdf"]},
             ],
         }
-        invalid_questions = [{"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}]
-        result = manager._clean_trim_policy(test_set_data, meal_config, invalid_questions)
+        invalid_questions = [
+            {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
+        ]
+        result = manager._clean_trim_policy(
+            test_set_data, meal_config, invalid_questions
+        )
         assert len(result["questions"]) == 2
         question_ids = {q["id"] for q in result["questions"]}
         assert question_ids == {1, 3}
@@ -868,7 +890,9 @@ class TestCleanTrimPolicy:
                 {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]},
             ],
         }
-        invalid_questions = [{"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}]
+        invalid_questions = [
+            {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
+        ]
         manager._clean_trim_policy(test_set_data, meal_config, invalid_questions)
         test_sets_dir = Path(config["meals"]["dir"]) / meal_config.name / "test_sets"
         archive_files = list(test_sets_dir.glob("trim_set.archive.*.json"))
@@ -895,7 +919,9 @@ class TestCleanTrimPolicy:
                 {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]},
             ],
         }
-        invalid_questions = [{"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}]
+        invalid_questions = [
+            {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
+        ]
         manager._clean_trim_policy(test_set_data, meal_config, invalid_questions)
         loaded = manager.load_test_set(meal_config.name, "trim_set")
         assert len(loaded["questions"]) == 1
@@ -974,7 +1000,9 @@ class TestCleanRegeneratePolicy:
                 {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]},
             ],
         }
-        invalid_questions = [{"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}]
+        invalid_questions = [
+            {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
+        ]
         result = manager._clean_regenerate_policy(
             test_set_data, meal_config, invalid_questions, None, "default", None
         )
@@ -1003,7 +1031,9 @@ class TestCleanRegeneratePolicy:
                 {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]},
             ],
         }
-        invalid_questions = [{"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}]
+        invalid_questions = [
+            {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
+        ]
         manager._clean_regenerate_policy(
             test_set_data, meal_config, invalid_questions, None, "default", None
         )
@@ -1033,7 +1063,9 @@ class TestCleanRegeneratePolicy:
                 {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]},
             ],
         }
-        invalid_questions = [{"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}]
+        invalid_questions = [
+            {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
+        ]
         result = manager._clean_regenerate_policy(
             test_set_data, meal_config, invalid_questions, None, "default", None
         )
@@ -1082,8 +1114,12 @@ class TestCleanRegeneratePolicy:
         _create_meal_dir(config, meal_config.name)
 
         class MockGenerator:
-            def generate_questions(self, meal_config, num_questions, llm_preset, token_tracker):
-                return [{"id": 100, "question": f"New Q{i}"} for i in range(num_questions)]
+            def generate_questions(
+                self, meal_config, num_questions, llm_preset, token_tracker
+            ):
+                return [
+                    {"id": 100, "question": f"New Q{i}"} for i in range(num_questions)
+                ]
 
         test_set_data = {
             "metadata": {
@@ -1100,9 +1136,16 @@ class TestCleanRegeneratePolicy:
                 {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]},
             ],
         }
-        invalid_questions = [{"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}]
+        invalid_questions = [
+            {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
+        ]
         result = manager._clean_regenerate_policy(
-            test_set_data, meal_config, invalid_questions, MockGenerator(), "default", None
+            test_set_data,
+            meal_config,
+            invalid_questions,
+            MockGenerator(),
+            "default",
+            None,
         )
         assert len(result["questions"]) == 2
         question_ids = {q["id"] for q in result["questions"]}
@@ -1154,8 +1197,12 @@ class TestCleanUserTestSet:
                 {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]},
             ],
         }
-        invalid_questions = [{"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}]
-        result = manager._clean_user_test_set(test_set_data, meal_config, invalid_questions)
+        invalid_questions = [
+            {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
+        ]
+        result = manager._clean_user_test_set(
+            test_set_data, meal_config, invalid_questions
+        )
         assert len(result["questions"]) == 1
 
     def test_routes_to_regenerate_policy(self, env):
@@ -1180,8 +1227,12 @@ class TestCleanUserTestSet:
                 {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]},
             ],
         }
-        invalid_questions = [{"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}]
-        result = manager._clean_user_test_set(test_set_data, meal_config, invalid_questions)
+        invalid_questions = [
+            {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
+        ]
+        result = manager._clean_user_test_set(
+            test_set_data, meal_config, invalid_questions
+        )
         assert len(result["questions"]) == 1
         assert result["metadata"]["audit_log"][0]["action"] == "regenerated"
 
@@ -1232,7 +1283,11 @@ class TestCleaningWarnings:
                 "meal_id": "abc123",
                 "suppress_warnings": True,
                 "audit_log": [
-                    {"action": "trimmed", "timestamp": "2026-04-20T10:00:00", "removed_count": 2}
+                    {
+                        "action": "trimmed",
+                        "timestamp": "2026-04-20T10:00:00",
+                        "removed_count": 2,
+                    }
                 ],
             },
             "questions": [],
@@ -1249,7 +1304,11 @@ class TestCleaningWarnings:
                 "meal_id": "abc123",
                 "suppress_warnings": False,
                 "audit_log": [
-                    {"action": "trimmed", "timestamp": "2026-04-20T10:00:00", "removed_count": 3}
+                    {
+                        "action": "trimmed",
+                        "timestamp": "2026-04-20T10:00:00",
+                        "removed_count": 3,
+                    }
                 ],
             },
             "questions": [],
@@ -1267,7 +1326,11 @@ class TestCleaningWarnings:
                 "meal_id": "abc123",
                 "suppress_warnings": False,
                 "audit_log": [
-                    {"action": "regenerated", "timestamp": "2026-04-20T11:00:00", "removed_count": 5}
+                    {
+                        "action": "regenerated",
+                        "timestamp": "2026-04-20T11:00:00",
+                        "removed_count": 5,
+                    }
                 ],
             },
             "questions": [],
@@ -1307,8 +1370,16 @@ class TestCleaningWarnings:
                 "meal_id": "abc123",
                 "suppress_warnings": False,
                 "audit_log": [
-                    {"action": "trimmed", "timestamp": "2026-04-20T10:00:00", "removed_count": 1},
-                    {"action": "regenerated", "timestamp": "2026-04-20T11:00:00", "removed_count": 2},
+                    {
+                        "action": "trimmed",
+                        "timestamp": "2026-04-20T10:00:00",
+                        "removed_count": 1,
+                    },
+                    {
+                        "action": "regenerated",
+                        "timestamp": "2026-04-20T11:00:00",
+                        "removed_count": 2,
+                    },
                 ],
             },
             "questions": [],
@@ -1364,7 +1435,9 @@ class TestCleanMachineTestSet:
                 {"id": 3, "question": "Q3", "source_files": ["reports/report_0.pdf"]},
             ],
         }
-        invalid_questions = [{"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}]
+        invalid_questions = [
+            {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
+        ]
         result = manager._clean_machine_test_set(
             test_set_data, meal_config, invalid_questions
         )
@@ -1382,7 +1455,12 @@ class TestCleanMachineTestSet:
 
         class MockGenerator:
             def supplement_document_based_questions(
-                self, meal_name, existing_test_set, target_count, llm_preset, token_tracker
+                self,
+                meal_name,
+                existing_test_set,
+                target_count,
+                llm_preset,
+                token_tracker,
             ):
                 current_count = len(existing_test_set.get("questions", []))
                 deficit = target_count - current_count
@@ -1407,10 +1485,11 @@ class TestCleanMachineTestSet:
                 {"id": 3, "question": "Q3", "source_files": ["reports/report_0.pdf"]},
             ],
         }
-        invalid_questions = [{"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}]
+        invalid_questions = [
+            {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
+        ]
         result = manager._clean_machine_test_set(
-            test_set_data, meal_config, invalid_questions,
-            generator=MockGenerator()
+            test_set_data, meal_config, invalid_questions, generator=MockGenerator()
         )
         assert len(result["questions"]) == 3
         question_ids = {q["id"] for q in result["questions"]}
@@ -1438,9 +1517,7 @@ class TestCleanMachineTestSet:
                 {"id": 1, "question": "Q1", "source_files": ["reports/report_0.pdf"]},
             ],
         }
-        result = manager._clean_machine_test_set(
-            test_set_data, meal_config, []
-        )
+        result = manager._clean_machine_test_set(test_set_data, meal_config, [])
         assert result["metadata"]["meal_id"] == "new_meal_id"
         assert result["metadata"]["updated_at"] != "2026-04-20T10:00:00"
 
@@ -1465,7 +1542,9 @@ class TestCleanMachineTestSet:
                 {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]},
             ],
         }
-        invalid_questions = [{"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}]
+        invalid_questions = [
+            {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
+        ]
         result = manager._clean_machine_test_set(
             test_set_data, meal_config, invalid_questions
         )
@@ -1500,13 +1579,15 @@ class TestCleanMachineTestSet:
         }
         new_generation_config = {"strategy": "random", "num_questions": 10, "seed": 42}
         result = manager._clean_machine_test_set(
-            test_set_data, meal_config, [],
-            generation_config=new_generation_config
+            test_set_data, meal_config, [], generation_config=new_generation_config
         )
         assert len(result["metadata"]["audit_log"]) == 2
         config_change_entry = result["metadata"]["audit_log"][0]
         assert config_change_entry["event"] == "generation_config_changed"
-        assert config_change_entry["old_config"] == {"strategy": "document", "num_questions": 5}
+        assert config_change_entry["old_config"] == {
+            "strategy": "document",
+            "num_questions": 5,
+        }
         assert config_change_entry["new_config"] == new_generation_config
         cleaned_entry = result["metadata"]["audit_log"][1]
         assert cleaned_entry["event"] == "cleaned"
@@ -1566,10 +1647,10 @@ class TestCleanMachineTestSet:
                 {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]},
             ],
         }
-        invalid_questions = [{"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}]
-        manager._clean_machine_test_set(
-            test_set_data, meal_config, invalid_questions
-        )
+        invalid_questions = [
+            {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
+        ]
+        manager._clean_machine_test_set(test_set_data, meal_config, invalid_questions)
         loaded = manager.load_test_set(meal_config.name, "machine_set")
         assert len(loaded["questions"]) == 1
         assert loaded["questions"][0]["id"] == 1
@@ -1595,9 +1676,7 @@ class TestCleanMachineTestSet:
                 {"id": 1, "question": "Q1", "source_files": ["reports/report_0.pdf"]},
             ],
         }
-        result = manager._clean_machine_test_set(
-            test_set_data, meal_config, []
-        )
+        result = manager._clean_machine_test_set(test_set_data, meal_config, [])
         assert len(result["questions"]) == 1
         assert result["metadata"]["meal_id"] == "new_meal_id"
         assert result["metadata"]["audit_log"][0]["removed_count"] == 0
@@ -1723,7 +1802,10 @@ class TestResolveTestSet:
                         "meal_id": "current_meal",
                         "created_at": "2026-04-20T10:00:00",
                         "updated_at": "2026-04-20T10:00:00",
-                        "generation": {"strategy": "document", "num_questions": num_questions},
+                        "generation": {
+                            "strategy": "document",
+                            "num_questions": num_questions,
+                        },
                     },
                     "questions": [
                         {"id": i, "question": f"Q{i}"} for i in range(num_questions)
@@ -1744,7 +1826,9 @@ class TestResolveTestSet:
         assert result["metadata"]["name"] == "new_set"
         assert len(result["questions"]) == 5
 
-    def test_auto_mode_not_found_without_generation_config_generated_with_defaults(self, env):
+    def test_auto_mode_not_found_without_generation_config_generated_with_defaults(
+        self, env
+    ):
         manager, config = env
         meal_config = _make_meal_config(
             data_id="current_meal",
@@ -1762,7 +1846,10 @@ class TestResolveTestSet:
                         "meal_id": "current_meal",
                         "created_at": "2026-04-20T10:00:00",
                         "updated_at": "2026-04-20T10:00:00",
-                        "generation": {"strategy": "document", "num_questions": num_questions},
+                        "generation": {
+                            "strategy": "document",
+                            "num_questions": num_questions,
+                        },
                     },
                     "questions": [
                         {"id": i, "question": f"Q{i}"} for i in range(num_questions)
@@ -1953,8 +2040,16 @@ class TestMergeTestSets:
                 "updated_at": "2026-04-20T10:00:00",
             },
             "questions": [
-                {"id": "q001", "question": "What is revenue?", "source_files": ["reports/report_0.pdf"]},
-                {"id": "q002", "question": "What is profit?", "source_files": ["reports/report_0.pdf"]},
+                {
+                    "id": "q001",
+                    "question": "What is revenue?",
+                    "source_files": ["reports/report_0.pdf"],
+                },
+                {
+                    "id": "q002",
+                    "question": "What is profit?",
+                    "source_files": ["reports/report_0.pdf"],
+                },
             ],
         }
         test_set_b = {
@@ -1965,8 +2060,16 @@ class TestMergeTestSets:
                 "updated_at": "2026-04-20T10:00:00",
             },
             "questions": [
-                {"id": "q001", "question": "What is cash flow?", "source_files": ["reports/report_1.pdf"]},
-                {"id": "q002", "question": "What is debt?", "source_files": ["reports/report_1.pdf"]},
+                {
+                    "id": "q001",
+                    "question": "What is cash flow?",
+                    "source_files": ["reports/report_1.pdf"],
+                },
+                {
+                    "id": "q002",
+                    "question": "What is debt?",
+                    "source_files": ["reports/report_1.pdf"],
+                },
             ],
         }
 
@@ -2015,8 +2118,16 @@ class TestMergeTestSets:
                 "updated_at": "2026-04-20T10:00:00",
             },
             "questions": [
-                {"id": "q001", "question": "What is revenue?", "source_files": ["reports/report_0.pdf"]},
-                {"id": "q002", "question": "What is profit?", "source_files": ["reports/report_0.pdf"]},
+                {
+                    "id": "q001",
+                    "question": "What is revenue?",
+                    "source_files": ["reports/report_0.pdf"],
+                },
+                {
+                    "id": "q002",
+                    "question": "What is profit?",
+                    "source_files": ["reports/report_0.pdf"],
+                },
             ],
         }
         test_set_b = {
@@ -2027,8 +2138,16 @@ class TestMergeTestSets:
                 "updated_at": "2026-04-20T10:00:00",
             },
             "questions": [
-                {"id": "q001", "question": "What is revenue?", "source_files": ["reports/report_0.pdf"]},
-                {"id": "q002", "question": "What is cash flow?", "source_files": ["reports/report_0.pdf"]},
+                {
+                    "id": "q001",
+                    "question": "What is revenue?",
+                    "source_files": ["reports/report_0.pdf"],
+                },
+                {
+                    "id": "q002",
+                    "question": "What is cash flow?",
+                    "source_files": ["reports/report_0.pdf"],
+                },
             ],
         }
 
@@ -2075,9 +2194,21 @@ class TestMergeTestSets:
                 "updated_at": "2026-04-20T10:00:00",
             },
             "questions": [
-                {"id": "q001", "question": "Valid question?", "source_files": ["reports/report_0.pdf"]},
-                {"id": "q002", "question": "Invalid question?", "source_files": ["reports/missing.pdf"]},
-                {"id": "q003", "question": "Another valid?", "source_files": ["reports/report_0.pdf"]},
+                {
+                    "id": "q001",
+                    "question": "Valid question?",
+                    "source_files": ["reports/report_0.pdf"],
+                },
+                {
+                    "id": "q002",
+                    "question": "Invalid question?",
+                    "source_files": ["reports/missing.pdf"],
+                },
+                {
+                    "id": "q003",
+                    "question": "Another valid?",
+                    "source_files": ["reports/report_0.pdf"],
+                },
             ],
         }
 
@@ -2119,7 +2250,11 @@ class TestMergeTestSets:
                 "updated_at": "2026-04-20T10:00:00",
             },
             "questions": [
-                {"id": "q001", "question": "Q1", "source_files": ["reports/report_0.pdf"]},
+                {
+                    "id": "q001",
+                    "question": "Q1",
+                    "source_files": ["reports/report_0.pdf"],
+                },
             ],
         }
         test_set_b = {
@@ -2130,7 +2265,11 @@ class TestMergeTestSets:
                 "updated_at": "2026-04-20T10:00:00",
             },
             "questions": [
-                {"id": "q001", "question": "Q2", "source_files": ["reports/report_0.pdf"]},
+                {
+                    "id": "q001",
+                    "question": "Q2",
+                    "source_files": ["reports/report_0.pdf"],
+                },
             ],
         }
 
@@ -2176,8 +2315,16 @@ class TestMergeTestSets:
                 "updated_at": "2026-04-20T10:00:00",
             },
             "questions": [
-                {"id": "q001", "question": "Q1", "source_files": ["reports/report_0.pdf"]},
-                {"id": "q002", "question": "Q2", "source_files": ["reports/missing.pdf"]},
+                {
+                    "id": "q001",
+                    "question": "Q1",
+                    "source_files": ["reports/report_0.pdf"],
+                },
+                {
+                    "id": "q002",
+                    "question": "Q2",
+                    "source_files": ["reports/missing.pdf"],
+                },
             ],
         }
 
@@ -2220,7 +2367,11 @@ class TestMergeTestSets:
                 "updated_at": "2026-04-20T10:00:00",
             },
             "questions": [
-                {"id": "q001", "question": "Q1", "source_files": ["reports/report_0.pdf"]},
+                {
+                    "id": "q001",
+                    "question": "Q1",
+                    "source_files": ["reports/report_0.pdf"],
+                },
             ],
         }
 
@@ -2307,7 +2458,11 @@ class TestMergeTestSets:
                 "updated_at": "2026-04-20T10:00:00",
             },
             "questions": [
-                {"id": "q001", "question": "Normal question?", "source_files": ["reports/report_0.pdf"]},
+                {
+                    "id": "q001",
+                    "question": "Normal question?",
+                    "source_files": ["reports/report_0.pdf"],
+                },
                 {
                     "id": "q002",
                     "question": "Irrelevant question?",
@@ -2350,7 +2505,11 @@ class TestMergeTestSets:
                 "updated_at": "2026-04-20T10:00:00",
             },
             "questions": [
-                {"id": "q001", "question": "Q1", "source_files": ["reports/report_0.pdf"]},
+                {
+                    "id": "q001",
+                    "question": "Q1",
+                    "source_files": ["reports/report_0.pdf"],
+                },
             ],
         }
 
@@ -2388,9 +2547,21 @@ class TestMergeTestSets:
                 "updated_at": "2026-04-20T10:00:00",
             },
             "questions": [
-                {"id": "old_id_1", "question": "Q1", "source_files": ["reports/report_0.pdf"]},
-                {"id": "old_id_2", "question": "Q2", "source_files": ["reports/report_0.pdf"]},
-                {"id": "old_id_3", "question": "Q3", "source_files": ["reports/report_0.pdf"]},
+                {
+                    "id": "old_id_1",
+                    "question": "Q1",
+                    "source_files": ["reports/report_0.pdf"],
+                },
+                {
+                    "id": "old_id_2",
+                    "question": "Q2",
+                    "source_files": ["reports/report_0.pdf"],
+                },
+                {
+                    "id": "old_id_3",
+                    "question": "Q3",
+                    "source_files": ["reports/report_0.pdf"],
+                },
             ],
         }
 
@@ -2516,7 +2687,9 @@ class TestBoundaryConditions:
                         "created_at": "2026-04-20T10:00:00",
                         "updated_at": "2026-04-20T10:00:00",
                     },
-                    "questions": [{"id": i, "question": f"Q{i}"} for i in range(num_questions)],
+                    "questions": [
+                        {"id": i, "question": f"Q{i}"} for i in range(num_questions)
+                    ],
                 }
 
         test_set_config = {
@@ -2565,7 +2738,11 @@ class TestBoundaryConditions:
         manager, config = env
         meal_config = _make_meal_config(data_id="abc")
         questions = [
-            {"id": 1, "question_type": "irrelevant", "source_files": ["nonexistent.pdf"]},
+            {
+                "id": 1,
+                "question_type": "irrelevant",
+                "source_files": ["nonexistent.pdf"],
+            },
         ]
         result = manager._check_questions_validity(questions, meal_config)
         assert result == []

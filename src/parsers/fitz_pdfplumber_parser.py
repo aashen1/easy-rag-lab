@@ -67,9 +67,13 @@ class FitzPdfPlumberParser(BaseParser):
         self._footer_filter = self._config.get("footer_filter", True)
         self._header_zone_ratio = self._config.get("header_zone_ratio", 0.10)
         self._footer_zone_ratio = self._config.get("footer_zone_ratio", 0.10)
-        self._noise_patterns = self._config.get("noise_patterns", DEFAULT_NOISE_PATTERNS)
+        self._noise_patterns = self._config.get(
+            "noise_patterns", DEFAULT_NOISE_PATTERNS
+        )
         self._table_strategy = self._config.get("table_strategy", "lines")
-        self._table_settings = self._config.get("table_settings", DEFAULT_TABLE_SETTINGS)
+        self._table_settings = self._config.get(
+            "table_settings", DEFAULT_TABLE_SETTINGS
+        )
         self._column_detection = self._config.get("column_detection", True)
         self._noise_re = [re.compile(p) for p in self._noise_patterns]
 
@@ -113,19 +117,30 @@ class FitzPdfPlumberParser(BaseParser):
                 page = doc[page_idx]
                 page_number = page_idx + 1
                 blocks = self._extract_page_blocks(page, page_number)
-                table_blocks = self._extract_tables_with_pdfplumber(str(pdf_file), page_idx)
+                table_blocks = self._extract_tables_with_pdfplumber(
+                    str(pdf_file), page_idx
+                )
                 combined = self._merge_text_and_tables(blocks, table_blocks)
                 md_text = self._blocks_to_markdown(combined)
-                pages.append(ParsedPage(
-                    page_number=page_number,
-                    text=md_text,
-                    metadata={"source": Path(pdf_path).as_posix(), "page_number": page_number},
-                ))
+                pages.append(
+                    ParsedPage(
+                        page_number=page_number,
+                        text=md_text,
+                        metadata={
+                            "source": Path(pdf_path).as_posix(),
+                            "page_number": page_number,
+                        },
+                    )
+                )
 
             doc.close()
             return ParseResult(
                 pages=pages,
-                metadata={"source": Path(pdf_path).as_posix(), "parser": self.name, "page_count": total_pages},
+                metadata={
+                    "source": Path(pdf_path).as_posix(),
+                    "parser": self.name,
+                    "page_count": total_pages,
+                },
             )
         except Exception as e:
             error_msg = f"Failed to parse PDF {pdf_path}: {str(e)}"
@@ -176,11 +191,7 @@ class FitzPdfPlumberParser(BaseParser):
         if not blocks:
             return 1
 
-        x_centers = [
-            (b[0] + b[2]) / 2
-            for b in blocks
-            if b[6] == 0
-        ]
+        x_centers = [(b[0] + b[2]) / 2 for b in blocks if b[6] == 0]
 
         if not x_centers:
             return 1
@@ -195,7 +206,9 @@ class FitzPdfPlumberParser(BaseParser):
 
         return 1
 
-    def _extract_page_blocks(self, page: fitz.Page, page_number: int) -> list[_TextBlock]:
+    def _extract_page_blocks(
+        self, page: fitz.Page, page_number: int
+    ) -> list[_TextBlock]:
         """Extract all content blocks from a page using fitz.
 
         Args:
@@ -210,16 +223,20 @@ class FitzPdfPlumberParser(BaseParser):
         column_count = self._detect_columns(page)
 
         blocks = []
-        raw_blocks = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)["blocks"]
+        raw_blocks = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)[
+            "blocks"
+        ]
 
         for block in raw_blocks:
             if block["type"] == 1:
-                blocks.append(_TextBlock(
-                    page_number=page_number,
-                    block_type="image",
-                    content=f"[图片: 页{page_number}]",
-                    bbox=tuple(block["bbox"]),
-                ))
+                blocks.append(
+                    _TextBlock(
+                        page_number=page_number,
+                        block_type="image",
+                        content=f"[图片: 页{page_number}]",
+                        bbox=tuple(block["bbox"]),
+                    )
+                )
                 continue
 
             if block["type"] != 0:
@@ -247,27 +264,33 @@ class FitzPdfPlumberParser(BaseParser):
             if self._is_noise(full_text, bbox, page_height):
                 continue
 
-            blocks.append(_TextBlock(
-                page_number=page_number,
-                block_type="text",
-                content=full_text,
-                bbox=bbox,
-                font_size=max_font_size,
-                is_bold=is_bold,
-            ))
+            blocks.append(
+                _TextBlock(
+                    page_number=page_number,
+                    block_type="text",
+                    content=full_text,
+                    bbox=bbox,
+                    font_size=max_font_size,
+                    is_bold=is_bold,
+                )
+            )
 
         if column_count == 2:
             mid_x = page_width / 2
-            blocks.sort(key=lambda b: (
-                0 if b.bbox[0] < mid_x else 1,
-                b.bbox[1],
-            ))
+            blocks.sort(
+                key=lambda b: (
+                    0 if b.bbox[0] < mid_x else 1,
+                    b.bbox[1],
+                )
+            )
         else:
             blocks.sort(key=lambda b: b.bbox[1])
 
         return blocks
 
-    def _extract_tables_with_pdfplumber(self, pdf_path: str, page_idx: int) -> list[_TextBlock]:
+    def _extract_tables_with_pdfplumber(
+        self, pdf_path: str, page_idx: int
+    ) -> list[_TextBlock]:
         """Extract tables from a page using pdfplumber.
 
         Args:
@@ -307,14 +330,18 @@ class FitzPdfPlumberParser(BaseParser):
 
                     bbox = tuple(table.bbox) if table.bbox else (0, 0, 0, 0)
 
-                    tables.append(_TextBlock(
-                        page_number=page_idx + 1,
-                        block_type="table",
-                        content=md_table,
-                        bbox=bbox,
-                    ))
+                    tables.append(
+                        _TextBlock(
+                            page_number=page_idx + 1,
+                            block_type="table",
+                            content=md_table,
+                            bbox=bbox,
+                        )
+                    )
         except Exception as e:
-            logger.warning(f"pdfplumber table extraction failed for page {page_idx + 1}: {str(e)}")
+            logger.warning(
+                f"pdfplumber table extraction failed for page {page_idx + 1}: {str(e)}"
+            )
 
         return tables
 
@@ -375,8 +402,7 @@ class FitzPdfPlumberParser(BaseParser):
         result = []
         for tb in text_blocks:
             overlaps_table = any(
-                self._bbox_overlap(tb.bbox, tab.bbox) > 0.5
-                for tab in table_blocks
+                self._bbox_overlap(tb.bbox, tab.bbox) > 0.5 for tab in table_blocks
             )
             if not overlaps_table:
                 result.append(tb)

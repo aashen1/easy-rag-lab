@@ -15,7 +15,9 @@ class TestParsedPage:
         assert page.metadata == {}
 
     def test_with_metadata(self) -> None:
-        page = ParsedPage(page_number=3, text="Content", metadata={"source": "test.pdf"})
+        page = ParsedPage(
+            page_number=3, text="Content", metadata={"source": "test.pdf"}
+        )
         assert page.metadata == {"source": "test.pdf"}
 
 
@@ -26,7 +28,10 @@ class TestParseResult:
         assert result.metadata == {}
 
     def test_with_pages(self) -> None:
-        pages = [ParsedPage(page_number=1, text="A"), ParsedPage(page_number=2, text="B")]
+        pages = [
+            ParsedPage(page_number=1, text="A"),
+            ParsedPage(page_number=2, text="B"),
+        ]
         result = ParseResult(pages=pages, metadata={"page_count": 2})
         assert len(result.pages) == 2
         assert result.metadata["page_count"] == 2

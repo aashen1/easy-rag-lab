@@ -20,9 +20,9 @@ def _extract_headings(text: str) -> list[str]:
         List of heading strings (e.g., ['# Title', '## Subtitle']).
     """
     headings = []
-    for line in text.split('\n'):
+    for line in text.split("\n"):
         stripped = line.strip()
-        if stripped.startswith('#'):
+        if stripped.startswith("#"):
             headings.append(stripped)
     return headings
 
@@ -41,7 +41,7 @@ def _split_into_sentences(text: str) -> list[str]:
     """
     import re
 
-    parts = re.split(r'(?<=[。！？；.!?;])', text)
+    parts = re.split(r"(?<=[。！？；.!?;])", text)
 
     sentences = []
     buffer = ""
@@ -78,7 +78,7 @@ def _split_into_paragraphs(text: str) -> list[str]:
     """
     import re
 
-    parts = re.split(r'\n\s*\n|\n(?=#)', text)
+    parts = re.split(r"\n\s*\n|\n(?=#)", text)
 
     paragraphs = []
     for part in parts:
@@ -180,45 +180,48 @@ def chunk_text_semantic(
 
     if len(sentences) <= 1:
         paragraphs = _split_into_paragraphs(text)
-        if paragraphs:
-            sentences = paragraphs
-        else:
-            sentences = [text]
+        sentences = paragraphs if paragraphs else [text]
 
     if len(sentences) <= 1:
         tokens = encoding.encode(text)
-        return [{
-            "text": text,
-            "metadata": {
-                "chunk_index": 0,
-                "char_count": len(text),
-                "token_count": len(tokens),
-                "start_token": 0,
-                "end_token": len(tokens),
-                "strategy": "semantic",
-            },
-        }]
+        return [
+            {
+                "text": text,
+                "metadata": {
+                    "chunk_index": 0,
+                    "char_count": len(text),
+                    "token_count": len(tokens),
+                    "start_token": 0,
+                    "end_token": len(tokens),
+                    "strategy": "semantic",
+                },
+            }
+        ]
 
     logger.debug(f"Computing similarities for {len(sentences)} sentences...")
     similarities = _compute_sentence_similarities(sentences, embedder)
 
     if len(similarities) == 0:
         tokens = encoding.encode(text)
-        return [{
-            "text": text,
-            "metadata": {
-                "chunk_index": 0,
-                "char_count": len(text),
-                "token_count": len(tokens),
-                "start_token": 0,
-                "end_token": len(tokens),
-                "strategy": "semantic",
-            },
-        }]
+        return [
+            {
+                "text": text,
+                "metadata": {
+                    "chunk_index": 0,
+                    "char_count": len(text),
+                    "token_count": len(tokens),
+                    "start_token": 0,
+                    "end_token": len(tokens),
+                    "strategy": "semantic",
+                },
+            }
+        ]
 
     if breakpoint_percentile is not None:
         threshold = np.percentile(similarities, breakpoint_percentile)
-        logger.debug(f"Percentile threshold: {threshold:.4f} (p={breakpoint_percentile})")
+        logger.debug(
+            f"Percentile threshold: {threshold:.4f} (p={breakpoint_percentile})"
+        )
     else:
         threshold = similarity_threshold
 
@@ -244,17 +247,19 @@ def chunk_text_semantic(
         if token_count > chunk_size:
             sub_chunks = _fixed_split_tokens(segment_tokens, encoding, chunk_size)
             for sub_text, sub_tokens in sub_chunks:
-                chunks.append({
-                    "text": sub_text,
-                    "metadata": {
-                        "chunk_index": chunk_index,
-                        "char_count": len(sub_text),
-                        "token_count": sub_tokens,
-                        "start_token": token_offset,
-                        "end_token": token_offset + sub_tokens,
-                        "strategy": "semantic",
-                    },
-                })
+                chunks.append(
+                    {
+                        "text": sub_text,
+                        "metadata": {
+                            "chunk_index": chunk_index,
+                            "char_count": len(sub_text),
+                            "token_count": sub_tokens,
+                            "start_token": token_offset,
+                            "end_token": token_offset + sub_tokens,
+                            "strategy": "semantic",
+                        },
+                    }
+                )
                 chunk_index += 1
                 token_offset += sub_tokens
         elif token_count < min_chunk_size and chunks:
@@ -269,13 +274,31 @@ def chunk_text_semantic(
                         "char_count": len(merged_text),
                         "token_count": len(merged_tokens),
                         "start_token": last["metadata"]["start_token"],
-                        "end_token": last["metadata"]["start_token"] + len(merged_tokens),
+                        "end_token": last["metadata"]["start_token"]
+                        + len(merged_tokens),
                         "strategy": "semantic",
                     },
                 }
                 token_offset = last["metadata"]["start_token"] + len(merged_tokens)
             else:
-                chunks.append({
+                chunks.append(
+                    {
+                        "text": segment_text,
+                        "metadata": {
+                            "chunk_index": chunk_index,
+                            "char_count": len(segment_text),
+                            "token_count": token_count,
+                            "start_token": token_offset,
+                            "end_token": token_offset + token_count,
+                            "strategy": "semantic",
+                        },
+                    }
+                )
+                chunk_index += 1
+                token_offset += token_count
+        else:
+            chunks.append(
+                {
                     "text": segment_text,
                     "metadata": {
                         "chunk_index": chunk_index,
@@ -285,25 +308,14 @@ def chunk_text_semantic(
                         "end_token": token_offset + token_count,
                         "strategy": "semantic",
                     },
-                })
-                chunk_index += 1
-                token_offset += token_count
-        else:
-            chunks.append({
-                "text": segment_text,
-                "metadata": {
-                    "chunk_index": chunk_index,
-                    "char_count": len(segment_text),
-                    "token_count": token_count,
-                    "start_token": token_offset,
-                    "end_token": token_offset + token_count,
-                    "strategy": "semantic",
-                },
-            })
+                }
+            )
             chunk_index += 1
             token_offset += token_count
 
-    logger.info(f"Semantic chunking: {len(sentences)} sentences -> {len(chunks)} chunks")
+    logger.info(
+        f"Semantic chunking: {len(sentences)} sentences -> {len(chunks)} chunks"
+    )
     return chunks
 
 
@@ -424,7 +436,9 @@ def process_parsed_files_semantic(
 
             with open(output_file, "w", encoding="utf-8") as f:
                 for chunk in chunks:
-                    chunk_id = f"{source_name}::chunk::{chunk['metadata']['chunk_index']:03d}"
+                    chunk_id = (
+                        f"{source_name}::chunk::{chunk['metadata']['chunk_index']:03d}"
+                    )
 
                     chunk_headings = _extract_headings(chunk["text"])
 

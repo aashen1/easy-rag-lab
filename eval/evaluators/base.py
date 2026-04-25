@@ -27,6 +27,7 @@ class EvaluationResult:
     Returns:
         EvaluationResult instance.
     """
+
     question_id: str
     question: str
     answer: str
@@ -197,7 +198,8 @@ class BaseEvaluator(ABC):
 
         if retrieval_metrics:
             unsupported = [
-                m for m in retrieval_metrics
+                m
+                for m in retrieval_metrics
                 if m not in self.supported_retrieval_metrics
             ]
             if unsupported:
@@ -208,7 +210,8 @@ class BaseEvaluator(ABC):
 
         if generation_metrics:
             unsupported = [
-                m for m in generation_metrics
+                m
+                for m in generation_metrics
                 if m not in self.supported_generation_metrics
             ]
             if unsupported:
