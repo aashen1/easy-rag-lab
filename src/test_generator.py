@@ -449,6 +449,26 @@ class TestSetGenerator:
 
     DOCUMENT_TRUNCATE_MAX = 8000
 
+    GOLDEN_TYPE_DISTRIBUTION = {
+        "single_fact": 0.17,
+        "multi_fact": 0.20,
+        "reasoning": 0.17,
+        "comparative": 0.17,
+        "missing": 0.13,
+        "irrelevant": 0.07,
+        "adversarial": 0.10,
+    }
+
+    FAILURE_MODES = {
+        "single_fact": "基础检索失败：精确数据/事实无法被检索到",
+        "multi_fact": "多跳检索失败：需要整合多个信息点但系统只返回部分",
+        "reasoning": "推理能力不足：无法基于检索到的信息进行逻辑推断",
+        "comparative": "对比分析失败：无法跨段落/跨文档对比信息",
+        "missing": "拒答能力不足：文档中没有的信息未能正确识别，产生幻觉",
+        "irrelevant": "幻觉控制失败：无关问题产生了看似相关的编造内容",
+        "adversarial": "边界场景翻车：数字近似/跨文档混淆/时序陷阱等",
+    }
+
     def __init__(self, config: dict[str, Any]):
         """Initialize the TestSetGenerator with application configuration.
 
@@ -2069,6 +2089,105 @@ class TestSetGenerator:
                 return True
 
         return False
+
+    def _detect_content_overlaps(
+        self,
+        documents: list[dict[str, Any]],
+        threshold: float = 0.8,
+    ) -> list[tuple[str, str, float]]:
+        """Detect content overlap between document pairs.
+
+        Samples 3 segments (beginning, middle, end) from the shorter
+        document and checks if they appear in the longer document. If the
+        hit rate exceeds the threshold, the shorter document is marked as
+        supplementary.
+
+        Args:
+            documents: List of document dicts with 'doc_id' and 'content'.
+            threshold: Minimum hit rate to mark as supplementary.
+
+        Returns:
+            List of tuples: (supplementary_doc_id, primary_doc_id, ratio).
+        """
+        overlaps: list[tuple[str, str, float]] = []
+        sample_size = 500
+
+        for i in range(len(documents)):
+            for j in range(i + 1, len(documents)):
+                doc_a = documents[i]
+                doc_b = documents[j]
+                len_a = len(doc_a["content"])
+                len_b = len(doc_b["content"])
+
+                if len_a <= len_b:
+                    shorter, longer = doc_a, doc_b
+                else:
+                    shorter, longer = doc_b, doc_a
+
+                short_text = re.sub(r"\s+", "", shorter["content"])
+                long_text = re.sub(r"\s+", "", longer["content"])
+
+                if len(short_text) < 100:
+                    continue
+
+                samples = [
+                    short_text[:sample_size],
+                    short_text[
+                        len(short_text) // 2 : len(short_text) // 2 + sample_size
+                    ],
+                    short_text[-sample_size:],
+                ]
+
+                hits = sum(1 for s in samples if len(s) >= 50 and s in long_text)
+                hit_rate = hits / len(samples)
+
+                if hit_rate >= threshold:
+                    overlaps.append((shorter["doc_id"], longer["doc_id"], hit_rate))
+
+        return overlaps
+
+    def _build_primary_pool(
+        self,
+        documents: list[dict[str, Any]],
+        overlaps: list[tuple[str, str, float]],
+    ) -> list[dict[str, Any]]:
+        """Build primary document pool, excluding supplementary documents.
+
+        If document A is marked as supplementary to B, A is excluded from
+        the primary pool. If A is supplementary to both B and C, only the
+        longer one (B or C) is kept as the primary.
+
+        Args:
+            documents: List of document dicts.
+            overlaps: Overlap tuples from _detect_content_overlaps().
+
+        Returns:
+            List of primary document dicts (supplementary excluded).
+        """
+        supplementary_ids: set[str] = set()
+        primary_map: dict[str, str] = {}
+
+        for supp_id, primary_id, _ratio in overlaps:
+            if supp_id not in supplementary_ids:
+                supplementary_ids.add(supp_id)
+                primary_map[supp_id] = primary_id
+            else:
+                existing_primary_id = primary_map[supp_id]
+                existing_doc = next(
+                    (d for d in documents if d["doc_id"] == existing_primary_id),
+                    None,
+                )
+                new_doc = next(
+                    (d for d in documents if d["doc_id"] == primary_id), None
+                )
+                if (
+                    new_doc
+                    and existing_doc
+                    and len(new_doc["content"]) > len(existing_doc["content"])
+                ):
+                    primary_map[supp_id] = primary_id
+
+        return [d for d in documents if d["doc_id"] not in supplementary_ids]
 
     def _generate_question_with_evidence(
         self,
