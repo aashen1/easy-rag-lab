@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -282,7 +283,7 @@ class LazyDocumentLoader:
         _cache: Cache of already loaded documents.
     """
 
-    def __init__(self, directory: Path) -> None:
+    def __init__(self, directory: Path, max_cache_size: int = 128) -> None:
         """Initialize the lazy loader and build the file index.
 
         Scans the directory for supported document files (.md and .pages.json)
@@ -290,6 +291,8 @@ class LazyDocumentLoader:
 
         Args:
             directory: Root directory to scan for documents.
+            max_cache_size: Maximum number of documents to keep in cache.
+                When exceeded, the least recently used document is evicted.
 
         Raises:
             FileNotFoundError: If the directory does not exist.
@@ -299,7 +302,8 @@ class LazyDocumentLoader:
 
         self.directory = directory
         self._index: dict[str, Path] = self._build_index()
-        self._cache: dict[str, LoadedDocument] = {}
+        self._cache: OrderedDict[str, tuple[LoadedDocument, float]] = OrderedDict()
+        self._max_cache_size = max_cache_size
 
         logger.info(
             f"LazyDocumentLoader initialized with {len(self._index)} documents indexed"
@@ -350,8 +354,13 @@ class LazyDocumentLoader:
             IOError: If reading the file fails.
         """
         if doc_name in self._cache:
-            logger.debug(f"Returning cached document: {doc_name}")
-            return self._cache[doc_name]
+            cached_doc, cached_mtime = self._cache[doc_name]
+            current_mtime = self._index[doc_name].stat().st_mtime
+            if current_mtime == cached_mtime:
+                self._cache.move_to_end(doc_name)
+                logger.debug(f"Returning cached document: {doc_name}")
+                return cached_doc
+            logger.debug(f"Cache stale for document: {doc_name}, reloading")
 
         if doc_name not in self._index:
             raise KeyError(
@@ -364,7 +373,9 @@ class LazyDocumentLoader:
         try:
             loader = get_loader(file_path)
             document = loader.load(file_path)
-            self._cache[doc_name] = document
+            self._cache[doc_name] = (document, file_path.stat().st_mtime)
+            if len(self._cache) > self._max_cache_size:
+                self._cache.popitem(last=False)
             logger.info(f"Loaded and cached document: {doc_name}")
             return document
         except Exception as e:

@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 import pytest
@@ -187,7 +188,7 @@ class TestLazyDocumentLoader:
             source_path=doc1.source_path,
             metadata=doc1.metadata,
         )
-        loader._cache["test"] = doc1_modified
+        loader._cache["test"] = (doc1_modified, loader._index["test"].stat().st_mtime)
 
         doc2 = loader.get("test")
 
@@ -273,6 +274,34 @@ class TestLazyDocumentLoader:
         loader.clear_cache()
 
         assert loader.cached_count == 0
+
+    def test_cache_invalidation_on_source_change(self, tmp_path: Path):
+        doc_file = tmp_path / "test.md"
+        doc_file.write_text("original content", encoding="utf-8")
+        loader = LazyDocumentLoader(tmp_path)
+        doc1 = loader.get("test")
+        assert "original content" in doc1.content
+        time.sleep(0.1)
+        doc_file.write_text("modified content", encoding="utf-8")
+        import os
+
+        os.utime(str(doc_file), (time.time() + 1, time.time() + 1))
+        doc2 = loader.get("test")
+        assert "modified content" in doc2.content
+
+    def test_lru_eviction(self, tmp_path: Path):
+        for i in range(5):
+            doc_file = tmp_path / f"doc_{i}.md"
+            doc_file.write_text(f"content {i}", encoding="utf-8")
+        loader = LazyDocumentLoader(tmp_path)
+        loader._max_cache_size = 3
+        loader.get("doc_0")
+        loader.get("doc_1")
+        loader.get("doc_2")
+        assert len(loader._cache) == 3
+        loader.get("doc_3")
+        assert len(loader._cache) == 3
+        assert "doc_0" not in loader._cache
 
 
 class TestGetLoader:
