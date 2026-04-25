@@ -1,6 +1,9 @@
 name: "baseline-1kpage-no-ocr"
 description: "1000页PDF性能评估实验 - OCR关闭对比"
 
+# 重要：在未安装 OCR 的情况下，pymupdf4llm 库实际会静默地将
+# use_ocr=true 参数给忽略了，因此这份配置在目前实际上没什么意义
+
 data:
   meal: "1kpage_no_ocr"
   create_if_missing:
