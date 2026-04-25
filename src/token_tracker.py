@@ -302,6 +302,26 @@ class TokenTracker:
         """
         return [r for r in self._records if r.category == category]
 
+    def get_summary_by_variant(self) -> dict[str, dict[str, TokenUsage]]:
+        """Get aggregated token usage grouped by variant name and category.
+
+        Each record's metadata is checked for a ``variant_name`` key. Records
+        without that key are grouped under ``"__none__"``.
+
+        Returns:
+            Nested dictionary: ``{variant_name: {category: TokenUsage}}``.
+        """
+        summary: dict[str, dict[str, TokenUsage]] = {}
+        for rec in self._records:
+            variant = rec.metadata.get("variant_name", "__none__")
+            if variant not in summary:
+                summary[variant] = {}
+            cat_map = summary[variant]
+            if rec.category not in cat_map:
+                cat_map[rec.category] = TokenUsage()
+            cat_map[rec.category] = cat_map[rec.category] + rec.usage
+        return summary
+
     def estimate_cost(
         self, cost_config: dict[str, Any], model_name: str | None = None
     ) -> dict[str, Any]:

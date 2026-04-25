@@ -1992,6 +1992,7 @@ def run_experiment(
                             category=rec_data["category"],
                             model_name=rec_data["model_name"],
                             usage=usage,
+                            variant_name=variant_name,
                         )
                     experiment_tracker.merge(variant_tracker)
 
@@ -2031,19 +2032,27 @@ def run_experiment(
                 )
 
                 if use_llm_report or exp_config.evaluation.get("llm_report", False):
-                    logger.info("Generating LLM-enhanced report...")
-                    try:
-                        reporter.generate_variant_comparison_report(
-                            exp_dir=exp_dir,
-                            variant_results=all_variant_results,
-                            meal_info=meal_info,
-                            config_snapshot=config_snapshot,
-                            output_filename="experiment_report_llm.md",
-                            use_llm=True,
+                    has_successful = any(
+                        "retrieval_metrics" in v for v in all_variant_results
+                    )
+                    if not has_successful:
+                        logger.warning(
+                            "All variants failed — skipping LLM report generation"
                         )
-                        logger.success("LLM-enhanced report generated successfully")
-                    except Exception as e:
-                        logger.warning(f"Failed to generate LLM report: {str(e)}")
+                    else:
+                        logger.info("Generating LLM-enhanced report...")
+                        try:
+                            reporter.generate_variant_comparison_report(
+                                exp_dir=exp_dir,
+                                variant_results=all_variant_results,
+                                meal_info=meal_info,
+                                config_snapshot=config_snapshot,
+                                output_filename="experiment_report_llm.md",
+                                use_llm=True,
+                            )
+                            logger.success("LLM-enhanced report generated successfully")
+                        except Exception as e:
+                            logger.warning(f"Failed to generate LLM report: {str(e)}")
 
         exp_manager.update_manifest_status(exp_dir, "completed")
 

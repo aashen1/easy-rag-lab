@@ -81,6 +81,13 @@
 - 实验配置重组：templates + 分类目录结构
 - 问题有效性检查与增量生成
 
+**近期修复**（2026-04-26）：
+- BUG-026：pipeline.py 全量缓存路径不一致 → 改用 ArtifactCache 动态计算
+- BUG-027：Token 统计无法按 variant 区分 → 新增 get_summary_by_variant()
+- FEAT-042：实验全部失败时跳过 LLM 报告生成
+- OPT-009：chunker 逐文件日志降噪（INFO→DEBUG）
+- RF-014：normalize_source 已确认使用 include_parent=True
+
 **待做事项**：参见 [docs/backlog.md](docs/backlog.md)
 
 **下版本方向**：参见 [docs/reviews/v0.1.8/release-summary.md](docs/reviews/v0.1.8/release-summary.md)
