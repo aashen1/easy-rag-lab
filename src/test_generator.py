@@ -206,6 +206,190 @@ QUESTION_TYPE_SUPPLEMENTS = {
     "irrelevant": IRRELEVANT_SUPPLEMENT,
 }
 
+EVIDENCE_AWARE_PROMPT = """你是一位金融行业从业者，正在阅读一份研究报告的若干片段。请基于这些片段，生成一个你会真实提出的问题，并提供支撑答案的原文引用。
+
+## 你的背景
+- 你可能是投资分析师、基金经理、行业研究员或企业战略规划人员
+- 你关心的是能帮助你做决策的信息
+- 你的提问风格是直接、口语化、不啰嗦
+
+## 文档片段
+以下是从同一份文档中选取的 {num_segments} 个片段：
+
+{segments_text}
+
+## 问题类型要求
+请生成一个【{question_type}】类型的问题。
+
+类型说明：
+- 单知识点查询：查询某个具体数据、事实或概念
+- 多知识点综合：需要整合多个信息点才能回答
+- 推理型问题：需要基于信息进行推理或判断
+- 对比分析：对比两个或多个对象
+- 缺失知识点：询问文档中没有或不完整的信息
+- 无关问题：与文档主题无关的问题
+
+## 生成要求
+
+1. 问题风格：
+   - 直接、口语化，像在问同事问题
+   - 不要用"根据文档"、"请分析"等学术化表述
+   - 避免过于正式或结构化的问题
+
+2. 答案要求：
+   - 答案应基于文档内容
+   - 答案中必须使用【原文引用】标注引用内容
+   - 如果文档无法回答，明确说明原因
+
+3. 证据要求：
+   - 必须提供支撑答案的原文引用
+   - 引用必须与片段原文完全一致（逐字逐句）
+   - 说明每个引用如何支撑答案
+
+## 输出格式
+
+请严格按以下JSON格式输出（不要输出其他内容）：
+
+{{
+    "question": "你的问题",
+    "answer": "答案文本，包含【原文引用】标注",
+    "question_type": "{question_type}",
+    "difficulty": "easy/medium/hard",
+    "evidence": [
+        {{
+            "segment_index": 0,
+            "quote": "必须与选段原文完全一致的引用",
+            "relevance": "该引用如何支撑答案"
+        }}
+    ],
+    "selected_segments": [0, 1]
+}}
+
+注意：
+- segment_index 对应片段编号（从0开始）
+- quote 必须与片段原文完全一致，不能修改或概括
+- selected_segments 仅多知识点综合问题需要填写，其他类型可省略
+- 单知识点问题通常只需1条证据
+- 多知识点综合问题需要多条证据，且必须填写 selected_segments"""
+
+EVIDENCE_SINGLE_FACT_SUPPLEMENT = """
+## 单知识点查询的特别说明
+
+好的示例：
+- "2024年光模块市场规模多少？"
+- "CPO的全称是什么？"
+- "中际旭创的主要产品是什么？"
+
+证据要求：
+- 通常只需1条证据
+- 引用应直接包含答案所需的具体数据或事实
+- quote 必须逐字逐句与原文一致
+
+不好的示例（太学术化）：
+- "请根据文档说明2024年光模块市场规模"
+- "文档中提到的CPO技术的全称是什么？"
+"""
+
+EVIDENCE_MULTI_FACT_SUPPLEMENT = """
+## 多知识点综合的特别说明
+
+好的示例：
+- "科瑞技术和猎奇智能在光模块设备上有什么区别？"
+- "光模块行业未来几年的增长点主要在哪里？"
+
+证据要求：
+- 必须提供2条或以上证据
+- 每条证据来自不同的片段
+- 必须填写 selected_segments 字段，列出涉及的所有片段编号
+- 引用应展示不同片段的关键信息
+
+答案要求：
+- 答案应综合多个片段的信息
+- 明确标注信息来源（如"片段0提到..."、"片段2显示..."）
+"""
+
+EVIDENCE_REASONING_SUPPLEMENT = """
+## 推理型问题的特别说明
+
+好的示例：
+- "为什么CPO能降低功耗？"
+- "如果800G需求翻倍，对设备商有什么影响？"
+
+证据要求：
+- 提供支撑推理过程的原文依据
+- 引用应包含推理的前提条件或逻辑链条
+- relevance 字段应说明引用如何支撑推理步骤
+
+答案要求：
+- 必须展示推理过程
+- 推理依据必须来自文档
+- 可以有合理的推断，但要说明依据
+"""
+
+EVIDENCE_COMPARATIVE_SUPPLEMENT = """
+## 对比分析的特别说明
+
+好的示例：
+- "中际旭创和新易盛哪个更值得投资？"
+- "CPO和LPO两种技术路线各有什么优缺点？"
+
+证据要求：
+- 为对比的每个对象提供对应的引用
+- 引用应展示对比的关键维度
+- relevance 字段应说明引用在对比中的作用
+
+答案要求：
+- 客观呈现对比结果
+- 如果文档信息不足以对比，如实说明
+- 可以给出倾向性结论，但要说明依据
+"""
+
+EVIDENCE_MISSING_SUPPLEMENT = """
+## 缺失知识点的特别说明
+
+这类问题测试系统处理"不知道"的能力。
+
+好的示例：
+- "光模块行业的ESG评级情况怎么样？"（文档未涉及ESG）
+- "2025年的市场预测数据有吗？"（文档只有到2024年）
+
+证据要求：
+- evidence 数组可以为空，或提供部分相关但不完整的信息
+- 如果提供证据，relevance 应说明该信息的局限性
+
+答案要求：
+- 明确说明"文档未提及该信息"或"文档信息不完整"
+- 如果有部分相关信息，可以提供并说明局限性
+- 不要编造信息
+"""
+
+EVIDENCE_IRRELEVANT_SUPPLEMENT = """
+## 无关问题的特别说明
+
+这类问题测试系统的拒答能力。
+
+好的示例：
+- "新能源汽车的电池技术发展怎么样？"（文档是关于光模块的）
+- "最近美联储加息对股市有什么影响？"（文档未涉及宏观政策）
+
+证据要求：
+- evidence 数组应为空
+- 不需要提供任何引用
+
+答案要求：
+- 明确说明"该问题与文档内容无关"
+- 可以简要说明文档的主题范围
+"""
+
+EVIDENCE_QUESTION_TYPE_SUPPLEMENTS = {
+    "single_fact": EVIDENCE_SINGLE_FACT_SUPPLEMENT,
+    "multi_fact": EVIDENCE_MULTI_FACT_SUPPLEMENT,
+    "reasoning": EVIDENCE_REASONING_SUPPLEMENT,
+    "comparative": EVIDENCE_COMPARATIVE_SUPPLEMENT,
+    "missing": EVIDENCE_MISSING_SUPPLEMENT,
+    "irrelevant": EVIDENCE_IRRELEVANT_SUPPLEMENT,
+}
+
 
 class TestSetGenerator:
     __test__ = False
@@ -250,7 +434,193 @@ class TestSetGenerator:
         self.test_gen_supplement_max_tokens = tg_config.get(
             "supplement_max_tokens", 1024
         )
+        self.segment_size = tg_config.get("segment_size", 8000)
+        self.segment_sampling_strategy = tg_config.get(
+            "segment_sampling_strategy", "random"
+        )
         self._doc_truncate_cache: dict[str, str] = {}
+
+    def _segment_document(
+        self, document_content: str, segment_size: int = 8000
+    ) -> list[dict[str, Any]]:
+        """Divide a document into segments for question generation.
+
+        Attempts to segment at sentence boundaries to avoid cutting mid-sentence.
+        For documents shorter than segment_size, returns a single segment.
+
+        Args:
+            document_content: The full text content of the document.
+            segment_size: Target character count per segment. Defaults to 8000.
+
+        Returns:
+            List of segment dictionaries, each containing:
+                - text: The segment text content
+                - start_char: Starting character position in original document
+                - end_char: Ending character position in original document
+                - segment_index: Zero-based index of the segment
+        """
+        if not document_content:
+            return []
+
+        doc_length = len(document_content)
+        if doc_length <= segment_size:
+            return [
+                {
+                    "text": document_content,
+                    "start_char": 0,
+                    "end_char": doc_length,
+                    "segment_index": 0,
+                }
+            ]
+
+        segments: list[dict[str, Any]] = []
+        current_pos = 0
+        segment_index = 0
+
+        sentence_endings = ["。", "！", "？", "！", "?", "!", "\n\n", "；", ";"]
+
+        while current_pos < doc_length:
+            target_end = min(current_pos + segment_size, doc_length)
+
+            if target_end >= doc_length:
+                segment_text = document_content[current_pos:doc_length]
+                if segment_text.strip():
+                    segments.append(
+                        {
+                            "text": segment_text,
+                            "start_char": current_pos,
+                            "end_char": doc_length,
+                            "segment_index": segment_index,
+                        }
+                    )
+                break
+
+            best_break = -1
+            search_start = max(current_pos + segment_size // 2, current_pos)
+
+            for ending in sentence_endings:
+                pos = document_content.rfind(ending, search_start, target_end)
+                if pos > best_break:
+                    best_break = pos
+
+            if best_break == -1:
+                space_pos = document_content.rfind(" ", search_start, target_end)
+                if space_pos > current_pos:
+                    best_break = space_pos
+
+            actual_end = best_break + 1 if best_break > current_pos else target_end
+
+            segment_text = document_content[current_pos:actual_end]
+            if segment_text.strip():
+                segments.append(
+                    {
+                        "text": segment_text,
+                        "start_char": current_pos,
+                        "end_char": actual_end,
+                        "segment_index": segment_index,
+                    }
+                )
+                segment_index += 1
+
+            current_pos = actual_end
+
+        return segments
+
+    def _select_segments_for_question_type(
+        self,
+        segments: list[dict[str, Any]],
+        question_type: str,
+        num_segments: int = 1,
+    ) -> list[dict[str, Any]]:
+        """Select document segments based on question type.
+
+        Different question types require different amounts of context:
+        - single_fact: Random 1 segment
+        - multi_fact/reasoning/comparative: Random 2-3 segments
+        - missing: Random 1 segment
+        - irrelevant: Empty list (no document context needed)
+
+        Args:
+            segments: List of segment dictionaries from _segment_document.
+            question_type: Type of question to generate (e.g., 'single_fact',
+                'multi_fact', 'reasoning', 'comparative', 'missing', 'irrelevant').
+            num_segments: Number of segments to select. For multi-segment types,
+                this is the maximum; actual count may vary. Defaults to 1.
+
+        Returns:
+            List of selected segment dictionaries. Empty list for irrelevant
+            questions or when no segments are available.
+        """
+        if not segments:
+            return []
+
+        if question_type == "irrelevant":
+            return []
+
+        if question_type == "single_fact" or question_type == "missing":
+            selected_count = 1
+        elif question_type in ["multi_fact", "reasoning", "comparative"]:
+            selected_count = min(random.randint(2, 3), len(segments))
+        else:
+            selected_count = min(num_segments, len(segments))
+
+        if selected_count >= len(segments):
+            return segments.copy()
+
+        if self.segment_sampling_strategy == "random":
+            return random.sample(segments, selected_count)
+        elif self.segment_sampling_strategy == "sequential":
+            start_idx = random.randint(0, len(segments) - selected_count)
+            return segments[start_idx : start_idx + selected_count]
+        else:
+            return random.sample(segments, selected_count)
+
+    def _map_segments_to_chunks(
+        self,
+        segments: list[dict[str, Any]],
+        doc_chunks: list[dict[str, Any]],
+    ) -> dict[int, list[str]]:
+        """Map document segments to chunk IDs based on character position overlap.
+
+        Determines which chunks belong to each segment by checking if the
+        chunk's character range overlaps with the segment's character range.
+
+        Args:
+            segments: List of segment dictionaries with 'start_char', 'end_char',
+                and 'segment_index' keys.
+            doc_chunks: List of chunk dictionaries from JSONL files, each
+                containing 'metadata' with 'start_index' and 'end_index' keys,
+                and 'chunk_id' key.
+
+        Returns:
+            Dictionary mapping segment_index to list of chunk_ids that overlap
+            with that segment. Segments with no overlapping chunks are mapped
+            to empty lists.
+        """
+        mapping: dict[int, list[str]] = {}
+
+        for segment in segments:
+            seg_start = segment.get("start_char", 0)
+            seg_end = segment.get("end_char", 0)
+            seg_index = segment.get("segment_index", 0)
+
+            overlapping_chunks: list[str] = []
+
+            for chunk in doc_chunks:
+                metadata = chunk.get("metadata", {})
+                chunk_start = metadata.get("start_index", 0)
+                chunk_end = metadata.get("end_index", 0)
+                chunk_id = chunk.get("chunk_id", "")
+
+                if not chunk_id:
+                    continue
+
+                if chunk_start < seg_end and chunk_end > seg_start:
+                    overlapping_chunks.append(chunk_id)
+
+            mapping[seg_index] = overlapping_chunks
+
+        return mapping
 
     def generate_test_set(
         self,
