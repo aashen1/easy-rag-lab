@@ -346,7 +346,7 @@ class RAGPipeline:
                 self.profiler.begin_stage("S4")
             logger.info("Step 4: Building BM25 index...")
             self.bm25_retriever.build_index_from_chunks(
-                chunks_dir=chunker_config["output_dir"],
+                chunks_dir=str(chunks_dir),
                 source_filter=source_filter_jsonl,
             )
             if self.profiler:
