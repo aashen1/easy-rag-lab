@@ -1671,14 +1671,30 @@ class TestSetGenerator:
                 f"Supplementing {deficit} more questions..."
             )
             doc_names = list(document_contents.keys())
-            all_types = list(self.TYPE_DISTRIBUTION.keys())
+            all_types = list(type_distribution.keys())
+            type_weights = [type_distribution[t] for t in all_types]
+            total_weight = sum(type_weights)
+            weighted_types = []
+            if total_weight > 0:
+                cumulative = 0.0
+                for t, w in zip(all_types, type_weights, strict=False):
+                    cumulative += w / total_weight
+                    weighted_types.append((t, cumulative))
+            else:
+                step = 1.0 / len(all_types)
+                weighted_types = [(t, (i + 1) * step) for i, t in enumerate(all_types)]
             extra_attempt = 0
             max_extra_attempts = deficit * 3
 
             while len(questions) < num_questions and extra_attempt < max_extra_attempts:
                 extra_attempt += 1
                 doc_name = doc_names[extra_attempt % len(doc_names)]
-                q_type = all_types[extra_attempt % len(all_types)]
+                r = random.random()
+                q_type = all_types[0]
+                for t, threshold in weighted_types:
+                    if r <= threshold:
+                        q_type = t
+                        break
                 doc_data = document_contents[doc_name]
                 doc_content = doc_data["content"]
                 source_path = doc_data["source_path"]
@@ -2038,13 +2054,29 @@ class TestSetGenerator:
             )
             doc_names = list(filtered_contents.keys())
             all_types = list(type_distribution.keys())
+            type_weights = [type_distribution[t] for t in all_types]
+            total_weight = sum(type_weights)
+            weighted_types = []
+            if total_weight > 0:
+                cumulative = 0.0
+                for t, w in zip(all_types, type_weights, strict=False):
+                    cumulative += w / total_weight
+                    weighted_types.append((t, cumulative))
+            else:
+                step = 1.0 / len(all_types)
+                weighted_types = [(t, (i + 1) * step) for i, t in enumerate(all_types)]
             extra_attempt = 0
             max_extra_attempts = deficit * 3
 
             while len(questions) < num_questions and extra_attempt < max_extra_attempts:
                 extra_attempt += 1
                 doc_name = doc_names[extra_attempt % len(doc_names)]
-                q_type = all_types[extra_attempt % len(all_types)]
+                r = random.random()
+                q_type = all_types[0]
+                for t, threshold in weighted_types:
+                    if r <= threshold:
+                        q_type = t
+                        break
                 doc_data = filtered_contents[doc_name]
                 doc_content = doc_data["content"]
                 source_path = doc_data["source_path"]
