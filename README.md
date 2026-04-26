@@ -2,7 +2,7 @@
 
 一个简单易学的 RAG（检索增强生成）系统，用于金融研报的智能问答。
 
-![Version](https://img.shields.io/badge/version-v0.1.8-blue)![Status](https://img.shields.io/badge/status-active-green)![License](https://img.shields.io/badge/license-MIT-green)
+![Version](https://img.shields.io/badge/version-v0.1.8-blue)![Status](https://img.shields.io/badge/status-active-green)![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
 
 ## 项目简介
 
@@ -138,7 +138,7 @@ ash-easy-rag/
 
 ## License
 
-MIT License
+AGPL-3.0 License
 
 ---
 
