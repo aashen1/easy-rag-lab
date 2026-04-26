@@ -440,3 +440,72 @@ class TestAuditTestset:
 
         report = audit_testset(golden_file)
         assert report["numerical_accuracy"]["issues_found"] >= 1
+
+
+class TestFormatProgressBar:
+    def test_zero_total(self):
+        from scripts.review_golden_testset import format_progress_bar
+
+        result = format_progress_bar(0, 0)
+        assert "0/0" in result
+
+    def test_half_progress(self):
+        from scripts.review_golden_testset import format_progress_bar
+
+        result = format_progress_bar(5, 10)
+        assert "5/10" in result
+        assert "50%" in result
+
+    def test_full_progress(self):
+        from scripts.review_golden_testset import format_progress_bar
+
+        result = format_progress_bar(10, 10)
+        assert "10/10" in result
+        assert "100%" in result
+
+
+class TestFormatAITierBadge:
+    def test_no_review(self):
+        from scripts.review_golden_testset import format_ai_tier_badge
+
+        assert format_ai_tier_badge(None) == ""
+
+    def test_tier_a(self):
+        from scripts.review_golden_testset import format_ai_tier_badge
+
+        result = format_ai_tier_badge({"tier": "A", "overall_score": 4.5})
+        assert "A(4.5)" in result
+
+    def test_tier_b(self):
+        from scripts.review_golden_testset import format_ai_tier_badge
+
+        result = format_ai_tier_badge({"tier": "B", "overall_score": 3.2})
+        assert "B(3.2)" in result
+
+    def test_tier_c(self):
+        from scripts.review_golden_testset import format_ai_tier_badge
+
+        result = format_ai_tier_badge({"tier": "C", "overall_score": 2.0})
+        assert "C(2.0)" in result
+
+
+class TestDisplayAIDetail:
+    def test_display_shows_dimensions(self, capsys):
+        from scripts.review_golden_testset import display_ai_detail
+
+        ai_review = {
+            "dimensions": {
+                "question_clarity": {"score": 4, "reason": "清晰"},
+                "answer_accuracy": {"score": 3, "reason": "一般"},
+            },
+            "overall_score": 3.5,
+            "tier": "B",
+            "overall_comment": "中等质量",
+            "suggested_action": "review",
+        }
+        display_ai_detail(ai_review)
+        captured = capsys.readouterr()
+        assert "question_clarity" in captured.out
+        assert "answer_accuracy" in captured.out
+        assert "3.5" in captured.out
+        assert "中等质量" in captured.out
