@@ -2337,7 +2337,13 @@ class TestSetGenerator:
             if qa is None:
                 continue
 
+            qa["question_type"] = self.QUESTION_TYPES.get(question_type, question_type)
+
             if question_type == "irrelevant":
+                evidence_list = qa.get("evidence", [])
+                if evidence_list:
+                    logger.debug("Irrelevant type question has evidence, retrying...")
+                    continue
                 qa["ground_truth_excerpt"] = ""
                 return qa
 
@@ -2347,6 +2353,10 @@ class TestSetGenerator:
                     qa["ground_truth_excerpt"] = ""
                     return qa
                 logger.debug(f"No evidence provided for question type: {question_type}")
+                continue
+
+            if question_type == "missing":
+                logger.debug("Missing type question has evidence, retrying...")
                 continue
 
             validation = self._validate_evidence(

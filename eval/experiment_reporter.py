@@ -1402,8 +1402,16 @@ class ExperimentReporter:
                 ndcg = r.retrieval.get("ndcg", 0)
 
                 if has_generation and r.generation:
-                    faithfulness = r.generation.get("faithfulness")
-                    relevancy = r.generation.get("answer_relevancy")
+                    faithfulness = r.generation.get("builtin_faithfulness")
+                    if faithfulness is None:
+                        faithfulness = r.generation.get("ragas_faithfulness")
+                    if faithfulness is None:
+                        faithfulness = r.generation.get("faithfulness")
+                    relevancy = r.generation.get("builtin_answer_relevancy")
+                    if relevancy is None:
+                        relevancy = r.generation.get("ragas_answer_relevancy")
+                    if relevancy is None:
+                        relevancy = r.generation.get("answer_relevancy")
                     fa_str = (
                         f"{faithfulness:.2f}" if faithfulness is not None else "N/A"
                     )
