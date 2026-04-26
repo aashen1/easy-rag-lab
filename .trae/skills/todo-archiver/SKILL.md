@@ -62,7 +62,13 @@ For each **New** item (`- [ ]` without `📋`):
    - Scale (if applicable)
    - Notes (key details from the verbose text that affect implementation)
 
-5. **Update TODO.md**: Append archive timestamp to the original item:
+5. **Create issue detail file** (for high-priority or complex issues only):
+   - Create `docs/reviews/issues/<id-lowercase>-<slug>.md`
+   - Include: status, priority, source, problem description, root cause analysis, impact, fix direction, related issues
+   - Add `[详情](reviews/issues/<id-lowercase>-<slug>.md)` link to the backlog.md notes column
+   - Skip this step for trivial or self-explanatory issues
+
+6. **Update TODO.md**: Append archive timestamp to the original item:
    ```
    - [ ] original text 📋 2026-04-21 归档为 [RF-007]
    ```
@@ -70,7 +76,7 @@ For each **New** item (`- [ ]` without `📋`):
    - Do NOT check the checkbox
    - Do NOT move the item
 
-6. **Update backlog.md statistics**: Recalculate the counts in the overview table
+7. **Update backlog.md statistics**: Recalculate the counts in the overview table
 
 ### Phase 3: Sync Completed Issues
 

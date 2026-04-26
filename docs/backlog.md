@@ -2,7 +2,7 @@
 
 <!-- status: active -->
 
-> 最后更新：2026-04-26（归档 1 条新 issue，同步 1 条已完成 issue，修复 1 条状态不一致）
+> 最后更新：2026-04-26（RF-008：新增 issue 详情文件机制，4 个高优先级 issue 已补充详情链接）
 
 本文档是项目"卫生情况"的总入口，追踪所有非阻塞性质的待做事项。
 
@@ -28,8 +28,8 @@
 | BUG-021 | expected_sources 标注错误（LLM 生成问题涉及文档中提到的其他实体，但 source_files 仅指向生成问题时的源文档） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P6-5) | 📋 待处理 | 需重新设计问题生成策略，使 source_files 反映问题实际涉及的文档 |
 | BUG-022 | `_locate_answer_chunks()` 定位精度不足 | [INV-007 调查](reviews/investigations/inv-007-eval-system-reliability.md) | 📋 待处理 | 使用关键词+子串启发式方法，expected_chunks 可能遗漏或误匹配 |
 | BUG-023 | `missing` 类型 `expect_retrieval` 标记错误导致 FPR 计算异常 | [inbox](inbox/一个关于FPR的bug，及两种修复方案.md) | ✅ 已完成 | commit `5e9fa65`：采用方案 A 将 `expect_retrieval` 改为 `True`，同时新增 `expect_no_answer` 跳过 faithfulness |
-| BUG-024 | Chunk JSONL 文本编码损坏导致 chunk-level 指标无法计算 | [hybrid-metrics-fix.md](guides/development/hybrid-metrics-fix.md#6-未修复问题chunk-jsonl-文本编码损坏) | 📋 待处理 | chunk text 字段中文字符为乱码（如`鍦 浜`而非`地产`），source_chunks 始终为空，chunk_hit_rate/mrr/ndcg 为 null；需排查 chunker 输出编码 |
-| BUG-025 | `source_chunks` 字段始终为空，文档级策略无法精确到页或 chunk | [TODO.md](../TODO.md) | 📋 待处理 | 需调研文档级策略能否精确到页/chunk，或需恢复 chunk 级策略 |
+| BUG-024 | Chunk JSONL 文本编码损坏导致 chunk-level 指标无法计算 | [hybrid-metrics-fix.md](guides/development/hybrid-metrics-fix.md#6-未修复问题chunk-jsonl-文本编码损坏) | 📋 待处理 | chunk text 字段中文字符为乱码，source_chunks 始终为空；[详情](reviews/issues/bug-024-chunk-encoding-and-page-info.md) |
+| BUG-025 | `source_chunks` 字段始终为空，文档级策略无法精确到页或 chunk | [TODO.md](../TODO.md) | 📋 待处理 | 需调研文档级策略能否精确到页/chunk；[详情](reviews/issues/bug-025-source-chunks-empty.md) |
 | BUG-026 | 全量缓存 hash 计算问题导致缓存无法命中 | [TODO.md](../TODO.md) | ✅ 已完成 | pipeline.py 传了错误的 artifacts_dir，改为使用 ArtifactCache 动态计算路径 |
 | BUG-027 | Token 统计功能可能无法正确识别多变体各变体消耗 | [TODO.md](../TODO.md) | ✅ 已完成 | 新增 get_summary_by_variant() 方法，run_experiment 中为 variant_tracker 添加 variant_name metadata |
 | BUG-028 | 审查脚本缺少页码信息，无法定位 ground truth 出自哪一页 | [TODO.md](../TODO.md) | 📋 待处理 | source_chunks 字段未实装，审查时无法精确定位 |
@@ -60,7 +60,7 @@
 | FEAT-011 | 补做 LLM 报告功能 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 新增 `--llm-report-only` CLI 参数，追溯生成 LLM 报告 |
 | FEAT-012 | 断点续传（实验中断恢复） | [TODO.md](../TODO.md) | 📋 待处理 | 大 | 支持实验中断后继续，需记录时间戳和基模变化 warning |
 | FEAT-013 | 部分评测支持 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 如仅评测 PDF→MD 环节，不停换提取策略对比 |
-| FEAT-014 | 透明版完整实验报告 | [TODO.md](../TODO.md) | 📋 待处理 | 大 | 含问题/答案/emb/recall/提示词/回复/指标计算过程 |
+| FEAT-014 | 透明版完整实验报告 | [TODO.md](../TODO.md) | 📋 待处理 | 大 | 含问题/答案/emb/recall/提示词/回复/指标计算过程；[详情](reviews/issues/feat-014-transparent-report.md) |
 | FEAT-015 | 更细粒度实验记录 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | token per chunk、文档分布、meal 分布、统计量 |
 | FEAT-016 | DATA_DIR 配置项支持 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 替代 mklink，系统级 RAG 数据源指定 |
 | FEAT-017 | CI/CD 集成 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 学习并实施 CI/CD |
@@ -74,7 +74,7 @@
 | FEAT-025 | 检索器层面文档级去重（top_k 结果按文档多样性分配） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P6-4) | 📋 待处理 | 中 | 当前 top 5 全部来自同一文档，检索多样性为零 |
 | FEAT-026 | meal 系统升级支持扩充已有 meal | [TODO.md](../TODO.md) | ✅ 已完成 | 中 | 支持 merge_meals/extend_meal，composition 元数据追踪 |
 | FEAT-027 | 问题集组合功能 | [TODO.md](../TODO.md) | ✅ 已完成 | 中 | 支持 merge_test_sets，问题去重与有效性验证 |
-| FEAT-028 | 配置验证系统（Pydantic 模型验证 + 必填项校验 + 范围校验） | 深度审查 | 📋 待处理 | 中 | 当前 yaml.safe_load 直接加载无验证，可能导致意外行为 |
+| FEAT-028 | 配置验证系统（Pydantic 模型验证 + 必填项校验 + 范围校验） | 深度审查 | 📋 待处理 | 中 | 当前 yaml.safe_load 直接加载无验证；需新增 pydantic 依赖；[详情](reviews/issues/feat-028-config-validation.md) |
 | FEAT-029 | 项目记忆系统 Skill（project-memory） | [TODO.md](../TODO.md) | ✅ 已完成 | 中 | 跨 session 项目记忆读写方法论，替代原"Project Context Skill"概念 |
 | FEAT-030 | 实验报告 sources 字段细化 | [INV-001 调查](reviews/investigations/inv-001-sources-field.md) | 📋 待处理 | 中 | 增加 retrieved_chunks 字段、标题层级信息，改善命中率虚高问题 |
 | FEAT-031 | golden_qa.json 重做与回归测试更新 | [INV-006 调查](reviews/investigations/inv-006-golden-test.md) | 📋 待处理 | 中 | 使用 document-based 策略重做，迁移为 TestSetManager 格式 |
