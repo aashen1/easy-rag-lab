@@ -340,14 +340,25 @@ def calculate_context_recall(
 
     context_text = "\n\n".join(retrieval_context)
     inferable_count = 0
+    sentence_verdicts = []
 
     for sentence in sentences:
-        if _can_infer_from_context(
+        can_infer = _can_infer_from_context(
             sentence, context_text, api_key, base_url, model_name
-        ):
+        )
+        if can_infer:
             inferable_count += 1
+        sentence_verdicts.append((sentence[:80], can_infer))
 
     score = inferable_count / len(sentences)
+
+    if score == 0.0:
+        logger.warning(
+            f"Context recall is 0.0 — no sentences inferable from context. "
+            f"Ground truth: {ground_truth[:200]}, "
+            f"Sentences: {sentence_verdicts}, "
+            f"Context preview: {context_text[:200]}"
+        )
 
     logger.success(
         f"Context recall: {score:.4f} "
