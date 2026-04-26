@@ -156,11 +156,10 @@ LLM_REPORT_PROMPT_TEMPLATE = """你是一位专业的RAG系统分析师。请根
   - Context Precision: 检索到的上下文是否与问题相关，以及排序质量
   - Context Recall: Ground Truth 中的信息是否能从检索上下文中推断
 - **解读 False Positive Rate (FPR)**：
-  - FPR 仅对无关问题（irrelevant）计算，衡量系统面对无关问题时"有多安静"
-  - FPR = 0.0 表示系统正确地没有返回任何结果（最佳表现）
-  - FPR = 1.0 表示系统返回了满额的无关结果（最差表现）
-  - FPR > 0.3 应视为警告，表明系统无法有效拒绝无关问题
-  - **注意：FPR 越低越好，与 Hit Rate/MRR/NDCG 的方向相反**
+  - FPR measures the proportion of top-k retrieval slots occupied for irrelevant questions
+  - FPR near 1.0 is expected for standard vector retrieval (always returns top-k results)
+  - FPR = 0.0 means the system correctly returned no results for irrelevant questions (requires explicit rejection mechanism)
+  - FPR values based on fewer than 3 irrelevant questions should be interpreted with caution
 - **必须分析检索多样性（Retrieval Diversity）**：如果 top-k 结果来自同一文档，说明信息来源单一
 - 分析不同问题类型的表现差异
 - 识别潜在的瓶颈或问题
@@ -551,7 +550,16 @@ class ExperimentReporter:
                 chunk_ndcg_str = (
                     f"{chunk_ndcg:.4f}" if chunk_ndcg is not None else "N/A"
                 )
-                fpr_str = f"{fpr:.4f}" if fpr is not None else "N/A"
+                if fpr is not None:
+                    fpr_count = vr.get("retrieval_metrics", {}).get(
+                        "irrelevant_questions_count", 0
+                    )
+                    fpr_str = f"{fpr:.4f} (n={fpr_count}"
+                    if fpr_count < 3:
+                        fpr_str += "⚠"
+                    fpr_str += ")"
+                else:
+                    fpr_str = "N/A"
 
                 row = [
                     f"{name}{marker}",
@@ -669,7 +677,22 @@ class ExperimentReporter:
             if dedup_mrr is not None:
                 lines.append(f"- MRR (dedup): {dedup_mrr:.4f}")
             if fpr is not None:
-                lines.append(f"- False Positive Rate: {fpr:.4f}")
+                fpr_count = metrics.get("irrelevant_questions_count", 0)
+                fpr_line = f"- False Positive Rate: {fpr:.4f} (n={fpr_count}"
+                if fpr_count < 3:
+                    fpr_line += ", ⚠ 样本量不足，统计意义有限"
+                fpr_line += ")"
+                lines.append(fpr_line)
+            chunk_applicable = (
+                chunk_metrics.get("retrieval_applicable_questions")
+                if chunk_metrics
+                else None
+            )
+            total_q = best.get("total_questions", 0)
+            if chunk_applicable is not None and chunk_applicable < total_q:
+                lines.append(
+                    f"- Applicable Questions (chunk): {chunk_applicable}/{total_q}"
+                )
 
         lines.append("")
 
@@ -733,6 +756,30 @@ class ExperimentReporter:
                 lines.append(f"- Hit Rate: {metrics.get('avg_hit_rate', 0):.4f}")
                 lines.append(f"- MRR: {metrics.get('avg_mrr', 0):.4f}")
                 lines.append(f"- NDCG: {metrics.get('avg_ndcg', 0):.4f}")
+
+                chunk_metrics = metrics.get("chunk_level_metrics", {})
+                if chunk_metrics:
+                    chunk_hr = chunk_metrics.get("avg_hit_rate")
+                    chunk_mrr = chunk_metrics.get("avg_mrr")
+                    chunk_ndcg = chunk_metrics.get("avg_ndcg")
+                    if any(v is not None for v in [chunk_hr, chunk_mrr, chunk_ndcg]):
+                        lines.append("")
+                        lines.append("**Chunk-Level Metrics**:")
+                        if chunk_hr is not None:
+                            lines.append(f"- Hit Rate (chunk): {chunk_hr:.4f}")
+                        if chunk_mrr is not None:
+                            lines.append(f"- MRR (chunk): {chunk_mrr:.4f}")
+                        if chunk_ndcg is not None:
+                            lines.append(f"- NDCG (chunk): {chunk_ndcg:.4f}")
+                    chunk_applicable = chunk_metrics.get(
+                        "retrieval_applicable_questions"
+                    )
+                    total_q = vr.get("total_questions", 0)
+                    if chunk_applicable is not None and chunk_applicable < total_q:
+                        lines.append(
+                            f"- Applicable Questions (chunk): {chunk_applicable}/{total_q}"
+                        )
+
                 lines.append("")
 
                 if vr.get("generation_metrics"):
@@ -884,12 +931,16 @@ class ExperimentReporter:
                 )
 
             if best_fpr is not None:
+                fpr_count = best.get("retrieval_metrics", {}).get(
+                    "irrelevant_questions_count", 0
+                )
                 if best_fpr > 0.3:
-                    fpr_assessment = "High false positive rate - many retrieved chunks are irrelevant, consider improving retrieval precision."
-                elif best_fpr > 0.1:
-                    fpr_assessment = "Moderate false positive rate - some irrelevant chunks are retrieved."
+                    if fpr_count >= 3:
+                        fpr_assessment = "High retrieval occupancy for irrelevant questions — standard vector retrieval typically returns top-k results regardless of relevance; consider adding a rejection mechanism if needed."
+                    else:
+                        fpr_assessment = "High retrieval occupancy (⚠ insufficient sample) — FPR near 1.0 is expected for vector retrieval; sample too small for reliable assessment."
                 else:
-                    fpr_assessment = "Low false positive rate - retrieved chunks are mostly relevant."
+                    fpr_assessment = "Low retrieval occupancy — system effectively filters irrelevant queries."
                 lines.append(
                     f"- **False Positive Rate ({best_fpr:.4f})**: {fpr_assessment}"
                 )

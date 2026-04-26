@@ -759,6 +759,11 @@ class TestMetricNamespacePrefix:
     ):
         mock_llm_config.return_value = {"api_key": "test"}
         mock_evaluator = MagicMock()
+        mock_evaluator.supported_retrieval_metrics = [
+            "hit_rate",
+            "mrr",
+            "ndcg",
+        ]
         mock_evaluator.supported_generation_metrics = [
             "faithfulness",
             "answer_relevancy",
@@ -809,11 +814,17 @@ class TestMetricNamespacePrefix:
     ):
         mock_llm_config.return_value = {"api_key": "test"}
         mock_builtin_evaluator = MagicMock()
+        mock_builtin_evaluator.supported_retrieval_metrics = [
+            "hit_rate",
+            "mrr",
+            "ndcg",
+        ]
         mock_builtin_evaluator.supported_generation_metrics = [
             "faithfulness",
             "answer_relevancy",
         ]
         mock_ragas_evaluator = MagicMock()
+        mock_ragas_evaluator.supported_retrieval_metrics = []
         mock_ragas_evaluator.supported_generation_metrics = [
             "faithfulness",
             "answer_relevancy",
@@ -886,11 +897,17 @@ class TestMetricNamespacePrefix:
     ):
         mock_llm_config.return_value = {"api_key": "test"}
         mock_builtin_evaluator = MagicMock()
+        mock_builtin_evaluator.supported_retrieval_metrics = [
+            "hit_rate",
+            "mrr",
+            "ndcg",
+        ]
         mock_builtin_evaluator.supported_generation_metrics = [
             "faithfulness",
             "answer_relevancy",
         ]
         mock_ragas_evaluator = MagicMock()
+        mock_ragas_evaluator.supported_retrieval_metrics = []
         mock_ragas_evaluator.supported_generation_metrics = [
             "faithfulness",
             "answer_relevancy",
@@ -1069,6 +1086,7 @@ class TestMetricNamespacePrefix:
     ):
         mock_llm_config.return_value = {"api_key": "test"}
         mock_ragas_evaluator = MagicMock()
+        mock_ragas_evaluator.supported_retrieval_metrics = []
         mock_ragas_evaluator.supported_generation_metrics = [
             "faithfulness",
             "answer_relevancy",
@@ -1647,6 +1665,7 @@ class TestRunExperimentExceptionPaths:
     ):
         mock_llm_config.return_value = {"api_key": "test"}
         mock_evaluator = MagicMock()
+        mock_evaluator.supported_retrieval_metrics = []
         mock_evaluator.supported_generation_metrics = []
         mock_create_evaluators.return_value = {"builtin": mock_evaluator}
 

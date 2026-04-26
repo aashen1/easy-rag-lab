@@ -212,47 +212,25 @@ QUESTION_TYPE_SUPPLEMENTS = {
 EVIDENCE_AWARE_PROMPT = """你是一位金融行业从业者，正在阅读一份研究报告的若干片段。请基于这些片段，生成一个你会真实提出的问题，并提供支撑答案的原文引用。
 
 ## 你的背景
-- 你可能是投资分析师、基金经理、行业研究员或企业战略规划人员
-- 你关心的是能帮助你做决策的信息
-- 你的提问风格是直接、口语化、不啰嗦
+- 你是投资分析师、基金经理或行业研究员，关心能帮助做决策的信息
+- 提问风格直接、口语化，不用"根据文档""请分析"等学术化表述
 
 ## 文档片段
 以下是从同一份文档中选取的 {num_segments} 个片段：
 
 {segments_text}
 
-## 问题类型要求
+## 问题类型
 请生成一个【{question_type}】类型的问题。
-
-类型说明：
-- 单知识点查询：查询某个具体数据、事实或概念
-- 多知识点综合：需要整合多个信息点才能回答
-- 推理型问题：需要基于信息进行推理或判断
-- 对比分析：对比两个或多个对象
-- 缺失知识点：询问文档中没有或不完整的信息
-- 无关问题：与文档主题无关的问题
+类型：单知识点查询/多知识点综合/推理型问题/对比分析/缺失知识点/无关问题/对抗性问题
 
 ## 生成要求
-
-1. 问题风格：
-   - 直接、口语化，像在问同事问题
-   - 不要用"根据文档"、"请分析"等学术化表述
-   - 避免过于正式或结构化的问题
-
-2. 答案要求：
-   - 答案应基于文档内容
-   - 答案中必须使用【原文引用】标注引用内容
-   - 如果文档无法回答，明确说明原因
-
-3. 证据要求：
-   - 必须提供支撑答案的原文引用
-   - 引用必须与片段原文完全一致（逐字逐句）
-   - 说明每个引用如何支撑答案
+1. 问题风格直接口语化，避免学术化表述
+2. 答案基于文档内容，用【原文引用】标注引用
+3. 证据引用必须与片段原文逐字一致，说明如何支撑答案
 
 ## 输出格式
-
-请严格按以下JSON格式输出（不要输出其他内容）：
-
+严格按JSON格式输出：
 {{
     "question": "你的问题",
     "answer": "答案文本，包含【原文引用】标注",
@@ -268,19 +246,9 @@ EVIDENCE_AWARE_PROMPT = """你是一位金融行业从业者，正在阅读一�
     "selected_segments": [0, 1]
 }}
 
-注意：
-- segment_index 对应片段编号（从0开始）
-- quote 必须与片段原文完全一致，不能修改或概括
-- selected_segments 仅多知识点综合问题需要填写，其他类型可省略
-- 单知识点问题通常只需1条证据
-- 多知识点综合问题需要多条证据，且必须填写 selected_segments
+注意：segment_index从0开始；quote必须逐字一致；selected_segments仅多知识点问题需填；单知识点1条证据，多知识点需多条证据。
 
-重要数值规则：
-- 文档中的财务数据通常以"元"为单位（如 12,162,684,368.86）
-- 答案中请换算为"亿元"：÷100,000,000（即去掉8位数字）
-- 正确示例：12,162,684,368.86元 = 121.63亿元
-- 错误示例：12,162,684,368.86元 ≠ 1216.3亿元（多了10倍）
-- 如果原文已用"亿元"为单位，则直接引用，不要再次换算"""
+数值规则：文档数据以"元"为单位时，答案换算为"亿元"（÷100,000,000）。如原文已是"亿元"则直接引用。"""
 
 EVIDENCE_SINGLE_FACT_SUPPLEMENT = """
 ## 单知识点查询的特别说明
@@ -490,6 +458,9 @@ class TestSetGenerator:
             "supplement_max_tokens", 1024
         )
         self.segment_size = tg_config.get("segment_size", 8000)
+        self.compact_segment_max_chars = tg_config.get(
+            "compact_segment_max_chars", 6000
+        )
         self.segment_sampling_strategy = tg_config.get(
             "segment_sampling_strategy", "random"
         )
@@ -584,6 +555,35 @@ class TestSetGenerator:
             current_pos = actual_end
 
         return segments
+
+    def _compact_segments(
+        self,
+        segments: list[dict[str, Any]],
+        max_chars: int,
+    ) -> list[dict[str, Any]]:
+        """Truncate segment text to reduce token consumption.
+
+        For question types that don't need the full segment context
+        (single_fact, missing, adversarial), truncating segments saves
+        ~25% input tokens without affecting generation quality.
+
+        Args:
+            segments: List of segment dictionaries with 'text' key.
+            max_chars: Maximum characters per segment.
+
+        Returns:
+            Segments with truncated text (copies, originals unchanged).
+        """
+        compacted = []
+        for seg in segments:
+            text = seg.get("text", "")
+            if len(text) <= max_chars:
+                compacted.append(seg)
+            else:
+                compacted_seg = dict(seg)
+                compacted_seg["text"] = text[:max_chars]
+                compacted.append(compacted_seg)
+        return compacted
 
     def _select_segments_for_question_type(
         self,
@@ -1565,6 +1565,7 @@ class TestSetGenerator:
         question_id = 1
         total_attempts = 0
         failed_count = 0
+        seen_questions: set[str] = set()
 
         for doc_name, doc_data in document_contents.items():
             assigned_types = doc_question_plans.get(doc_name, [])
@@ -1645,7 +1646,16 @@ class TestSetGenerator:
                                 f"for question {qa['id']}"
                             )
 
+                    question_text = qa.get("question", "")
+                    if question_text in seen_questions:
+                        logger.debug(
+                            f"Skipping duplicate question: {question_text[:50]}..."
+                        )
+                        failed_count += 1
+                        continue
+
                     questions.append(qa)
+                    seen_questions.add(question_text)
                     question_id += 1
                 else:
                     failed_count += 1
@@ -1741,7 +1751,16 @@ class TestSetGenerator:
                                 f"for question {qa['id']}"
                             )
 
+                    question_text = qa.get("question", "")
+                    if question_text in seen_questions:
+                        logger.debug(
+                            f"Skipping duplicate question: {question_text[:50]}..."
+                        )
+                        failed_count += 1
+                        continue
+
                     questions.append(qa)
+                    seen_questions.add(question_text)
                     question_id += 1
                 else:
                     failed_count += 1
@@ -1901,6 +1920,7 @@ class TestSetGenerator:
         question_id = 1
         total_attempts = 0
         failed_count = 0
+        seen_questions: set[str] = set()
 
         for doc_name, doc_data in filtered_contents.items():
             assigned_types = doc_question_plans.get(doc_name, [])
@@ -1992,7 +2012,16 @@ class TestSetGenerator:
                             q_type, ""
                         )
 
+                    question_text = qa.get("question", "")
+                    if question_text in seen_questions:
+                        logger.debug(
+                            f"Skipping duplicate question: {question_text[:50]}..."
+                        )
+                        failed_count += 1
+                        continue
+
                     questions.append(qa)
+                    seen_questions.add(question_text)
                     question_id += 1
                 else:
                     failed_count += 1
@@ -2089,7 +2118,16 @@ class TestSetGenerator:
                             q_type, ""
                         )
 
+                    question_text = qa.get("question", "")
+                    if question_text in seen_questions:
+                        logger.debug(
+                            f"Skipping duplicate question: {question_text[:50]}..."
+                        )
+                        failed_count += 1
+                        continue
+
                     questions.append(qa)
+                    seen_questions.add(question_text)
                     question_id += 1
                 else:
                     failed_count += 1
@@ -2250,6 +2288,12 @@ class TestSetGenerator:
         if not selected_segments and question_type != "irrelevant":
             logger.debug(f"No segments selected for question type: {question_type}")
             return None
+
+        compact_types = {"single_fact", "missing", "adversarial"}
+        if question_type in compact_types and selected_segments:
+            selected_segments = self._compact_segments(
+                selected_segments, self.compact_segment_max_chars
+            )
 
         for attempt in range(self.max_retries):
             qa = self._generate_question_with_evidence(
@@ -3042,6 +3086,9 @@ class TestSetGenerator:
         failed_count = 0
         max_attempts = deficit * 3
         attempt = 0
+        seen_questions: set[str] = {
+            q.get("question", "") for q in existing_questions if q.get("question")
+        }
 
         while len(new_questions) < deficit and attempt < max_attempts:
             attempt += 1
@@ -3082,7 +3129,16 @@ class TestSetGenerator:
                         chunks_dir=chunks_dir,
                     )
 
+                question_text = qa.get("question", "")
+                if question_text in seen_questions:
+                    logger.debug(
+                        f"Skipping duplicate question: {question_text[:50]}..."
+                    )
+                    failed_count += 1
+                    continue
+
                 new_questions.append(qa)
+                seen_questions.add(question_text)
                 question_id += 1
             else:
                 failed_count += 1

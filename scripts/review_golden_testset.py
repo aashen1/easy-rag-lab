@@ -177,11 +177,14 @@ def edit_field(value: str, field_name: str) -> str:
     return new_value
 
 
-def review_question(question: dict[str, Any]) -> dict[str, Any]:
+def review_question(
+    question: dict[str, Any], reviewer: str | None = None
+) -> dict[str, Any]:
     """Interactively review and potentially edit a single question.
 
     Args:
         question: Question dictionary to review.
+        reviewer: Optional reviewer identifier.
 
     Returns:
         Updated question dictionary.
@@ -201,6 +204,8 @@ def review_question(question: dict[str, Any]) -> dict[str, Any]:
             question["metadata"]["reviewed"] = True
             question["metadata"]["review_status"] = REVIEW_STATUS_APPROVED
             question["metadata"]["reviewed_at"] = datetime.now().isoformat()
+            if reviewer:
+                question["metadata"]["reviewer"] = reviewer
             print("  ✓ Approved")
             return question
 
@@ -228,7 +233,12 @@ def review_question(question: dict[str, Any]) -> dict[str, Any]:
                 question.setdefault("metadata", {})
                 question["metadata"]["review_notes"] = notes
 
-            print("  ✓ Edited (not yet approved, choose action again)")
+            question.setdefault("metadata", {})
+            question["metadata"]["review_status"] = REVIEW_STATUS_NEEDS_REVISION
+            if reviewer:
+                question["metadata"]["reviewer"] = reviewer
+
+            print("  ✓ Edited (marked as needs_revision, choose action again)")
             continue
 
         elif choice == "r":
@@ -236,6 +246,8 @@ def review_question(question: dict[str, Any]) -> dict[str, Any]:
             question["metadata"]["reviewed"] = True
             question["metadata"]["review_status"] = REVIEW_STATUS_REJECTED
             question["metadata"]["reviewed_at"] = datetime.now().isoformat()
+            if reviewer:
+                question["metadata"]["reviewer"] = reviewer
             reason = input("  Rejection reason: ").strip()
             if reason:
                 question["metadata"]["review_notes"] = reason
@@ -253,15 +265,181 @@ def review_question(question: dict[str, Any]) -> dict[str, Any]:
             print("  Invalid choice, please try again")
 
 
+def check_auto_approve_eligibility(
+    question: dict[str, Any], audit_flags: dict[str, set[str]] | None = None
+) -> tuple[bool, list[str]]:
+    """Check if a question is eligible for auto-approval.
+
+    A question is auto-approvable if it passes all quality checks:
+    1. excerpt_verified == True (or irrelevant type)
+    2. No numerical auto-correction
+    3. Not flagged by audit report (template, duplication, concentration)
+    4. Question length in reasonable range (15-200 chars)
+    5. Answer length in reasonable range (10-500 chars)
+
+    Args:
+        question: Question dictionary to check.
+        audit_flags: Optional dict with keys 'template_ids', 'duplicate_ids',
+            'concentrated_ids' containing sets of question IDs flagged by audit.
+
+    Returns:
+        Tuple of (is_eligible, list_of_reasons_if_not).
+    """
+    reasons = []
+    metadata = question.get("metadata", {})
+    q_type = question.get("question_type", "")
+    q_id = question.get("id", "")
+
+    if q_type != "irrelevant" and not metadata.get("excerpt_verified", False):
+        reasons.append("excerpt not verified")
+
+    if metadata.get("numerical_auto_corrected", False):
+        reasons.append("numerical auto-corrected")
+
+    if audit_flags:
+        if q_id in audit_flags.get("template_ids", set()):
+            reasons.append("template pattern detected")
+        if q_id in audit_flags.get("duplicate_ids", set()):
+            reasons.append("potential content duplication")
+        if q_id in audit_flags.get("concentrated_ids", set()):
+            reasons.append("document concentration")
+
+    q_text = question.get("question", "")
+    if len(q_text) < 15:
+        reasons.append(f"question too short ({len(q_text)} chars)")
+    elif len(q_text) > 200:
+        reasons.append(f"question too long ({len(q_text)} chars)")
+
+    answer = question.get("answer", "")
+    if len(answer) < 10:
+        reasons.append(f"answer too short ({len(answer)} chars)")
+    elif len(answer) > 500:
+        reasons.append(f"answer too long ({len(answer)} chars)")
+
+    return len(reasons) == 0, reasons
+
+
+def build_audit_flags(report: dict[str, Any]) -> dict[str, set[str]]:
+    """Build sets of question IDs flagged by audit report.
+
+    Args:
+        report: Audit report from audit_testset().
+
+    Returns:
+        Dict with 'template_ids', 'duplicate_ids', 'concentrated_ids' keys.
+    """
+    flags: dict[str, set[str]] = {
+        "template_ids": set(),
+        "duplicate_ids": set(),
+        "concentrated_ids": set(),
+    }
+
+    for group in report.get("content_duplication", {}).get("groups", []):
+        for qid in group.get("question_ids", []):
+            flags["duplicate_ids"].add(qid)
+
+    return flags
+
+
+def run_auto_approve(
+    input_path: Path,
+    dry_run: bool = False,
+) -> None:
+    """Auto-approve questions that pass all quality checks.
+
+    Questions that pass all checks are marked as auto_approved.
+    Questions with empty/invalid content are marked as auto_rejected.
+
+    Args:
+        input_path: Path to the golden test set JSON file.
+        dry_run: If True, only report what would be done without modifying.
+    """
+    testset = load_testset(input_path)
+    questions = testset.get("questions", [])
+
+    if not questions:
+        logger.error("No questions found in test set")
+        return
+
+    report = audit_testset(input_path)
+    audit_flags = build_audit_flags(report)
+
+    auto_approved = 0
+    auto_rejected = 0
+    needs_review = 0
+
+    for question in questions:
+        metadata = question.get("metadata", {})
+        current_status = metadata.get("review_status")
+        if current_status in (REVIEW_STATUS_APPROVED, REVIEW_STATUS_REJECTED):
+            continue
+
+        q_text = question.get("question", "")
+        answer = question.get("answer", "")
+
+        if not q_text.strip() or not answer.strip():
+            if not dry_run:
+                question.setdefault("metadata", {})
+                question["metadata"]["reviewed"] = True
+                question["metadata"]["review_status"] = REVIEW_STATUS_REJECTED
+                question["metadata"]["reviewed_at"] = datetime.now().isoformat()
+                question["metadata"]["review_notes"] = "auto_rejected: empty content"
+            auto_rejected += 1
+            continue
+
+        is_eligible, reasons = check_auto_approve_eligibility(question, audit_flags)
+
+        if is_eligible:
+            if not dry_run:
+                question.setdefault("metadata", {})
+                question["metadata"]["reviewed"] = True
+                question["metadata"]["review_status"] = "auto_approved"
+                question["metadata"]["reviewed_at"] = datetime.now().isoformat()
+                question["metadata"]["review_notes"] = (
+                    "auto_approved: passed all quality checks"
+                )
+            auto_approved += 1
+        else:
+            needs_review += 1
+
+    if not dry_run:
+        create_backup(input_path)
+        testset["metadata"]["updated_at"] = datetime.now().isoformat()
+        audit_entry = {
+            "event": "auto_approve",
+            "timestamp": datetime.now().isoformat(),
+            "auto_approved": auto_approved,
+            "auto_rejected": auto_rejected,
+            "needs_review": needs_review,
+        }
+        testset["metadata"].setdefault("audit_log", []).append(audit_entry)
+        save_testset(testset, input_path)
+
+    print(f"\n{'=' * 80}")
+    print("  Auto-Approve Results" + (" (DRY RUN)" if dry_run else ""))
+    print(f"{'=' * 80}")
+    print(f"  Auto-approved: {auto_approved}")
+    print(f"  Auto-rejected: {auto_rejected}")
+    print(f"  Needs review:  {needs_review}")
+    print(f"  Total:         {len(questions)}")
+    if dry_run:
+        print("\n  (No changes were made - use without --dry-run to apply)")
+    print(f"{'=' * 80}")
+
+
 def run_review(
     input_path: Path,
     start_from: int = 1,
+    include_auto_approved: bool = False,
+    reviewer: str | None = None,
 ) -> None:
     """Run the interactive review process.
 
     Args:
         input_path: Path to the golden test set JSON file.
         start_from: Question index to start from (1-based).
+        include_auto_approved: Whether to show auto_approved questions.
+        reviewer: Optional reviewer identifier.
     """
     testset = load_testset(input_path)
     questions = testset.get("questions", [])
@@ -272,11 +450,17 @@ def run_review(
 
     create_backup(input_path)
 
+    last_index = testset.get("metadata", {}).get("last_reviewed_index")
+    if start_from <= 1 and last_index is not None:
+        start_from = last_index + 1
+        logger.info(f"Resuming from last reviewed position: question {start_from}")
+
     total = len(questions)
     approved = sum(
         1
         for q in questions
-        if q.get("metadata", {}).get("review_status") == REVIEW_STATUS_APPROVED
+        if q.get("metadata", {}).get("review_status")
+        in (REVIEW_STATUS_APPROVED, "auto_approved")
     )
     rejected = sum(
         1
@@ -288,6 +472,8 @@ def run_review(
     print(f"\n{'=' * 80}")
     print("  Golden Test Set Review Tool")
     print(f"  File: {input_path}")
+    if reviewer:
+        print(f"  Reviewer: {reviewer}")
     print(
         f"  Total: {total} | Approved: {approved} | Rejected: {rejected} | Pending: {pending}"
     )
@@ -304,12 +490,15 @@ def run_review(
             continue
         if review_status == REVIEW_STATUS_REJECTED:
             continue
+        if review_status == "auto_approved" and not include_auto_approved:
+            continue
 
         display_question(question, i + 1, total)
 
-        result = review_question(question)
+        result = review_question(question, reviewer=reviewer)
 
         if result.get("_action") == "quit":
+            testset["metadata"]["last_reviewed_index"] = i
             break
 
         questions[i] = result
@@ -318,6 +507,7 @@ def run_review(
         if changes_since_save >= save_interval:
             testset["questions"] = questions
             testset["metadata"]["updated_at"] = datetime.now().isoformat()
+            testset["metadata"]["last_reviewed_index"] = i
             save_testset(testset, input_path)
             changes_since_save = 0
             print(f"\n  [Auto-saved at question {i + 1}]")
@@ -331,6 +521,8 @@ def run_review(
         "start_from": start_from,
         "total_questions": total,
     }
+    if reviewer:
+        audit_entry["reviewer"] = reviewer
     testset["metadata"].setdefault("audit_log", []).append(audit_entry)
 
     save_testset(testset, input_path)
@@ -338,7 +530,8 @@ def run_review(
     final_approved = sum(
         1
         for q in questions
-        if q.get("metadata", {}).get("review_status") == REVIEW_STATUS_APPROVED
+        if q.get("metadata", {}).get("review_status")
+        in (REVIEW_STATUS_APPROVED, "auto_approved")
     )
     final_rejected = sum(
         1
@@ -600,15 +793,43 @@ def main():
         action="store_true",
         help="Run audit report instead of interactive review",
     )
+    parser.add_argument(
+        "--auto-approve",
+        action="store_true",
+        help="Auto-approve questions that pass all quality checks",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="With --auto-approve, only report what would be done",
+    )
+    parser.add_argument(
+        "--include-auto-approved",
+        action="store_true",
+        help="Show auto_approved questions during interactive review",
+    )
+    parser.add_argument(
+        "--reviewer",
+        type=str,
+        default=None,
+        help="Reviewer identifier to record in metadata",
+    )
     args = parser.parse_args()
 
     if args.audit:
         report = audit_testset(Path(args.input))
         print_audit_report(report)
+    elif args.auto_approve:
+        run_auto_approve(
+            input_path=Path(args.input),
+            dry_run=args.dry_run,
+        )
     else:
         run_review(
             input_path=Path(args.input),
             start_from=args.start_from,
+            include_auto_approved=args.include_auto_approved,
+            reviewer=args.reviewer,
         )
 
 

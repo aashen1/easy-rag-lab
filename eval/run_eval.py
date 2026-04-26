@@ -95,6 +95,11 @@ def run_evaluation(
         test_cases = test_data
     elif isinstance(test_data, dict) and "questions" in test_data:
         test_cases = test_data["questions"]
+        test_cases = [
+            q
+            for q in test_cases
+            if q.get("metadata", {}).get("review_status") != "rejected"
+        ]
     else:
         logger.error(f"Unsupported test data format: {type(test_data)}")
         sys.exit(1)

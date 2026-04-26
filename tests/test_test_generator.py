@@ -1159,16 +1159,25 @@ class TestGenerateDocumentBasedQuestionsSupplemental:
         mock_meal_manager.get_meal_dir.return_value = tmp_path / "meals" / "test_meal"
 
         call_count = 0
+        questions_pool = [
+            ("营收增长多少？", "20%"),
+            ("利润率是多少？", "15%"),
+            ("资产规模多大？", "500亿"),
+            ("负债率多少？", "30%"),
+            ("现金流情况如何？", "正增长"),
+        ]
 
         def mock_generate(query, contexts, system_prompt, category, **kwargs):
             nonlocal call_count
             call_count += 1
             if call_count <= 2:
                 return "invalid json"
+            idx = (call_count - 3) % len(questions_pool)
+            q_text, a_text = questions_pool[idx]
             return json.dumps(
                 {
-                    "question": "营收增长多少？",
-                    "answer": "20%",
+                    "question": q_text,
+                    "answer": a_text,
                     "question_type": "single_fact",
                     "difficulty": "easy",
                     "reasoning": "",
@@ -1176,8 +1185,8 @@ class TestGenerateDocumentBasedQuestionsSupplemental:
                     "answer_sources": [],
                     "evidence": [
                         {
-                            "quote": "营收增长20%",
-                            "source_segment": 0,
+                            "quote": "文档",
+                            "segment_index": 0,
                             "match_type": "exact",
                         }
                     ],
@@ -1341,17 +1350,31 @@ class TestSupplementDocumentBasedQuestions:
         mock_meal_manager.get_meal_dir.return_value = tmp_path / "meals" / "test_meal"
 
         mock_llm_generator = MagicMock()
-        mock_llm_generator.generate.return_value = json.dumps(
-            {
-                "question": "新增问题？",
-                "answer": "新增答案",
-                "question_type": "single_fact",
-                "difficulty": "easy",
-                "reasoning": "",
-                "key_entities": [],
-                "answer_sources": [],
-            }
-        )
+        supplement_responses = [
+            json.dumps(
+                {
+                    "question": "新增问题1？",
+                    "answer": "新增答案1",
+                    "question_type": "single_fact",
+                    "difficulty": "easy",
+                    "reasoning": "",
+                    "key_entities": [],
+                    "answer_sources": [],
+                }
+            ),
+            json.dumps(
+                {
+                    "question": "新增问题2？",
+                    "answer": "新增答案2",
+                    "question_type": "single_fact",
+                    "difficulty": "easy",
+                    "reasoning": "",
+                    "key_entities": [],
+                    "answer_sources": [],
+                }
+            ),
+        ]
+        mock_llm_generator.generate.side_effect = supplement_responses * 10
 
         existing = {
             "metadata": {
@@ -2128,3 +2151,192 @@ class TestBuildPrimaryPool:
         ]
         result = self.generator._build_primary_pool(docs, [])
         assert len(result) == 2
+
+
+class TestQuestionDeduplication:
+    def setup_method(self):
+        self.config = {
+            "parser": {},
+            "test_generation": {"max_retries": 3, "default_num_questions": 20},
+        }
+        self.generator = TestSetGenerator(self.config)
+
+    def test_supplement_skips_duplicate_question(self, tmp_path):
+        parsed_dir = tmp_path / "parsed"
+        sub_dir = parsed_dir / "research_reports"
+        sub_dir.mkdir(parents=True)
+        (sub_dir / "doc_a.md").write_text("文档A内容" * 100, encoding="utf-8")
+
+        meal_config = MagicMock()
+        meal_config.data_id = "test_data_id"
+        meal_config.pdf_files = [MagicMock(path="research_reports/doc_a.pdf")]
+
+        mock_meal_manager = MagicMock()
+        mock_meal_manager.load_meal.return_value = meal_config
+        mock_meal_manager.get_meal_dir.return_value = tmp_path / "meals" / "test_meal"
+
+        mock_llm_generator = MagicMock()
+        mock_llm_generator.generate.return_value = json.dumps(
+            {
+                "question": "美的集团2023年营业收入是多少？",
+                "answer": "美的集团2023年营业收入为3737亿元",
+                "question_type": "single_fact",
+                "difficulty": "easy",
+                "reasoning": "",
+                "key_entities": [],
+                "answer_sources": [],
+            }
+        )
+
+        existing = {
+            "metadata": {
+                "name": "document_level_n3",
+                "meal_id": "test_data_id",
+                "created_at": "2026-01-01T00:00:00",
+                "updated_at": "2026-01-01T00:00:00",
+                "generation": {
+                    "strategy": "document",
+                    "num_questions": 3,
+                    "type_distribution": {},
+                    "llm_preset": "default",
+                },
+                "user_defined": False,
+                "audit_log": [],
+            },
+            "questions": [
+                {
+                    "id": "q001",
+                    "question": "美的集团2023年营业收入是多少？",
+                    "answer": "答案1",
+                    "question_type": "single_fact",
+                    "source_document": "doc_a",
+                    "category": "document",
+                    "source_files": [],
+                    "source_chunks": [],
+                },
+                {
+                    "id": "q002",
+                    "question": "格力电器2024年净利润是多少？",
+                    "answer": "答案2",
+                    "question_type": "single_fact",
+                    "source_document": "doc_a",
+                    "category": "document",
+                    "source_files": [],
+                    "source_chunks": [],
+                },
+            ],
+            "quality_metrics": {},
+        }
+
+        with (
+            patch.object(
+                self.generator, "_resolve_parsed_dir", return_value=parsed_dir
+            ),
+            patch("src.test_generator.MealManager", return_value=mock_meal_manager),
+            patch("src.test_generator.Generator", return_value=mock_llm_generator),
+            patch(
+                "src.test_generator.get_llm_config",
+                return_value={
+                    "model_name": "test",
+                    "api_key": "test",
+                    "base_url": "http://test",
+                },
+            ),
+        ):
+            result = self.generator.supplement_document_based_questions(
+                meal_name="test_meal",
+                existing_test_set=existing,
+                target_count=5,
+            )
+
+        question_texts = [q["question"] for q in result["questions"]]
+        assert question_texts.count("美的集团2023年营业收入是多少？") == 1
+
+    def test_supplement_allows_different_questions(self, tmp_path):
+        parsed_dir = tmp_path / "parsed"
+        sub_dir = parsed_dir / "research_reports"
+        sub_dir.mkdir(parents=True)
+        (sub_dir / "doc_a.md").write_text("文档A内容" * 100, encoding="utf-8")
+
+        meal_config = MagicMock()
+        meal_config.data_id = "test_data_id"
+        meal_config.pdf_files = [MagicMock(path="research_reports/doc_a.pdf")]
+
+        mock_meal_manager = MagicMock()
+        mock_meal_manager.load_meal.return_value = meal_config
+        mock_meal_manager.get_meal_dir.return_value = tmp_path / "meals" / "test_meal"
+
+        call_count = 0
+
+        def mock_generate(query, contexts, system_prompt, category, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            return json.dumps(
+                {
+                    "question": f"第{call_count}个关于公司营收的新问题是什么？",
+                    "answer": f"第{call_count}个新答案",
+                    "question_type": "single_fact",
+                    "difficulty": "easy",
+                    "reasoning": "",
+                    "key_entities": [],
+                    "answer_sources": [],
+                }
+            )
+
+        mock_llm_generator = MagicMock()
+        mock_llm_generator.generate.side_effect = mock_generate
+
+        existing = {
+            "metadata": {
+                "name": "document_level_n3",
+                "meal_id": "test_data_id",
+                "created_at": "2026-01-01T00:00:00",
+                "updated_at": "2026-01-01T00:00:00",
+                "generation": {
+                    "strategy": "document",
+                    "num_questions": 3,
+                    "type_distribution": {},
+                    "llm_preset": "default",
+                },
+                "user_defined": False,
+                "audit_log": [],
+            },
+            "questions": [
+                {
+                    "id": "q001",
+                    "question": "美的集团2023年营业收入是多少？",
+                    "answer": "答案1",
+                    "question_type": "single_fact",
+                    "source_document": "doc_a",
+                    "category": "document",
+                    "source_files": [],
+                    "source_chunks": [],
+                },
+            ],
+            "quality_metrics": {},
+        }
+
+        with (
+            patch.object(
+                self.generator, "_resolve_parsed_dir", return_value=parsed_dir
+            ),
+            patch("src.test_generator.MealManager", return_value=mock_meal_manager),
+            patch("src.test_generator.Generator", return_value=mock_llm_generator),
+            patch(
+                "src.test_generator.get_llm_config",
+                return_value={
+                    "model_name": "test",
+                    "api_key": "test",
+                    "base_url": "http://test",
+                },
+            ),
+        ):
+            result = self.generator.supplement_document_based_questions(
+                meal_name="test_meal",
+                existing_test_set=existing,
+                target_count=3,
+            )
+
+        assert len(result["questions"]) == 3
+        question_texts = [q["question"] for q in result["questions"]]
+        assert len(set(question_texts)) == len(question_texts)
