@@ -1067,6 +1067,13 @@ class TestDocumentBasedQuestionsSourceFiles:
                 "reasoning": "测试",
                 "key_entities": ["光模块"],
                 "answer_sources": ["第1段"],
+                "evidence": [
+                    {
+                        "quote": "光模块行业内容" * 10,
+                        "source_segment": 0,
+                        "match_type": "exact",
+                    }
+                ],
             }
         )
 
@@ -1152,6 +1159,13 @@ class TestGenerateDocumentBasedQuestionsSupplemental:
                     "reasoning": "",
                     "key_entities": [],
                     "answer_sources": [],
+                    "evidence": [
+                        {
+                            "quote": "营收增长20%",
+                            "source_segment": 0,
+                            "match_type": "exact",
+                        }
+                    ],
                 }
             )
 

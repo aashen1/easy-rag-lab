@@ -323,6 +323,9 @@ class TestBuiltinEvaluator:
             question="What is the revenue?",
             answer="Revenue is $1M.",
             contexts=["Revenue was $1M in 2023."],
+            expected_sources=["doc1.pdf"],
+            expected_answer="Revenue is $1M.",
+            expect_retrieval=True,
             llm_config=llm_config,
             retrieval_metrics=["context_precision"],
         )
@@ -471,6 +474,8 @@ class TestBuiltinEvaluator:
             answer="Revenue is $1M.",
             contexts=["Revenue was $1M in 2023."],
             expected_sources=["doc1.pdf"],
+            expected_answer="Revenue is $1M.",
+            expect_retrieval=True,
             retrieved_sources=["doc1.pdf", "doc2.pdf"],
             llm_config=llm_config,
             retrieval_metrics=["context_precision", "context_recall"],
