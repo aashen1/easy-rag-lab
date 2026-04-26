@@ -862,6 +862,9 @@ def _collect_rag_samples(
         "name", "unknown"
     )
     questions = test_set.get("questions", [])
+    questions = [
+        q for q in questions if q.get("metadata", {}).get("review_status") != "rejected"
+    ]
 
     logger.info(
         f"Collecting results for test set '{test_set_name}' ({len(questions)} questions)..."

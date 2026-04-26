@@ -82,6 +82,40 @@ class TestSetManager:
         self.config = config
         self.meal_manager = MealManager(config)
 
+    @staticmethod
+    def _filter_rejected_questions(test_set_data: dict[str, Any]) -> dict[str, Any]:
+        """Filter out rejected questions from a test set.
+
+        Questions with metadata.review_status == "rejected" are excluded
+        from evaluation. This method modifies the test_set_data in place
+        and returns it for chaining.
+
+        Args:
+            test_set_data: Test set dictionary with a "questions" key.
+
+        Returns:
+            The same test_set_data dict with rejected questions removed.
+        """
+        questions = test_set_data.get("questions", [])
+        original_count = len(questions)
+        if original_count == 0:
+            return test_set_data
+
+        filtered = [
+            q
+            for q in questions
+            if q.get("metadata", {}).get("review_status") != "rejected"
+        ]
+        rejected_count = original_count - len(filtered)
+        if rejected_count > 0:
+            test_set_data["questions"] = filtered
+            logger.info(
+                f"Filtered {rejected_count} rejected question(s) "
+                f"from test set '{test_set_data.get('metadata', {}).get('name', 'unknown')}' "
+                f"({original_count} -> {len(filtered)})"
+            )
+        return test_set_data
+
     def _get_golden_testset_dir(self) -> Path:
         """Get the golden test set directory path.
 
@@ -121,7 +155,8 @@ class TestSetManager:
             with open(file_path, encoding="utf-8") as f:
                 data = json.load(f)
             logger.info(f"Loaded golden test set '{name}' from {file_path}")
-            return self._migrate_test_set(data)
+            migrated = self._migrate_test_set(data)
+            return self._filter_rejected_questions(migrated)
         except json.JSONDecodeError as e:
             raise TestSetError(
                 f"Failed to parse golden test set '{name}': {str(e)}"
@@ -1092,6 +1127,11 @@ class TestSetManager:
             try:
                 test_set_data = self.load_test_set(source_meal, source_test_set)
                 questions = test_set_data.get("questions", [])
+                questions = [
+                    q
+                    for q in questions
+                    if q.get("metadata", {}).get("review_status") != "rejected"
+                ]
                 all_questions.extend(questions)
                 loaded_sources.append(
                     {"meal": source_meal, "test_set": source_test_set}
