@@ -250,6 +250,29 @@ EVIDENCE_AWARE_PROMPT = """你是一位金融行业从业者，正在阅读一�
 
 数值规则：文档数据以"元"为单位时，答案换算为"亿元"（÷100,000,000）。如原文已是"亿元"则直接引用。"""
 
+IRRELEVANT_QUESTION_PROMPT = """你是一位金融行业从业者。请生成一个与以下文档主题完全无关的问题，测试RAG系统的拒答能力。
+
+## 文档主题
+文档主题：{doc_topic}
+
+## 生成要求
+1. 问题必须与文档主题完全无关，不能通过文档内容回答
+2. 问题风格直接口语化，像真实的投资分析师会问的问题
+3. 问题应该看起来合理，只是恰好与这份文档无关
+
+## 输出格式
+严格按JSON格式输出：
+{{
+    "question": "你的问题",
+    "answer": "该问题与文档内容无关，文档主要讨论{doc_topic}相关内容。",
+    "question_type": "无关问题",
+    "difficulty": "easy",
+    "evidence": [],
+    "selected_segments": []
+}}
+
+注意：evidence必须为空数组，因为文档中不包含回答此问题的信息。"""
+
 EVIDENCE_SINGLE_FACT_SUPPLEMENT = """
 ## 单知识点查询的特别说明
 
@@ -1597,6 +1620,7 @@ class TestSetGenerator:
                     question_type=q_type,
                     generator=generator,
                     source_path=source_path,
+                    doc_name=doc_name,
                 )
 
                 if qa is not None:
@@ -1718,6 +1742,7 @@ class TestSetGenerator:
                     question_type=q_type,
                     generator=generator,
                     source_path=source_path,
+                    doc_name=doc_name,
                 )
 
                 if qa is not None:
@@ -1970,6 +1995,7 @@ class TestSetGenerator:
                     question_type=q_type,
                     generator=generator,
                     source_path=source_path,
+                    doc_name=doc_name,
                 )
 
                 if qa is not None:
@@ -2100,6 +2126,7 @@ class TestSetGenerator:
                     question_type=q_type,
                     generator=generator,
                     source_path=source_path,
+                    doc_name=doc_name,
                 )
 
                 if qa is not None:
@@ -2291,6 +2318,7 @@ class TestSetGenerator:
         question_type: str,
         generator: Generator,
         source_path: str,
+        doc_name: str = "",
     ) -> dict[str, Any] | None:
         """Generate a single question using hybrid strategy.
 
@@ -2321,6 +2349,12 @@ class TestSetGenerator:
             logger.debug(f"No segments selected for question type: {question_type}")
             return None
 
+        if question_type == "irrelevant":
+            return self._generate_irrelevant_question(
+                doc_name=doc_name,
+                generator=generator,
+            )
+
         compact_types = {"single_fact", "missing", "adversarial"}
         if question_type in compact_types and selected_segments:
             selected_segments = self._compact_segments(
@@ -2338,14 +2372,6 @@ class TestSetGenerator:
                 continue
 
             qa["question_type"] = self.QUESTION_TYPES.get(question_type, question_type)
-
-            if question_type == "irrelevant":
-                evidence_list = qa.get("evidence", [])
-                if evidence_list:
-                    logger.debug("Irrelevant type question has evidence, retrying...")
-                    continue
-                qa["ground_truth_excerpt"] = ""
-                return qa
 
             evidence_list = qa.get("evidence", [])
             if not evidence_list:
@@ -2408,6 +2434,58 @@ class TestSetGenerator:
             qa["ground_truth_excerpt"] = "\n".join(all_quotes) if all_quotes else ""
 
             return qa
+
+        return None
+
+    def _generate_irrelevant_question(
+        self,
+        doc_name: str,
+        generator: Generator,
+    ) -> dict[str, Any] | None:
+        """Generate an irrelevant question unrelated to the document.
+
+        Uses a dedicated prompt that does not reference document segments,
+        avoiding the contradiction of asking LLM to generate an unrelated
+        question while providing document content.
+
+        Args:
+            doc_name: Name of the document (used to derive topic).
+            generator: Generator instance for LLM calls.
+
+        Returns:
+            Dictionary with question data, or None if generation fails.
+        """
+        doc_topic = doc_name.split("：")[0] if "：" in doc_name else doc_name
+
+        prompt = IRRELEVANT_QUESTION_PROMPT.format(doc_topic=doc_topic)
+
+        for _attempt in range(self.max_retries):
+            try:
+                response = generator.generate(
+                    query=prompt,
+                    contexts=[],
+                    system_prompt="你是一位金融行业从业者。请严格按照要求的JSON格式输出，不要输出任何其他内容。",
+                    category="test_generation",
+                    allow_no_contexts=True,
+                )
+
+                qa = self._parse_evidence_question_response(response)
+                if qa is None:
+                    continue
+
+                qa["question_type"] = self.QUESTION_TYPES.get("irrelevant", "无关问题")
+                qa["ground_truth_excerpt"] = ""
+
+                evidence_list = qa.get("evidence", [])
+                if evidence_list:
+                    logger.debug("Irrelevant question has evidence, retrying...")
+                    continue
+
+                return qa
+
+            except Exception as e:
+                logger.warning(f"Failed to generate irrelevant question: {str(e)}")
+                continue
 
         return None
 
