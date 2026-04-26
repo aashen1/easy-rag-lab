@@ -2,7 +2,7 @@
 
 <!-- status: active -->
 
-> 最后更新：2026-04-26（归档 12 条新 issue，同步 6 条已完成 issue）
+> 最后更新：2026-04-26（RF-008：新增 issue 详情文件机制，4 个高优先级 issue 已补充详情链接）
 
 本文档是项目"卫生情况"的总入口，追踪所有非阻塞性质的待做事项。
 
@@ -13,10 +13,10 @@
 | 类型 | 待处理 | 进行中 | 已完成 | 已延期 |
 |------|--------|--------|--------|--------|
 | Bug | 8 | 0 | 18 | 2 |
-| Feature | 28 | 0 | 19 | 0 |
-| Refactor | 8 | 0 | 14 | 1 |
+| Feature | 26 | 0 | 21 | 0 |
+| Refactor | 5 | 0 | 17 | 1 |
 | Optimization | 7 | 0 | 2 | 0 |
-| Investigation | 3 | 0 | 17 | 1 |
+| Investigation | 4 | 0 | 17 | 1 |
 | Test | 0 | 0 | 8 | 0 |
 
 ---
@@ -28,8 +28,8 @@
 | BUG-021 | expected_sources 标注错误（LLM 生成问题涉及文档中提到的其他实体，但 source_files 仅指向生成问题时的源文档） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P6-5) | 📋 待处理 | 需重新设计问题生成策略，使 source_files 反映问题实际涉及的文档 |
 | BUG-022 | `_locate_answer_chunks()` 定位精度不足 | [INV-007 调查](reviews/investigations/inv-007-eval-system-reliability.md) | 📋 待处理 | 使用关键词+子串启发式方法，expected_chunks 可能遗漏或误匹配 |
 | BUG-023 | `missing` 类型 `expect_retrieval` 标记错误导致 FPR 计算异常 | [inbox](inbox/一个关于FPR的bug，及两种修复方案.md) | ✅ 已完成 | commit `5e9fa65`：采用方案 A 将 `expect_retrieval` 改为 `True`，同时新增 `expect_no_answer` 跳过 faithfulness |
-| BUG-024 | Chunk JSONL 文本编码损坏导致 chunk-level 指标无法计算 | [hybrid-metrics-fix.md](guides/development/hybrid-metrics-fix.md#6-未修复问题chunk-jsonl-文本编码损坏) | 📋 待处理 | chunk text 字段中文字符为乱码（如`鍦 浜`而非`地产`），source_chunks 始终为空，chunk_hit_rate/mrr/ndcg 为 null；需排查 chunker 输出编码 |
-| BUG-025 | `source_chunks` 字段始终为空，文档级策略无法精确到页或 chunk | [TODO.md](../TODO.md) | 📋 待处理 | 需调研文档级策略能否精确到页/chunk，或需恢复 chunk 级策略 |
+| BUG-024 | Chunk JSONL 文本编码损坏导致 chunk-level 指标无法计算 | [hybrid-metrics-fix.md](guides/development/hybrid-metrics-fix.md#6-未修复问题chunk-jsonl-文本编码损坏) | 📋 待处理 | chunk text 字段中文字符为乱码，source_chunks 始终为空；[详情](reviews/issues/bug-024-chunk-encoding-and-page-info.md) |
+| BUG-025 | `source_chunks` 字段始终为空，文档级策略无法精确到页或 chunk | [TODO.md](../TODO.md) | 📋 待处理 | 需调研文档级策略能否精确到页/chunk；[详情](reviews/issues/bug-025-source-chunks-empty.md) |
 | BUG-026 | 全量缓存 hash 计算问题导致缓存无法命中 | [TODO.md](../TODO.md) | ✅ 已完成 | pipeline.py 传了错误的 artifacts_dir，改为使用 ArtifactCache 动态计算路径 |
 | BUG-027 | Token 统计功能可能无法正确识别多变体各变体消耗 | [TODO.md](../TODO.md) | ✅ 已完成 | 新增 get_summary_by_variant() 方法，run_experiment 中为 variant_tracker 添加 variant_name metadata |
 | BUG-028 | 审查脚本缺少页码信息，无法定位 ground truth 出自哪一页 | [TODO.md](../TODO.md) | 📋 待处理 | source_chunks 字段未实装，审查时无法精确定位 |
@@ -60,7 +60,7 @@
 | FEAT-011 | 补做 LLM 报告功能 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 新增 `--llm-report-only` CLI 参数，追溯生成 LLM 报告 |
 | FEAT-012 | 断点续传（实验中断恢复） | [TODO.md](../TODO.md) | 📋 待处理 | 大 | 支持实验中断后继续，需记录时间戳和基模变化 warning |
 | FEAT-013 | 部分评测支持 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 如仅评测 PDF→MD 环节，不停换提取策略对比 |
-| FEAT-014 | 透明版完整实验报告 | [TODO.md](../TODO.md) | 📋 待处理 | 大 | 含问题/答案/emb/recall/提示词/回复/指标计算过程 |
+| FEAT-014 | 透明版完整实验报告 | [TODO.md](../TODO.md) | 📋 待处理 | 大 | 含问题/答案/emb/recall/提示词/回复/指标计算过程；[详情](reviews/issues/feat-014-transparent-report.md) |
 | FEAT-015 | 更细粒度实验记录 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | token per chunk、文档分布、meal 分布、统计量 |
 | FEAT-016 | DATA_DIR 配置项支持 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 替代 mklink，系统级 RAG 数据源指定 |
 | FEAT-017 | CI/CD 集成 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 学习并实施 CI/CD |
@@ -74,13 +74,13 @@
 | FEAT-025 | 检索器层面文档级去重（top_k 结果按文档多样性分配） | [pipeline-deep-audit.md](pipeline-deep-audit.md#P6-4) | 📋 待处理 | 中 | 当前 top 5 全部来自同一文档，检索多样性为零 |
 | FEAT-026 | meal 系统升级支持扩充已有 meal | [TODO.md](../TODO.md) | ✅ 已完成 | 中 | 支持 merge_meals/extend_meal，composition 元数据追踪 |
 | FEAT-027 | 问题集组合功能 | [TODO.md](../TODO.md) | ✅ 已完成 | 中 | 支持 merge_test_sets，问题去重与有效性验证 |
-| FEAT-028 | 配置验证系统（Pydantic 模型验证 + 必填项校验 + 范围校验） | 深度审查 | 📋 待处理 | 中 | 当前 yaml.safe_load 直接加载无验证，可能导致意外行为 |
+| FEAT-028 | 配置验证系统（Pydantic 模型验证 + 必填项校验 + 范围校验） | 深度审查 | 📋 待处理 | 中 | 当前 yaml.safe_load 直接加载无验证；需新增 pydantic 依赖；[详情](reviews/issues/feat-028-config-validation.md) |
 | FEAT-029 | 项目记忆系统 Skill（project-memory） | [TODO.md](../TODO.md) | ✅ 已完成 | 中 | 跨 session 项目记忆读写方法论，替代原"Project Context Skill"概念 |
 | FEAT-030 | 实验报告 sources 字段细化 | [INV-001 调查](reviews/investigations/inv-001-sources-field.md) | 📋 待处理 | 中 | 增加 retrieved_chunks 字段、标题层级信息，改善命中率虚高问题 |
 | FEAT-031 | golden_qa.json 重做与回归测试更新 | [INV-006 调查](reviews/investigations/inv-006-golden-test.md) | ✅ 已完成 | 中 | Golden 生成逻辑收编入 TestSetGenerator，统一链路 |
 | FEAT-032 | 评估模型与生成模型分离配置 | [INV-007 调查](reviews/investigations/inv-007-eval-system-reliability.md) | 📋 待处理 | 中 | 解决 faithfulness/answer_relevancy 自评偏差问题 |
 | FEAT-033 | 增强日志系统覆盖率与 pytest 集成 | [INV-003 调查](reviews/investigations/inv-003-logging.md) | 📋 待处理 | 中 | pytest-loguru 集成、配置加载日志、文件写入结构化日志 |
-| FEAT-034 | 开源准备度完善 | [INV-005 调查](reviews/investigations/inv-005-open-source.md) | 📋 待处理 | 中 | CONTRIBUTING.md、README 更新、可选 SECURITY.md |
+| FEAT-034 | 开源准备度完善 | [INV-005 调查](reviews/investigations/inv-005-open-source.md) | ✅ 已完成 | 中 | CONTRIBUTING.md 已创建，README 已更新至 v0.1.8 |
 | FEAT-035 | 元数据增强（页码+标题层级） | [INV-010 调查](reviews/investigations/inv-010-metadata.md) | 📋 待处理 | 中 | chunk metadata 增加 page_number 和 headings 字段 |
 | FEAT-036 | PDF 表格解析质量提升 | [INV-016 调查](reviews/investigations/inv-016-table-parsing.md) | 📋 待处理 | 中 | fitz_pdfplumber 为推荐解析器、补充 OCR 支持、表格参数调优 |
 | FEAT-037 | benchmark_use_ocr 对比维度参数化 | benchmark_use_ocr 扩展规划 | 📋 待处理 | 中 | 将 OCR 开/关硬编码改为 YAML 配置驱动，支持任意 pymupdf4llm 选项的 A/B 对比 |
@@ -88,7 +88,6 @@
 | FEAT-039 | 交互式审查脚本（Papers Please 风格） | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 指定问题集逐题审查：展示问题/预期答案/实际答案/信息源/分数，用户打回或放过，自动生成审查报告 |
 | FEAT-040 | 审查脚本 PDF 高亮唤起功能 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 审查时唤起 PDF 并高亮相关段落关键词，审核完自动关闭 |
 | FEAT-041 | 多变体实验增量补做 | [TODO.md](../TODO.md) | 📋 待处理 | 大 | 支持在已跑完基线上追加 variant，只算新增部分，最终综合报告 |
-| FEAT-042 | 实验成功后才生成 LLM 报告 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 实验失败时跳过 LLM 报告生成步骤 |
 | FEAT-043 | 手动中断后部分生成报告 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 中断后根据已完成 variant 生成部分报告，需确认中断时是否保存已完成结果 |
 
 ---
@@ -97,12 +96,12 @@
 
 | ID | 描述 | 来源 | 状态 | 规模 | 备注 |
 |----|------|------|------|------|------|
-| RF-001 | CLI 输出规范化（172 处 print） | [v0.1.5 code-review](reviews/v0.1.5/code-review.md) | 📋 待处理 | 中 | 替换为 loguru 会改变输出格式 |
-| RF-002 | 项目结构整理（根目录 .py 文件） | [原 TODO.md](../TODO.md) | 📋 待处理 | 小 | lint 盲区已修复（04-25），结构整理待定；详见 [评估报告](reviews/investigations/rf-002-project-structure.md) |
+| RF-001 | CLI 输出规范化（172 处 print） | [v0.1.5 code-review](reviews/v0.1.5/code-review.md) | ✅ 已完成 | 中 | src/ 中仅剩 artifact_cli.py 的 20 处 print（CLI 工具合理用法）；pipeline.py 4 处已替换为 logger.info |
+| RF-002 | 项目结构整理（根目录 .py 文件） | [原 TODO.md](../TODO.md) | ✅ 已完成 | 小 | 方案 C：合并 interactive.py 到 main.py，新增 --interactive 参数；详见 [评估报告](reviews/investigations/rf-002-project-structure.md) |
 | RF-004 | 硬编码配置值提取到 config.yaml | v0.1.7 合并验收 | ✅ 已完成 | 中 | metrics.py/experiment_reporter.py/test_generator.py 中模型名、API URL、max_tokens、temperature 硬编码 |
 | RF-005 | Anthropic 客户端创建统一抽象 | v0.1.7 合并验收 | ✅ 已完成 | 小 | 提取 create_anthropic_client 到 src/llm_client.py，4处→1处 |
 | RF-007 | exp_configs 版本维护机制沉淀 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 随版本演进清洗模板，考虑沉淀为 skill 或系统提示词 |
-| RF-008 | backlog issue 详细信息记录 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 参考 GitHub 做法，支持超链接引用详情 |
+| RF-008 | backlog issue 详细信息记录 | [TODO.md](../TODO.md) | ✅ 已完成 | 中 | 新增 docs/reviews/issues/ 详情文件机制，backlog 备注列添加超链接；todo-archiver skill 已更新 |
 | RF-009 | commit-rule 与 CLAUDE.md 渐进式披露 | [TODO.md](../TODO.md) | ✅ 已完成 | 中 | 三层渐进式披露：commit-rule 23行+CLAUDE.md 3行+SKILL.md+docs/guides/commit-conventions.md |
 | RF-010 | lint/ruff 配置 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 添加代码检查工具 |
 | RF-011 | docs 目录组织度维护 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 打扫卫生时考量 docs 目录组织度，恢复整洁度 |
@@ -114,7 +113,7 @@
 | RF-017 | 自定义异常类型定义（RAGPipelineError、RetrievalError 等） | 深度审查 | ✅ 已完成 | 小 | 新增 src/exceptions.py，9个业务异常类，全项目替换 |
 | RF-018 | Pipeline 类职责拆分（当前 560 行承担全流程） | 深度审查 | 📋 待处理 | 大 | 可拆分为 PipelineOrchestrator + 各阶段 Stage 类 |
 | RF-019 | answer_relevancy 评分稳定性改进 | [INV-007 调查](reviews/investigations/inv-007-eval-system-reliability.md) | 📋 待处理 | 小 | overall_score 由 LLM 自主决定，考虑引入 RAGAS 式伪问题生成作为交叉验证 |
-| RF-020 | 全量测试路径重构（data/parsed→artifacts） | [TODO.md](../TODO.md) | ✅ 已完成 | Golden 改用 find_full_dataset_meal() 查找全量 meal，不再直接读 data/parsed |
+| RF-020 | 全量测试路径重构（data/parsed→artifacts） | [TODO.md](../TODO.md) | ✅ 已完成 | 中 | 旧路径全面迁移至 Artifact 体系，新增 Pointer 机制和 artifact_cli 工具 |
 
 ---
 
@@ -143,6 +142,7 @@
 | INV-007 | 评测系统可靠性全面审查 | [TODO.md](../TODO.md) | 📋 待处理 | 致命 bug 已修复，系统从"不可信"提升到"部分可信"；产出 FEAT-032/BUG-022/RF-019 三个子条目 |
 | INV-009 | 问题集扩大与指标收敛趋势 | [TODO.md](../TODO.md) | 📋 待处理 | 等 v0.1.9 发版确认数据有效性后推进 |
 | INV-020 | 大规模数据索引构建性能评估 | 深度审查 | 📋 待处理 | ⬇️ 降级优先级；当前规模性能可接受，10万+ chunks 时需流式 embedding |
+| INV-022 | 多 worktree 并行开发时 issue 编号撞车问题 | [TODO.md](../TODO.md) | 📋 待处理 | 纯文本 issue 系统在 merge 时同步，递增编号易撞车；需调研 hash 指纹方案或借鉴 GitHub 集中式 issue 系统 |
 
 ---
 
@@ -196,6 +196,8 @@
 | FEAT-016 | DATA_DIR 配置项支持 → load_config 自动解析 data/ 前缀路径 | [TODO.md](../TODO.md) | 2026-04-21 |
 | FEAT-019 | .trae 目录 plan/spec 文档定期归档机制 | [TODO.md](../TODO.md) | 2026-04-21 |
 | FEAT-029 | 项目记忆系统 Skill（project-memory） | [TODO.md](../TODO.md) | 2026-04-24 |
+| FEAT-042 | 实验成功后才生成 LLM 报告 | [TODO.md](../TODO.md) | 2026-04-26 |
+| FEAT-034 | 开源准备度完善 | [INV-005 调查](reviews/investigations/inv-005-open-source.md) | 2026-04-26 |
 | FEAT-011 | 补做 LLM 报告功能 | [TODO.md](../TODO.md) | 2026-04-24 |
 | FEAT-DONE-001 | 文档系统重构 | [原 TODO.md](../TODO.md) | 2026-04-18 |
 | FEAT-DONE-002 | LLM 报告功能修复 | [原 TODO.md](../TODO.md) | 2026-04-17 |
@@ -220,6 +222,9 @@
 | BUG-026 | 全量缓存 hash 路径不一致 → pipeline.py 改用 ArtifactCache 动态计算 | [TODO.md](../TODO.md) | 2026-04-26 |
 | BUG-027 | Token 统计按 variant 区分 → 新增 get_summary_by_variant() | [TODO.md](../TODO.md) | 2026-04-26 |
 | OPT-009 | chunker 日志降噪 → 逐文件 INFO→DEBUG | [TODO.md](../TODO.md) | 2026-04-26 |
+| RF-001 | CLI 输出规范化 → src/ 中仅剩 artifact_cli.py 的 20 处 print（合理用法） | [v0.1.5 code-review](reviews/v0.1.5/code-review.md) | 2026-04-26 |
+| RF-002 | 项目结构整理 → 方案 C：合并 interactive.py 到 main.py | [原 TODO.md](../TODO.md) | 2026-04-26 |
+| RF-008 | backlog issue 详细信息记录 → 新增 docs/reviews/issues/ 详情文件机制 | [TODO.md](../TODO.md) | 2026-04-26 |
 
 ### Investigation
 

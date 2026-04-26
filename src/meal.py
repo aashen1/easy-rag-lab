@@ -420,6 +420,62 @@ class ArtifactCache:
         self.artifacts_dir = artifacts_dir
         self.raw_dir = raw_dir
 
+    @property
+    def pointers_dir(self) -> Path:
+        """Directory for pointer files that provide quick access to artifacts.
+
+        Returns:
+            Path to the ``_pointers`` subdirectory under artifacts_dir.
+        """
+        return self.artifacts_dir / "_pointers"
+
+    def save_pointer(self, name: str, target: str) -> None:
+        """Save a pointer file pointing to an artifact directory.
+
+        Pointer files are plain text files stored under ``_pointers/``
+        that record the relative path to an artifact directory. This
+        allows users to quickly locate full-parse artifacts without
+        knowing the hash-based directory name.
+
+        Args:
+            name: Pointer name (e.g., ``'full_parsed'``, ``'full_chunks'``).
+                Used as the filename with a ``.pointer`` suffix.
+            target: Relative path under ``artifacts_dir``
+                (e.g., ``'d3a711e6/parsed_a1b2c3d4'``).
+        """
+        self.pointers_dir.mkdir(parents=True, exist_ok=True)
+        pointer_file = self.pointers_dir / f"{name}.pointer"
+        try:
+            pointer_file.write_text(target, encoding="utf-8")
+            logger.debug(f"Saved pointer '{name}' -> {target}")
+        except Exception as e:
+            logger.warning(f"Failed to save pointer '{name}': {str(e)}")
+
+    def resolve_pointer(self, name: str) -> Path | None:
+        """Resolve a pointer to an actual artifact directory.
+
+        Args:
+            name: Pointer name to resolve (without ``.pointer`` suffix).
+
+        Returns:
+            Full Path to the artifact directory, or None if the pointer
+            file does not exist or the target directory does not exist.
+        """
+        pointer_file = self.pointers_dir / f"{name}.pointer"
+        if not pointer_file.exists():
+            return None
+
+        try:
+            relative_path = pointer_file.read_text(encoding="utf-8").strip()
+            target = self.artifacts_dir / relative_path
+            if target.exists():
+                return target
+            logger.warning(f"Pointer '{name}' points to non-existent path: {target}")
+            return None
+        except Exception as e:
+            logger.warning(f"Failed to resolve pointer '{name}': {str(e)}")
+            return None
+
     def _compute_full_data_id(self) -> str:
         """Compute data_id for all PDFs in the raw directory.
 
@@ -743,9 +799,6 @@ class MealManager:
         self.meals_dir = Path(meals_config.get("dir", "data/meals"))
         self.collection_prefix = meals_config.get("collection_prefix", "m_")
         self.raw_dir = Path(config.get("parser", {}).get("input_dir", "data/raw"))
-        self.chunks_dir = Path(
-            config.get("chunker", {}).get("output_dir", "data/chunks")
-        )
 
         artifacts_config = config.get("artifacts", {})
         artifacts_base = artifacts_config.get("dir", "data/artifacts")

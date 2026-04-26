@@ -21,44 +21,31 @@ raw/
 - `贵州茅台_2023_年度报告.pdf`
 - `中金公司_2024_消费行业研报.pdf`
 
----
-
-### `parsed/`
-由 `src/parser.py` 生成，每个 PDF 对应一个同名 `.md` 文件。
-
-pymupdf4llm 将 PDF 转为 Markdown，保留标题层级与表格结构。
-
-重新生成：
-```bash
-pixi run python src/parser.py
-```
-
 ------
 
-### `chunks/`
+### `artifacts/`
 
-由 `src/chunker.py` 生成，每个来源文件对应一个 `.jsonl` 文件，每行为一个 chunk。
+由 ArtifactCache 系统管理，按数据指纹（data_id）和配置哈希自动组织。
 
-chunk 字段结构：
-
-```json
-{
-  "chunk_id": "贵州茅台_2023_年度报告_042",
-  "text": "...",
-  "metadata": {
-    "source": "贵州茅台_2023_年度报告.pdf",
-    "category": "annual_report",
-    "chunk_index": 42,
-    "char_count": 312,
-    "token_count": 256
-  }
-}
+```
+artifacts/
+├── _pointers/                    # 全量解析快捷指针
+│   ├── full_parsed.pointer       # 指向当前全量解析产物
+│   └── full_chunks.pointer       # 指向当前全量分块产物
+└── {data_id[:16]}/               # 数据指纹前16字符
+    ├── manifest.json             # 缓存元数据（含 pdf_inventory、config_hashes）
+    ├── parsed_{parser_hash}/     # 解析产物（Markdown / pages.json）
+    └── chunks_{chunker_hash}/    # 分块产物（JSONL）
 ```
 
-重新生成：
+- `data_id`：所有 PDF 文件 SHA-256 哈希的组合哈希，前 16 字符作为目录名
+- `parser_hash`：解析器配置哈希，前 8 字符，区分不同解析器配置
+- `chunker_hash`：分块器配置哈希，前 8 字符，区分不同分块配置
 
+重新生成：
 ```bash
-pixi run python src/chunker.py
+pixi run python src/parser.py    # 解析 → artifacts/{data_id}/parsed_{hash}/
+pixi run python src/chunker.py   # 分块 → artifacts/{data_id}/chunks_{hash}/
 ```
 
 ------
@@ -73,6 +60,19 @@ Qdrant 本地持久化目录，由 `src/indexer.py` 在首次运行时自动创�
 
 ```bash
 pixi run python src/indexer.py --rebuild
+```
+
+------
+
+### `meals/`
+
+Meal（数据套餐）管理目录，每个 Meal 对应一个子目录。
+
+```
+meals/
+└── {meal_name}/
+    ├── manifest.json         # Meal 元数据（data_id、config_hashes、collection_name）
+    └── test_sets/            # 该 Meal 的测试集
 ```
 
 ------

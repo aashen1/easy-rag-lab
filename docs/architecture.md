@@ -75,16 +75,21 @@ PDF 解析 → 分块 → Embedding → 向量索引 → 检索 → [重排序] 
 ## 数据流
 
 ```
-data/raw/           # 原始 PDF
+data/raw/                          # 原始 PDF
     ↓ parser (page_chunks=True)
-data/parsed/        # 解析后的页级 JSON (.pages.json) 或 Markdown (.md)
+data/artifacts/{data_id}/parsed_{hash}/   # 解析后的页级 JSON (.pages.json) 或 Markdown (.md)
     ↓ chunker (page_aware_fixed)
-data/chunks/        # 分块后的 JSONL（含页码元数据）
+data/artifacts/{data_id}/chunks_{hash}/   # 分块后的 JSONL（含页码元数据）
     ↓ embedder + indexer
-data/vector_store/  # Qdrant 向量索引
+data/vector_store/                 # Qdrant 向量索引
     ↓ retriever + generator
 回答
 ```
+
+> 全量解析/分块的产物路径由 Artifact 系统自动管理（基于 data_id 和配置哈希）。
+> 可通过 Pointer 文件快速定位：`data/artifacts/_pointers/full_parsed.pointer`、
+> `data/artifacts/_pointers/full_chunks.pointer`。
+> 也可使用 CLI 工具：`pixi run python -m src.artifact_cli list`
 
 ---
 
@@ -117,8 +122,7 @@ Meal 是数据集版本管理系统，核心概念：
 
 ```
 ash-easy-rag/
-├── main.py              # 主入口（CLI）
-├── interactive.py       # 交互式问答
+├── main.py              # 主入口（CLI + 交互式问答）
 ├── config.yaml          # 配置文件
 ├── src/                 # 核心模块
 │   ├── parser.py

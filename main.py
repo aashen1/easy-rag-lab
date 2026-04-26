@@ -38,6 +38,11 @@ def main():
         "--config", type=str, default="config.yaml", help="Config file path"
     )
     parser.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Start interactive Q&A mode (use with or without --meal)",
+    )
+    parser.add_argument(
         "--llm-preset", type=str, help="LLM preset name (default, opus, sonnet, haiku)"
     )
 
@@ -147,6 +152,7 @@ def main():
         or args.merge_test_sets
         or args.meal
         or args.llm_report_only
+        or args.interactive
     )
 
     if not has_action:
@@ -249,6 +255,9 @@ def main():
             _print_query_result(result)
         else:
             _interactive_qa(pipeline, args.meal)
+    elif args.interactive:
+        pipeline = RAGPipeline(config_path=args.config, llm_preset=args.llm_preset)
+        _interactive_qa(pipeline)
     elif args.query:
         pipeline = RAGPipeline(config_path=args.config, llm_preset=args.llm_preset)
         result = pipeline.query(args.query)
@@ -617,15 +626,26 @@ def _print_query_result(result: dict[str, Any]) -> None:
             print(f"    Query:         {tu['query_tokens']:,}")
 
 
-def _interactive_qa(pipeline: RAGPipeline, meal_name: str) -> None:
-    print(f"\nInteractive Q&A mode (meal: {meal_name})")
-    print("Type your question, or 'quit'/'exit'/'q' to exit.\n")
+def _interactive_qa(pipeline: RAGPipeline, meal_name: str | None = None) -> None:
+    collection_info = pipeline.indexer.get_collection_info()
+    if meal_name:
+        print(f"\n🤖 RAG 问答系统已启动（meal: {meal_name}）")
+    else:
+        print("\n🤖 RAG 问答系统已启动")
+
+    if collection_info:
+        chunks_count = collection_info.get("points_count", 0)
+        print(f"📝 数据库中已有 {chunks_count} 个文档片段")
+    else:
+        print("⚠️  数据库为空，请先构建索引：pixi run python main.py --build-index")
+
+    print("输入 'quit' 或 'exit' 退出\n")
 
     while True:
         try:
-            question = input("Q> ").strip()
+            question = input("💬 You: ").strip()
         except (EOFError, KeyboardInterrupt):
-            print("\nExiting.")
+            print("\n\n👋 再见！\n")
             break
 
         if not question:
@@ -635,28 +655,34 @@ def _interactive_qa(pipeline: RAGPipeline, meal_name: str) -> None:
             if tracker and tracker.record_count > 0:
                 total = tracker.get_total()
                 print(
-                    f"\nSession Token Usage: in={total.input_tokens:,} out={total.output_tokens:,} total={total.total_tokens:,}"
+                    f"\n📊 Session Token Usage: in={total.input_tokens:,} "
+                    f"out={total.output_tokens:,} total={total.total_tokens:,}"
                 )
-            print("Exiting.")
+            print("👋 再见！\n")
             break
 
         try:
             result = pipeline.query(question)
-            print(f"\nA: {result['answer']}")
+            print(f"\n🤖 Assistant: {result['answer']}\n")
+
             if "token_usage" in result and result["token_usage"]:
                 tu = result["token_usage"]
                 print(
-                    f"  Tokens: in={tu['input_tokens']:,} out={tu['output_tokens']:,} total={tu['total_tokens']:,}"
+                    f"📊 Tokens: in={tu['input_tokens']:,} out={tu['output_tokens']:,} "
+                    f"total={tu['total_tokens']:,}\n"
                 )
-            if "sources" in result:
-                sources = result["sources"]
-                scores = result["scores"]
-                print("\n  Sources:")
-                for i, (src, sc) in enumerate(zip(sources, scores, strict=False), 1):
-                    print(f"    {i}. {src} ({sc:.4f})")
-            print()
+
+            if "sources" in result and result["sources"]:
+                print("📚 参考来源：")
+                for i, (source, score) in enumerate(
+                    zip(result["sources"][:3], result["scores"][:3], strict=False), 1
+                ):
+                    source_name = source.split("\\")[-1] if "\\" in source else source
+                    print(f"   {i}. {source_name} (相关度: {score:.4f})")
+                print()
         except Exception as e:
-            logger.error(f"Query failed: {str(e)}")
+            logger.error(f"Error processing query: {str(e)}")
+            print(f"\n❌ 处理问题时出错: {str(e)}\n")
 
 
 def _handle_merge_meals(

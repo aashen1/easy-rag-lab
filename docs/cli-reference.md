@@ -125,13 +125,23 @@ pixi run python main.py --generate-test-set <meal_name> --strategy factual --num
 
 ---
 
-## 交互式问答 (`interactive.py`)
+## 交互式问答
 
 ```bash
-pixi run python interactive.py
+pixi run interactive
+# 或
+pixi run python main.py --interactive
+
+# 指定 Meal 进入交互模式
+pixi run python main.py --meal <meal_name>
 ```
 
 启动交互式命令行，连续提问。输入 `quit`、`exit` 或 `q` 退出。
+
+| 参数 | 说明 |
+|------|------|
+| `--interactive` | 启动交互式问答模式 |
+| `--meal` | 指定 Meal 进入交互模式（无 `--query` 时自动进入） |
 
 ---
 

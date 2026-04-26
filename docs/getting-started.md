@@ -45,7 +45,9 @@ pixi run python main.py --build-index --sample-ratio 0.1
 启动交互式命令行，连续提问：
 
 ```bash
-pixi run python interactive.py
+pixi run interactive
+# 或
+pixi run python main.py --interactive
 ```
 
 ---

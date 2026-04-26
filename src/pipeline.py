@@ -323,6 +323,10 @@ class RAGPipeline:
                     )
             logger.info(f"Source filter for indexer: {len(source_filter_jsonl)} files")
 
+        if sampling_config is None:
+            relative_chunks = f"{data_id[:16]}/chunks_{chunker_hash}"
+            cache.save_pointer("full_chunks", relative_chunks)
+
         if self.profiler:
             self.profiler.begin_stage("S3")
 
@@ -346,13 +350,19 @@ class RAGPipeline:
                 self.profiler.begin_stage("S4")
             logger.info("Step 4: Building BM25 index...")
             self.bm25_retriever.build_index_from_chunks(
-                chunks_dir=chunker_config["output_dir"],
+                chunks_dir=str(chunks_dir),
                 source_filter=source_filter_jsonl,
             )
             if self.profiler:
                 self.profiler.end_stage()
 
         logger.success("Index built successfully")
+        if sampling_config is None:
+            logger.info(
+                f"Artifacts: parsed={parsed_dir}, chunks={chunks_dir} "
+                f"| Pointers: data/artifacts/_pointers/full_parsed.pointer, "
+                f"data/artifacts/_pointers/full_chunks.pointer"
+            )
 
     def close(self) -> None:
         """Close the pipeline and release resources.
@@ -655,11 +665,11 @@ if __name__ == "__main__":
 
     if args.query:
         result = pipeline.query(args.query)
-        print(f"\nQuestion: {result['question']}")
-        print(f"\nAnswer: {result['answer']}")
+        logger.info(f"Question: {result['question']}")
+        logger.info(f"Answer: {result['answer']}")
         if "contexts" in result:
-            print("\nSources:")
+            logger.info("Sources:")
             for i, (source, score) in enumerate(
                 zip(result["sources"], result["scores"], strict=False), 1
             ):
-                print(f"{i}. {source} (score: {score:.4f})")
+                logger.info(f"{i}. {source} (score: {score:.4f})")

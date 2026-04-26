@@ -9,112 +9,154 @@
 | 旧路径 | `data/parsed`, `data/chunks`, `data/vector_store` | config.yaml 配置 + 硬编码默认值 |
 | Artifact | `data/artifacts/{data_id[:16]}/parsed_{hash}/`, `data/artifacts/{data_id[:16]}/chunks_{hash}/` | ArtifactCache 类管理 |
 
-**核心矛盾**：Pipeline 的 Step 1 (parse) 已经走 ArtifactCache，但 Step 2 (chunk) 和 Step 3 (index) 仍然使用 `chunker_config["input_dir"]` / `chunker_config["output_dir"]`（即 `data/parsed` / `data/chunks`），导致全量解析后分块步骤找不到输入文件。
+---
+
+## 重新审视：各问题点当前状态
+
+### ✅ 已修复的问题
+
+#### 1.1 `pipeline.py` 的 `build_index()` — **大部分已修复**
+
+之前的问题（source_filter 使用旧路径、chunker/indexer 使用旧路径）现在状态：
+
+- ✅ L233: `parsed_dir = cache.get_parsed_dir(data_id, parser_hash)` — 已通过 ArtifactCache 获取
+- ✅ L249: `output_path.relative_to(parsed_dir)` — source_filter 已基于 artifact parsed_dir
+- ✅ L255-262: `chunker_hash` 计算和 `chunks_dir = cache.get_chunks_dir(data_id, chunker_hash)` — 已通过 ArtifactCache 获取
+- ✅ L282-284: `input_dir=str(parsed_dir), output_dir=str(chunks_dir)` — page_aware 分块已用 artifact 路径
+- ✅ L294-296: `input_dir=str(parsed_dir), output_dir=str(chunks_dir)` — semantic 分块已用 artifact 路径
+- ✅ L305-307: `input_dir=str(parsed_dir), output_dir=str(chunks_dir)` — fixed 分块已用 artifact 路径
+- ✅ L321-322: `output_path.relative_to(chunks_dir)` — source_filter 已基于 artifact chunks_dir
+- ✅ L331: `chunks_dir=str(chunks_dir)` — indexer 已用 artifact 路径
+
+**但仍有 1 处遗漏**：
+- ❌ L349: `chunks_dir=chunker_config["output_dir"]` — BM25 索引构建仍使用旧路径 `data/chunks`
+
+#### 1.1b `pipeline.py` 的 `use_meal()` — **已修复**
+
+- ✅ L412-419: BM25 切换 meal 时已通过 ArtifactCache 获取 chunks_dir
+
+### ❌ 仍未修复的问题
+
+#### 1.2 `chunker.py` 的独立运行模式 — **未修复**
+
+- ❌ L687-689: `input_dir=chunker_config["input_dir"]`, `output_dir=chunker_config["output_dir"]` — 仍使用 config 中的 `data/parsed` / `data/chunks`
+
+#### 1.3 `test_generator.py` 的旧路径回退逻辑 — **未修复**
+
+- ❌ L1089: `_resolve_parsed_dir()` 回退到 `self.config.get("parser", {}).get("output_dir", "data/parsed")`
+- ❌ L1123: `_resolve_chunks_dir()` 回退到 `self.config.get("chunker", {}).get("output_dir", "data/chunks")`
+- ❌ L3044-3046: `find_adjacent_chunks()` 回退到 `self.config.get("chunker", {}).get("output_dir", "data/chunks")`
+
+#### 1.4 `recommend_testset.py` 的硬编码路径 — **未修复**
+
+- ❌ L340: `Path("data/meals")` 硬编码
+- ❌ L353: `Path("data/parsed")` 硬编码
+- ❌ L373: `Path("data/exp_reports")` 硬编码
+
+#### 1.5 `meal.py` 中的旧路径引用 — **未修复**
+
+- ❌ L746-748: `self.chunks_dir = Path(config.get("chunker", {}).get("output_dir", "data/chunks"))` — 属性仍存在
+- 经 grep 确认 `self.chunks_dir` 仅在 L746 定义，未被其他地方引用（可安全删除）
+
+#### 1.6 `config.yaml` 中的旧路径配置 — **未修复**
+
+- ❌ L69: `parser.output_dir: "data/parsed"`
+- ❌ L104: `chunker.input_dir: "data/parsed"`
+- ❌ L105: `chunker.output_dir: "data/chunks"`
+
+#### 1.7 `indexer.py` 默认值 — **未修复**
+
+- ❌ L18: `persist_dir: str = "data/vector_store"` 硬编码默认值
+
+#### 1.8 脚本文件 — **未修复**
+
+- ❌ `scripts/generate_golden_testset.py` L1216/L1220: 默认参数 `data/parsed` / `data/chunks`
+- ❌ `scripts/analyze_tokenizer_diff.py` L8: 硬编码 `data/chunks`
+
+#### 1.9 测试文件 — **未修复**
+
+- ❌ `tests/test_test_generator.py`: 11 处 `"output_dir": "data/parsed"` / `"data/chunks"`
+
+#### 1.10 `data/README.md` — **未修复**
+
+- ❌ 仍描述 `data/parsed/`、`data/chunks/`、`data/vector_store/` 目录结构
 
 ---
 
-## 第一部分（必做）：清除旧路径，全面适配 Artifact
+## 修订后的实施计划
 
-### 1.1 重构 `pipeline.py` 的 `build_index()` 方法
+### Phase 1 - 核心路径迁移（必做）
 
-**当前问题**：
-- L238/L266: source_filter 计算使用 `parser_config["output_dir"]`（`data/parsed`）
-- L271-274: chunker 调用使用 `chunker_config["input_dir"]` / `chunker_config["output_dir"]`
-- L293: indexer 调用使用 `chunker_config["output_dir"]`
-- L311: BM25 调用使用 `chunker_config["output_dir"]`
+#### 1.1 修复 `pipeline.py` BM25 遗漏（1 处）
 
-**改造方案**：
-- parse 完成后，从 `parse_results` 或 `ArtifactCache` 获取实际的 `parsed_dir`
-- 计算 `chunker_hash`，通过 `ArtifactCache.get_chunks_dir(data_id, chunker_hash)` 获取 `chunks_dir`
-- 将 `parsed_dir` 和 `chunks_dir` 传入 chunker 和 indexer，替代从 config 读取的旧路径
-- source_filter 的相对路径计算也基于实际的 `parsed_dir` / `chunks_dir`
+**文件**: [pipeline.py:349](file:///b:/project/w1-easy-rag/src/pipeline.py#L349)
 
-### 1.2 重构 `chunker.py` 的独立运行模式
+将 `chunks_dir=chunker_config["output_dir"]` 改为 `chunks_dir=str(chunks_dir)`
 
-**当前问题**：`__main__` 块（L680-697）直接使用 `chunker_config["input_dir"]` / `chunker_config["output_dir"]`
+#### 1.2 重构 `chunker.py` 独立运行模式
 
-**改造方案**：
-- 引入 ArtifactCache，计算 data_id 和 parser_hash / chunker_hash
+**文件**: [chunker.py:679-697](file:///b:/project/w1-easy-rag/src/chunker.py#L679-L697)
+
+- 引入 ArtifactCache，计算 data_id、parser_hash、chunker_hash
 - 从 ArtifactCache 获取 `parsed_dir` 和 `chunks_dir`
-- 传递给 `process_parsed_files()` 等函数
+- 替代 `chunker_config["input_dir"]` / `chunker_config["output_dir"]`
 
-### 1.3 移除 `test_generator.py` 的旧路径回退逻辑
+#### 1.3 移除 `test_generator.py` 的旧路径回退逻辑（3 处）
 
-**当前问题**：
-- `_resolve_parsed_dir()` L407: 回退到 `data/parsed`
-- `_resolve_chunks_dir()` L441: 回退到 `data/chunks`
-- `find_adjacent_chunks()` L1609: 回退到 `data/chunks`
+**文件**: [test_generator.py](file:///b:/project/w1-easy-rag/src/test_generator.py)
 
-**改造方案**：
-- 删除回退分支，只保留 ArtifactCache 路径解析
-- 如果 ArtifactCache 解析失败，返回 None 并记录 warning（而非静默回退到旧路径）
+- L1089: `_resolve_parsed_dir()` — 删除 `data/parsed` 回退
+- L1123: `_resolve_chunks_dir()` — 删除 `data/chunks` 回退
+- L3044-3046: `find_adjacent_chunks()` — 删除 `data/chunks` 回退
 
-### 1.4 修复 `recommend_testset.py` 的硬编码路径
+#### 1.4 修复 `recommend_testset.py` 硬编码路径（3 处）
 
-**当前问题**：
-- L340: `Path("data/meals")` 硬编码
-- L353: `Path("data/parsed")` 硬编码
-- L373: `Path("data/exp_reports")` 硬编码
+**文件**: [recommend_testset.py](file:///b:/project/w1-easy-rag/eval/recommend_testset.py)
 
-**改造方案**：
-- 引入 `load_config()` 读取配置
-- `data/meals` → 从 config 读取 `meals.dir`
-- `data/parsed` → 通过 ArtifactCache 解析
-- `data/exp_reports` → 从 config 读取 `experiments.dir`
+- L340: `Path("data/meals")` → 从 config 读取
+- L353: `Path("data/parsed")` → 通过 ArtifactCache 解析
+- L373: `Path("data/exp_reports")` → 从 config 读取
 
-### 1.5 清理 `meal.py` 中的旧路径引用
+#### 1.5 清理 `meal.py` 中的 `self.chunks_dir`（1 处）
 
-**当前问题**：
-- L747: `self.chunks_dir = Path(config.get("chunker", {}).get("output_dir", "data/chunks"))` — 这个属性在 MealManager 中可能仍被使用
+**文件**: [meal.py:746-748](file:///b:/project/w1-easy-rag/src/meal.py#L746-L748)
 
-**改造方案**：
-- 检查 `self.chunks_dir` 的所有使用点，替换为通过 `self.cache.get_chunks_dir()` 获取
-- 删除 `self.chunks_dir` 属性
+- 删除 `self.chunks_dir` 属性（经确认无其他引用）
 
-### 1.6 更新 `config.yaml`
+#### 1.6 更新 `config.yaml`
 
-**改造方案**：
-- 将 `parser.output_dir`、`chunker.input_dir`、`chunker.output_dir` 标记为 deprecated
-- 这些路径不再作为实际 I/O 路径使用，仅保留为向后兼容的注释说明
-- 或者直接删除这些配置项（更彻底，但需要确认无其他依赖）
+**文件**: [config.yaml](file:///b:/project/w1-easy-rag/config.yaml)
 
-**倾向**：直接删除，因为这些路径在 artifact 体系下完全由 hash 决定，用户不应手动指定。
+- 删除 `parser.output_dir`（L69）
+- 删除 `chunker.input_dir`（L104）
+- 删除 `chunker.output_dir`（L105）
+- 添加注释说明 parsed/chunks 路径现在由 artifact 体系自动管理
 
-### 1.7 更新 `indexer.py` 默认值
+#### 1.7 更新 `indexer.py` 默认值
 
-**当前问题**：L18 `persist_dir: str = "data/vector_store"` 硬编码默认值
+**文件**: [indexer.py:18](file:///b:/project/w1-easy-rag/src/indexer.py#L18)
 
-**改造方案**：
-- 改为从 config 读取，或使用 `None` 作为默认值并在初始化时从 config 注入
-- 在 Meal 模式下，Qdrant collection 名已经包含 hash 信息，persist_dir 可以保持不变（Qdrant 本地存储路径与 artifact 路径是不同概念）
+- 将 `persist_dir: str = "data/vector_store"` 改为 `persist_dir: str | None = None`
+- 在 `__init__` 中当 `persist_dir is None` 时从 config 读取
 
-**注意**：`data/vector_store` 是 Qdrant 的本地持久化目录，与 parsed/chunks 的 artifact 路径性质不同。Qdrant 通过 collection_name 区分不同 meal 的数据，persist_dir 只是 Qdrant 的数据根目录。这个路径可以保留，但应从 config 统一读取而非硬编码默认值。
+**注意**：`data/vector_store` 与 artifact 体系性质不同（Qdrant 通过 collection_name 区分数据），保留 config 中的配置项是合理的，只需消除硬编码默认值。
 
-### 1.8 更新脚本文件
+#### 1.8 更新脚本文件
 
-- `scripts/generate_golden_testset.py`：默认参数从 `data/parsed` / `data/chunks` 改为通过 ArtifactCache 解析
-- `scripts/analyze_tokenizer_diff.py`：硬编码 `data/chunks` 改为通过 ArtifactCache 解析
+- `scripts/generate_golden_testset.py` L1216/L1220: 默认参数改为通过 ArtifactCache 解析
+- `scripts/analyze_tokenizer_diff.py` L8: 更新使用说明中的路径
 
-### 1.9 更新测试文件
+#### 1.9 更新测试文件
 
-- `tests/test_test_generator.py`：mock 配置中的 `"output_dir": "data/parsed"` / `"data/chunks"` 需要更新为 artifact 路径或移除
-- `tests/test_run_experiment.py`：`"input_dir": "data/raw"` 可保留（raw 是源文件目录，不属于 artifact 体系）
+- `tests/test_test_generator.py`: 11 处 `"output_dir": "data/parsed"` / `"data/chunks"` 需要更新
 
-### 1.10 更新 `data/README.md`
+#### 1.10 更新 `data/README.md`
 
-- 移除 `data/parsed/`、`data/chunks/`、`data/vector_store/` 的描述
+- 移除 `data/parsed/`、`data/chunks/` 的描述
 - 添加 `data/artifacts/` 的目录结构说明
 - 更新重建流程说明
 
----
-
-## 第二部分（优化）：全量解析 UX 优化
-
-### 问题
-
-全量解析后，产物落在 `data/artifacts/d3a711e69a4e.../parsed_a1b2c3d4/`，用户很难直观找到。
-
-### 方案：Pointer 文件 + CLI 查询
+### Phase 2 - UX 优化（在 Phase 1 基础上）
 
 #### 2.1 Pointer 文件机制
 
@@ -123,8 +165,8 @@
 ```
 data/artifacts/
 ├── _pointers/
-│   ├── full_parsed.pointer    # 内容: d3a711e69a4e.../parsed_a1b2c3d4
-│   └── full_chunks.pointer    # 内容: d3a711e69a4e.../chunks_e5f6g7h8
+│   ├── full_parsed.pointer    # 内容: d3a711e69a4e/parsed_a1b2c3d4
+│   └── full_chunks.pointer    # 内容: d3a711e69a4e/chunks_e5f6g7h8
 ├── d3a711e69a4e.../
 │   ├── manifest.json
 │   ├── parsed_a1b2c3d4/
@@ -132,77 +174,44 @@ data/artifacts/
 ```
 
 **设计要点**：
-- `_pointers/` 目录存放纯文本 `.pointer` 文件，每行记录一个 artifact 相对路径
+- `_pointers/` 目录存放纯文本 `.pointer` 文件
 - 全量解析完成后，`ArtifactCache` 自动更新对应的 pointer 文件
-- pointer 文件内容为相对于 `data/artifacts/` 的路径，如 `d3a711e69a4e/parsed_a1b2c3d4`
-- 提供 `ArtifactCache.resolve_pointer(name)` 方法，读取 pointer 并返回完整 Path
-- Windows 兼容：使用文本文件而非 symlink（symlink 需要管理员权限）
+- pointer 文件内容为相对于 `data/artifacts/` 的路径
+- Windows 兼容：使用文本文件而非 symlink
 
 **新增方法**：
 ```python
 class ArtifactCache:
     def save_pointer(self, name: str, target: str) -> None:
-        """Save a pointer file pointing to an artifact path.
-
-        Args:
-            name: Pointer name (e.g., 'full_parsed', 'full_chunks').
-            target: Relative path under artifacts_dir (e.g., 'd3a7.../parsed_a1b2').
-        """
+        """Save a pointer file pointing to an artifact path."""
 
     def resolve_pointer(self, name: str) -> Path | None:
-        """Resolve a pointer to an actual artifact directory.
-
-        Args:
-            name: Pointer name to resolve.
-
-        Returns:
-            Full Path to the artifact directory, or None if pointer/target doesn't exist.
-        """
+        """Resolve a pointer to an actual artifact directory."""
 ```
 
 #### 2.2 CLI 查询命令
 
-新增一个简单的 CLI 入口，让用户可以查询当前 artifact 状态：
+新增 CLI 入口，让用户查询 artifact 状态：
 
 ```bash
-# 列出所有 artifact 组
-pixi run python -m src.artifact list
-
-# 查看全量解析指向
-pixi run python -m src.artifact pointer full_parsed
-
-# 显示某个 artifact 组的详细信息
-pixi run python -m src.artifact info d3a711e69a4e
+pixi run python -m src.artifact list          # 列出所有 artifact 组
+pixi run python -m src.artifact pointer full_parsed  # 查看全量解析指向
+pixi run python -m src.artifact info d3a711e69a4e    # 显示详细信息
 ```
-
-**实现方式**：在 `src/` 下新增 `artifact_cli.py`（或作为 `meal.py` 的 `__main__` 扩展），提供上述命令。
 
 #### 2.3 在 pipeline 日志中输出友好路径
 
-全量解析完成后，在日志中输出：
+全量解析完成后输出：
 ```
 ✓ Full parse complete. Artifacts at: data/artifacts/d3a711e69a4e/parsed_a1b2c3d4/
   Quick access: data/artifacts/_pointers/full_parsed.pointer
 ```
 
----
+### Phase 3 - 验证
 
-## 实施顺序
-
-1. **Phase 1 - 核心路径迁移**（必做）
-   1.1 → 1.5：源代码中的旧路径清除
-   1.6 → 1.7：配置和默认值清理
-   1.8 → 1.10：脚本、测试、文档更新
-
-2. **Phase 2 - UX 优化**（在 Phase 1 基础上）
-   2.1：Pointer 文件机制
-   2.2：CLI 查询命令
-   2.3：日志友好输出
-
-3. **Phase 3 - 验证**
-   - 运行 `pixi run lint` 确保代码质量
-   - 运行 `pixi run pytest` 确保测试通过
-   - 手动验证全量解析流程：parse → chunk → index 全链路走 artifact 路径
+- 运行 `pixi run lint` 确保代码质量
+- 运行 `pixi run pytest` 确保测试通过
+- 手动验证全量解析流程：parse → chunk → index 全链路走 artifact 路径
 
 ---
 

@@ -8,13 +8,13 @@ version = "0.1.0"
 [tasks]
 
 [tasks.ruff-check]
-cmd = "ruff check src/ eval/ tests/ main.py interactive.py"
+cmd = "ruff check src/ eval/ tests/ main.py"
 
 [tasks.ruff-format]
-cmd = "ruff format src/ eval/ tests/ main.py interactive.py"
+cmd = "ruff format src/ eval/ tests/ main.py"
 
 [tasks.lint]
-cmd = "ruff check --fix src/ eval/ tests/ main.py interactive.py && ruff format src/ eval/ tests/ main.py interactive.py"
+cmd = "ruff check --fix src/ eval/ tests/ main.py && ruff format src/ eval/ tests/ main.py"
 
 [tasks.pre-commit-install]
 cmd = "pre-commit install && pre-commit install --hook-type post-merge"
@@ -27,6 +27,9 @@ cmd = "pytest tests/ -m \"not integration\" --tb=short -q --durations=10"
 
 [tasks.test-all]
 cmd = "pytest tests/ --tb=short -q --durations=10"
+
+[tasks.interactive]
+cmd = "python main.py --interactive"
 
 
 

@@ -5,7 +5,7 @@ and outputs a statistical report to help decide whether chunk_size needs
 adjustment for the BGE embedding model.
 
 Usage:
-    pixi run python scripts/analyze_tokenizer_diff.py --input_dir data/chunks
+    pixi run python scripts/analyze_tokenizer_diff.py --input_dir data/artifacts/{data_id}/chunks_{hash}
 """
 
 import argparse

@@ -74,6 +74,12 @@
 
 **版本**：v0.1.9（统一测试集生成链路）
 
+**近期变更**：
+- 旧路径体系（data/parsed、data/chunks）已全面迁移至 Artifact 体系
+- ArtifactCache 新增 Pointer 文件机制（_pointers/full_parsed.pointer 等）
+- 新增 artifact_cli.py 命令行工具，支持 list/pointer/info 子命令
+- config.yaml 中 parser.output_dir / chunker.input_dir / chunker.output_dir 已删除
+
 **新功能**：
 - 统一测试集生成链路：Golden 生成逻辑收编入 TestSetGenerator
 - adversarial 问题类型：对抗性问题支持，默认分布 0%

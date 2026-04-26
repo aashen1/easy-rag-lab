@@ -2,7 +2,7 @@
 
 一个简单易学的 RAG（检索增强生成）系统，用于金融研报的智能问答。
 
-![Version](https://img.shields.io/badge/version-v0.1.5-blue)![Status](https://img.shields.io/badge/status-MVP-orange)![License](https://img.shields.io/badge/license-MIT-green)
+![Version](https://img.shields.io/badge/version-v0.1.8-blue)![Status](https://img.shields.io/badge/status-active-green)![License](https://img.shields.io/badge/license-MIT-green)
 
 ## 项目简介
 
@@ -10,17 +10,23 @@
 
 ### 核心功能
 
-- **PDF 解析**：使用 pymupdf4llm 将 PDF 转换为 Markdown
-- **文本分块**：固定长度分块（512 tokens, overlap=0）
-- **向量检索**：使用 BAAI/bge-large-zh-v1.5 进行 Embedding，Qdrant 进行向量存储
+- **PDF 解析**：支持 pymupdf4llm 和 fitz_pdfplumber 两种解析器
+- **文本分块**：固定长度 / 语义分块，可配置 chunk_size 和 overlap
+- **向量检索**：BAAI/bge-large-zh-v1.5 Embedding + Qdrant 向量存储
+- **混合检索**：BM25 + 向量检索 + Reranker 重排 + 查询改写
 - **智能问答**：基于检索结果生成准确回答
+- **评测系统**：RAGAS + Builtin 双线评测，五大核心指标
+- **实验管理**：多变体对比实验，自动生成 LLM 分析报告
+- **Meal 体系**：数据集快照管理，Artifact 缓存与指针机制
 
 ### 技术栈
 
-- **PDF 解析**：pymupdf4llm
+- **PDF 解析**：pymupdf4llm / fitz_pdfplumber
 - **Embedding**：BAAI/bge-large-zh-v1.5（本地）
 - **向量存储**：Qdrant（本地持久化）
-- **LLM**：LongCat API（Anthropic SDK）
+- **LLM**：Anthropic Claude API（兼容第三方中转）
+- **评测**：RAGAS + 自研 Builtin 指标
+- **环境管理**：pixi
 
 ---
 
@@ -50,7 +56,7 @@ pixi install
 pixi run python main.py --query "中芯国际2024年的营业收入是多少？"
 
 # 交互式问答
-pixi run python interactive.py
+pixi run interactive
 
 # 构建向量索引
 pixi run python main.py --build-index --sample-count 5
@@ -74,8 +80,7 @@ pixi run python main.py --build-index --sample-count 5
 
 ```
 ash-easy-rag/
-├── main.py              # 主入口（CLI）
-├── interactive.py       # 交互式问答
+├── main.py              # 主入口（CLI + 交互式问答）
 ├── config.yaml          # 配置文件
 ├── src/                 # 核心模块
 ├── eval/                # 评测模块
@@ -103,7 +108,9 @@ MIT License
 
 ## 致谢
 
-- [pymupdf4llm](https://github.com/pymupdf/PyMuPDF4LLM) - PDF 解析
+- [PyMuPDF4LLM](https://github.com/pymupdf/PyMuPDF4LLM) - PDF 解析
+- [pdfplumber](https://github.com/jsvine/pdfplumber) - PDF 表格提取
 - [transformers](https://huggingface.co/docs/transformers/) - Embedding 模型
 - [Qdrant](https://qdrant.tech/) - 向量数据库
-- [LongCat](https://longcat.chat/) - LLM API
+- [RAGAS](https://docs.ragas.io/) - RAG 评测框架
+- [Anthropic](https://www.anthropic.com/) - Claude API
