@@ -22,6 +22,7 @@ from eval.evaluators.base import BaseEvaluator  # noqa: E402
 from eval.evaluators.builtin_evaluator import BuiltinEvaluator  # noqa: E402
 from eval.evaluators.ragas_evaluator import RagasEvaluator  # noqa: E402
 from eval.experiment_reporter import ExperimentReporter  # noqa: E402
+from eval.metrics.metric_resolver import MetricResolver  # noqa: E402
 from eval.pipeline_profiler import PipelineProfiler  # noqa: E402
 from eval.visualize_profiler import generate_profiler_charts  # noqa: E402
 from src.exceptions import (  # noqa: E402
@@ -1177,8 +1178,8 @@ def evaluate_test_set(
     """
     Evaluate a single test set against the pipeline.
 
-    Requires exp_config and system_config to use the evaluator
-    abstraction layer with backend selection.
+    Uses MetricResolver to determine which metrics each backend should
+    compute, based on the configured resolution strategy and metrics preset.
 
     Args:
         pipeline: Configured RAG pipeline.
@@ -1200,13 +1201,39 @@ def evaluate_test_set(
         )
 
     evaluators = _create_evaluators(exp_config, system_config)
-    backends = exp_config.evaluation.get("backends", ["builtin"])
+    eval_config = exp_config.evaluation
 
-    retrieval_metrics = exp_config.evaluation.get("metrics", {}).get("retrieval")
-    generation_metrics = exp_config.evaluation.get("metrics", {}).get("generation")
+    retrieval_metrics = eval_config.get("metrics", {}).get("retrieval")
+    generation_metrics = eval_config.get("metrics", {}).get("generation")
 
-    llm_preset = exp_config.evaluation.get("llm_preset", "default")
+    llm_preset = eval_config.get("llm_preset", "default")
     llm_config = get_llm_config(system_config, llm_preset)
+
+    resolution_strategy = eval_config.get("resolution_strategy", "priority_fallback")
+    backend_priority = eval_config.get("backend_priority", None)
+    metrics_preset = eval_config.get("metrics_preset", None)
+    custom_metrics = eval_config.get("custom_metrics", None)
+
+    if metrics_preset and not retrieval_metrics and not generation_metrics:
+        resolver = MetricResolver(
+            evaluators=evaluators,
+            strategy=resolution_strategy,
+            backend_priority=backend_priority,
+            metrics_preset=metrics_preset,
+            custom_metrics=custom_metrics,
+        )
+    else:
+        resolver = _build_legacy_resolver(
+            evaluators, retrieval_metrics, generation_metrics
+        )
+
+    unresolvable = resolver.validate()
+    if unresolvable:
+        logger.warning(
+            f"The following metrics cannot be computed by any backend: {unresolvable}"
+        )
+
+    allocation = resolver.resolve()
 
     equivalence_groups = meal_info.get("equivalence_groups") if meal_info else None
     samples = _collect_rag_samples(
@@ -1214,78 +1241,126 @@ def evaluate_test_set(
     )
 
     all_results: dict[str, dict[str, Any]] = {}
+    use_namespace = resolver.strategy == "comparison"
 
-    use_namespace = len(backends) > 1
+    for backend_name, metrics in allocation.items():
+        if backend_name not in evaluators:
+            logger.warning(f"Backend '{backend_name}' not available, skipping")
+            continue
 
-    if "builtin" in backends and "builtin" in evaluators:
-        builtin_generation_metrics = generation_metrics
-        if builtin_generation_metrics:
-            builtin_generation_metrics = [
-                m
-                for m in builtin_generation_metrics
-                if m in evaluators["builtin"].supported_generation_metrics
-            ]
-        builtin_results = _evaluate_with_builtin(
-            samples=samples,
-            evaluator=evaluators["builtin"],
-            llm_config=llm_config if builtin_generation_metrics else None,
-            retrieval_metrics=retrieval_metrics,
-            generation_metrics=builtin_generation_metrics,
+        evaluator = evaluators[backend_name]
+        ret_metrics = metrics.get("retrieval", [])
+        gen_metrics = metrics.get("generation", [])
+
+        if not ret_metrics and not gen_metrics:
+            continue
+
+        needs_llm = bool(
+            gen_metrics
+            or any(m in ("context_precision", "context_recall") for m in ret_metrics)
         )
-        for r in builtin_results:
-            if use_namespace and "generation" in r and r["generation"]:
-                r["generation"] = {
-                    f"builtin_{k}": v for k, v in r["generation"].items()
-                }
-            all_results[r["id"]] = r
 
-    if "ragas" in backends and "ragas" in evaluators:
-        ragas_from_generation = [
-            m
-            for m in (generation_metrics or [])
-            if m in evaluators["ragas"].supported_generation_metrics
-        ]
-        ragas_from_retrieval = [
-            m
-            for m in (retrieval_metrics or [])
-            if m in evaluators["ragas"].supported_generation_metrics
-        ]
-        ragas_only_metrics = list(
-            dict.fromkeys(ragas_from_generation + ragas_from_retrieval)
-        )
-        if ragas_only_metrics:
-            ragas_results = _evaluate_with_ragas(
+        if backend_name == "builtin":
+            results = _evaluate_with_builtin(
                 samples=samples,
-                evaluator=evaluators["ragas"],
-                llm_config=llm_config,
-                generation_metrics=ragas_from_generation or None,
-                retrieval_metrics=retrieval_metrics,
+                evaluator=evaluator,
+                llm_config=llm_config if needs_llm else None,
+                retrieval_metrics=ret_metrics or None,
+                generation_metrics=gen_metrics or None,
             )
-            for r in ragas_results:
-                if use_namespace and "generation" in r and r["generation"]:
-                    r["generation"] = {
-                        f"ragas_{k}": v for k, v in r["generation"].items()
-                    }
-                if use_namespace and "llm_retrieval" in r and r["llm_retrieval"]:
-                    r["llm_retrieval"] = {
-                        f"ragas_{k}": v for k, v in r["llm_retrieval"].items()
-                    }
-                qid = r["id"]
-                if qid in all_results:
-                    if "generation" in r:
-                        if "generation" not in all_results[qid]:
-                            all_results[qid]["generation"] = {}
-                        all_results[qid]["generation"].update(r["generation"])
-                    if "llm_retrieval" in r:
-                        if "llm_retrieval" not in all_results[qid]:
-                            all_results[qid]["llm_retrieval"] = {}
-                        all_results[qid]["llm_retrieval"].update(r["llm_retrieval"])
-                    if "ragas_error" in r:
-                        all_results[qid]["ragas_error"] = r["ragas_error"]
-                else:
-                    all_results[qid] = r
+        elif backend_name == "ragas":
+            results = _evaluate_with_ragas(
+                samples=samples,
+                evaluator=evaluator,
+                llm_config=llm_config,
+                generation_metrics=gen_metrics or None,
+                retrieval_metrics=ret_metrics or None,
+            )
+        else:
+            logger.warning(f"Unknown backend '{backend_name}', skipping")
+            continue
+
+        for r in results:
+            if use_namespace:
+                r = _namespace_result(r, backend_name)
+            qid = r["id"]
+            if qid in all_results:
+                _merge_result(all_results[qid], r)
+            else:
+                all_results[qid] = r
 
     return list(all_results.values())
+
+
+def _build_legacy_resolver(
+    evaluators: dict[str, BaseEvaluator],
+    retrieval_metrics: list[str] | None,
+    generation_metrics: list[str] | None,
+) -> MetricResolver:
+    """Build a MetricResolver from legacy per-metric config.
+
+    When the user specifies individual metrics via evaluation.metrics.retrieval
+    and evaluation.metrics.generation (old style), convert to a custom preset.
+    Uses comparison strategy for multi-backend and priority_fallback for
+    single-backend to match the original namespace behavior.
+
+    Args:
+        evaluators: Available evaluators.
+        retrieval_metrics: Legacy retrieval metric list.
+        generation_metrics: Legacy generation metric list.
+
+    Returns:
+        MetricResolver configured with a custom preset matching legacy behavior.
+    """
+    custom = {
+        "retrieval": retrieval_metrics or [],
+        "generation": generation_metrics or [],
+    }
+    strategy = "comparison" if len(evaluators) > 1 else "priority_fallback"
+    return MetricResolver(
+        evaluators=evaluators,
+        strategy=strategy,
+        backend_priority=list(evaluators.keys()),
+        metrics_preset="custom",
+        custom_metrics=custom,
+    )
+
+
+def _namespace_result(result: dict[str, Any], backend_name: str) -> dict[str, Any]:
+    """Add backend name prefix to metric keys for comparison mode.
+
+    Args:
+        result: Single evaluation result dict.
+        backend_name: Backend name to use as prefix.
+
+    Returns:
+        Result dict with prefixed metric keys.
+    """
+    if "generation" in result and result["generation"]:
+        result["generation"] = {
+            f"{backend_name}_{k}": v for k, v in result["generation"].items()
+        }
+    if "llm_retrieval" in result and result["llm_retrieval"]:
+        result["llm_retrieval"] = {
+            f"{backend_name}_{k}": v for k, v in result["llm_retrieval"].items()
+        }
+    return result
+
+
+def _merge_result(target: dict[str, Any], source: dict[str, Any]) -> None:
+    """Merge source result into target, combining metric dicts.
+
+    Args:
+        target: Target result dict to merge into (modified in place).
+        source: Source result dict to merge from.
+    """
+    for key in ("generation", "llm_retrieval"):
+        if key in source and source[key]:
+            if key not in target:
+                target[key] = {}
+            target[key].update(source[key])
+    if "ragas_error" in source:
+        target["ragas_error"] = source["ragas_error"]
 
 
 def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
