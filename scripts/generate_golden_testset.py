@@ -13,9 +13,9 @@ import argparse
 import sys
 from pathlib import Path
 
-from src.utils import load_config
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from src.utils import load_config
 
 
 def main():
