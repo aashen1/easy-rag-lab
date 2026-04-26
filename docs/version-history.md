@@ -189,6 +189,8 @@ MVP RAG 基础链路
 - 基线测试验证与精调
 - golden_test 测试集优化（50-150问）
 - 评测系统可靠性确认
+- BUG-029/030/031：irrelevant 问题指标修复（context_precision/recall 守卫、RAGAS reference fallback、expected_answer 条件回退）
+- OPT-004：Recall@3/5/10 指标验证通过
 
 ### v0.1.10（计划中）
 

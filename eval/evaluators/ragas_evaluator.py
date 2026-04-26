@@ -230,14 +230,14 @@ class RagasEvaluator(BaseEvaluator):
 
             ragas_samples = []
             for sample in samples:
-                reference = sample.get("ground_truth_excerpt") or sample.get(
-                    "expected_answer"
-                )
+                reference = sample.get("ground_truth_excerpt")
+                if not reference and sample.get("expect_retrieval", True):
+                    reference = sample.get("expected_answer")
                 ragas_sample = SingleTurnSample(
                     user_input=sample.get("question", ""),
                     response=sample.get("answer", ""),
                     retrieved_contexts=sample.get("contexts", []),
-                    reference=reference,
+                    reference=reference if reference else None,
                 )
                 ragas_samples.append(ragas_sample)
 
