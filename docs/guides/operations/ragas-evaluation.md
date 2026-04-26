@@ -1,10 +1,6 @@
 # RAGAS 评测系统使用指南
 
-<!-- status: needs-update -->
-
-> ⚠️ **文档状态**：本文档缺少 v0.1.8 新增 builtin 指标（Chunk-level、Dedup、FPR）的说明，且 "已知未修复问题" 章节中的部分问题（如 context_precision 聚合位置）可能已在后续修复中解决。建议核对并更新。
-
-> 最后更新: 2026-04-21
+> 最后更新: 2026-04-27
 
 本文档介绍如何使用 RAGAS 评测后端进行 RAG 系统评测，以及如何与自研评测系统并行使用。
 
@@ -227,14 +223,7 @@ variants:
 evaluation:
   backends: ["ragas"]
   llm_preset: "default"
-  metrics:
-    retrieval:
-      - "context_precision"    # 检索指标：精不精
-      - "context_recall"       # 检索指标：有没有漏
-    generation:
-      - "faithfulness"         # 生成指标：有没有瞎编
-      - "answer_relevancy"     # 生成指标：有没有跑题
-      - "answer_correctness"   # 端到端指标：对不对
+  metrics_preset: "full"
 
 llm:
   question_generation: "default"
@@ -242,6 +231,8 @@ llm:
 ```
 
 > 也可直接使用项目自带的模板：`exp_configs/ragas_evaluation/ragas_only.yaml`
+
+> **指标预设说明**：`metrics_preset: "full"` 包含 RAGAS 五大指标（faithfulness, answer_relevancy, context_precision, context_recall, answer_correctness）以及 semantic_similarity。如只需基础指标，可使用 `"core"` 预设。详见 [配置参考](../config-reference.md)。
 
 ### 3.5 运行实验
 
@@ -271,7 +262,9 @@ data/exp_reports/exp_YYYYMMDD_HHMMSS_ragas_only_evaluation/
 pixi run python eval/run_experiment.py --config exp_configs/ragas_evaluation/ragas_builtin.yaml
 ```
 
-此模式下，`faithfulness` 和 `answer_relevancy` 会由两个后端分别计算并添加前缀（`builtin_faithfulness` vs `ragas_faithfulness`），便于对比。
+此配置使用 `metrics_preset: "full"` + `resolution_strategy: "priority_fallback"`，重叠指标（faithfulness, answer_relevancy, context_precision, context_recall）只由 builtin 后端计算，避免 token 浪费。RAGAS 专属指标（answer_correctness, semantic_similarity）由 ragas 后端计算。
+
+如需对标验证两个后端的结果一致性，可使用 `resolution_strategy: "comparison"` 模式，此时重叠指标由两个后端分别计算并添加前缀区分。
 
 ---
 
@@ -287,13 +280,11 @@ pixi run python eval/run_experiment.py --config exp_configs/ragas_evaluation/rag
 
 **临时方案**：锁定 RAGAS 版本范围，升级前在测试环境验证。
 
-### 4.2 `context_precision`/`context_recall` 在 `generation` 下时聚合位置不一致
+### 4.2 `context_precision`/`context_recall` 的归类
 
-**问题**：如果用户将 `context_precision`/`context_recall` 放在 `generation` 配置项下（旧写法），RAGAS 后端会将它们放在结果的 `generation` 字典中，而非 `llm_retrieval` 字典。虽然 `compute_aggregate_metrics` 已做统一处理（从两个来源聚合），但在逐题结果中，这些指标的位置取决于配置方式。
+**状态**：已通过 MetricResolver 解决。
 
-**影响**：逐题结果中指标位置不一致，可能影响自定义的结果解析逻辑。
-
-**临时方案**：统一将 `context_precision`/`context_recall` 放在 `retrieval` 配置项下。
+新版本使用 `metrics_preset` 后，context_precision 和 context_recall 自动归类为检索指标，由 MetricResolver 统一分配给支持它们的后端计算，不再存在配置位置不一致的问题。
 
 ### 4.3 自动生成的 Ground Truth 质量有限
 
@@ -374,14 +365,27 @@ evaluation:
   # 评测后端列表：支持 "builtin"、"ragas" 或两者兼有
   backends: ["builtin"]
 
+  # 指标预设：core / extended / full / custom
+  metrics_preset: "core"
+
+  # 解析策略：priority_fallback / comparison
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
+
+  # 自定义指标（仅 metrics_preset: "custom" 时生效）
+  # custom_metrics:
+  #   retrieval: [hit_rate, mrr, ndcg]
+  #   generation: [faithfulness, answer_correctness]
+
   # RAGAS 专用配置
   ragas:
     enabled: false                    # 是否启用 RAGAS
     llm_backend: "anthropic"          # LLM 后端：推荐 "anthropic"（兼容 LongCat API）
     embeddings_backend: "local"       # Embeddings 后端："local"（BGE）或 "openai"
+    max_tokens: 4096                  # RAGAS LLM 调用的最大输出 token 数
     run_config:
       max_workers: 5                  # 并行评测的最大工作线程数
-      timeout: 60                     # 单次评测超时时间（秒）
+      timeout: 120                    # 单次评测超时时间（秒）
       max_retries: 3                  # 失败重试次数
     embedding:                        # Embeddings 模型配置（可选，覆盖全局 embedding 配置）
       model_name: "BAAI/bge-large-zh-v1.5"  # RAGAS 使用的 Embeddings 模型
@@ -390,11 +394,16 @@ evaluation:
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
+| `metrics_preset` | `"core"` | 指标预设。`"core"` 日常实验，`"extended"` 深度诊断，`"full"` 版本发布，`"custom"` 自定义 |
+| `resolution_strategy` | `"priority_fallback"` | 解析策略。`"priority_fallback"` 避免重复计算，`"comparison"` 对标验证 |
+| `backend_priority` | `["builtin", "ragas"]` | priority_fallback 模式的后端优先级 |
+| `custom_metrics` | — | custom 预设时的指标列表，含 `retrieval` 和 `generation` 两个子键 |
 | `ragas.enabled` | `false` | 是否启用 RAGAS 评测 |
 | `ragas.llm_backend` | `"anthropic"` | LLM 接口类型。`"anthropic"` 使用 LangChain Anthropic 接口连接 LongCat API |
 | `ragas.embeddings_backend` | `"local"` | Embeddings 接口。`"local"` 使用本地 BGE 模型，`"openai"` 使用 OpenAI 兼容接口 |
+| `ragas.max_tokens` | `4096` | RAGAS LLM 调用的最大输出 token 数 |
 | `ragas.run_config.max_workers` | `5` | RAGAS 批量评测的并行度 |
-| `ragas.run_config.timeout` | `60` | 单次评测超时时间（秒） |
+| `ragas.run_config.timeout` | `120` | 单次评测超时时间（秒） |
 | `ragas.run_config.max_retries` | `3` | 评测失败时的重试次数 |
 | `ragas.embedding.model_name` | `"BAAI/bge-large-zh-v1.5"` | RAGAS 使用的 Embeddings 模型名称 |
 | `ragas.embedding.device` | `"cuda"` | Embeddings 模型运行设备 |
@@ -403,21 +412,37 @@ evaluation:
 
 ### 实验配置中的评测后端
 
-实验配置 YAML 中的 `evaluation.backends` 字段控制使用哪些评测后端：
+实验配置 YAML 中的 `evaluation` 字段控制评测行为：
 
 ```yaml
+# 仅自研评测 + core 预设
 evaluation:
-  backends: ["builtin"]    # 仅自研评测
+  backends: ["builtin"]
+  metrics_preset: "core"
 ```
 
 ```yaml
+# 仅 RAGAS 评测 + full 预设
 evaluation:
-  backends: ["ragas"]      # 仅 RAGAS 评测
+  backends: ["ragas"]
+  metrics_preset: "full"
 ```
 
 ```yaml
+# 双后端 + priority_fallback（推荐日常使用）
 evaluation:
-  backends: ["builtin", "ragas"]  # 同时使用两个评测系统
+  backends: ["builtin", "ragas"]
+  metrics_preset: "full"
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
+```
+
+```yaml
+# 双后端 + comparison（版本发布对标）
+evaluation:
+  backends: ["builtin", "ragas"]
+  metrics_preset: "full"
+  resolution_strategy: "comparison"
 ```
 
 > 当 `backends` 中包含 `"ragas"` 时，`config.yaml` 中的 `ragas.enabled` 应设为 `true`。
@@ -426,6 +451,8 @@ evaluation:
 
 ## 后端选择指南
 
+评测系统采用 **指标预设 + 解析策略** 两层架构。选择预设决定计算哪些指标，选择策略决定每个指标由哪个后端计算。
+
 ### 仅使用自研评测
 
 适用于：快速评测、关注检索指标与生成指标、无需额外依赖。
@@ -433,30 +460,18 @@ evaluation:
 ```yaml
 evaluation:
   backends: ["builtin"]
-  metrics:
-    retrieval:
-      - "hit_rate"
-      - "mrr"
-      - "ndcg"
-      - "chunk_hit_rate"
-      - "chunk_mrr"
-      - "chunk_ndcg"
-      - "dedup_hit_rate"
-      - "dedup_mrr"
-      - "dedup_ndcg"
-      - "false_positive_rate"
-      - "context_precision"
-      - "context_recall"
-    generation:
-      - "faithfulness"
-      - "answer_relevancy"
+  metrics_preset: "extended"
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
 ```
 
 > **builtin 检索指标说明**：
 > - **基础指标**：`hit_rate`、`mrr`、`ndcg` — 基于文档级别的检索评估
+> - **Recall@k**：`recall_3`、`recall_5`、`recall_10` — 不同 top-k 下的召回率
 > - **chunk 级别指标**：`chunk_hit_rate`、`chunk_mrr`、`chunk_ndcg` — 基于切块级别的检索评估
 > - **去重指标**：`dedup_hit_rate`、`dedup_mrr`、`dedup_ndcg` — 去除同一文档重复结果后的检索评估
 > - **FPR**：`false_positive_rate` — 针对无关问题的误检率
+> - **Diversity**：`retrieval_diversity` — 检索结果文档多样性
 > - **LLM 检索指标**：`context_precision`、`context_recall` — 需要调用 LLM，需提供 `llm_config`
 
 ### 仅使用 RAGAS 评测
@@ -466,15 +481,7 @@ evaluation:
 ```yaml
 evaluation:
   backends: ["ragas"]
-  metrics:
-    retrieval:
-      - "context_precision"    # RAGAS 支持的检索指标
-      - "context_recall"
-    generation:
-      - "faithfulness"
-      - "answer_relevancy"
-      - "answer_correctness"
-      - "semantic_similarity"
+  metrics_preset: "full"
 ```
 
 > **注意**：RAGAS 不提供传统检索指标（hit_rate, mrr, ndcg）。如果需要这些指标，请同时启用 builtin 后端。
@@ -483,27 +490,46 @@ evaluation:
 
 适用于：全面评测、对比两套指标结果。
 
+**priority_fallback 模式**（推荐，节省 token）：
+
 ```yaml
 evaluation:
   backends: ["builtin", "ragas"]
-  metrics:
-    retrieval:
-      - "hit_rate"
-      - "mrr"
-      - "ndcg"
-      - "context_precision"    # 两个后端分别计算
-      - "context_recall"       # 两个后端分别计算
-    generation:
-      - "faithfulness"
-      - "answer_relevancy"
-      - "answer_correctness"
+  metrics_preset: "full"
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
 ```
 
 此模式下：
-- **传统检索指标**（hit_rate, mrr, ndcg）由 builtin 后端计算
-- **faithfulness, answer_relevancy** 由两个后端分别计算，可对比结果差异
-- **context_precision, context_recall** 由两个后端分别计算（计算方式不同）
-- **answer_correctness, semantic_similarity** 仅由 RAGAS 后端计算
+- **传统检索指标**（hit_rate, mrr, ndcg 等）由 builtin 后端计算
+- **重叠指标**（faithfulness, answer_relevancy, context_precision, context_recall）由 builtin 后端计算（优先级更高），不重复计算
+- **RAGAS 专属指标**（answer_correctness, semantic_similarity）由 ragas 后端计算
+
+**comparison 模式**（用于对标验证）：
+
+```yaml
+evaluation:
+  backends: ["builtin", "ragas"]
+  metrics_preset: "full"
+  resolution_strategy: "comparison"
+```
+
+此模式下，重叠指标由两个后端分别计算，结果加前缀区分。
+
+### 自定义指标
+
+如果预设不满足需求，可使用 `custom` 预设自行指定：
+
+```yaml
+evaluation:
+  backends: ["builtin", "ragas"]
+  metrics_preset: "custom"
+  custom_metrics:
+    retrieval: [hit_rate, mrr, ndcg, recall_3, recall_5, recall_10, context_precision]
+    generation: [faithfulness, answer_correctness, semantic_similarity]
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["ragas", "builtin"]
+```
 
 ### 指标命名空间前缀
 
@@ -723,11 +749,7 @@ A: 尝试以下优化：
 
 ### Q: context_precision 和 context_recall 应该放在 retrieval 还是 generation 下？
 
-A: **推荐放在 `retrieval` 下**，因为它们语义上是检索指标。v0.1.8 起两种位置均支持：
-- 放在 `retrieval` 下：结果出现在 `llm_retrieval` 字典中，聚合到 `avg_context_precision`/`avg_context_recall`
-- 放在 `generation` 下：结果出现在 `generation` 字典中，聚合路径相同但逐题结果位置不同
-
-为保持一致性，建议统一使用 `retrieval` 位置。
+A: **新版本使用 `metrics_preset` 后无需手动指定指标位置**。系统会根据预设自动将 context_precision 和 context_recall 归类为检索指标，分配给支持它们的后端计算。如果使用 `custom` 预设，在 `custom_metrics.retrieval` 中指定即可。
 
 ---
 

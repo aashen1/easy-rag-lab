@@ -1,10 +1,6 @@
 # 评测指标详解
 
-<!-- status: needs-update -->
-
-> ⚠️ **文档状态**：指标概述表格中 "RAGAS 生成指标" 的归类已不准确——Context Precision 和 Context Recall 现已由 builtin 和 ragas 双后端支持（见指标对比表）。此外，builtin 后端还新增了 Chunk-level、Dedup、FPR 等指标，本文档尚未涵盖。建议统一更新指标分类和说明。
-
-> 最后更新: 2026-04-21
+> 最后更新: 2026-04-27
 
 本文档详细说明 RAG 评测系统中各个指标的含义、计算方法和改进建议。
 
@@ -12,15 +8,16 @@
 
 ## 概述
 
-评测系统提供两类指标，并支持两种评测后端：
+评测系统提供三类指标，支持两种评测后端（builtin 和 ragas），通过 **指标预设 + 解析策略** 两层架构管理：
 
-| 类别 | 指标 | 评测对象 | 可用后端 |
-|------|------|---------|---------|
-| **检索指标** | Hit Rate, MRR, NDCG | 检索结果质量 | builtin |
-| **生成质量指标** | Faithfulness, Answer Relevancy | 回答内容质量 | builtin, ragas |
-| **RAGAS 生成指标** | Context Precision, Context Recall, Factual Correctness, Semantic Similarity | 回答与检索质量 | ragas |
+| 类别 | 指标 | 评测对象 | 可用后端 | 需要 LLM |
+|------|------|---------|---------|---------|
+| **纯计算检索指标** | Hit Rate, MRR, NDCG, Recall@k, Chunk Hit/MRR/NDCG, Dedup Hit/MRR/NDCG, FPR, Diversity | 检索结果质量 | builtin | 否 |
+| **LLM 检索指标** | Context Precision, Context Recall | 检索内容质量 | builtin, ragas | 是 |
+| **生成质量指标** | Faithfulness, Answer Relevancy | 回答内容质量 | builtin, ragas | 是 |
+| **RAGAS 专属指标** | Answer Correctness, Semantic Similarity | 端到端质量 | ragas | 是/Embedding |
 
-> 关于 RAGAS 后端的详细使用方法，请参阅 [RAGAS 评测系统指南](ragas-evaluation.md)。
+> 关于指标预设（core/extended/full/custom）和解析策略（priority_fallback/comparison）的配置方法，请参阅 [配置参考](../config-reference.md) 的 Evaluation 章节。关于 RAGAS 后端的详细使用方法，请参阅 [RAGAS 评测系统指南](ragas-evaluation.md)。
 
 ---
 
@@ -133,6 +130,117 @@ NDCG@k = DCG@k / IDCG@k
 
 ---
 
+### Recall@k（召回率）
+
+**定义**：检索结果中包含的相关文档占所有相关文档的比例。
+
+**计算方法**：
+
+```
+Recall@k = |检索结果中相关文档| / |所有相关文档|
+```
+
+**取值范围**：0.0 - 1.0
+
+系统提供 Recall@3、Recall@5、Recall@10 三个粒度：
+
+| 指标 | 含义 | 适用场景 |
+|------|------|---------|
+| `recall_3` | top-3 中的召回率 | 评估精准检索能力 |
+| `recall_5` | top-5 中的召回率 | 评估标准检索能力 |
+| `recall_10` | top-10 中的召回率 | 评估广泛召回能力 |
+
+**解读**：
+- **0.8+**：检索召回充分
+- **0.5-0.8**：部分相关文档未被检索到
+- **< 0.5**：召回严重不足
+
+**改进建议**：
+- 增大 `top_k` 值
+- 启用混合检索（BM25 + 向量）
+- 优化 chunk 大小
+
+---
+
+### Chunk-level 检索指标
+
+**定义**：与基础检索指标（hit_rate/mrr/ndcg）语义相同，但评估粒度为 chunk 级别而非文档级别。
+
+| 指标 | 说明 |
+|------|------|
+| `chunk_hit_rate` | chunk 级别的命中率 |
+| `chunk_mrr` | chunk 级别的平均倒数排名 |
+| `chunk_ndcg` | chunk 级别的归一化折损累积增益 |
+
+**与文档级指标的区别**：
+
+| 维度 | 文档级指标 | Chunk 级指标 |
+|------|-----------|-------------|
+| 评估粒度 | 整篇文档 | 单个 chunk |
+| ground truth | `expected_sources`（文档名列表） | `expected_chunks`（chunk ID 列表） |
+| 适用场景 | 评估文档检索能力 | 评估精确段落定位能力 |
+
+> **注意**：chunk 级指标需要测试数据中包含 `expected_chunks` 字段。使用 `document` 策略生成的测试集会自动包含此字段。
+
+---
+
+### Dedup 检索指标
+
+**定义**：去除同一文档的重复检索结果后，再计算 hit_rate/mrr/ndcg。
+
+| 指标 | 说明 |
+|------|------|
+| `dedup_hit_rate` | 去重后的命中率 |
+| `dedup_mrr` | 去重后的平均倒数排名 |
+| `dedup_ndcg` | 去重后的归一化折损累积增益 |
+
+**与基础指标的区别**：当检索结果中同一文档的多个 chunk 都被返回时，dedup 指标只计一次，避免同一文档的多个 chunk 虚增检索分数。
+
+**适用场景**：评估检索结果的文档多样性，避免检索结果被单一文档垄断。
+
+---
+
+### False Positive Rate（误检率）
+
+**定义**：针对 irrelevant 类型问题，检索系统错误返回文档的比例。
+
+**计算方法**：
+
+```
+FPR = 错误返回文档的 irrelevant 问题数 / 总 irrelevant 问题数
+```
+
+**取值范围**：0.0 - 1.0
+
+**解读**：
+- **0.0**：完美拒答，所有 irrelevant 问题均未返回文档
+- **0.5+**：拒答能力不足，容易对无关问题产生幻觉
+
+**改进建议**：
+- 优化检索阈值
+- 添加相关性过滤
+- 优化 prompt 要求 LLM 在不确定时拒答
+
+---
+
+### Retrieval Diversity（检索多样性）
+
+**定义**：检索结果中来自不同文档的比例，衡量检索结果是否覆盖了多个信息源。
+
+**取值范围**：0.0 - 1.0
+
+**解读**：
+- **0.8+**：检索结果来源多样
+- **0.5-0.8**：检索结果来源一般
+- **< 0.5**：检索结果集中在少数文档
+
+**改进建议**：
+- 启用混合检索
+- 调整 `top_k` 参数
+- 考虑添加文档级去重
+
+---
+
 ## 生成质量指标
 
 ### Faithfulness（忠实度）
@@ -223,7 +331,7 @@ Faithfulness = 可推导陈述数 / 总陈述数
 
 **定义**：衡量检索系统是否将相关上下文排在无关上下文之前。
 
-**来源**：DeepEval / RAGAS
+**来源**：builtin / RAGAS 双后端支持
 
 **计算方法**：
 
@@ -262,7 +370,7 @@ Context Precision = (1/N) × Σ(Precision@k × r_k)
 
 **定义**：Ground Truth / 参考答案中的信息是否都能从检索上下文中推断出来。
 
-**来源**：RAGAS
+**来源**：builtin / RAGAS 双后端支持
 
 **计算方法**：
 
@@ -303,9 +411,9 @@ Context Recall = 可推断句子数 / Ground Truth 总句子数
 
 ## RAGAS 特有生成指标
 
-以下指标由 RAGAS 评测后端提供，需要在配置中启用 `ragas` 后端。
+以下指标由 RAGAS 评测后端提供，需要在配置中启用 `ragas` 后端。在指标预设中，它们属于 `full` 预设。
 
-### Factual Correctness（事实正确性）
+### Answer Correctness（答案正确性）
 
 **定义**：回答与参考答案的事实一致性，基于 claim-level 对比。
 
@@ -392,95 +500,82 @@ metrics = compute_aggregate_metrics(results)
 
 ## 指标对比
 
-| 指标 | 评测阶段 | 是否需要 LLM | 需要 reference | 计算成本 | 可用后端 |
-|------|---------|-------------|---------------|---------|---------|
-| Hit Rate | 检索 | 否 | 否 | 低 | builtin |
-| MRR | 检索 | 否 | 否 | 低 | builtin |
-| NDCG | 检索 | 否 | 否 | 低 | builtin |
-| Context Precision | 生成/检索 | 是 | 可选 | 高 | builtin, ragas |
-| Context Recall | 生成/检索 | 是 | 是 | 高 | ragas |
-| Faithfulness | 生成 | 是 | 否 | 高 | builtin, ragas |
-| Answer Relevancy | 生成 | 是 | 否 | 高 | builtin, ragas |
-| Factual Correctness | 生成 | 是 | 是 | 高 | ragas |
-| Semantic Similarity | 生成 | 否（需 Embedding） | 是 | 中 | ragas |
+| 指标 | 评测阶段 | 是否需要 LLM | 需要 Reference | 计算成本 | 可用后端 | 所属预设 |
+|------|---------|-------------|---------------|---------|---------|---------|
+| Hit Rate | 检索 | 否 | 否 | 低 | builtin | core |
+| MRR | 检索 | 否 | 否 | 低 | builtin | core |
+| NDCG | 检索 | 否 | 否 | 低 | builtin | core |
+| Recall@3/5/10 | 检索 | 否 | 否 | 低 | builtin | core |
+| Chunk Hit/MRR/NDCG | 检索 | 否 | 否 | 低 | builtin | extended |
+| Dedup Hit/MRR/NDCG | 检索 | 否 | 否 | 低 | builtin | extended |
+| Context Precision | 检索 | 是 | 是 | 高 | builtin, ragas | extended |
+| Context Recall | 检索 | 是 | 是 | 高 | builtin, ragas | extended |
+| Faithfulness | 生成 | 是 | 否 | 高 | builtin, ragas | core |
+| Answer Relevancy | 生成 | 是 | 否 | 高 | builtin, ragas | core |
+| False Positive Rate | 检索 | 否 | 否 | 低 | builtin | full |
+| Retrieval Diversity | 检索 | 否 | 否 | 低 | builtin | full |
+| Answer Correctness | 端到端 | 是 | 是 | 高 | ragas | full |
+| Semantic Similarity | 端到端 | 否（需 Embedding） | 是 | 中 | ragas | full |
 
 ---
 
 ## 使用建议
 
-### 快速评测
+### 通过指标预设快速配置（推荐）
 
-仅使用检索指标，快速评估检索效果：
-
-```yaml
-evaluation:
-  backends: ["builtin"]
-  metrics:
-    retrieval:
-      - "hit_rate"
-      - "mrr"
-      - "ndcg"
-```
-
-### 标准评测
-
-同时使用检索和生成指标：
+评测系统提供四级指标预设，覆盖从日常实验到版本发布的全部场景：
 
 ```yaml
+# 日常实验：core 预设，~3 次 LLM 调用/题
 evaluation:
-  llm_preset: "default"
   backends: ["builtin"]
-  metrics:
-    retrieval:
-      - "hit_rate"
-      - "mrr"
-      - "ndcg"
-    generation:
-      - "faithfulness"
-      - "answer_relevancy"
+  metrics_preset: "core"
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
 ```
-
-### 深度评测（对齐业界标准）
-
-包含 LLM 检索指标，全面评估系统质量：
 
 ```yaml
+# 深度诊断：extended 预设，~11 次 LLM 调用/题
 evaluation:
-  llm_preset: "default"
-  llm_retrieval_metrics:
-    - "context_precision"
-    - "context_recall"
   backends: ["builtin"]
-  metrics:
-    retrieval:
-      - "hit_rate"
-      - "mrr"
-      - "ndcg"
-    generation:
-      - "faithfulness"
-      - "answer_relevancy"
+  metrics_preset: "extended"
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
 ```
 
-### RAGAS 评测
+```yaml
+# 版本发布：full 预设 + 双后端 priority_fallback
+evaluation:
+  backends: ["builtin", "ragas"]
+  metrics_preset: "full"
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
+```
 
-使用 RAGAS 后端获取更丰富的生成质量指标：
+```yaml
+# 版本发布对标：full 预设 + comparison 模式
+evaluation:
+  backends: ["builtin", "ragas"]
+  metrics_preset: "full"
+  resolution_strategy: "comparison"
+```
+
+### 自定义指标列表
+
+如果预设不满足需求，可使用 `custom` 预设自行指定指标：
 
 ```yaml
 evaluation:
   backends: ["builtin", "ragas"]
-  metrics:
-    retrieval:
-      - "hit_rate"
-      - "mrr"
-      - "ndcg"
-    generation:
-      - "faithfulness"
-      - "answer_relevancy"
-      - "context_precision"
-      - "context_recall"
-      - "answer_correctness"
-      - "semantic_similarity"
+  metrics_preset: "custom"
+  custom_metrics:
+    retrieval: [hit_rate, mrr, ndcg, recall_3, recall_5, recall_10]
+    generation: [faithfulness, answer_correctness, semantic_similarity]
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["ragas", "builtin"]
 ```
+
+> **提示**：`custom_metrics` 中的指标名必须与上表"指标"列中的名称完全匹配（如 `recall_3` 而非 `recall@3`）。如果某个指标没有后端可以计算，系统会记录 warning 并跳过。
 
 ### 指标优先级
 
@@ -488,11 +583,12 @@ evaluation:
 2. **MRR**：反映排序质量，重要
 3. **Faithfulness**：反映回答可信度，关键
 4. **NDCG**：综合排序指标，进阶
-5. **Context Precision**：检索内容相关性 + 排序质量，深度评测
-6. **Context Recall**：信息覆盖完整性，深度评测
-7. **Answer Relevancy**：反映用户体验，进阶
-8. **Factual Correctness**：事实正确性（需参考答案），进阶
-9. **Semantic Similarity**：语义相似度（需参考答案），进阶
+5. **Recall@k**：检索召回充分性，进阶
+6. **Context Precision**：检索内容相关性 + 排序质量，深度评测
+7. **Context Recall**：信息覆盖完整性，深度评测
+8. **Answer Relevancy**：反映用户体验，进阶
+9. **Answer Correctness**：事实正确性（需参考答案），进阶
+10. **Semantic Similarity**：语义相似度（需参考答案），进阶
 
 ---
 

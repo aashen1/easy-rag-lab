@@ -1,10 +1,6 @@
 # 配置文件参考手册
 
-<!-- status: needs-update -->
-
-> ⚠️ **文档状态**：本文档缺少 v0.1.8 新增配置项的说明，包括：TestSetManager 相关配置（`testset_manager`）、等价组推断配置（`equivalence_group`）、问题有效性检查配置（`validity_check`）、以及 `evaluation` 中新增的 `context_precision`、`context_recall` 等 builtin 指标。此外，`test_generation.default_strategy` 实际默认值已变更为 `document`，但文档仍显示 `factual`。建议全面更新。
-
-> 最后更新: 2026-04-19
+> 最后更新: 2026-04-27
 
 本文档说明 `config.yaml` 中所有配置项的含义和默认值。
 
@@ -279,41 +275,94 @@ retrieval:
 
 ```yaml
 evaluation:
-  test_data_path: "eval/test_data.json"  # 测试数据路径
-  results_dir: "eval/results"            # 结果输出目录
   backends: ["builtin"]                  # 评测后端列表
-  metrics:
-    retrieval:                           # 检索指标
-      - "hit_rate"
-      - "mrr"
-      - "ndcg"
-    generation:                          # 生成质量指标
-      - "faithfulness"
-      - "answer_relevancy"
-  ragas:                                 # RAGAS 专用配置
+  normalize_source_include_parent: true  # 归一化来源时是否包含父路径
+
+  # 指标解析策略
+  resolution_strategy: "priority_fallback"  # priority_fallback / comparison
+  backend_priority: ["builtin", "ragas"]    # priority_fallback 模式的后端优先级
+
+  # 指标预设
+  metrics_preset: "core"  # core / extended / full / custom
+
+  # 自定义指标（仅 metrics_preset: "custom" 时生效）
+  # custom_metrics:
+  #   retrieval: [hit_rate, mrr, ndcg]
+  #   generation: [faithfulness, answer_correctness]
+
+  # RAGAS 专用配置
+  ragas:
     enabled: false
     llm_backend: "anthropic"
     embeddings_backend: "local"
+    max_tokens: 4096
     run_config:
       max_workers: 5
-      timeout: 60
+      timeout: 120
       max_retries: 3
 ```
 
-### 检索指标
+### 核心概念：指标预设 + 解析策略
 
-| 指标 | 说明 |
-|------|------|
-| `hit_rate` | 命中率，检索结果中是否包含相关文档 |
-| `mrr` | 平均倒数排名，第一个相关文档的排名 |
-| `ndcg` | 归一化折损累积增益，综合排序质量 |
+评测系统采用 **指标预设 + 解析策略** 的两层架构：
 
-### 生成质量指标
+1. **指标预设**（`metrics_preset`）决定"计算哪些指标"
+2. **解析策略**（`resolution_strategy`）决定"每个指标由哪个后端计算"
 
-| 指标 | 说明 | 注意事项 |
+用户只需选择预设和策略，无需手动列举指标列表。如需精细控制，可使用 `custom` 预设自行指定。
+
+### 指标预设
+
+| 预设 | retrieval 指标 | generation 指标 | LLM 调用/题 | 适用场景 |
+|------|---------------|----------------|------------|---------|
+| **core** | hit_rate, mrr, ndcg, recall_3, recall_5, recall_10 | faithfulness, answer_relevancy | ~3 次 | 日常实验 |
+| **extended** | core 全部 + chunk_hit_rate/mrr/ndcg, dedup_hit_rate/mrr/ndcg, context_precision, context_recall | faithfulness, answer_relevancy | ~11 次 | 深度诊断 |
+| **full** | extended 全部 + false_positive_rate, retrieval_diversity | faithfulness, answer_relevancy, answer_correctness, semantic_similarity | ~15+ 次 | 版本发布 |
+| **custom** | 由 `custom_metrics.retrieval` 指定 | 由 `custom_metrics.generation` 指定 | 取决于选择 | 精细化需求 |
+
+> **层级关系**：core ⊂ extended ⊂ full，每层严格包含上层的所有指标。
+
+### 解析策略
+
+| 策略 | 说明 | 适用场景 |
 |------|------|---------|
-| `faithfulness` | 忠实度，回答是否可从上下文推导 | 需要额外 LLM 调用 |
-| `answer_relevancy` | 回答相关性，回答与问题的相关程度 | 需要额外 LLM 调用 |
+| `priority_fallback` | 每个指标只由最高优先级后端计算，避免重复 | 日常实验（默认，节省 token） |
+| `comparison` | 所有后端都计算各自支持的指标，结果加前缀区分 | 版本发布前的对标验证 |
+
+**priority_fallback 示例**（`backend_priority: ["builtin", "ragas"]`）：
+
+| 指标 | 分配后端 | 理由 |
+|------|---------|------|
+| hit_rate, mrr, ndcg, recall_*, chunk_*, dedup_*, fpr, diversity | builtin | 仅 builtin 支持 |
+| faithfulness, answer_relevancy | builtin | builtin 优先级更高 |
+| context_precision, context_recall | builtin | builtin 优先级更高 |
+| answer_correctness, semantic_similarity | ragas | builtin 不支持，降级到 ragas |
+
+**comparison 示例**（`backends: ["builtin", "ragas"]`）：
+
+| 指标 | builtin 结果 | ragas 结果 |
+|------|-------------|-----------|
+| faithfulness | builtin_faithfulness=0.85 | ragas_faithfulness=0.72 |
+| answer_relevancy | builtin_answer_relevancy=0.90 | ragas_answer_relevancy=0.88 |
+| hit_rate | builtin_hit_rate=0.80 | — |
+| answer_correctness | — | ragas_answer_correctness=0.75 |
+
+### 自定义指标
+
+当 `metrics_preset: "custom"` 时，必须提供 `custom_metrics` 字段：
+
+```yaml
+evaluation:
+  backends: ["builtin", "ragas"]
+  metrics_preset: "custom"
+  custom_metrics:
+    retrieval: [hit_rate, mrr, ndcg, recall_3, recall_5, recall_10]
+    generation: [faithfulness, answer_correctness, semantic_similarity]
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["ragas", "builtin"]
+```
+
+> **提示**：`custom_metrics` 中的指标名必须与系统支持的指标名完全匹配。如果某个指标没有后端可以计算，系统会记录 warning 并跳过。
 
 ### 评测后端
 
@@ -331,6 +380,23 @@ evaluation:
   backends: ["builtin", "ragas"]     # 同时使用
 ```
 
+### 双后端指标能力矩阵
+
+| 分类 | 指标 | Builtin | RAGAS | 需要 LLM | 需要 Embedding | 需要 Reference |
+|------|------|:-------:|:-----:|:--------:|:-------------:|:-------------:|
+| **仅 Builtin** | hit_rate, mrr, ndcg | ✅ | — | 否 | 否 | expected_sources |
+| **仅 Builtin** | chunk_hit_rate/mrr/ndcg | ✅ | — | 否 | 否 | expected_chunks |
+| **仅 Builtin** | dedup_hit_rate/mrr/ndcg | ✅ | — | 否 | 否 | expected_sources |
+| **仅 Builtin** | false_positive_rate | ✅ | — | 否 | 否 | 否 |
+| **仅 Builtin** | retrieval_diversity | ✅ | — | 否 | 否 | 否 |
+| **仅 Builtin** | recall_3, recall_5, recall_10 | ✅ | — | 否 | 否 | expected_sources |
+| **两者重叠** | faithfulness | ✅ | ✅ | 是 | 否 | 否 |
+| **两者重叠** | answer_relevancy | ✅ | ✅ | 是 | RAGAS需 | 否 |
+| **两者重叠** | context_precision | ✅ | ✅ | 是 | 否 | 是 |
+| **两者重叠** | context_recall | ✅ | ✅ | 是 | 否 | 是 |
+| **仅 RAGAS** | answer_correctness | — | ✅ | 是 | 是 | 是 |
+| **仅 RAGAS** | semantic_similarity | — | ✅ | 否 | 是 | 是 |
+
 ### RAGAS 配置
 
 | 参数 | 默认值 | 说明 |
@@ -338,20 +404,10 @@ evaluation:
 | `ragas.enabled` | `false` | 是否启用 RAGAS 评测 |
 | `ragas.llm_backend` | `"anthropic"` | LLM 接口类型。`"anthropic"` 使用 LangChain Anthropic 接口连接 LongCat API |
 | `ragas.embeddings_backend` | `"local"` | Embeddings 接口。`"local"` 使用本地 BGE 模型，`"openai"` 使用 OpenAI 兼容接口 |
+| `ragas.max_tokens` | `4096` | RAGAS LLM 调用的最大输出 token 数 |
 | `ragas.run_config.max_workers` | `5` | RAGAS 批量评测的并行度 |
-| `ragas.run_config.timeout` | `60` | 单次评测超时时间（秒） |
+| `ragas.run_config.timeout` | `120` | 单次评测超时时间（秒） |
 | `ragas.run_config.max_retries` | `3` | 评测失败时的重试次数 |
-
-### RAGAS 生成指标
-
-| 指标 | 说明 | 注意事项 |
-|------|------|---------|
-| `faithfulness` | 忠实度（RAGAS 实现） | 需要额外 LLM 调用 |
-| `answer_relevancy` | 回答相关性（RAGAS 实现） | 需要额外 LLM 调用 |
-| `context_precision` | 上下文精确度，相关文档排名质量 | 需要 reference |
-| `context_recall` | 上下文召回率，检索覆盖度 | 需要 reference |
-| `answer_correctness` | 答案正确性（事实重叠 + 语义相似度） | 需要 reference |
-| `semantic_similarity` | 语义相似度 | 需要 reference |
 
 > 详细指标说明请参阅 [评测指标详解](guides/evaluation-metrics.md)，RAGAS 使用方法请参阅 [RAGAS 评测系统指南](guides/ragas-evaluation.md)。
 
@@ -388,7 +444,7 @@ artifacts:
 
 ```yaml
 test_generation:
-  default_strategy: "factual"   # 默认问题策略
+  default_strategy: "document"  # 默认问题策略
   default_num_questions: 20     # 默认问题数量
   max_retries: 3                # 最大重试次数
 

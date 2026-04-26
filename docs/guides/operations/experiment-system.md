@@ -1,10 +1,6 @@
 # 实验评测系统使用指南
 
-<!-- status: needs-update -->
-
-> ⚠️ **文档状态**：本文档内容基本准确，但缺少 v0.1.8 新增功能的说明（TestSetManager 集成、等价组支持、问题有效性检查、增量生成、config_snapshot 完整保存、Technology Summary 等）。建议补充更新。
-
-> 最后更新: 2026-04-18
+> 最后更新: 2026-04-27
 
 本文档介绍如何使用自动化评测系统进行 RAG 系统实验。
 
@@ -72,12 +68,20 @@ data:
     seed: 42
 
 test_sets:
-  - strategy: "document"         # 文档级问题生成（推荐）
-    num_questions: 20
-    seed: 100
-  - strategy: "factual"          # 传统策略（已弃用）
-    num_questions: 20
-    seed: 100
+  - name: "my_test_set"          # 测试集名称（可选，省略时自动推导）
+    on_missing: "auto"
+    generation:
+      strategy: "document"       # 文档级问题生成（推荐）
+      num_questions: 20
+      seed: 100
+      type_distribution:         # 可选：自定义类型分布
+        single_fact: 0.30
+        multi_fact: 0.25
+        reasoning: 0.15
+        comparative: 0.15
+        missing: 0.10
+        irrelevant: 0.05
+        adversarial: 0.00
 
 variants:
   - name: "variant_1"
@@ -88,16 +92,15 @@ variants:
         chunk_overlap: 0
 
 evaluation:
-  llm_preset: "default"
   backends: ["builtin"]          # 评测后端：["builtin"], ["ragas"], 或 ["builtin", "ragas"]
-  metrics:
-    retrieval:                   # 检索指标
-      - "hit_rate"
-      - "mrr"
-      - "ndcg"
-    generation:                  # 生成质量指标
-      - "faithfulness"
-      - "answer_relevancy"
+  llm_preset: "default"          # LLM preset
+  metrics_preset: "core"         # 指标预设：core / extended / full / custom
+  resolution_strategy: "priority_fallback"  # 解析策略
+  backend_priority: ["builtin", "ragas"]    # 后端优先级
+
+llm:
+  question_generation: "default"
+  answering: "default"
 ```
 
 ### 配置字段说明
@@ -108,14 +111,16 @@ evaluation:
 | `description` | 实验描述 |
 | `data.meal` | Meal 名称 |
 | `data.create_if_missing` | 自动创建 Meal 的配置 |
-| `test_sets[].strategy` | 问题策略（推荐 `document`，传统策略已弃用） |
-| `test_sets[].num_questions` | 问题数量 |
+| `test_sets[].name` | 测试集名称（可选，省略时自动推导为 `{strategy}_n{num_questions}`） |
+| `test_sets[].generation.strategy` | 问题策略（推荐 `document`，传统策略已弃用） |
+| `test_sets[].generation.num_questions` | 问题数量 |
 | `variants[].name` | Variant 名称 |
 | `variants[].config_overrides` | 配置覆盖 |
-| `evaluation.llm_preset` | LLM preset |
 | `evaluation.backends` | 评测后端列表，支持 `builtin`、`ragas` 或两者兼有 |
-| `evaluation.metrics.retrieval` | 检索指标列表 |
-| `evaluation.metrics.generation` | 生成质量指标列表 |
+| `evaluation.llm_preset` | LLM preset |
+| `evaluation.metrics_preset` | 指标预设（core/extended/full/custom），详见 [配置参考](../config-reference.md) |
+| `evaluation.resolution_strategy` | 解析策略（priority_fallback/comparison） |
+| `evaluation.backend_priority` | priority_fallback 模式的后端优先级 |
 
 ---
 
@@ -144,15 +149,19 @@ evaluation:
 
 ```yaml
 test_sets:
-  - strategy: "document"
-    num_questions: 20
-    type_distribution:          # 可选：自定义类型分布
-      single_fact: 0.40
-      multi_fact: 0.30
-      reasoning: 0.15
-      comparative: 0.10
-      missing: 0.05
-      irrelevant: 0.00
+  - name: "my_test_set"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 20
+      type_distribution:          # 可选：自定义类型分布
+        single_fact: 0.40
+        multi_fact: 0.30
+        reasoning: 0.15
+        comparative: 0.10
+        missing: 0.05
+        irrelevant: 0.00
+        adversarial: 0.00
 ```
 
 ### 传统策略（已弃用）
@@ -206,18 +215,40 @@ data/exp_reports/exp_20250416_120000/
 
 ### 指标配置
 
+评测系统采用 **指标预设 + 解析策略** 两层架构，用户只需选择预设即可：
+
+```yaml
+# 日常实验：core 预设
+evaluation:
+  backends: ["builtin"]
+  llm_preset: "default"
+  metrics_preset: "core"
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
+```
+
+**指标预设说明**：
+
+| 预设 | 包含指标 | LLM 调用/题 | 适用场景 |
+|------|---------|------------|---------|
+| `core` | hit_rate, mrr, ndcg, recall@k, faithfulness, answer_relevancy | ~3 次 | 日常实验 |
+| `extended` | core + chunk/dedup/context_precision/context_recall | ~11 次 | 深度诊断 |
+| `full` | extended + fpr/diversity/answer_correctness/semantic_similarity | ~15+ 次 | 版本发布 |
+| `custom` | 用户自定义 | 取决于选择 | 精细化需求 |
+
+> 详细指标说明请参阅 [评测指标详解](evaluation-metrics.md)，预设和解析策略的完整说明请参阅 [配置参考](../config-reference.md)。
+
+**自定义指标**：如需精细控制，使用 `custom` 预设：
+
 ```yaml
 evaluation:
-  llm_preset: "default"
-  backends: ["builtin"]          # 评测后端选择
-  metrics:
-    retrieval:
-      - "hit_rate"
-      - "mrr"
-      - "ndcg"
-    generation:                  # 生成质量指标需要 LLM 调用
-      - "faithfulness"
-      - "answer_relevancy"
+  backends: ["builtin", "ragas"]
+  metrics_preset: "custom"
+  custom_metrics:
+    retrieval: [hit_rate, mrr, ndcg, recall_3, recall_5, recall_10]
+    generation: [faithfulness, answer_correctness]
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["ragas", "builtin"]
 ```
 
 **注意**：生成质量指标需要额外的 LLM 调用，会增加评测时间和成本。
@@ -227,22 +258,25 @@ evaluation:
 在实验配置中启用 RAGAS 评测后端：
 
 ```yaml
+# 双后端 + priority_fallback：重叠指标只计算一次
 evaluation:
+  backends: ["builtin", "ragas"]
   llm_preset: "default"
-  backends: ["builtin", "ragas"]  # 同时使用自研和 RAGAS
-  metrics:
-    retrieval:
-      - "hit_rate"
-      - "mrr"
-      - "ndcg"
-    generation:
-      - "faithfulness"            # 两个后端都会计算
-      - "answer_relevancy"        # 两个后端都会计算
-      - "context_precision"       # RAGAS 特有指标
-      - "context_recall"          # RAGAS 特有指标
+  metrics_preset: "full"
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
 ```
 
-> RAGAS 特有指标（context_precision, context_recall, factual_correctness, semantic_similarity）需要在 `backends` 中包含 `"ragas"` 才能生效。详见 [RAGAS 评测系统指南](ragas-evaluation.md)。
+```yaml
+# 双后端 + comparison：重叠指标双后端各算一次，结果加前缀区分
+evaluation:
+  backends: ["builtin", "ragas"]
+  llm_preset: "default"
+  metrics_preset: "full"
+  resolution_strategy: "comparison"
+```
+
+> RAGAS 专属指标（answer_correctness, semantic_similarity）需要在 `backends` 中包含 `"ragas"` 才能生效。详见 [RAGAS 评测系统指南](ragas-evaluation.md)。
 
 ---
 

@@ -2,8 +2,8 @@
 
 <!-- status: completed -->
 
-> 完成日期：2026-04-20  
-> 版本：v0.1.8  
+> 完成日期：2026-04-20
+> 版本：v0.1.8
 > 相关 Spec: [.trae/specs/test-set-independent-management](../.trae/specs/test-set-independent-management/)
 
 ## 概述
@@ -235,14 +235,9 @@ variants:
 
 evaluation:
   llm_preset: "default"
-  metrics:
-    retrieval:
-      - "hit_rate"
-      - "mrr"
-      - "ndcg"
-    generation:
-      - "faithfulness"
-      - "answer_relevancy"
+  metrics_preset: "core"
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
 ```
 
 ### 合并测试集
