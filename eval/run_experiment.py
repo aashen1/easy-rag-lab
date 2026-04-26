@@ -1455,11 +1455,17 @@ def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
 
         type_valid_gen = [r for r in group if "generation" in r and r["generation"]]
         for mn in ["faithfulness", "answer_relevancy"]:
-            vals = [
-                r["generation"][mn]
-                for r in type_valid_gen
-                if mn in r["generation"] and r["generation"][mn] is not None
-            ]
+            vals = []
+            for r in type_valid_gen:
+                gen = r["generation"]
+                value = None
+                for prefix in ["builtin_", "ragas_", ""]:
+                    key = f"{prefix}{mn}" if prefix else mn
+                    if key in gen and gen[key] is not None:
+                        value = gen[key]
+                        break
+                if value is not None:
+                    vals.append(value)
             if vals:
                 type_entry[f"avg_{mn}"] = sum(vals) / len(vals)
 

@@ -187,6 +187,56 @@ class ExperimentReporter:
     """Experiment report generator supporting template and LLM modes."""
 
     @staticmethod
+    def _get_generation_metric(
+        gen_metrics: dict[str, float], metric_name: str
+    ) -> float | None:
+        """Get a generation metric value, handling builtin_/ragas_ prefixes.
+
+        Priority: builtin > ragas > unprefixed (for backward compatibility)
+
+        Args:
+            gen_metrics: Dictionary of generation metrics.
+            metric_name: Base metric name (e.g., 'faithfulness', 'answer_relevancy').
+
+        Returns:
+            Metric value or None if not found.
+        """
+        builtin_key = f"avg_builtin_{metric_name}"
+        ragas_key = f"avg_ragas_{metric_name}"
+        unprefixed_key = f"avg_{metric_name}"
+
+        if builtin_key in gen_metrics and gen_metrics[builtin_key] is not None:
+            return gen_metrics[builtin_key]
+        if ragas_key in gen_metrics and gen_metrics[ragas_key] is not None:
+            return gen_metrics[ragas_key]
+        if unprefixed_key in gen_metrics and gen_metrics[unprefixed_key] is not None:
+            return gen_metrics[unprefixed_key]
+        return None
+
+    @staticmethod
+    def _get_all_generation_metrics(
+        gen_metrics: dict[str, float], metric_name: str
+    ) -> dict[str, float]:
+        """Get all generation metric values with their prefixes.
+
+        Args:
+            gen_metrics: Dictionary of generation metrics.
+            metric_name: Base metric name (e.g., 'faithfulness', 'answer_relevancy').
+
+        Returns:
+            Dictionary with prefixed metric names and values.
+        """
+        result = {}
+        for prefix in ["builtin", "ragas"]:
+            key = f"avg_{prefix}_{metric_name}"
+            if key in gen_metrics and gen_metrics[key] is not None:
+                result[prefix] = gen_metrics[key]
+        unprefixed_key = f"avg_{metric_name}"
+        if unprefixed_key in gen_metrics and gen_metrics[unprefixed_key] is not None:
+            result["default"] = gen_metrics[unprefixed_key]
+        return result
+
+    @staticmethod
     def _dict_to_yaml_lines(data: Any, indent: int = 0) -> list[str]:
         """Convert a dict to YAML-like lines with arbitrary nesting depth.
 
@@ -526,8 +576,12 @@ class ExperimentReporter:
 
                 if has_generation:
                     gen_metrics = vr.get("generation_metrics", {})
-                    faithfulness = gen_metrics.get("avg_faithfulness")
-                    relevancy = gen_metrics.get("avg_answer_relevancy")
+                    faithfulness = self._get_generation_metric(
+                        gen_metrics, "faithfulness"
+                    )
+                    relevancy = self._get_generation_metric(
+                        gen_metrics, "answer_relevancy"
+                    )
                     fa_str = (
                         f"{faithfulness:.2f}" if faithfulness is not None else "N/A"
                     )
@@ -633,8 +687,8 @@ class ExperimentReporter:
         if best.get("generation_metrics"):
             gen_metrics = best["generation_metrics"]
             lines.append("**Generation Quality Metrics**:")
-            faithfulness = gen_metrics.get("avg_faithfulness")
-            relevancy = gen_metrics.get("avg_answer_relevancy")
+            faithfulness = self._get_generation_metric(gen_metrics, "faithfulness")
+            relevancy = self._get_generation_metric(gen_metrics, "answer_relevancy")
             if faithfulness is not None:
                 lines.append(f"- Faithfulness: {faithfulness:.4f}")
             if relevancy is not None:
@@ -684,8 +738,12 @@ class ExperimentReporter:
                 if vr.get("generation_metrics"):
                     gen_metrics = vr["generation_metrics"]
                     lines.append("**Generation Quality Metrics**:")
-                    faithfulness = gen_metrics.get("avg_faithfulness")
-                    relevancy = gen_metrics.get("avg_answer_relevancy")
+                    faithfulness = self._get_generation_metric(
+                        gen_metrics, "faithfulness"
+                    )
+                    relevancy = self._get_generation_metric(
+                        gen_metrics, "answer_relevancy"
+                    )
                     if faithfulness is not None:
                         lines.append(f"- Faithfulness: {faithfulness:.4f}")
                     if relevancy is not None:
@@ -840,8 +898,12 @@ class ExperimentReporter:
 
         if best.get("generation_metrics"):
             gen_metrics = best["generation_metrics"]
-            best_faithfulness = gen_metrics.get("avg_faithfulness", 0)
-            best_relevancy = gen_metrics.get("avg_answer_relevancy", 0)
+            best_faithfulness = (
+                self._get_generation_metric(gen_metrics, "faithfulness") or 0
+            )
+            best_relevancy = (
+                self._get_generation_metric(gen_metrics, "answer_relevancy") or 0
+            )
 
             lines.append("### Generation Quality Analysis")
             lines.append("")
@@ -912,6 +974,10 @@ class ExperimentReporter:
                 hr = tm.get("avg_hit_rate", "N/A")
                 mrr = tm.get("avg_mrr", "N/A")
                 faith = tm.get("avg_faithfulness", "N/A")
+                if faith == "N/A":
+                    faith = tm.get("avg_builtin_faithfulness", "N/A")
+                if faith == "N/A":
+                    faith = tm.get("avg_ragas_faithfulness", "N/A")
                 hr_str = f"{hr:.4f}" if isinstance(hr, int | float) else hr
                 mrr_str = f"{mrr:.4f}" if isinstance(mrr, int | float) else mrr
                 faith_str = f"{faith:.4f}" if isinstance(faith, int | float) else faith
@@ -958,8 +1024,12 @@ class ExperimentReporter:
 
         if best.get("generation_metrics"):
             gen_metrics = best["generation_metrics"]
-            best_faithfulness = gen_metrics.get("avg_faithfulness", 0)
-            best_relevancy = gen_metrics.get("avg_answer_relevancy", 0)
+            best_faithfulness = (
+                self._get_generation_metric(gen_metrics, "faithfulness") or 0
+            )
+            best_relevancy = (
+                self._get_generation_metric(gen_metrics, "answer_relevancy") or 0
+            )
 
             if best_faithfulness < 0.6:
                 recommendations.append(
@@ -1348,8 +1418,16 @@ class ExperimentReporter:
         lines.append("")
 
         if result.generation_metrics:
-            avg_faithfulness = result.generation_metrics.get("avg_faithfulness", 0)
-            avg_relevancy = result.generation_metrics.get("avg_answer_relevancy", 0)
+            avg_faithfulness = (
+                self._get_generation_metric(result.generation_metrics, "faithfulness")
+                or 0
+            )
+            avg_relevancy = (
+                self._get_generation_metric(
+                    result.generation_metrics, "answer_relevancy"
+                )
+                or 0
+            )
 
             lines.append("### Generation Quality Summary")
             lines.append("")
@@ -1419,8 +1497,16 @@ class ExperimentReporter:
             rec_num += 1
 
         if result.generation_metrics:
-            avg_faithfulness = result.generation_metrics.get("avg_faithfulness", 0)
-            avg_relevancy = result.generation_metrics.get("avg_answer_relevancy", 0)
+            avg_faithfulness = (
+                self._get_generation_metric(result.generation_metrics, "faithfulness")
+                or 0
+            )
+            avg_relevancy = (
+                self._get_generation_metric(
+                    result.generation_metrics, "answer_relevancy"
+                )
+                or 0
+            )
 
             if avg_faithfulness < 0.6:
                 recommendations.append(
