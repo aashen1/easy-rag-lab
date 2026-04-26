@@ -256,7 +256,7 @@ test_generation:
     segment_size: 8000
     segment_sampling_strategy: "random"
     quote_fuzzy_match_threshold: 0.85
-    multi_hop_candidate_count: 4
+    multi_hop_candidate_count: 3
 
   document_level:
     enabled: true
