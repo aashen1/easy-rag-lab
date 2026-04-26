@@ -3,19 +3,23 @@
 <!-- status: active -->
 
 > 创建日期：2026-04-25
+> 最后更新：2026-04-26
 > 版本：v0.1.9
-> 关联脚本: [`scripts/generate_golden_testset.py`](../../scripts/generate_golden_testset.py)
-> 关联审核: [`scripts/review_golden_testset.py`](../../scripts/review_golden_testset.py)
+> 核心模块: [`src/test_generator.py`](../../src/test_generator.py) → `TestSetGenerator.generate_golden_testset()`
+> CLI 入口: [`scripts/generate_golden_testset.py`](../../scripts/generate_golden_testset.py)
+> 审核工具: [`scripts/review_golden_testset.py`](../../scripts/review_golden_testset.py)
 
 ## 概述
 
-本文档描述如何使用 LLM 辅助脚本生成 Golden Testset 初版，以及后续人工精修的工作流。
+本文档描述如何使用统一的 TestSetGenerator 生成 Golden Testset，以及后续人工精修的工作流。
 
 核心思路：**脚本生成初版 → 审计报告定位问题 → 人工精修 → 迭代**。脚本负责保证覆盖面和结构性质量，人工负责答案准确性和题目深度。
 
+> **v0.1.9 变更**：Golden 生成逻辑已收编入 `TestSetGenerator.generate_golden_testset()`，不再使用独立的 `scripts/generate_golden_testset.py` 中的生成逻辑。该脚本现为薄 CLI 壳，仅做参数解析后委托给 TestSetGenerator。所有问题生成策略（hybrid/document/golden）共享同一套核心逻辑。
+
 ## 前置条件
 
-1. **PDF 已解析**：`data/parsed/` 目录下有 `.pages.json` 或 `.md` 文件
+1. **全量 meal 已创建**：需要有一个包含所有 PDF 的 meal（sampling=1.0）。Golden 生成通过 `MealManager.find_full_dataset_meal()` 自动查找
 2. **API Key 已配置**：`.env` 中有 LLM API Key（参见 `.env.example`）
 3. **config.yaml 已配置**：`llm_presets` 下有所需的模型配置
 
@@ -27,7 +31,17 @@
 pixi run python scripts/generate_golden_testset.py \
   --num-questions 5 \
   --seed 42 \
-  --output data/golden_testset/golden_test_small.json
+  --name golden_test_small
+```
+
+或通过主 CLI：
+
+```bash
+pixi run python main.py \
+  --generate-test-set golden \
+  --strategy golden \
+  --num-questions 5 \
+  --seed 42
 ```
 
 检查输出文件是否正常生成，题目格式是否正确。
@@ -45,50 +59,58 @@ pixi run python scripts/generate_golden_testset.py \
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
 | `--num-questions` | 150 | 生成题目总数 |
-| `--seed` | None | 随机种子，设相同值可复现文档分配结果 |
+| `--name` | golden_150 | 测试集名称 |
+| `--seed` | None | 随机种子，设相同值可复现 |
 | `--llm-preset` | default | 使用的 LLM 预设名称（对应 config.yaml） |
-| `--output` | data/golden_testset/golden_150.json | 输出路径 |
-| `--parsed-dir` | data/parsed | 解析后文档目录 |
-| `--chunks-dir` | data/chunks | Chunks 目录 |
 
 ### 生成流程
 
 ```
-load_documents()
+MealManager.find_full_dataset_meal()  ← 自动查找全量 PDF meal
     ↓
-detect_content_overlaps()    ← 检测摘要⊆年报等包含关系
+_load_full_documents() + _load_document_chunks()  ← 从 meal artifacts 加载
     ↓
-build_primary_pool()         ← 排除 supplementary 文档
+_detect_content_overlaps()    ← 检测摘要⊆年报等包含关系
     ↓
-shuffle(primary_docs)        ← 打乱顺序，打破排序偏置
+_build_primary_pool()         ← 排除 supplementary 文档
     ↓
-distribute_across_documents() ← 渐进式幂次加权分配
+_calculate_question_distribution()  ← 按 GOLDEN_TYPE_DISTRIBUTION 分配
+    ↓
+_distribute_questions_across_docs() ← 轮询分配到各文档
     ↓
 for each doc + type:
-    generate_single_question()  ← LLM 生成
-    validate_answer_numerical_accuracy()  ← 10x 数值校验 + 自动修正
-    verify_excerpt_in_document()  ← excerpt 原文验证
+    _generate_hybrid_question()  ← 复用内部链路核心逻辑
+    _validate_numerical_accuracy()  ← 10x 数值校验 + 自动修正
+    _verify_excerpt_in_document()  ← excerpt 原文验证
+    附加 golden 元数据（target_failure_mode, reviewed, author）
     ↓
 补充不足题目（如有）
     ↓
-输出 JSON
+保存到 data/golden_testset/{name}.json
 ```
 
-### 渐进式分配策略
+### Golden 类型分布
 
-问题分配采用幂次加权算法，根据题目/文档比自动调节分化程度：
+| 类型 | 占比 | 说明 |
+|------|------|------|
+| single_fact | 17% | 单知识点查询 |
+| multi_fact | 20% | 多知识点综合 |
+| reasoning | 17% | 推理型问题 |
+| comparative | 17% | 对比分析 |
+| missing | 13% | 缺失知识点 |
+| irrelevant | 7% | 无关问题 |
+| adversarial | 10% | 对抗性问题（边界场景） |
 
-- `weight = L^p`，其中 `p = max(0, (r-1)/r)`，`r = 总题数/文档数`
-- `r ≈ 1`（文档多问题少）→ 均等分配
-- `r >> 1`（文档少问题多）→ 按内容量比例分配
-- 过渡平滑，无突变点
+### 与普通策略的差异
 
-| 场景 | r | p | 效果 |
-|------|---|---|------|
-| 300 文档 150 题 | 0.5 | 0 | 随机选 150 个文档各出 1 题 |
-| 150 文档 150 题 | 1 | 0 | 每文档恰好 1 题 |
-| 75 文档 150 题 | 2 | 0.5 | 温和分化 |
-| 30 文档 150 题 | 5 | 0.8 | 强分化，大文档多出题 |
+| 维度 | 普通策略（hybrid/document） | Golden 策略 |
+|------|---------------------------|-------------|
+| 文档来源 | 绑定指定 meal | 自动查找全量 PDF meal |
+| 文档去重 | 不执行 | 执行内容重叠检测 |
+| adversarial 类型 | 默认 0%（可配置） | 10% |
+| 审计元数据 | 无 | reviewed/author/target_failure_mode |
+| 生命周期 | user_defined=False | user_defined=True, invalid_policy="immutable" |
+| 保存位置 | data/meals/{meal}/test_sets/ | data/golden_testset/ |
 
 ## 第三步：审计
 
@@ -110,30 +132,6 @@ pixi run python scripts/review_golden_testset.py --audit
 | Excerpt 验证率 | 已验证/未验证比例 |
 | 模板模式 | "X年Y的Z是多少？"等重复句式 |
 
-### 审计报告示例
-
-```
-================================================================================
-  Golden Test Set Audit Report
-  File: data/golden_testset/golden_150.json
-  Total Questions: 150
-================================================================================
-
---- Document Distribution ---
-  Unique source files: 52
-  Top 10:
-    annual_reports/2023/万科A/2023年年度报告.pages.json: 5 (3.3%)
-    ...
-
---- Numerical Accuracy ---
-  Issues found: 0
-
---- Content Duplication ---
-  Potential duplicate groups: 2
-    ...
-================================================================================
-```
-
 ## 第四步：人工精修
 
 审计通过后，进入交互式精修：
@@ -154,34 +152,9 @@ pixi run python scripts/review_golden_testset.py
 | P2 | excerpt 完整性 | 补充过短的 excerpt（<50 字），确保可用于 context_precision 评测 |
 | P3 | difficulty 标注 | 补充 hard 难度题（当前生成偏向 easy/medium） |
 
-### 交互式操作
+## 第五步：恢复状态
 
-```
-Question 1/150: golden_001
-Q: 万科2023年净利润是多少？
-A: 121.63亿元
-Type: single_fact | Difficulty: easy
-
-[a]pprove  [r]evise  [j]reject  [s]kip  [q]uit
-```
-
-- **approve**：标记 `reviewed=True`，进入下一题
-- **revise**：编辑 question/answer/excerpt 等字段
-- **reject**：删除该题（最终补充新题）
-- **skip**：跳过，留待后续处理
-
-## 第五步：迭代
-
-精修完成后，如需补充被删除的题目：
-
-```bash
-# 重新生成（会覆盖），或手动补充后用 --audit 再审
-pixi run python scripts/review_golden_testset.py --audit
-```
-
-## 第六步：恢复状态
-
-如果要撤销某次精修，可以使用准备的撤销脚本，该脚本将会把所有问题的状态恢复至未审核：
+如果要撤销某次精修，可以使用重置脚本：
 
 ```bash
 pixi run python scripts/reset_review_status.py data/golden_testset/golden_150.json
@@ -189,37 +162,42 @@ pixi run python scripts/reset_review_status.py data/golden_testset/golden_150.js
 
 ## 常见问题
 
+### Q: 生成时报"No full-dataset meal found"怎么办？
+
+需要先创建一个包含所有 PDF 的 meal：
+
+```bash
+pixi run python main.py --create-meal golden_full --sampling 1.0
+```
+
 ### Q: 生成时 API 报错怎么办？
 
 脚本会自动跳过失败的题目并记录日志。生成结束后会尝试补充不足的题目。如果最终题目数仍不够，可提高 `--num-questions` 的值（如设为 160 以留出余量）。
 
 ### Q: 如何保留旧版本？
 
-用 `--output` 指定新路径：
+用 `--name` 指定新名称：
 
 ```bash
 pixi run python scripts/generate_golden_testset.py \
   --num-questions 150 --seed 42 \
-  --output data/golden_testset/golden_150_v2.json
+  --name golden_150_v2
 ```
-
-### Q: 文档目录结构不同怎么办？
-
-脚本不假设任何目录结构。文档名碰撞通过 `source_path`（相对路径）解决，文档覆盖通过 shuffle + 渐进式分配保证。无论文档按年/按公司/按行业/平铺组织，都能均匀抽样。
 
 ### Q: 如何只对特定文档出题？
 
-目前不支持文档过滤。如需限定范围，可临时将目标文档放入独立目录，用 `--parsed-dir` 指定。
+目前不支持文档过滤。建议创建一个只包含目标文档的 meal，然后使用 `--strategy hybrid` 生成。
 
 ## 设计决策记录
 
 | 决策 | 选择 | 理由 |
 |------|------|------|
+| 生成逻辑归属 | 收编入 TestSetGenerator | 消除重复代码，统一维护入口 |
 | 文档唯一标识 | source_path（相对路径） | 文件 stem 会碰撞（9 个公司共享"2023年年度报告"） |
-| 分配算法 | 幂次加权 L^p | r≈1 均等，r>>1 按比例，平滑过渡 |
 | 内容去重 | 3 段采样子串匹配 | 不依赖路径模式，纯内容判断 |
 | 数值校验 | answer vs excerpt 交叉验证 | LLM 系统性 10x 错误需脚本兜底 |
-| max_per_doc | 默认不设上限 | 文档少问题多时不应人为限制 |
+| adversarial 类型 | 默认 0%，golden 10% | 普通策略可选启用，golden 必须包含 |
+| 全量 meal 查找 | data_id 反查 | 替代直接读 data/parsed/，与 meal 体系一致 |
 
 ## 相关文档
 

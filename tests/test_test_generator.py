@@ -1948,3 +1948,122 @@ class TestHallucinationDetection:
         assert len(result["invalid_quotes"]) == 2
         reasons = [q["reason"] for q in result["invalid_quotes"]]
         assert all("not found" in r.lower() for r in reasons)
+
+
+class TestValidateNumericalAccuracy:
+    def setup_method(self):
+        self.config = {"test_generation": {}}
+        self.generator = TestSetGenerator(self.config)
+
+    def test_valid_no_numerical_issues(self):
+        qa = {
+            "answer": "营收为121.63亿元",
+            "ground_truth_excerpt": "营收12,162,684,368.86元",
+        }
+        is_valid, correction = self.generator._validate_numerical_accuracy(qa)
+        assert is_valid is True
+        assert correction is None
+
+    def test_10x_error_detected(self):
+        qa = {
+            "answer": "营收为1216.3亿元",
+            "ground_truth_excerpt": "营收12,162,684,368.86元",
+        }
+        is_valid, correction = self.generator._validate_numerical_accuracy(qa)
+        assert is_valid is False
+        assert correction is not None
+        assert any(e["type"] == "10x_error" for e in correction["errors"])
+
+    def test_empty_answer_returns_valid(self):
+        qa = {"answer": "", "ground_truth_excerpt": "营收12,162,684,368.86元"}
+        is_valid, correction = self.generator._validate_numerical_accuracy(qa)
+        assert is_valid is True
+
+    def test_no_large_numbers_returns_valid(self):
+        qa = {"answer": "增长了5%", "ground_truth_excerpt": "增长率为5%"}
+        is_valid, correction = self.generator._validate_numerical_accuracy(qa)
+        assert is_valid is True
+
+
+class TestVerifyExcerptInDocument:
+    def setup_method(self):
+        self.config = {"test_generation": {}}
+        self.generator = TestSetGenerator(self.config)
+
+    def test_exact_match(self):
+        doc = "公司2024年营收121.63亿元，同比增长12.5%。"
+        excerpt = "营收121.63亿元"
+        assert self.generator._verify_excerpt_in_document(excerpt, doc) is True
+
+    def test_no_match(self):
+        doc = "公司2024年营收121.63亿元。"
+        excerpt = "净利润500亿元"
+        assert self.generator._verify_excerpt_in_document(excerpt, doc) is False
+
+    def test_fuzzy_match_with_whitespace(self):
+        doc = "公司 2024 年 营收 121.63 亿元"
+        excerpt = "公司2024年营收121.63亿元"
+        assert self.generator._verify_excerpt_in_document(excerpt, doc) is True
+
+    def test_empty_excerpt_returns_false(self):
+        doc = "公司2024年营收121.63亿元。"
+        assert self.generator._verify_excerpt_in_document("", doc) is False
+
+
+class TestDetectContentOverlaps:
+    def setup_method(self):
+        self.config = {"test_generation": {}}
+        self.generator = TestSetGenerator(self.config)
+
+    def test_no_overlap(self):
+        docs = [
+            {"doc_id": "a", "content": "光模块市场分析报告" * 50},
+            {"doc_id": "b", "content": "新能源汽车行业研究" * 50},
+        ]
+        overlaps = self.generator._detect_content_overlaps(docs)
+        assert len(overlaps) == 0
+
+    def test_full_overlap_detected(self):
+        base = "光模块市场分析报告内容填充" * 50
+        long_content = base * 5
+        short_content = base[:2000]
+        docs = [
+            {"doc_id": "full", "content": long_content},
+            {"doc_id": "summary", "content": short_content},
+        ]
+        overlaps = self.generator._detect_content_overlaps(docs)
+        assert len(overlaps) == 1
+        assert overlaps[0][0] == "summary"
+        assert overlaps[0][1] == "full"
+
+    def test_short_documents_skipped(self):
+        docs = [
+            {"doc_id": "a", "content": "短"},
+            {"doc_id": "b", "content": "短"},
+        ]
+        overlaps = self.generator._detect_content_overlaps(docs)
+        assert len(overlaps) == 0
+
+
+class TestBuildPrimaryPool:
+    def setup_method(self):
+        self.config = {"test_generation": {}}
+        self.generator = TestSetGenerator(self.config)
+
+    def test_excludes_supplementary(self):
+        docs = [
+            {"doc_id": "full", "content": "a" * 5000},
+            {"doc_id": "summary", "content": "b" * 3000},
+        ]
+        overlaps = [("summary", "full", 0.9)]
+        result = self.generator._build_primary_pool(docs, overlaps)
+        assert len(result) == 1
+        assert result[0]["doc_id"] == "full"
+
+    def test_no_overlaps_returns_all(self):
+        docs = [
+            {"doc_id": "a", "content": "a" * 5000},
+            {"doc_id": "b", "content": "b" * 5000},
+        ]
+        result = self.generator._build_primary_pool(docs, [])
+        assert len(result) == 2

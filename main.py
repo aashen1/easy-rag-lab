@@ -101,7 +101,7 @@ def main():
         "--strategy",
         type=str,
         default="factual",
-        choices=["factual", "boundary", "multi_hop", "document", "hybrid"],
+        choices=["factual", "boundary", "multi_hop", "document", "hybrid", "golden"],
         help="Test generation strategy (default: factual)",
     )
     testgen_group.add_argument(
@@ -536,15 +536,21 @@ def _handle_repair_meal(meal_manager: MealManager, name: str) -> None:
 def _handle_generate_test_set(
     meal_manager: MealManager, config: dict[str, Any], args: argparse.Namespace
 ) -> None:
-    if not meal_manager.meal_exists(args.generate_test_set):
-        logger.error(f"Meal '{args.generate_test_set}' not found")
-        sys.exit(1)
-
     from src.test_generator import TestSetGenerator
 
     generator = TestSetGenerator(config)
     try:
-        if args.strategy == "document":
+        if args.strategy == "golden":
+            test_set = generator.generate_golden_testset(
+                num_questions=args.num_questions or 150,
+                name=getattr(args, "name", None) or "golden_150",
+                llm_preset=args.llm_preset or "default",
+                seed=getattr(args, "seed", None),
+            )
+        elif args.strategy == "document":
+            if not meal_manager.meal_exists(args.generate_test_set):
+                logger.error(f"Meal '{args.generate_test_set}' not found")
+                sys.exit(1)
             test_set = generator.generate_document_based_questions(
                 meal_name=args.generate_test_set,
                 name=getattr(args, "name", None),
@@ -552,6 +558,9 @@ def _handle_generate_test_set(
                 llm_preset=args.llm_preset or "default",
             )
         elif args.strategy == "hybrid":
+            if not meal_manager.meal_exists(args.generate_test_set):
+                logger.error(f"Meal '{args.generate_test_set}' not found")
+                sys.exit(1)
             test_set = generator.generate_hybrid_questions(
                 meal_name=args.generate_test_set,
                 name=getattr(args, "name", None),
@@ -559,6 +568,9 @@ def _handle_generate_test_set(
                 llm_preset=args.llm_preset or "default",
             )
         else:
+            if not meal_manager.meal_exists(args.generate_test_set):
+                logger.error(f"Meal '{args.generate_test_set}' not found")
+                sys.exit(1)
             test_set = generator.generate_test_set(
                 meal_name=args.generate_test_set,
                 strategy=args.strategy,

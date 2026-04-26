@@ -87,6 +87,7 @@ DOCUMENT_LEVEL_PROMPT = """你是一位金融行业从业者，正在阅读一�
 - 对比分析：对比两个或多个对象
 - 缺失知识点：询问文档中没有或不完整的信息
 - 无关问题：与文档主题无关的问题
+- 对抗性问题：故意设计容易让RAG系统出错的边界场景
 
 ## 生成要求
 
@@ -272,7 +273,14 @@ EVIDENCE_AWARE_PROMPT = """你是一位金融行业从业者，正在阅读一�
 - quote 必须与片段原文完全一致，不能修改或概括
 - selected_segments 仅多知识点综合问题需要填写，其他类型可省略
 - 单知识点问题通常只需1条证据
-- 多知识点综合问题需要多条证据，且必须填写 selected_segments"""
+- 多知识点综合问题需要多条证据，且必须填写 selected_segments
+
+重要数值规则：
+- 文档中的财务数据通常以"元"为单位（如 12,162,684,368.86）
+- 答案中请换算为"亿元"：÷100,000,000（即去掉8位数字）
+- 正确示例：12,162,684,368.86元 = 121.63亿元
+- 错误示例：12,162,684,368.86元 ≠ 1216.3亿元（多了10倍）
+- 如果原文已用"亿元"为单位，则直接引用，不要再次换算"""
 
 EVIDENCE_SINGLE_FACT_SUPPLEMENT = """
 ## 单知识点查询的特别说明
@@ -383,6 +391,28 @@ EVIDENCE_IRRELEVANT_SUPPLEMENT = """
 - 可以简要说明文档的主题范围
 """
 
+EVIDENCE_ADVERSARIAL_SUPPLEMENT = """
+## 对抗性问题的特别说明
+
+请生成一道故意设计容易让RAG系统出错的边界场景问题。
+
+可选的对抗策略（选一种）：
+1. 数字近似陷阱：在问题中包含一个与文档中数字接近但不相同的值，看系统是否会纠正
+2. 时序陷阱：问一个文档未覆盖的时间段数据
+3. 否定问题：用"不是""没有"等否定措辞，看系统是否会忽略否定
+4. 部分匹配陷阱：问一个答案恰好跨越文档段落边界的问题
+
+要求：
+- 问题中必须包含"诱饵"信息，好的系统应该能识别并纠正
+- 答案必须指出文档中的正确信息，并说明问题中的诱饵
+- 问题要口语化，像在问同事，不要用"请说明""根据文档"等学术化措辞
+- 好的例子："光模块市场增长了15%吗？"（文档实际是12.5%，测试系统是否会纠正）
+
+证据要求：
+- 必须提供包含正确信息的原文引用
+- 引用应直接反驳问题中的诱饵信息
+"""
+
 EVIDENCE_QUESTION_TYPE_SUPPLEMENTS = {
     "single_fact": EVIDENCE_SINGLE_FACT_SUPPLEMENT,
     "multi_fact": EVIDENCE_MULTI_FACT_SUPPLEMENT,
@@ -390,6 +420,7 @@ EVIDENCE_QUESTION_TYPE_SUPPLEMENTS = {
     "comparative": EVIDENCE_COMPARATIVE_SUPPLEMENT,
     "missing": EVIDENCE_MISSING_SUPPLEMENT,
     "irrelevant": EVIDENCE_IRRELEVANT_SUPPLEMENT,
+    "adversarial": EVIDENCE_ADVERSARIAL_SUPPLEMENT,
 }
 
 
@@ -403,6 +434,7 @@ class TestSetGenerator:
         "comparative": "对比分析",
         "missing": "缺失知识点",
         "irrelevant": "无关问题",
+        "adversarial": "对抗性问题",
     }
 
     TYPE_DISTRIBUTION = {
@@ -412,9 +444,30 @@ class TestSetGenerator:
         "comparative": 0.15,
         "missing": 0.10,
         "irrelevant": 0.05,
+        "adversarial": 0.00,
     }
 
     DOCUMENT_TRUNCATE_MAX = 8000
+
+    GOLDEN_TYPE_DISTRIBUTION = {
+        "single_fact": 0.17,
+        "multi_fact": 0.20,
+        "reasoning": 0.17,
+        "comparative": 0.17,
+        "missing": 0.13,
+        "irrelevant": 0.07,
+        "adversarial": 0.10,
+    }
+
+    FAILURE_MODES = {
+        "single_fact": "基础检索失败：精确数据/事实无法被检索到",
+        "multi_fact": "多跳检索失败：需要整合多个信息点但系统只返回部分",
+        "reasoning": "推理能力不足：无法基于检索到的信息进行逻辑推断",
+        "comparative": "对比分析失败：无法跨段落/跨文档对比信息",
+        "missing": "拒答能力不足：文档中没有的信息未能正确识别，产生幻觉",
+        "irrelevant": "幻觉控制失败：无关问题产生了看似相关的编造内容",
+        "adversarial": "边界场景翻车：数字近似/跨文档混淆/时序陷阱等",
+    }
 
     def __init__(self, config: dict[str, Any]):
         """Initialize the TestSetGenerator with application configuration.
@@ -567,6 +620,8 @@ class TestSetGenerator:
             selected_count = 1
         elif question_type in ["multi_fact", "reasoning", "comparative"]:
             selected_count = min(random.randint(2, 3), len(segments))
+        elif question_type == "adversarial":
+            selected_count = min(random.randint(1, 2), len(segments))
         else:
             selected_count = min(num_segments, len(segments))
 
@@ -1565,6 +1620,36 @@ class TestSetGenerator:
                     else:
                         qa["source_files"] = [source_path]
 
+                    is_valid, correction = self._validate_numerical_accuracy(qa)
+                    if not is_valid and correction:
+                        logger.warning(
+                            f"Numerical accuracy issue: {correction['suggestion']}"
+                        )
+                        for err in correction.get("errors", []):
+                            wrong_val = err["answer_value"]
+                            correct_val = err["correct_value"]
+                            answer_text = qa.get("answer", "")
+                            qa["answer"] = answer_text.replace(
+                                f"{wrong_val}",
+                                f"{correct_val}",
+                            )
+                        qa.setdefault("metadata", {})
+                        qa["metadata"]["numerical_auto_corrected"] = True
+
+                    excerpt = qa.get("ground_truth_excerpt", "")
+                    if excerpt and q_type not in ("irrelevant",):
+                        excerpt_verified = self._verify_excerpt_in_document(
+                            excerpt,
+                            doc_content,
+                        )
+                        qa.setdefault("metadata", {})
+                        qa["metadata"]["excerpt_verified"] = excerpt_verified
+                        if not excerpt_verified:
+                            logger.warning(
+                                f"ground_truth_excerpt not found in document "
+                                f"for question {qa['id']}"
+                            )
+
                     questions.append(qa)
                     question_id += 1
                 else:
@@ -1631,6 +1716,36 @@ class TestSetGenerator:
                     else:
                         qa["source_files"] = [source_path]
 
+                    is_valid, correction = self._validate_numerical_accuracy(qa)
+                    if not is_valid and correction:
+                        logger.warning(
+                            f"Numerical accuracy issue: {correction['suggestion']}"
+                        )
+                        for err in correction.get("errors", []):
+                            wrong_val = err["answer_value"]
+                            correct_val = err["correct_value"]
+                            answer_text = qa.get("answer", "")
+                            qa["answer"] = answer_text.replace(
+                                f"{wrong_val}",
+                                f"{correct_val}",
+                            )
+                        qa.setdefault("metadata", {})
+                        qa["metadata"]["numerical_auto_corrected"] = True
+
+                    excerpt = qa.get("ground_truth_excerpt", "")
+                    if excerpt and q_type not in ("irrelevant",):
+                        excerpt_verified = self._verify_excerpt_in_document(
+                            excerpt,
+                            doc_content,
+                        )
+                        qa.setdefault("metadata", {})
+                        qa["metadata"]["excerpt_verified"] = excerpt_verified
+                        if not excerpt_verified:
+                            logger.warning(
+                                f"ground_truth_excerpt not found in document "
+                                f"for question {qa['id']}"
+                            )
+
                     questions.append(qa)
                     question_id += 1
                 else:
@@ -1675,6 +1790,367 @@ class TestSetGenerator:
         logger.success(
             f"Generated {len(questions)}/{num_questions} questions "
             f"for meal '{meal_name}' (strategy: hybrid)"
+        )
+        return test_set
+
+    def generate_golden_testset(
+        self,
+        num_questions: int = 150,
+        name: str = "golden_150",
+        llm_preset: str = "default",
+        token_tracker: Any | None = None,
+        type_distribution: dict[str, float] | None = None,
+        seed: int | None = None,
+    ) -> dict[str, Any]:
+        """Generate a golden test set from the full dataset.
+
+        Uses the full-dataset meal to load all documents, applies content
+        deduplication, and generates questions with golden-specific
+        metadata (FAILURE_MODES, audit fields, immutable policy).
+
+        Args:
+            num_questions: Total number of questions to generate.
+            name: Name for the golden test set.
+            llm_preset: LLM preset name for generation.
+            token_tracker: Optional token tracker.
+            type_distribution: Override type distribution. Defaults to
+                GOLDEN_TYPE_DISTRIBUTION.
+            seed: Random seed for reproducibility.
+
+        Returns:
+            Dictionary containing the golden test set.
+
+        Raises:
+            TestSetError: If no full-dataset meal is found or generation
+                fails.
+        """
+        import random as rng_module
+
+        from src.meal import MealManager
+
+        meal_manager = MealManager(self.config)
+        meal_config = meal_manager.find_full_dataset_meal()
+
+        if meal_config is None:
+            raise TestSetError(
+                "No full-dataset meal found. Create a meal with "
+                "sampling=1.0 (i.e. include all PDFs) first."
+            )
+
+        logger.info(
+            f"Using full-dataset meal '{meal_config.name}' "
+            f"for golden test set generation"
+        )
+
+        if type_distribution is None:
+            type_distribution = self.GOLDEN_TYPE_DISTRIBUTION
+
+        if seed is not None:
+            rng_module.seed(seed)
+
+        document_contents = self._load_full_documents(meal_config)
+        if not document_contents:
+            raise TestSetError(f"No documents found for meal '{meal_config.name}'")
+
+        logger.info(f"Loaded {len(document_contents)} documents")
+
+        doc_chunks_map = self._load_document_chunks(meal_config, document_contents)
+
+        doc_list = [
+            {"doc_id": doc_name, "content": doc_data["content"]}
+            for doc_name, doc_data in document_contents.items()
+        ]
+        overlaps = self._detect_content_overlaps(doc_list)
+        if overlaps:
+            for supp_id, primary_id, ratio in overlaps:
+                logger.info(
+                    f"Content overlap: {supp_id} is supplementary "
+                    f"to {primary_id} (overlap={ratio:.0%})"
+                )
+
+        primary_pool = self._build_primary_pool(doc_list, overlaps)
+        primary_names = {d["doc_id"] for d in primary_pool}
+
+        if len(primary_names) < len(document_contents):
+            excluded = set(document_contents.keys()) - primary_names
+            logger.info(
+                f"Primary pool: {len(primary_names)} documents "
+                f"({len(excluded)} supplementary excluded: {excluded})"
+            )
+            filtered_contents = {
+                k: v for k, v in document_contents.items() if k in primary_names
+            }
+        else:
+            filtered_contents = document_contents
+
+        type_counts = self._calculate_question_distribution(
+            num_questions, type_distribution
+        )
+        logger.info(f"Golden type distribution: {type_counts}")
+
+        doc_question_plans = self._distribute_questions_across_docs(
+            type_counts, list(filtered_contents.keys())
+        )
+
+        llm_config = get_llm_config(self.config, llm_preset)
+        generator = Generator(
+            model_name=llm_config["model_name"],
+            api_key=llm_config["api_key"],
+            base_url=llm_config["base_url"],
+            temperature=self.test_gen_temperature,
+            max_tokens=self.test_gen_max_tokens,
+            token_tracker=token_tracker,
+        )
+
+        questions: list[dict[str, Any]] = []
+        question_id = 1
+        total_attempts = 0
+        failed_count = 0
+
+        for doc_name, doc_data in filtered_contents.items():
+            assigned_types = doc_question_plans.get(doc_name, [])
+            if not assigned_types:
+                continue
+
+            doc_content = doc_data["content"]
+            source_path = doc_data["source_path"]
+            doc_chunks = doc_chunks_map.get(doc_name, [])
+
+            segments = self._segment_document(doc_content, self.segment_size)
+            if not segments:
+                logger.warning(f"No segments for document: {doc_name}")
+                continue
+
+            segment_chunk_map = self._map_segments_to_chunks(segments, doc_chunks)
+
+            for q_type in assigned_types:
+                if len(questions) >= num_questions:
+                    break
+                total_attempts += 1
+                logger.info(
+                    f"Generating question {len(questions) + 1}/{num_questions} "
+                    f"(type={q_type}, doc={doc_name})..."
+                )
+
+                qa = self._generate_hybrid_question(
+                    segments=segments,
+                    doc_chunks=doc_chunks,
+                    segment_chunk_map=segment_chunk_map,
+                    question_type=q_type,
+                    generator=generator,
+                    source_path=source_path,
+                )
+
+                if qa is not None:
+                    qa["id"] = f"golden_{question_id:03d}"
+                    qa["source_document"] = doc_name
+                    qa["category"] = "golden"
+
+                    if q_type == "irrelevant":
+                        qa["source_files"] = []
+                        qa["source_chunks"] = []
+                        qa["expect_retrieval"] = False
+                    elif q_type == "missing":
+                        qa["source_files"] = [source_path]
+                        qa["source_chunks"] = []
+                        qa["expect_no_answer"] = True
+                        qa["expect_retrieval"] = True
+                    else:
+                        qa["source_files"] = [source_path]
+
+                    is_valid, correction = self._validate_numerical_accuracy(qa)
+                    if not is_valid and correction:
+                        logger.warning(
+                            f"Numerical accuracy issue: {correction['suggestion']}"
+                        )
+                        for err in correction.get("errors", []):
+                            wrong_val = err["answer_value"]
+                            correct_val = err["correct_value"]
+                            answer_text = qa.get("answer", "")
+                            qa["answer"] = answer_text.replace(
+                                f"{wrong_val}",
+                                f"{correct_val}",
+                            )
+                        qa.setdefault("metadata", {})
+                        qa["metadata"]["numerical_auto_corrected"] = True
+
+                    excerpt = qa.get("ground_truth_excerpt", "")
+                    if excerpt and q_type not in ("irrelevant",):
+                        excerpt_verified = self._verify_excerpt_in_document(
+                            excerpt,
+                            doc_content,
+                        )
+                        qa.setdefault("metadata", {})
+                        qa["metadata"]["excerpt_verified"] = excerpt_verified
+                        if not excerpt_verified:
+                            logger.warning(
+                                f"ground_truth_excerpt not found in document "
+                                f"for question {qa['id']}"
+                            )
+
+                    qa.setdefault("metadata", {})
+                    qa["metadata"]["author"] = "llm_assisted"
+                    qa["metadata"]["reviewed"] = False
+                    qa["metadata"]["review_notes"] = ""
+                    if not qa["metadata"].get("target_failure_mode"):
+                        qa["metadata"]["target_failure_mode"] = self.FAILURE_MODES.get(
+                            q_type, ""
+                        )
+
+                    questions.append(qa)
+                    question_id += 1
+                else:
+                    failed_count += 1
+                    logger.warning(
+                        f"Failed to generate question, total failures: "
+                        f"{failed_count}/{total_attempts}"
+                    )
+
+        if len(questions) < num_questions:
+            deficit = num_questions - len(questions)
+            logger.info(
+                f"Main loop generated {len(questions)}/{num_questions}. "
+                f"Supplementing {deficit} more..."
+            )
+            doc_names = list(filtered_contents.keys())
+            all_types = list(type_distribution.keys())
+            extra_attempt = 0
+            max_extra_attempts = deficit * 3
+
+            while len(questions) < num_questions and extra_attempt < max_extra_attempts:
+                extra_attempt += 1
+                doc_name = doc_names[extra_attempt % len(doc_names)]
+                q_type = all_types[extra_attempt % len(all_types)]
+                doc_data = filtered_contents[doc_name]
+                doc_content = doc_data["content"]
+                source_path = doc_data["source_path"]
+                doc_chunks = doc_chunks_map.get(doc_name, [])
+
+                segments = self._segment_document(doc_content, self.segment_size)
+                if not segments:
+                    continue
+
+                segment_chunk_map = self._map_segments_to_chunks(segments, doc_chunks)
+
+                logger.info(
+                    f"Supplemental question {len(questions) + 1}/{num_questions} "
+                    f"(type={q_type}, doc={doc_name})..."
+                )
+
+                qa = self._generate_hybrid_question(
+                    segments=segments,
+                    doc_chunks=doc_chunks,
+                    segment_chunk_map=segment_chunk_map,
+                    question_type=q_type,
+                    generator=generator,
+                    source_path=source_path,
+                )
+
+                if qa is not None:
+                    qa["id"] = f"golden_{question_id:03d}"
+                    qa["source_document"] = doc_name
+                    qa["category"] = "golden"
+
+                    if q_type == "irrelevant":
+                        qa["source_files"] = []
+                        qa["source_chunks"] = []
+                        qa["expect_retrieval"] = False
+                    elif q_type == "missing":
+                        qa["source_files"] = [source_path]
+                        qa["source_chunks"] = []
+                        qa["expect_no_answer"] = True
+                        qa["expect_retrieval"] = True
+                    else:
+                        qa["source_files"] = [source_path]
+
+                    is_valid, correction = self._validate_numerical_accuracy(qa)
+                    if not is_valid and correction:
+                        for err in correction.get("errors", []):
+                            wrong_val = err["answer_value"]
+                            correct_val = err["correct_value"]
+                            answer_text = qa.get("answer", "")
+                            qa["answer"] = answer_text.replace(
+                                f"{wrong_val}",
+                                f"{correct_val}",
+                            )
+                        qa.setdefault("metadata", {})
+                        qa["metadata"]["numerical_auto_corrected"] = True
+
+                    excerpt = qa.get("ground_truth_excerpt", "")
+                    if excerpt and q_type not in ("irrelevant",):
+                        excerpt_verified = self._verify_excerpt_in_document(
+                            excerpt,
+                            doc_content,
+                        )
+                        qa.setdefault("metadata", {})
+                        qa["metadata"]["excerpt_verified"] = excerpt_verified
+
+                    qa.setdefault("metadata", {})
+                    qa["metadata"]["author"] = "llm_assisted"
+                    qa["metadata"]["reviewed"] = False
+                    qa["metadata"]["review_notes"] = ""
+                    if not qa["metadata"].get("target_failure_mode"):
+                        qa["metadata"]["target_failure_mode"] = self.FAILURE_MODES.get(
+                            q_type, ""
+                        )
+
+                    questions.append(qa)
+                    question_id += 1
+                else:
+                    failed_count += 1
+                    logger.warning(
+                        f"Supplemental question failed, total failures: {failed_count}"
+                    )
+
+        if not questions:
+            raise TestSetError("No golden questions could be generated")
+
+        quality_metrics = self._calculate_hybrid_quality_metrics(questions)
+
+        metadata = TestSetMetadata(
+            name=name,
+            meal_id=meal_config.data_id,
+            created_at=datetime.now().isoformat(),
+            updated_at=datetime.now().isoformat(),
+            generation={
+                "strategy": "golden",
+                "num_questions": num_questions,
+                "type_distribution": type_distribution,
+                "llm_preset": llm_preset,
+                "seed": seed,
+            },
+            user_defined=True,
+            invalid_policy="immutable",
+        )
+
+        test_set = {
+            "metadata": metadata.to_dict(),
+            "quality_metrics": quality_metrics,
+            "questions": questions,
+        }
+
+        golden_dir = Path(self.config.get("data_dir", "data")) / "golden_testset"
+        golden_dir.mkdir(parents=True, exist_ok=True)
+        output_path = golden_dir / f"{name}.json"
+
+        try:
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(test_set, f, ensure_ascii=False, indent=2)
+            logger.info(f"Saved golden test set '{name}' to {output_path}")
+        except Exception as e:
+            raise TestSetError(
+                f"Failed to save golden test set '{name}': {str(e)}"
+            ) from e
+
+        if len(questions) < num_questions:
+            logger.warning(
+                f"Could only generate {len(questions)}/{num_questions} "
+                f"golden questions after supplemental attempts"
+            )
+
+        logger.success(
+            f"Generated {len(questions)}/{num_questions} golden questions "
+            f"(strategy: golden)"
         )
         return test_set
 
@@ -1854,6 +2330,226 @@ class TestSetGenerator:
 
         return None
 
+    def _validate_numerical_accuracy(
+        self, question_data: dict[str, Any]
+    ) -> tuple[bool, dict[str, Any] | None]:
+        """Validate numerical accuracy in answer against ground_truth_excerpt.
+
+        Detects 10x unit conversion errors where excerpt has large numbers
+        in yuan but answer incorrectly converts to yi-yuan.
+
+        Args:
+            question_data: Dictionary containing 'answer' and
+                'ground_truth_excerpt'.
+
+        Returns:
+            Tuple of (is_valid, correction). is_valid is True if numbers
+            are consistent. correction is None or contains fix information.
+        """
+        answer = question_data.get("answer", "")
+        excerpt = question_data.get("ground_truth_excerpt", "")
+
+        if not answer or not excerpt:
+            return True, None
+
+        excerpt_nums_raw = re.findall(r"[\d,]{8,}(?:\.\d+)?", excerpt)
+        excerpt_yi_values: list[float] = []
+        for raw_num in excerpt_nums_raw:
+            try:
+                clean = raw_num.replace(",", "")
+                val = float(clean)
+                yi_val = val / 1e8
+                if yi_val > 1:
+                    excerpt_yi_values.append(yi_val)
+            except ValueError:
+                continue
+
+        if not excerpt_yi_values:
+            return True, None
+
+        answer_yi_matches = re.findall(r"([\d,.]+)\s*亿", answer)
+        answer_yi_values: list[float] = []
+        for num_str in answer_yi_matches:
+            try:
+                answer_yi_values.append(float(num_str.replace(",", "")))
+            except ValueError:
+                continue
+
+        if not answer_yi_values:
+            return True, None
+
+        errors: list[dict[str, Any]] = []
+        for ans_val in answer_yi_values:
+            for exc_val in excerpt_yi_values:
+                if exc_val == 0:
+                    continue
+                ratio = ans_val / exc_val
+                if 9.5 <= ratio <= 10.5:
+                    errors.append(
+                        {
+                            "type": "10x_error",
+                            "answer_value": ans_val,
+                            "excerpt_value_yi": round(exc_val, 2),
+                            "correct_value": round(exc_val, 2),
+                        }
+                    )
+                elif 0.05 <= ratio <= 0.15:
+                    errors.append(
+                        {
+                            "type": "10x_error_reverse",
+                            "answer_value": ans_val,
+                            "excerpt_value_yi": round(exc_val, 2),
+                            "correct_value": round(exc_val, 2),
+                        }
+                    )
+
+        if errors:
+            correction = {
+                "errors": errors,
+                "suggestion": (
+                    "Answer contains 10x unit conversion errors. "
+                    "Values in yuan should be divided by 100,000,000 "
+                    "to convert to yi-yuan."
+                ),
+            }
+            return False, correction
+
+        return True, None
+
+    def _verify_excerpt_in_document(
+        self,
+        excerpt: str,
+        document_content: str,
+        min_overlap: int = 15,
+    ) -> bool:
+        """Verify that the excerpt can be found in the document content.
+
+        Uses fuzzy matching: strips whitespace and checks for substring
+        overlap of at least min_overlap consecutive characters.
+
+        Args:
+            excerpt: The ground truth excerpt to verify.
+            document_content: The full document content to search in.
+            min_overlap: Minimum number of consecutive matching characters.
+
+        Returns:
+            True if the excerpt (or a substantial part of it) is found.
+        """
+        if not excerpt:
+            return False
+
+        excerpt_clean = re.sub(r"\s+", "", excerpt)
+        doc_clean = re.sub(r"\s+", "", document_content)
+
+        if excerpt_clean in doc_clean:
+            return True
+
+        for start in range(0, len(excerpt_clean) - min_overlap + 1, min_overlap // 2):
+            window = excerpt_clean[start : start + min_overlap]
+            if len(window) >= min_overlap and window in doc_clean:
+                return True
+
+        return False
+
+    def _detect_content_overlaps(
+        self,
+        documents: list[dict[str, Any]],
+        threshold: float = 0.8,
+    ) -> list[tuple[str, str, float]]:
+        """Detect content overlap between document pairs.
+
+        Samples 3 segments (beginning, middle, end) from the shorter
+        document and checks if they appear in the longer document. If the
+        hit rate exceeds the threshold, the shorter document is marked as
+        supplementary.
+
+        Args:
+            documents: List of document dicts with 'doc_id' and 'content'.
+            threshold: Minimum hit rate to mark as supplementary.
+
+        Returns:
+            List of tuples: (supplementary_doc_id, primary_doc_id, ratio).
+        """
+        overlaps: list[tuple[str, str, float]] = []
+        sample_size = 500
+
+        for i in range(len(documents)):
+            for j in range(i + 1, len(documents)):
+                doc_a = documents[i]
+                doc_b = documents[j]
+                len_a = len(doc_a["content"])
+                len_b = len(doc_b["content"])
+
+                if len_a <= len_b:
+                    shorter, longer = doc_a, doc_b
+                else:
+                    shorter, longer = doc_b, doc_a
+
+                short_text = re.sub(r"\s+", "", shorter["content"])
+                long_text = re.sub(r"\s+", "", longer["content"])
+
+                if len(short_text) < 100:
+                    continue
+
+                samples = [
+                    short_text[:sample_size],
+                    short_text[
+                        len(short_text) // 2 : len(short_text) // 2 + sample_size
+                    ],
+                    short_text[-sample_size:],
+                ]
+
+                hits = sum(1 for s in samples if len(s) >= 50 and s in long_text)
+                hit_rate = hits / len(samples)
+
+                if hit_rate >= threshold:
+                    overlaps.append((shorter["doc_id"], longer["doc_id"], hit_rate))
+
+        return overlaps
+
+    def _build_primary_pool(
+        self,
+        documents: list[dict[str, Any]],
+        overlaps: list[tuple[str, str, float]],
+    ) -> list[dict[str, Any]]:
+        """Build primary document pool, excluding supplementary documents.
+
+        If document A is marked as supplementary to B, A is excluded from
+        the primary pool. If A is supplementary to both B and C, only the
+        longer one (B or C) is kept as the primary.
+
+        Args:
+            documents: List of document dicts.
+            overlaps: Overlap tuples from _detect_content_overlaps().
+
+        Returns:
+            List of primary document dicts (supplementary excluded).
+        """
+        supplementary_ids: set[str] = set()
+        primary_map: dict[str, str] = {}
+
+        for supp_id, primary_id, _ratio in overlaps:
+            if supp_id not in supplementary_ids:
+                supplementary_ids.add(supp_id)
+                primary_map[supp_id] = primary_id
+            else:
+                existing_primary_id = primary_map[supp_id]
+                existing_doc = next(
+                    (d for d in documents if d["doc_id"] == existing_primary_id),
+                    None,
+                )
+                new_doc = next(
+                    (d for d in documents if d["doc_id"] == primary_id), None
+                )
+                if (
+                    new_doc
+                    and existing_doc
+                    and len(new_doc["content"]) > len(existing_doc["content"])
+                ):
+                    primary_map[supp_id] = primary_id
+
+        return [d for d in documents if d["doc_id"] not in supplementary_ids]
+
     def _generate_question_with_evidence(
         self,
         selected_segments: list[dict[str, Any]],
@@ -1967,6 +2663,8 @@ class TestSetGenerator:
                 "type_distribution": {},
                 "quote_verification_rate": 0.0,
                 "ground_truth_confidence": 0.0,
+                "excerpt_verified_rate": 0.0,
+                "numerical_correction_rate": 0.0,
             }
 
         base_metrics = self._calculate_quality_metrics(questions)
@@ -2005,10 +2703,23 @@ class TestSetGenerator:
             else 0.0
         )
 
+        questions_with_excerpt = sum(
+            1 for q in questions if q.get("metadata", {}).get("excerpt_verified", True)
+        )
+        questions_with_numerical_correction = sum(
+            1
+            for q in questions
+            if q.get("metadata", {}).get("numerical_auto_corrected", False)
+        )
+        excerpt_verified_rate = questions_with_excerpt / total
+        numerical_correction_rate = questions_with_numerical_correction / total
+
         return {
             **base_metrics,
             "quote_verification_rate": round(quote_verification_rate, 4),
             "ground_truth_confidence": round(ground_truth_confidence, 4),
+            "excerpt_verified_rate": round(excerpt_verified_rate, 4),
+            "numerical_correction_rate": round(numerical_correction_rate, 4),
         }
 
     def generate_document_based_questions(

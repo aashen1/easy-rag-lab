@@ -72,14 +72,16 @@
 
 ## 当前状态
 
-**版本**：v0.1.8（评估系统可靠性增强与 TestSetManager 架构）
+**版本**：v0.1.9（统一测试集生成链路）
 
 **新功能**：
-- Context Precision、Context Recall、Chunk-level、Dedup、FPR 五项新指标
-- TestSetManager 系统：结构化测试集生命周期管理
-- 等价组支持：meal 推断与指标归一化
-- 实验配置重组：templates + 分类目录结构
-- 问题有效性检查与增量生成
+- 统一测试集生成链路：Golden 生成逻辑收编入 TestSetGenerator
+- adversarial 问题类型：对抗性问题支持，默认分布 0%
+- 数值精度校验：10 倍换算错误自动检测修正（所有策略受益）
+- excerpt 验证：ground_truth_excerpt 原文真实性验证（所有策略受益）
+- 文档去重：内容重叠检测与补充文档排除（golden 策略专用）
+- 全量 meal 查找：MealManager.find_full_dataset_meal()
+- Golden 自动生成：resolve_test_set 中 golden 不存在时自动生成
 
 **近期修复**（2026-04-26）：
 - BUG-026：pipeline.py 全量缓存路径不一致 → 改用 ArtifactCache 动态计算
@@ -87,10 +89,11 @@
 - FEAT-042：实验全部失败时跳过 LLM 报告生成
 - OPT-009：chunker 逐文件日志降噪（INFO→DEBUG）
 - RF-014：normalize_source 已确认使用 include_parent=True
+- RF-020：Golden 独立生成链路收编入 TestSetGenerator，消除重复代码
 
 **待做事项**：参见 [docs/backlog.md](docs/backlog.md)
 
-**下版本方向**：参见 [docs/reviews/v0.1.8/release-summary.md](docs/reviews/v0.1.8/release-summary.md)
+**下版本方向**：参见 [docs/reviews/v0.1.9/release-summary.md](docs/reviews/v0.1.9/release-summary.md)
 
 ---
 

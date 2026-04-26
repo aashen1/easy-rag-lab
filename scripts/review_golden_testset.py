@@ -28,7 +28,16 @@ from loguru import logger
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scripts.generate_golden_testset import validate_answer_numerical_accuracy  # noqa: E402, I001
+from src.test_generator import TestSetGenerator as _TSG
+
+_validator = _TSG({"test_generation": {}})
+
+
+def validate_answer_numerical_accuracy(
+    question_data: dict[str, Any],
+) -> tuple[bool, dict[str, Any] | None]:
+    """Validate numerical accuracy, delegating to TestSetGenerator."""
+    return _validator._validate_numerical_accuracy(question_data)
 
 
 REVIEW_STATUS_APPROVED = "approved"
@@ -86,6 +95,7 @@ def create_backup(path: Path) -> Path:
     backup_path = path.parent / f"{path.stem}.backup.{timestamp}.json"
     if path.exists():
         import shutil
+
         shutil.copy2(path, backup_path)
         logger.info(f"Backup created at {backup_path}")
     return backup_path
@@ -113,8 +123,10 @@ def display_question(question: dict[str, Any], index: int, total: int) -> None:
 
     source_chunks = question.get("source_chunks", [])
     if source_chunks:
-        print(f"  Chunks:     {', '.join(source_chunks[:5])}"
-              + (f" +{len(source_chunks) - 5} more" if len(source_chunks) > 5 else ""))
+        print(
+            f"  Chunks:     {', '.join(source_chunks[:5])}"
+            + (f" +{len(source_chunks) - 5} more" if len(source_chunks) > 5 else "")
+        )
 
     metadata = question.get("metadata", {})
     if metadata.get("excerpt_verified") is not None:
@@ -193,12 +205,8 @@ def review_question(question: dict[str, Any]) -> dict[str, Any]:
             return question
 
         elif choice == "e":
-            question["question"] = edit_field(
-                question.get("question", ""), "question"
-            )
-            question["answer"] = edit_field(
-                question.get("answer", ""), "answer"
-            )
+            question["question"] = edit_field(question.get("question", ""), "question")
+            question["answer"] = edit_field(question.get("answer", ""), "answer")
             question["ground_truth_excerpt"] = edit_field(
                 question.get("ground_truth_excerpt", ""), "ground_truth_excerpt"
             )
@@ -266,11 +274,13 @@ def run_review(
 
     total = len(questions)
     approved = sum(
-        1 for q in questions
+        1
+        for q in questions
         if q.get("metadata", {}).get("review_status") == REVIEW_STATUS_APPROVED
     )
     rejected = sum(
-        1 for q in questions
+        1
+        for q in questions
         if q.get("metadata", {}).get("review_status") == REVIEW_STATUS_REJECTED
     )
     pending = total - approved - rejected
@@ -278,7 +288,9 @@ def run_review(
     print(f"\n{'=' * 80}")
     print("  Golden Test Set Review Tool")
     print(f"  File: {input_path}")
-    print(f"  Total: {total} | Approved: {approved} | Rejected: {rejected} | Pending: {pending}")
+    print(
+        f"  Total: {total} | Approved: {approved} | Rejected: {rejected} | Pending: {pending}"
+    )
     print(f"{'=' * 80}")
 
     save_interval = 5
@@ -324,19 +336,23 @@ def run_review(
     save_testset(testset, input_path)
 
     final_approved = sum(
-        1 for q in questions
+        1
+        for q in questions
         if q.get("metadata", {}).get("review_status") == REVIEW_STATUS_APPROVED
     )
     final_rejected = sum(
-        1 for q in questions
+        1
+        for q in questions
         if q.get("metadata", {}).get("review_status") == REVIEW_STATUS_REJECTED
     )
     final_pending = total - final_approved - final_rejected
 
     print(f"\n{'=' * 80}")
     print("  Review Summary")
-    print(f"  Total: {total} | Approved: {final_approved} | "
-          f"Rejected: {final_rejected} | Pending: {final_pending}")
+    print(
+        f"  Total: {total} | Approved: {final_approved} | "
+        f"Rejected: {final_rejected} | Pending: {final_pending}"
+    )
     print(f"  Saved to: {input_path}")
     print(f"{'=' * 80}")
 
@@ -371,7 +387,8 @@ def audit_testset(input_path: Path) -> dict[str, Any]:
             doc_counter[sf] += 1
     total_docs = len(doc_counter)
     skewed_docs = {
-        doc: count for doc, count in doc_counter.items()
+        doc: count
+        for doc, count in doc_counter.items()
         if count / len(questions) > 0.15
     }
     report["document_distribution"] = {
@@ -386,11 +403,13 @@ def audit_testset(input_path: Path) -> dict[str, Any]:
             continue
         is_valid, correction = validate_answer_numerical_accuracy(q)
         if not is_valid and correction:
-            numerical_issues.append({
-                "id": q.get("id", "unknown"),
-                "question": q.get("question", "")[:80],
-                "correction": correction,
-            })
+            numerical_issues.append(
+                {
+                    "id": q.get("id", "unknown"),
+                    "question": q.get("question", "")[:80],
+                    "correction": correction,
+                }
+            )
     report["numerical_accuracy"] = {
         "issues_found": len(numerical_issues),
         "issues": numerical_issues,
@@ -401,7 +420,11 @@ def audit_testset(input_path: Path) -> dict[str, Any]:
         if q.get("question_type") == "irrelevant":
             continue
         entities = tuple(sorted(q.get("key_entities", [])))
-        source = q.get("source_files", ["unknown"])[0] if q.get("source_files") else "unknown"
+        source = (
+            q.get("source_files", ["unknown"])[0]
+            if q.get("source_files")
+            else "unknown"
+        )
         key = (source, entities)
         if key not in entity_groups:
             entity_groups[key] = []
@@ -410,11 +433,13 @@ def audit_testset(input_path: Path) -> dict[str, Any]:
     duplicate_pairs: list[dict] = []
     for key, qids in entity_groups.items():
         if len(qids) >= 2 and len(key[1]) >= 2:
-            duplicate_pairs.append({
-                "source_file": key[0],
-                "shared_entities": list(key[1]),
-                "question_ids": qids,
-            })
+            duplicate_pairs.append(
+                {
+                    "source_file": key[0],
+                    "shared_entities": list(key[1]),
+                    "question_ids": qids,
+                }
+            )
     report["content_duplication"] = {
         "potential_duplicate_groups": len(duplicate_pairs),
         "groups": duplicate_pairs[:20],
@@ -424,7 +449,11 @@ def audit_testset(input_path: Path) -> dict[str, Any]:
     for q in questions:
         if q.get("question_type") == "irrelevant":
             continue
-        source = q.get("source_files", ["unknown"])[0] if q.get("source_files") else "unknown"
+        source = (
+            q.get("source_files", ["unknown"])[0]
+            if q.get("source_files")
+            else "unknown"
+        )
         key = f"{source}|{q.get('question_type', 'unknown')}"
         doc_type_counter[key] += 1
     over_concentrated = {
@@ -440,11 +469,11 @@ def audit_testset(input_path: Path) -> dict[str, Any]:
     report["difficulty_distribution"] = dict(diff_counter)
 
     verified_count = sum(
-        1 for q in questions
-        if q.get("metadata", {}).get("excerpt_verified", False)
+        1 for q in questions if q.get("metadata", {}).get("excerpt_verified", False)
     )
     not_verified_count = sum(
-        1 for q in questions
+        1
+        for q in questions
         if q.get("question_type") not in ("irrelevant",)
         and q.get("metadata", {}).get("excerpt_verified") is False
     )
@@ -461,7 +490,8 @@ def audit_testset(input_path: Path) -> dict[str, Any]:
         qtext = q.get("question", "")
         pattern = re.sub(
             r"[\u4e00-\u9fff]{2,6}(集团|股份|公司|银行|医药|时代|电器|水泥|味业|白药|茅台|老窖)?",
-            "X", qtext,
+            "X",
+            qtext,
         )
         pattern = re.sub(r"\d{4}", "YEAR", pattern)
         pattern = re.sub(r"[\d,.]+%?", "NUM", pattern)
@@ -471,9 +501,7 @@ def audit_testset(input_path: Path) -> dict[str, Any]:
     }
     report["template_patterns"] = {
         "repeated_patterns": len(template_patterns),
-        "patterns": dict(
-            sorted(template_patterns.items(), key=lambda x: -x[1])[:10]
-        ),
+        "patterns": dict(sorted(template_patterns.items(), key=lambda x: -x[1])[:10]),
     }
 
     return report
@@ -513,7 +541,9 @@ def print_audit_report(report: dict[str, Any]) -> None:
 
     content_dup = report.get("content_duplication", {})
     print("\n--- Content Duplication ---")
-    print(f"  Potential duplicate groups: {content_dup.get('potential_duplicate_groups', 0)}")
+    print(
+        f"  Potential duplicate groups: {content_dup.get('potential_duplicate_groups', 0)}"
+    )
     for group in content_dup.get("groups", [])[:10]:
         print(
             f"    {group['source_file']}: entities={group['shared_entities']} "
@@ -555,15 +585,19 @@ def main():
         description="Interactive review tool for golden test set"
     )
     parser.add_argument(
-        "--input", default="data/golden_testset/golden_150.json",
+        "--input",
+        default="data/golden_testset/golden_150.json",
         help="Path to golden test set JSON file",
     )
     parser.add_argument(
-        "--start-from", type=int, default=1,
+        "--start-from",
+        type=int,
+        default=1,
         help="Question index to start from (1-based)",
     )
     parser.add_argument(
-        "--audit", action="store_true",
+        "--audit",
+        action="store_true",
         help="Run audit report instead of interactive review",
     )
     args = parser.parse_args()

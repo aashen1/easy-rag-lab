@@ -2,9 +2,38 @@
 
 <!-- status: active -->
 
-> 最后更新：2026-04-24
+> 最后更新：2026-04-26
 
 本文档记录项目的版本迭代历程，每个版本的关键决策、交付成果和经验教训。
+
+---
+
+## v0.1.9 (2026-04-26)
+
+### 版本主题
+
+统一测试集生成链路
+
+### 关键决策
+
+- 将 Golden 独立生成逻辑收编入 TestSetGenerator，消除两套并行链路
+- Golden 独有功能分两类处理：A 类（所有策略受益）直接并入内部链路，B 类（仅 golden 需要）作为条件分支
+- Golden 不再直接读 data/parsed/，改为通过 MealManager.find_full_dataset_meal() 查找全量 PDF meal
+- Golden 脚本退化为薄 CLI 壳，仅做参数解析
+
+### 交付成果
+
+- **adversarial 问题类型**：7 种问题类型，默认分布 0%
+- **数值精度校验**：10 倍换算错误自动检测修正（所有策略受益）
+- **excerpt 验证**：ground_truth_excerpt 原文真实性验证（所有策略受益）
+- **文档去重**：内容重叠检测与补充文档排除（golden 策略专用）
+- **全量 meal 查找**：MealManager.find_full_dataset_meal()
+- **Golden 自动生成**：resolve_test_set 中 golden 不存在时自动生成
+- **1377 个测试全部通过**：无回归
+
+### 版本验收
+
+- [完成报告](reviews/v0.1.9/completion-report.md)
 
 ---
 
