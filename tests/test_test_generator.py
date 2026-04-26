@@ -544,6 +544,80 @@ class TestCalculateQuestionDistribution:
         assert total == 20
         assert result["single_fact"] == 6
 
+    def test_distribution_small_count_no_last_type_dominance(self):
+        distribution = {
+            "single_fact": 0.17,
+            "multi_fact": 0.17,
+            "reasoning": 0.17,
+            "comparative": 0.17,
+            "missing": 0.15,
+            "irrelevant": 0.10,
+            "adversarial": 0.07,
+        }
+        result = self.generator._calculate_question_distribution(6, distribution)
+        total = sum(result.values())
+        assert total == 6
+        assert result["adversarial"] <= 2, (
+            f"adversarial should not dominate, got {result['adversarial']}"
+        )
+        non_zero_types = sum(1 for v in result.values() if v > 0)
+        assert non_zero_types >= 3, (
+            f"at least 3 types should have questions, got {non_zero_types}"
+        )
+
+    def test_distribution_large_count_proportional(self):
+        distribution = {
+            "single_fact": 0.30,
+            "multi_fact": 0.25,
+            "reasoning": 0.15,
+            "comparative": 0.15,
+            "missing": 0.10,
+            "irrelevant": 0.05,
+        }
+        result = self.generator._calculate_question_distribution(100, distribution)
+        total = sum(result.values())
+        assert total == 100
+        assert result["single_fact"] == 30
+        assert result["multi_fact"] == 25
+        assert result["reasoning"] == 15
+        assert result["comparative"] == 15
+        assert result["missing"] == 10
+        assert result["irrelevant"] == 5
+
+    def test_distribution_one_question_multiple_types(self):
+        distribution = {
+            "type_a": 0.50,
+            "type_b": 0.30,
+            "type_c": 0.20,
+        }
+        result = self.generator._calculate_question_distribution(1, distribution)
+        total = sum(result.values())
+        assert total == 1
+        non_zero = [k for k, v in result.items() if v > 0]
+        assert len(non_zero) == 1
+
+    def test_distribution_zero_proportion_type_excluded(self):
+        distribution = {
+            "single_fact": 0.50,
+            "multi_fact": 0.50,
+            "adversarial": 0.00,
+        }
+        result = self.generator._calculate_question_distribution(10, distribution)
+        total = sum(result.values())
+        assert total == 10
+        assert result["adversarial"] == 0
+        assert result["single_fact"] == 5
+        assert result["multi_fact"] == 5
+
+    def test_distribution_empty_distribution(self):
+        result = self.generator._calculate_question_distribution(10, {})
+        assert result == {}
+
+    def test_distribution_zero_questions(self):
+        distribution = {"single_fact": 0.50, "multi_fact": 0.50}
+        result = self.generator._calculate_question_distribution(0, distribution)
+        assert result == {}
+
 
 class TestParseDocumentQuestionResponse:
     def setup_method(self):
