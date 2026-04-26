@@ -367,11 +367,14 @@ class TestLocateAnswerChunks:
         }
         generator = TestSetGenerator(config)
 
-        result = generator._locate_answer_chunks(
-            answer="2024年营收增长9.53%",
-            source_path="reports/report_0.pages.json",
-            meal_config=meal_config,
-        )
+        with pytest.warns(
+            DeprecationWarning, match="_locate_answer_chunks is deprecated"
+        ):
+            result = generator._locate_answer_chunks(
+                answer="2024年营收增长9.53%",
+                source_path="reports/report_0.pages.json",
+                meal_config=meal_config,
+            )
 
         assert len(result) > 0
         assert "report_0::chunk::000" in result
@@ -399,11 +402,14 @@ class TestLocateAnswerChunks:
         }
         generator = TestSetGenerator(config)
 
-        result = generator._locate_answer_chunks(
-            answer="净利润12.75%",
-            source_path="reports/doc.pages.json",
-            chunks_dir=chunks_dir,
-        )
+        with pytest.warns(
+            DeprecationWarning, match="_locate_answer_chunks is deprecated"
+        ):
+            result = generator._locate_answer_chunks(
+                answer="净利润12.75%",
+                source_path="reports/doc.pages.json",
+                chunks_dir=chunks_dir,
+            )
 
         assert len(result) > 0
 
@@ -413,10 +419,13 @@ class TestLocateAnswerChunks:
         }
         generator = TestSetGenerator(config)
 
-        result = generator._locate_answer_chunks(
-            answer="some answer",
-            source_path="reports/doc.md",
-        )
+        with pytest.warns(
+            DeprecationWarning, match="_locate_answer_chunks is deprecated"
+        ):
+            result = generator._locate_answer_chunks(
+                answer="some answer",
+                source_path="reports/doc.md",
+            )
 
         assert result == []
 
@@ -458,19 +467,25 @@ class TestLocateAnswerChunks:
         }
         generator = TestSetGenerator(config)
 
-        result_no_expand = generator._locate_answer_chunks(
-            answer="营收增长9.53%",
-            source_path="reports/doc.md",
-            chunks_dir=chunks_dir,
-            adjacent_tolerance=0,
-        )
+        with pytest.warns(
+            DeprecationWarning, match="_locate_answer_chunks is deprecated"
+        ):
+            result_no_expand = generator._locate_answer_chunks(
+                answer="营收增长9.53%",
+                source_path="reports/doc.md",
+                chunks_dir=chunks_dir,
+                adjacent_tolerance=0,
+            )
 
-        result_expand = generator._locate_answer_chunks(
-            answer="营收增长9.53%",
-            source_path="reports/doc.md",
-            chunks_dir=chunks_dir,
-            adjacent_tolerance=1,
-        )
+        with pytest.warns(
+            DeprecationWarning, match="_locate_answer_chunks is deprecated"
+        ):
+            result_expand = generator._locate_answer_chunks(
+                answer="营收增长9.53%",
+                source_path="reports/doc.md",
+                chunks_dir=chunks_dir,
+                adjacent_tolerance=1,
+            )
 
         assert len(result_no_expand) == 1
         assert len(result_expand) == 3
@@ -1401,6 +1416,9 @@ class TestSupplementDocumentBasedQuestions:
                     "api_key": "test",
                     "base_url": "http://test",
                 },
+            ),
+            pytest.warns(
+                DeprecationWarning, match="_locate_answer_chunks is deprecated"
             ),
         ):
             result = self.generator.supplement_document_based_questions(
