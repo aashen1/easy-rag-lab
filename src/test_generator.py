@@ -3346,7 +3346,12 @@ class TestSetGenerator:
         num_questions: int,
         type_distribution: dict[str, float],
     ) -> dict[str, int]:
-        """Calculate the number of questions for each type.
+        """Calculate the number of questions for each type using largest remainder method.
+
+        Uses the Largest Remainder Method to allocate integer question counts
+        from proportional distributions, avoiding the problem where the last
+        type (smallest proportion) receives all remaining questions due to
+        integer truncation.
 
         Args:
             num_questions: Total number of questions to generate.
@@ -3354,21 +3359,36 @@ class TestSetGenerator:
 
         Returns:
             Dictionary mapping type names to question counts.
+            Sum of all counts equals num_questions.
         """
+        if not type_distribution or num_questions <= 0:
+            return {}
+
+        total_proportion = sum(type_distribution.values())
+        if total_proportion <= 0:
+            n_types = len(type_distribution)
+            return {t: num_questions // n_types for t in type_distribution}
+
         type_counts = {}
-        remaining = num_questions
+        allocated = 0
+        remainders = []
 
-        sorted_types = sorted(
-            type_distribution.items(), key=lambda x: x[1], reverse=True
-        )
+        for q_type, proportion in type_distribution.items():
+            normalized = proportion / total_proportion * num_questions
+            floor_count = int(normalized)
+            remainder = normalized - floor_count
+            type_counts[q_type] = floor_count
+            allocated += floor_count
+            remainders.append((q_type, remainder))
 
-        for i, (q_type, proportion) in enumerate(sorted_types):
-            if i == len(sorted_types) - 1:
-                type_counts[q_type] = remaining
-            else:
-                count = int(num_questions * proportion)
-                type_counts[q_type] = count
-                remaining -= count
+        remainders.sort(key=lambda x: x[1], reverse=True)
+
+        idx = 0
+        while allocated < num_questions:
+            q_type = remainders[idx % len(remainders)][0]
+            type_counts[q_type] += 1
+            allocated += 1
+            idx += 1
 
         return type_counts
 
