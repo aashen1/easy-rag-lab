@@ -201,6 +201,7 @@ pixi run python scripts/generate_golden_testset.py \
 
 ## 相关文档
 
+- [Golden Testset 审核工具指南](golden-test-review.md) — 交互式审核、AI预审、PDF定位
 - [TestSet 管理系统](test-set-management.md) — 测试集生命周期管理
 - [评测指标详解](evaluation-metrics.md) — 各指标的含义和计算方式
 - [问题生成指南](question-generation.md) — 文档级问题生成策略
