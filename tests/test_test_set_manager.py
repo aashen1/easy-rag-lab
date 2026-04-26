@@ -1802,6 +1802,7 @@ class TestResolveTestSet:
                 llm_preset,
                 token_tracker,
                 chunks_dir=None,
+                type_distribution=None,
             ):
                 return {
                     "metadata": {
@@ -1852,6 +1853,7 @@ class TestResolveTestSet:
                 llm_preset,
                 token_tracker,
                 chunks_dir=None,
+                type_distribution=None,
             ):
                 return {
                     "metadata": {
@@ -2698,6 +2700,7 @@ class TestBoundaryConditions:
                 llm_preset,
                 token_tracker,
                 chunks_dir=None,
+                type_distribution=None,
             ):
                 return {
                     "metadata": {

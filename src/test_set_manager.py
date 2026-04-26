@@ -965,10 +965,21 @@ class TestSetManager:
         if generation_config is not None:
             strategy = generation_config.get("strategy", "document")
             num_questions = generation_config.get("num_questions", 20)
+            type_distribution = generation_config.get("type_distribution")
             logger.info(
                 f"Generating test set '{name}' with strategy={strategy}, "
                 f"num_questions={num_questions}"
             )
+            if strategy == "hybrid":
+                return generator.generate_hybrid_questions(
+                    meal_name=meal_name,
+                    num_questions=num_questions,
+                    name=name,
+                    type_distribution=type_distribution,
+                    llm_preset=llm_preset,
+                    token_tracker=token_tracker,
+                    chunks_dir=chunks_dir,
+                )
             return generator.generate_document_based_questions(
                 meal_name=meal_name,
                 num_questions=num_questions,
@@ -976,6 +987,7 @@ class TestSetManager:
                 llm_preset=llm_preset,
                 token_tracker=token_tracker,
                 chunks_dir=chunks_dir,
+                type_distribution=type_distribution,
             )
 
         logger.info(
