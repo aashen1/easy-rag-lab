@@ -274,6 +274,7 @@ test_generation:
   hybrid:
     enabled: true
     segment_size: 8000
+    compact_segment_max_chars: 6000
     segment_sampling_strategy: "random"
     quote_fuzzy_match_threshold: 0.85
     multi_hop_candidate_count: 3

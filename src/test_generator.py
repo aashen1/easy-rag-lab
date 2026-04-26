@@ -458,6 +458,9 @@ class TestSetGenerator:
             "supplement_max_tokens", 1024
         )
         self.segment_size = tg_config.get("segment_size", 8000)
+        self.compact_segment_max_chars = tg_config.get(
+            "compact_segment_max_chars", 6000
+        )
         self.segment_sampling_strategy = tg_config.get(
             "segment_sampling_strategy", "random"
         )
@@ -552,6 +555,35 @@ class TestSetGenerator:
             current_pos = actual_end
 
         return segments
+
+    def _compact_segments(
+        self,
+        segments: list[dict[str, Any]],
+        max_chars: int,
+    ) -> list[dict[str, Any]]:
+        """Truncate segment text to reduce token consumption.
+
+        For question types that don't need the full segment context
+        (single_fact, missing, adversarial), truncating segments saves
+        ~25% input tokens without affecting generation quality.
+
+        Args:
+            segments: List of segment dictionaries with 'text' key.
+            max_chars: Maximum characters per segment.
+
+        Returns:
+            Segments with truncated text (copies, originals unchanged).
+        """
+        compacted = []
+        for seg in segments:
+            text = seg.get("text", "")
+            if len(text) <= max_chars:
+                compacted.append(seg)
+            else:
+                compacted_seg = dict(seg)
+                compacted_seg["text"] = text[:max_chars]
+                compacted.append(compacted_seg)
+        return compacted
 
     def _select_segments_for_question_type(
         self,
@@ -2218,6 +2250,12 @@ class TestSetGenerator:
         if not selected_segments and question_type != "irrelevant":
             logger.debug(f"No segments selected for question type: {question_type}")
             return None
+
+        compact_types = {"single_fact", "missing", "adversarial"}
+        if question_type in compact_types and selected_segments:
+            selected_segments = self._compact_segments(
+                selected_segments, self.compact_segment_max_chars
+            )
 
         for attempt in range(self.max_retries):
             qa = self._generate_question_with_evidence(
