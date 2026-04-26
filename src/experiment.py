@@ -25,6 +25,7 @@ VALID_RETRIEVAL_METRICS = {
     "recall_3",
     "recall_5",
     "recall_10",
+    "retrieval_diversity",
 }
 VALID_GENERATION_METRICS = {"faithfulness", "answer_relevancy"}
 VALID_ON_MISSING_VALUES = {"auto", "clean_only", "strict"}
@@ -241,9 +242,58 @@ class ExperimentConfig:
                 if "name" not in variant:
                     errors.append(f"Variant {i} missing 'name' field")
 
-        if "metrics" not in self.evaluation:
-            errors.append("Evaluation configuration must include 'metrics' field")
-        else:
+        VALID_METRICS_PRESETS = {"core", "extended", "full", "custom"}
+        has_metrics = "metrics" in self.evaluation
+        has_preset = "metrics_preset" in self.evaluation
+
+        if not has_metrics and not has_preset:
+            errors.append(
+                "Evaluation configuration must include 'metrics' or 'metrics_preset' field"
+            )
+        elif has_preset:
+            metrics_preset = self.evaluation["metrics_preset"]
+            if metrics_preset not in VALID_METRICS_PRESETS:
+                errors.append(
+                    f"Invalid metrics_preset: '{metrics_preset}'. "
+                    f"Valid options: {sorted(VALID_METRICS_PRESETS)}"
+                )
+            if metrics_preset == "custom":
+                custom_metrics = self.evaluation.get("custom_metrics")
+                if custom_metrics is None:
+                    errors.append(
+                        "custom_metrics must be provided when metrics_preset='custom'"
+                    )
+                elif not isinstance(custom_metrics, dict):
+                    errors.append("custom_metrics must be a dictionary")
+                else:
+                    if "retrieval" not in custom_metrics:
+                        errors.append("custom_metrics must include 'retrieval' field")
+                    else:
+                        invalid_retrieval = [
+                            m
+                            for m in custom_metrics["retrieval"]
+                            if m not in VALID_RETRIEVAL_METRICS
+                        ]
+                        if invalid_retrieval:
+                            errors.append(
+                                f"Invalid retrieval metrics in custom_metrics: {invalid_retrieval}. "
+                                f"Valid options: {sorted(VALID_RETRIEVAL_METRICS)}"
+                            )
+                    if "generation" in custom_metrics:
+                        all_valid_generation = (
+                            VALID_GENERATION_METRICS | VALID_RAGAS_METRICS
+                        )
+                        invalid_generation = [
+                            m
+                            for m in custom_metrics["generation"]
+                            if m not in all_valid_generation
+                        ]
+                        if invalid_generation:
+                            errors.append(
+                                f"Invalid generation metrics in custom_metrics: {invalid_generation}. "
+                                f"Valid options: {sorted(all_valid_generation)}"
+                            )
+        if has_metrics:
             metrics = self.evaluation["metrics"]
             if not isinstance(metrics, dict):
                 errors.append("Evaluation 'metrics' must be a dictionary")

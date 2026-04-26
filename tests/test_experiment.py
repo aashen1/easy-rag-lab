@@ -119,7 +119,10 @@ class TestExperimentConfig:
         assert "Data configuration must include 'meal' field" in errors
         assert "At least one test set must be defined" in errors
         assert "At least one variant must be defined" in errors
-        assert "Evaluation configuration must include 'metrics' field" in errors
+        assert (
+            "Evaluation configuration must include 'metrics' or 'metrics_preset' field"
+            in errors
+        )
         assert len(errors) == 6
 
     @pytest.mark.unit
@@ -252,6 +255,7 @@ class TestExperimentConfig:
             "recall_3",
             "recall_5",
             "recall_10",
+            "retrieval_diversity",
         } == VALID_RETRIEVAL_METRICS
         assert {"faithfulness", "answer_relevancy"} == VALID_GENERATION_METRICS
 
