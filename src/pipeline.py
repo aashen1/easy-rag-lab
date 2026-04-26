@@ -665,11 +665,11 @@ if __name__ == "__main__":
 
     if args.query:
         result = pipeline.query(args.query)
-        print(f"\nQuestion: {result['question']}")
-        print(f"\nAnswer: {result['answer']}")
+        logger.info(f"Question: {result['question']}")
+        logger.info(f"Answer: {result['answer']}")
         if "contexts" in result:
-            print("\nSources:")
+            logger.info("Sources:")
             for i, (source, score) in enumerate(
                 zip(result["sources"], result["scores"], strict=False), 1
             ):
-                print(f"{i}. {source} (score: {score:.4f})")
+                logger.info(f"{i}. {source} (score: {score:.4f})")
