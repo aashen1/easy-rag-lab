@@ -1010,6 +1010,7 @@ class TestSetGenerator:
         llm_preset: str = "default",
         seed: int | None = None,
         token_tracker: Any | None = None,
+        type_distribution: dict[str, float] | None = None,
     ) -> dict[str, Any]:
         """Generate a test set of Q&A pairs for a given meal.
 
@@ -1028,6 +1029,8 @@ class TestSetGenerator:
                 random state is not reset.
             token_tracker: Optional token usage tracker passed to the LLM
                 generator.
+            type_distribution: Optional type distribution override. If None,
+                uses the default distribution for the strategy.
 
         Returns:
             Dictionary containing the test set metadata and generated questions.
@@ -1048,6 +1051,7 @@ class TestSetGenerator:
                 num_questions=num_questions,
                 llm_preset=llm_preset,
                 token_tracker=token_tracker,
+                type_distribution=type_distribution,
             )
 
         if normalized_strategy == "document":
@@ -1060,6 +1064,7 @@ class TestSetGenerator:
                 llm_preset=llm_preset,
                 token_tracker=token_tracker,
                 use_hybrid=True,
+                type_distribution=type_distribution,
             )
 
         deprecated_strategies = {"factual", "boundary", "multi_hop"}

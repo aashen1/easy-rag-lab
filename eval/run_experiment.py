@@ -592,6 +592,7 @@ def _prepare_legacy_test_set(
                 llm_preset=llm_preset,
                 seed=seed,
                 token_tracker=token_tracker,
+                type_distribution=type_distribution,
             )
 
         logger.success(
