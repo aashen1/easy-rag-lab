@@ -1565,6 +1565,7 @@ class TestSetGenerator:
         question_id = 1
         total_attempts = 0
         failed_count = 0
+        seen_questions: set[str] = set()
 
         for doc_name, doc_data in document_contents.items():
             assigned_types = doc_question_plans.get(doc_name, [])
@@ -1645,7 +1646,16 @@ class TestSetGenerator:
                                 f"for question {qa['id']}"
                             )
 
+                    question_text = qa.get("question", "")
+                    if question_text in seen_questions:
+                        logger.debug(
+                            f"Skipping duplicate question: {question_text[:50]}..."
+                        )
+                        failed_count += 1
+                        continue
+
                     questions.append(qa)
+                    seen_questions.add(question_text)
                     question_id += 1
                 else:
                     failed_count += 1
@@ -1741,7 +1751,16 @@ class TestSetGenerator:
                                 f"for question {qa['id']}"
                             )
 
+                    question_text = qa.get("question", "")
+                    if question_text in seen_questions:
+                        logger.debug(
+                            f"Skipping duplicate question: {question_text[:50]}..."
+                        )
+                        failed_count += 1
+                        continue
+
                     questions.append(qa)
+                    seen_questions.add(question_text)
                     question_id += 1
                 else:
                     failed_count += 1
@@ -1901,6 +1920,7 @@ class TestSetGenerator:
         question_id = 1
         total_attempts = 0
         failed_count = 0
+        seen_questions: set[str] = set()
 
         for doc_name, doc_data in filtered_contents.items():
             assigned_types = doc_question_plans.get(doc_name, [])
@@ -1992,7 +2012,16 @@ class TestSetGenerator:
                             q_type, ""
                         )
 
+                    question_text = qa.get("question", "")
+                    if question_text in seen_questions:
+                        logger.debug(
+                            f"Skipping duplicate question: {question_text[:50]}..."
+                        )
+                        failed_count += 1
+                        continue
+
                     questions.append(qa)
+                    seen_questions.add(question_text)
                     question_id += 1
                 else:
                     failed_count += 1
@@ -2089,7 +2118,16 @@ class TestSetGenerator:
                             q_type, ""
                         )
 
+                    question_text = qa.get("question", "")
+                    if question_text in seen_questions:
+                        logger.debug(
+                            f"Skipping duplicate question: {question_text[:50]}..."
+                        )
+                        failed_count += 1
+                        continue
+
                     questions.append(qa)
+                    seen_questions.add(question_text)
                     question_id += 1
                 else:
                     failed_count += 1
@@ -3048,6 +3086,9 @@ class TestSetGenerator:
         failed_count = 0
         max_attempts = deficit * 3
         attempt = 0
+        seen_questions: set[str] = {
+            q.get("question", "") for q in existing_questions if q.get("question")
+        }
 
         while len(new_questions) < deficit and attempt < max_attempts:
             attempt += 1
@@ -3088,7 +3129,16 @@ class TestSetGenerator:
                         chunks_dir=chunks_dir,
                     )
 
+                question_text = qa.get("question", "")
+                if question_text in seen_questions:
+                    logger.debug(
+                        f"Skipping duplicate question: {question_text[:50]}..."
+                    )
+                    failed_count += 1
+                    continue
+
                 new_questions.append(qa)
+                seen_questions.add(question_text)
                 question_id += 1
             else:
                 failed_count += 1
