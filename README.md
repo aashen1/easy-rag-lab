@@ -138,11 +138,13 @@ ash-easy-rag/
 
 ## License
 
-AGPL-3.0 License
+AGPL-3.0 License (see: https://www.gnu.org/licenses/agpl-3.0.txt)
+
+说明：本项目使用了 `pymupdf` 与 `pymupdf4llm` 作为 PDF 解析链路，因此选择开源为 AGPL-3.0 许可证。
 
 ---
 
-## 致谢
+## 技术栈
 
 - [PyMuPDF4LLM](https://github.com/pymupdf/PyMuPDF4LLM) - PDF 解析
 - [pdfplumber](https://github.com/jsvine/pdfplumber) - PDF 表格提取
