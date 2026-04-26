@@ -33,6 +33,12 @@
 ### 持久化
 - 文档解析结果、向量索引等中间产物必须落盘，避免每次启动时重建
 
+### 文件删除与回收站
+- **禁止永久删除文件**：不得使用 `DeleteFile`、`rm`、`del` 等操作直接删除文件
+- 所有需要删除的文件/目录必须移入 `.trashbin/` 目录，带时间戳子目录避免冲突
+- 例外：AI 当次会话自建的临时文件、`__pycache__` 目录可直接删除
+- 完整规范见 `.trae/rules/trashbin-rule.md`
+
 ### 项目记忆
 - 本项目文档系统同时服务于人类与 AI，是跨 session 的项目记忆系统
 - 新 session 启动时必须先读 CLAUDE.md + backlog.md + version-history.md 理解项目状态
