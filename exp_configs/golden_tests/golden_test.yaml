@@ -1,5 +1,5 @@
 name: "golden_test"
-description: "Golden test suite for RAG system regression testing"
+description: "Quick regression test suite for RAG system - uses standard quality level"
 
 data:
   meal: "golden_test"
@@ -12,7 +12,7 @@ test_sets:
     on_missing: "auto"
     generation:
       strategy: "document"
-      num_questions: 10
+      num_questions: 20
 
 variants:
   - name: "baseline"
@@ -22,24 +22,9 @@ variants:
 evaluation:
   backends: ["builtin"]
   llm_preset: "default"
-  metrics:
-    retrieval:
-      - "hit_rate"
-      - "mrr"
-      - "ndcg"
-      - "chunk_hit_rate"
-      - "chunk_mrr"
-      - "chunk_ndcg"
-      - "dedup_hit_rate"
-      - "dedup_mrr"
-      - "dedup_ndcg"
-      - "false_positive_rate"
-      - "recall_3"
-      - "recall_5"
-      - "recall_10"
-    generation:
-      - "faithfulness"
-      - "answer_relevancy"
+  metrics_preset: "core"
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
 
 llm:
   question_generation: "default"

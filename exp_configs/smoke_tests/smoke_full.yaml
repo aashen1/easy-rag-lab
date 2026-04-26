@@ -14,13 +14,13 @@ test_sets:
       strategy: "document"
       num_questions: 6
       type_distribution:
-        single_fact: 0.20
-        multi_fact: 0.20
+        single_fact: 0.17
+        multi_fact: 0.17
         reasoning: 0.15
         comparative: 0.15
-        missing: 0.15
-        irrelevant: 0.15
-        adversarial: 0.00
+        missing: 0.13
+        irrelevant: 0.10
+        adversarial: 0.13
 
 variants:
   - name: "baseline"
@@ -90,24 +90,9 @@ evaluation:
   backends: ["builtin"]
   llm_preset: "default"
   llm_report: true
-  metrics:
-    retrieval:
-      - "hit_rate"
-      - "mrr"
-      - "ndcg"
-      - "chunk_hit_rate"
-      - "chunk_mrr"
-      - "chunk_ndcg"
-      - "dedup_hit_rate"
-      - "dedup_mrr"
-      - "dedup_ndcg"
-      - "false_positive_rate"
-      - "recall_3"
-      - "recall_5"
-      - "recall_10"
-    generation:
-      - "faithfulness"
-      - "answer_relevancy"
+  metrics_preset: "extended"
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
 
 llm:
   question_generation: "default"

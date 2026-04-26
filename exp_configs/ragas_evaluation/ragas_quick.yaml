@@ -22,11 +22,7 @@ variants:
 evaluation:
   backends: ["ragas"]
   llm_preset: "default"
-  metrics:
-    retrieval: []
-    generation:
-      - "faithfulness"
-      - "answer_relevancy"
+  metrics_preset: "core"
 
 llm:
   question_generation: "default"

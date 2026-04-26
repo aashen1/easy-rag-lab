@@ -22,14 +22,7 @@ variants:
 evaluation:
   backends: ["ragas"]
   llm_preset: "default"
-  metrics:
-    retrieval:
-      - "context_precision"
-      - "context_recall"
-    generation:
-      - "faithfulness"
-      - "answer_relevancy"
-      - "answer_correctness"
+  metrics_preset: "full"
 
 llm:
   question_generation: "default"

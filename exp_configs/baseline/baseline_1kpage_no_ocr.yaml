@@ -1,8 +1,9 @@
 name: "baseline-1kpage-no-ocr"
-description: "1000页PDF性能评估实验 - OCR关闭对比"
+description: "DEPRECATED - pymupdf4llm silently ignores use_ocr when OCR not installed, making this config meaningless"
 
-# 重要：在未安装 OCR 的情况下，pymupdf4llm 库实际会静默地将
-# use_ocr=true 参数给忽略了，因此这份配置在目前实际上没什么意义
+# DEPRECATED: This config is no longer useful because pymupdf4llm silently
+# ignores the use_ocr=true parameter when OCR is not installed.
+# See baseline_1kpage.yaml instead.
 
 data:
   meal: "1kpage_no_ocr"
@@ -27,21 +28,9 @@ evaluation:
   backends: ["builtin"]
   llm_preset: "default"
   llm_report: false
-  metrics:
-    retrieval:
-      - "hit_rate"
-      - "mrr"
-      - "ndcg"
-      - "chunk_hit_rate"
-      - "chunk_mrr"
-      - "chunk_ndcg"
-      - "dedup_hit_rate"
-      - "dedup_mrr"
-      - "dedup_ndcg"
-      - "false_positive_rate"
-    generation:
-      - "faithfulness"
-      - "answer_relevancy"
+  metrics_preset: "core"
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
 
 llm:
   question_generation: "default"

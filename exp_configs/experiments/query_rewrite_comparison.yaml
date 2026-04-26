@@ -61,24 +61,9 @@ variants:
 evaluation:
   backends: ["builtin"]
   llm_preset: "default"
-  metrics:
-    retrieval:
-      - "hit_rate"
-      - "mrr"
-      - "ndcg"
-      - "chunk_hit_rate"
-      - "chunk_mrr"
-      - "chunk_ndcg"
-      - "dedup_hit_rate"
-      - "dedup_mrr"
-      - "dedup_ndcg"
-      - "false_positive_rate"
-      - "recall_3"
-      - "recall_5"
-      - "recall_10"
-    generation:
-      - "faithfulness"
-      - "answer_relevancy"
+  metrics_preset: "extended"
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
 
 llm:
   question_generation: "default"

@@ -124,28 +124,25 @@ variants:
 # ------------------------------------------------------------
 # 评测配置
 # ------------------------------------------------------------
+# metrics_preset 可选值：
+#   core     — 日常实验：hit_rate/mrr/ndcg/recall + faithfulness/answer_relevancy
+#   extended — 深度诊断：core + chunk_*/dedup_*/context_precision/context_recall
+#   full     — 版本发布：extended + answer_correctness/semantic_similarity/false_positive_rate/retrieval_diversity
+#   custom   — 自定义指标列表（需配合 custom_metrics 使用）
+#
+# resolution_strategy 可选值：
+#   priority_fallback — 每个指标只由最高优先级后端计算，避免重复（默认，节省 token）
+#   comparison        — 所有后端都计算各自支持的指标，结果加前缀区分（用于对标验证）
 evaluation:
   backends: ["builtin"]
   llm_preset: "default"
   llm_report: false
-  metrics:
-    retrieval:
-      - "hit_rate"
-      - "mrr"
-      - "ndcg"
-      - "chunk_hit_rate"
-      - "chunk_mrr"
-      - "chunk_ndcg"
-      - "dedup_hit_rate"
-      - "dedup_mrr"
-      - "dedup_ndcg"
-      - "false_positive_rate"
-      - "recall_3"
-      - "recall_5"
-      - "recall_10"
-    generation:
-      - "faithfulness"
-      - "answer_relevancy"
+  metrics_preset: "extended"
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
+  # custom_metrics:                    # 仅 metrics_preset: "custom" 时生效
+  #   retrieval: [hit_rate, mrr, ndcg]
+  #   generation: [faithfulness, answer_correctness]
 
 # ------------------------------------------------------------
 # LLM配置

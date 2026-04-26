@@ -23,25 +23,9 @@ evaluation:
   backends: ["builtin", "ragas"]
   llm_preset: "default"
   llm_report: true
-  metrics:
-    retrieval:
-      - "hit_rate"
-      - "mrr"
-      - "ndcg"
-      - "chunk_hit_rate"
-      - "chunk_mrr"
-      - "chunk_ndcg"
-      - "dedup_hit_rate"
-      - "dedup_mrr"
-      - "dedup_ndcg"
-      - "false_positive_rate"
-      - "context_precision"
-      - "context_recall"
-    generation:
-      - "faithfulness"
-      - "answer_relevancy"
-      - "answer_correctness"
-      - "semantic_similarity"
+  metrics_preset: "full"
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
 
 llm:
   question_generation: "default"
