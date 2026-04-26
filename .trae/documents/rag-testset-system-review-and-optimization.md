@@ -23,39 +23,290 @@
 | 链路冗余        | 中    | Golden 与 Default 共享 90% 代码逻辑，仅类型分布/去重/元数据不同                                                                    |
 | 评测 Token 盲区 | 中    | Builtin evaluator 的 LLM 调用未纳入 TokenTracker                                                                     |
 
+### 1.3 双后端指标能力矩阵
+
+| 分类            | 指标                        | Builtin | RAGAS | 需要 LLM | 需要 Embedding |    需要 Reference   |
+| ------------- | ------------------------- | :-----: | :---: | :----: | :----------: | :---------------: |
+| **仅 Builtin** | hit\_rate, mrr, ndcg      |    ✅    |   -   |    否   |       否      | expected\_sources |
+| **仅 Builtin** | chunk\_hit\_rate/mrr/ndcg |    ✅    |   -   |    否   |       否      |  expected\_chunks |
+| **仅 Builtin** | dedup\_hit\_rate/mrr/ndcg |    ✅    |   -   |    否   |       否      | expected\_sources |
+| **仅 Builtin** | false\_positive\_rate     |    ✅    |   -   |    否   |       否      |         否         |
+| **仅 Builtin** | retrieval\_diversity      |    ✅    |   -   |    否   |       否      |         否         |
+| **仅 Builtin** | recall\_3/5/10            |    ✅    |   -   |    否   |       否      | expected\_sources |
+| **两者重叠**      | faithfulness              |    ✅    |   ✅   |    是   |       否      |         否         |
+| **两者重叠**      | answer\_relevancy         |    ✅    |   ✅   |    是   |    RAGAS需    |         否         |
+| **两者重叠**      | context\_precision        |    ✅    |   ✅   |    是   |       否      |         是         |
+| **两者重叠**      | context\_recall           |    ✅    |   ✅   |    是   |       否      |         是         |
+| **仅 RAGAS**   | answer\_correctness       |    -    |   ✅   |    是   |       是      |         是         |
+| **仅 RAGAS**   | semantic\_similarity      |    -    |   ✅   |    否   |       是      |         是         |
+
+**关键洞察**：
+
+* 11 项指标仅 Builtin 可计算（全部纯计算，零 LLM 开销）
+
+* 4 项指标两者均可计算（重叠区，是 token 浪费的根源）
+
+* 2 项指标仅 RAGAS 可计算（answer\_correctness, semantic\_similarity）
+
 ***
 
 ## 二、优化方案详细设计
 
 ### 2.1 系统逻辑与指标优化
 
-#### 2.1.1 指标体系精简（剔除冗余指标）
+#### 2.1.1 多后端指标解析系统（核心重构）
 
-**现状**：Builtin 和 RAGAS 有 4 个重叠指标，同时启用时 token 成本翻倍且评分不一致。
+**设计理念**：将指标选择从"后端驱动"转变为"指标驱动"——用户指定需要哪些指标，系统自动选择最优后端计算。
 
-**方案**：建立 **指标分层策略**，而非简单删除：
+**两种运行模式**：
 
-| 层级                | 指标                                                                                        | 后端      | LLM 需求 | 适用场景   |
-| ----------------- | ----------------------------------------------------------------------------------------- | ------- | ------ | ------ |
-| **核心层**（每次必算）     | hit\_rate, mrr, ndcg, recall\@3/5/10, faithfulness, answer\_relevancy                     | builtin | 是（2 个） | 日常实验   |
-| **扩展层**（按需启用）     | chunk\_hit\_rate/mrr/ndcg, dedup\_hit\_rate/mrr/ndcg, context\_precision, context\_recall | builtin | 是（2 个） | 深度诊断   |
-| **RAGAS 层**（对标验证） | faithfulness, answer\_relevancy, answer\_correctness, semantic\_similarity                | ragas   | 是（4 个） | 版本发布对标 |
-| **诊断层**（专项分析）     | fpr, retrieval\_diversity, hallucination\_rate                                            | builtin | 否      | 问题排查   |
+##### 模式 A：优先级降级模式（priority\_fallback）
 
-**具体操作**：
+用户配置后端优先级列表，系统按优先级为每个指标选择第一个能计算它的后端，**避免重复计算**。
 
-1. 在 `config.yaml` 中新增 `evaluation.metrics_tier` 配置项（core/extended/full），默认 `core`
-2. `core`：仅计算核心层指标（hit\_rate/mrr/ndcg/recall + faithfulness/answer\_relevancy）
-3. `extended`：核心层 + chunk/dedup/context\_precision/context\_recall
-4. `full`：全部指标 + RAGAS 对标
-5. 修改 `BuiltinEvaluator.evaluate_single()` 根据 tier 跳过非必要指标
-6. 修改 `run_experiment.py` 根据 tier 决定是否启用 RAGAS 后端
+```yaml
+evaluation:
+  resolution_strategy: "priority_fallback"  # 默认模式
+  backend_priority: ["builtin", "ragas"]     # 优先级从高到低
+```
 
-**预估收益**：
+**解析逻辑**：
 
-* core tier 相比 full：评测 LLM 调用从 \~11 次/题降至 \~3 次/题（-73%）
+```
+对于每个指标 metric:
+  1. 遍历 backend_priority 列表
+  2. 找到第一个 supported_metrics 包含该 metric 的后端
+  3. 将 metric 分配给该后端计算
+  4. 后续低优先级后端不再计算该指标
+```
 
-* 日常实验不再默认跑 context\_precision/context\_recall（每题 \~8 次 LLM 调用）
+**示例**（`backend_priority: ["builtin", "ragas"]`）：
+
+| 指标                                                                  | 分配后端    | 理由                    |
+| ------------------------------------------------------------------- | ------- | --------------------- |
+| hit\_rate, mrr, ndcg, chunk\_*, dedup\_*, fpr, diversity, recall\@k | builtin | 仅 builtin 支持          |
+| faithfulness                                                        | builtin | builtin 优先级更高         |
+| answer\_relevancy                                                   | builtin | builtin 优先级更高         |
+| context\_precision                                                  | builtin | builtin 优先级更高         |
+| context\_recall                                                     | builtin | builtin 优先级更高         |
+| answer\_correctness                                                 | ragas   | builtin 不支持，降级到 ragas |
+| semantic\_similarity                                                | ragas   | builtin 不支持，降级到 ragas |
+
+**示例**（`backend_priority: ["ragas", "builtin"]`）：
+
+| 指标                                                                  | 分配后端    | 理由                    |
+| ------------------------------------------------------------------- | ------- | --------------------- |
+| hit\_rate, mrr, ndcg, chunk\_*, dedup\_*, fpr, diversity, recall\@k | builtin | ragas 不支持，降级到 builtin |
+| faithfulness                                                        | ragas   | ragas 优先级更高           |
+| answer\_relevancy                                                   | ragas   | ragas 优先级更高           |
+| context\_precision                                                  | ragas   | ragas 优先级更高           |
+| context\_recall                                                     | ragas   | ragas 优先级更高           |
+| answer\_correctness                                                 | ragas   | ragas 支持              |
+| semantic\_similarity                                                | ragas   | ragas 支持              |
+
+**Token 节省**：无论哪种优先级，重叠指标只计算一次，相比当前双后端同时计算节省 **50% 重叠指标 token**。
+
+##### 模式 B：对比分析模式（comparison）
+
+两个（或多个）后端同时计算所有支持的指标，结果加前缀区分，用于验证结果一致性。
+
+```yaml
+evaluation:
+  resolution_strategy: "comparison"
+  backends: ["builtin", "ragas"]  # 参与对比的后端列表
+```
+
+**解析逻辑**：
+
+```
+对于每个后端:
+  计算该后端支持的所有指标
+  结果加前缀: {backend_name}_{metric_name}
+```
+
+**示例**（comparison 模式）：
+
+| 指标                  | builtin 结果                      | ragas 结果                        | 说明           |
+| ------------------- | ------------------------------- | ------------------------------- | ------------ |
+| faithfulness        | builtin\_faithfulness=0.85      | ragas\_faithfulness=0.72        | 可对比一致性       |
+| answer\_relevancy   | builtin\_answer\_relevancy=0.90 | ragas\_answer\_relevancy=0.88   | 可对比一致性       |
+| hit\_rate           | builtin\_hit\_rate=0.80         | -                               | 仅 builtin 支持 |
+| answer\_correctness | -                               | ragas\_answer\_correctness=0.75 | 仅 ragas 支持   |
+
+**适用场景**：版本发布前的对标验证、新后端集成时的一致性校验。
+
+**Token 开销**：对比模式下重叠指标的重复计算是预期行为，用户明确知晓成本。
+
+##### 智能分层预设（与两种模式配合）
+
+在两种模式之上，提供指标分层预设，控制"计算哪些指标"：
+
+```yaml
+evaluation:
+  metrics_preset: "core"  # core / extended / full / custom
+```
+
+| 预设           | 包含指标                                                                  | LLM 调用/题 | 适用场景  |
+| ------------ | --------------------------------------------------------------------- | -------- | ----- |
+| **core**     | hit\_rate, mrr, ndcg, recall\@3/5/10, faithfulness, answer\_relevancy | \~3 次    | 日常实验  |
+| **extended** | core + chunk\_*, dedup\_*, context\_precision, context\_recall        | \~11 次   | 深度诊断  |
+| **full**     | extended + answer\_correctness, semantic\_similarity                  | \~15+ 次  | 版本发布  |
+| **custom**   | 用户自定义列表                                                               | 取决于选择    | 精细化需求 |
+
+**组合示例**：
+
+```yaml
+# 日常实验：core 指标 + builtin 优先
+evaluation:
+  metrics_preset: "core"
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
+
+# 版本发布对标：full 指标 + 对比分析
+evaluation:
+  metrics_preset: "full"
+  resolution_strategy: "comparison"
+  backends: ["builtin", "ragas"]
+
+# 精细化需求：自定义指标 + ragas 优先
+evaluation:
+  metrics_preset: "custom"
+  custom_metrics: ["hit_rate", "mrr", "faithfulness", "answer_correctness", "semantic_similarity"]
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["ragas", "builtin"]
+```
+
+##### 技术实现方案
+
+**1. MetricResolver 类**（新增）
+
+```python
+class MetricResolver:
+    """指标解析器：根据策略和优先级将指标分配给后端"""
+
+    def __init__(self, evaluators: dict[str, BaseEvaluator],
+                 strategy: str = "priority_fallback",
+                 backend_priority: list[str] | None = None,
+                 metrics_preset: str = "core",
+                 custom_metrics: list[str] | None = None):
+        ...
+
+    def resolve(self) -> dict[str, list[str]]:
+        """返回 {backend_name: [metric1, metric2, ...]} 的分配方案"""
+
+    def _resolve_priority_fallback(self, requested_metrics: list[str]) -> dict[str, list[str]]:
+        """优先级降级模式：每个指标只分配给最高优先级后端"""
+
+    def _resolve_comparison(self, requested_metrics: list[str]) -> dict[str, list[str]]:
+        """对比分析模式：每个后端计算所有支持的指标"""
+
+    def _expand_preset(self, preset: str) -> list[str]:
+        """将预设名展开为指标列表"""
+
+    def validate(self) -> list[str]:
+        """校验所有请求的指标都有后端可计算，返回无法计算的指标列表"""
+```
+
+**2. 修改 evaluate\_test\_set()**
+
+```python
+def evaluate_test_set(...):
+    # 当前：直接遍历所有后端，每个后端计算所有支持的指标
+    # 优化后：通过 MetricResolver 确定分配方案，每个后端只计算分配给它的指标
+
+    resolver = MetricResolver(
+        evaluators=evaluators,
+        strategy=config.evaluation.resolution_strategy,
+        backend_priority=config.evaluation.backend_priority,
+        metrics_preset=config.evaluation.metrics_preset,
+    )
+    allocation = resolver.resolve()
+    # allocation = {"builtin": ["hit_rate", "mrr", ..., "faithfulness"],
+    #               "ragas": ["answer_correctness", "semantic_similarity"]}
+
+    for backend_name, metrics in allocation.items():
+        evaluator = evaluators[backend_name]
+        # 传入 metrics 列表，evaluator 只计算这些指标
+        results = evaluator.evaluate_batch(samples, retrieval_metrics=..., generation_metrics=...)
+```
+
+**3. 修改 BaseEvaluator 接口**
+
+当前 `evaluate_single()` 和 `evaluate_batch()` 已支持 `retrieval_metrics` 和 `generation_metrics` 参数过滤，无需修改接口。只需确保调用时传入 MetricResolver 分配的指标列表。
+
+**4. 配置结构**
+
+```yaml
+evaluation:
+  backends: ["builtin"]  # 可用后端列表
+
+  resolution_strategy: "priority_fallback"  # priority_fallback / comparison
+  backend_priority: ["builtin", "ragas"]    # priority_fallback 模式的优先级
+
+  metrics_preset: "core"  # core / extended / full / custom
+  custom_metrics: []       # custom 预设时的指标列表
+
+  # 预设定义（内置，用户可覆盖）
+  presets:
+    core:
+      retrieval: [hit_rate, mrr, ndcg, recall_3, recall_5, recall_10]
+      generation: [faithfulness, answer_relevancy]
+    extended:
+      retrieval: [hit_rate, mrr, ndcg, recall_3, recall_5, recall_10,
+                  chunk_hit_rate, chunk_mrr, chunk_ndcg,
+                  dedup_hit_rate, dedup_mrr, dedup_ndcg,
+                  context_precision, context_recall]
+      generation: [faithfulness, answer_relevancy]
+    full:
+      retrieval: [hit_rate, mrr, ndcg, recall_3, recall_5, recall_10,
+                  chunk_hit_rate, chunk_mrr, chunk_ndcg,
+                  dedup_hit_rate, dedup_mrr, dedup_ndcg,
+                  context_precision, context_recall,
+                  false_positive_rate, retrieval_diversity]
+      generation: [faithfulness, answer_relevancy,
+                   answer_correctness, semantic_similarity]
+```
+
+**5. 向后兼容**
+
+* 未指定 `resolution_strategy` 时，默认 `priority_fallback` + `backend_priority: ["builtin", "ragas"]`
+
+* 现有 `golden: true` 配置自动映射为 `metrics_preset: "full"`
+
+* 现有 `backends: ["builtin", "ragas"]` 在 priority\_fallback 模式下不再重复计算
+
+##### 可扩展性分析
+
+**未来集成 DeepEval 等新后端**：
+
+```yaml
+evaluation:
+  backends: ["builtin", "ragas", "deepeval"]
+  backend_priority: ["builtin", "deepeval", "ragas"]
+  # DeepEval 也支持 faithfulness/answer_relevancy
+  # 在 priority_fallback 模式下：
+  #   faithfulness → builtin（第一优先级）
+  #   answer_relevancy → builtin（第一优先级）
+  #   deepeval 独有指标 → deepeval
+  #   ragas 独有指标 → ragas
+```
+
+新增后端只需：
+
+1. 实现 `BaseEvaluator` 接口
+2. 在 `backends` 列表中注册
+3. 在 `backend_priority` 中指定优先级
+4. `MetricResolver` 自动处理指标分配
+
+**这是工程最佳实践**：
+
+* ✅ 开闭原则：新增后端无需修改现有代码
+
+* ✅ 单一职责：MetricResolver 专注指标分配，Evaluator 专注指标计算
+
+* ✅ 配置驱动：所有策略通过配置管理，无需改代码
+
+* ✅ 防御性设计：validate() 方法确保所有指标都有后端可计算
 
 #### 2.1.2 Token 消耗优化
 
@@ -94,8 +345,6 @@
 **优化项 D：预验证机制减少无效重试**
 
 * 在调用 LLM 前，检查 segments 是否包含足够的关键词/数字（`_extract_segment_keywords` 已存在）
-
-* 对 irrelevant 类型，跳过 segment 加载（当前已实现，但可加日志确认）
 
 * 对 evidence 验证失败的重试，先尝试修复 JSON 格式再重试
 
@@ -349,56 +598,61 @@ def generate_test_set(self, meal_name, quality_level="quick", **kwargs):
 | 1.4 | needs\_revision 状态激活             | review\_golden\_testset.py          | P1  |
 | 1.5 | 审核进度持久化                          | review\_golden\_testset.py          | P1  |
 
-### Phase 2：指标体系优化（预估 3-4 天）
+### Phase 2：多后端指标解析系统（预估 4-5 天）
 
-| 步骤  | 任务                       | 涉及文件                                     | 优先级 |
-| --- | ------------------------ | ---------------------------------------- | --- |
-| 2.1 | 设计 metrics\_tier 配置      | config.yaml                              | P1  |
-| 2.2 | BuiltinEvaluator 支持 tier | builtin\_evaluator.py                    | P1  |
-| 2.3 | run\_experiment 支持 tier  | run\_experiment.py                       | P1  |
-| 2.4 | 评测 LLM 调用纳入 TokenTracker | builtin\_evaluator.py, token\_tracker.py | P2  |
-| 2.5 | segment\_size 自适应        | test\_generator.py                       | P2  |
+| 步骤  | 任务                                                             | 涉及文件                                     | 优先级 |
+| --- | -------------------------------------------------------------- | ---------------------------------------- | --- |
+| 2.1 | 实现 MetricResolver 类                                            | eval/metrics/metric\_resolver.py（新增）     | P1  |
+| 2.2 | 配置系统扩展（resolution\_strategy/backend\_priority/metrics\_preset） | config.yaml                              | P1  |
+| 2.3 | 重构 evaluate\_test\_set() 使用 MetricResolver                     | run\_experiment.py                       | P1  |
+| 2.4 | 指标预设定义（core/extended/full）                                     | config.yaml                              | P1  |
+| 2.5 | 向后兼容处理（旧配置自动映射）                                                | run\_experiment.py                       | P1  |
+| 2.6 | MetricResolver 单元测试                                            | tests/test\_metric\_resolver.py（新增）      | P1  |
+| 2.7 | 评测 LLM 调用纳入 TokenTracker                                       | builtin\_evaluator.py, token\_tracker.py | P2  |
 
-### Phase 3：审核流程优化（预估 3-4 天）
-
-| 步骤  | 任务                 | 涉及文件                       | 优先级 |
-| --- | ------------------ | -------------------------- | --- |
-| 3.1 | 实现 auto-approve 机制 | review\_golden\_testset.py | P1  |
-| 3.2 | 审计报告与审核联动          | review\_golden\_testset.py | P2  |
-| 3.3 | 批量操作支持             | review\_golden\_testset.py | P2  |
-| 3.4 | 审核者身份记录            | review\_golden\_testset.py | P3  |
-
-### Phase 4：双链路融合（预估 4-5 天）
-
-| 步骤  | 任务                                       | 涉及文件                                     | 优先级 |
-| --- | ---------------------------------------- | ---------------------------------------- | --- |
-| 4.1 | Golden 差异点提取为配置参数                        | test\_generator.py, config.yaml          | P2  |
-| 4.2 | generate\_golden\_testset 重构为统一方法 + 配置覆盖 | test\_generator.py                       | P2  |
-| 4.3 | 移除 Golden 自动生成逻辑                         | test\_set\_manager.py                    | P2  |
-| 4.4 | 引入 quality\_level 概念                     | test\_generator.py, config.yaml, main.py | P3  |
-| 4.5 | 实验配置向后兼容                                 | run\_experiment.py                       | P3  |
-
-### Phase 5：生成质量提升（预估 3-4 天）
+### Phase 3：Token 优化与生成质量（预估 3-4 天）
 
 | 步骤  | 任务                    | 涉及文件               | 优先级 |
 | --- | --------------------- | ------------------ | --- |
-| 5.1 | LLM 自评过滤              | test\_generator.py | P2  |
-| 5.2 | 问题多样性增强（embedding 去重） | test\_generator.py | P3  |
-| 5.3 | 数值校验扩展                | test\_generator.py | P3  |
-| 5.4 | 预验证机制减少无效重试           | test\_generator.py | P2  |
+| 3.1 | segment\_size 自适应     | test\_generator.py | P2  |
+| 3.2 | 预验证机制减少无效重试           | test\_generator.py | P2  |
+| 3.3 | LLM 自评过滤              | test\_generator.py | P2  |
+| 3.4 | 问题多样性增强（embedding 去重） | test\_generator.py | P3  |
+| 3.5 | 数值校验扩展                | test\_generator.py | P3  |
+
+### Phase 4：审核流程优化（预估 3-4 天）
+
+| 步骤  | 任务                 | 涉及文件                       | 优先级 |
+| --- | ------------------ | -------------------------- | --- |
+| 4.1 | 实现 auto-approve 机制 | review\_golden\_testset.py | P1  |
+| 4.2 | 审计报告与审核联动          | review\_golden\_testset.py | P2  |
+| 4.3 | 批量操作支持             | review\_golden\_testset.py | P2  |
+| 4.4 | 审核者身份记录            | review\_golden\_testset.py | P3  |
+
+### Phase 5：双链路融合（预估 4-5 天）
+
+| 步骤  | 任务                                       | 涉及文件                                     | 优先级 |
+| --- | ---------------------------------------- | ---------------------------------------- | --- |
+| 5.1 | Golden 差异点提取为配置参数                        | test\_generator.py, config.yaml          | P2  |
+| 5.2 | generate\_golden\_testset 重构为统一方法 + 配置覆盖 | test\_generator.py                       | P2  |
+| 5.3 | 移除 Golden 自动生成逻辑                         | test\_set\_manager.py                    | P2  |
+| 5.4 | 引入 quality\_level 概念                     | test\_generator.py, config.yaml, main.py | P3  |
+| 5.5 | 实验配置向后兼容                                 | run\_experiment.py                       | P3  |
 
 ***
 
 ## 四、预期收益汇总
 
-| 维度                      | 当前            | 优化后                 | 改善幅度         |
-| ----------------------- | ------------- | ------------------- | ------------ |
-| 测试集生成 token/题           | \~8,000 input | \~5,000-5,500 input | **-30\~35%** |
-| 评测 LLM 调用/题（core tier）  | \~11 次        | \~3 次               | **-73%**     |
-| 人工审核工作量（150 题）          | 150 题         | 40-60 题             | **-60%**     |
-| 代码重复（Golden vs Default） | 独立方法          | 统一方法 + 配置           | **-200 行**   |
-| 指标可观测性                  | 评测 LLM 调用不可见  | 全链路追踪               | 质的飞跃         |
-| rejected 题目污染           | 存在            | 已修复                 | BUG 消除       |
+| 维度                                            | 当前            | 优化后                 | 改善幅度              |
+| --------------------------------------------- | ------------- | ------------------- | ----------------- |
+| 测试集生成 token/题                                 | \~8,000 input | \~5,000-5,500 input | **-30\~35%**      |
+| 评测 LLM 调用/题（core preset + priority\_fallback） | \~11 次        | \~3 次               | **-73%**          |
+| 重叠指标重复计算                                      | 4 个指标双后端各算一次  | 仅最高优先级后端计算          | **-50% 重叠 token** |
+| 人工审核工作量（150 题）                                | 150 题         | 40-60 题             | **-60%**          |
+| 代码重复（Golden vs Default）                       | 独立方法          | 统一方法 + 配置           | **-200 行**        |
+| 指标可观测性                                        | 评测 LLM 调用不可见  | 全链路追踪               | 质的飞跃              |
+| rejected 题目污染                                 | 存在            | 已修复                 | BUG 消除            |
+| 后端扩展性                                         | 硬编码双后端        | MetricResolver 自动分配 | 新后端零改动            |
 
 ***
 
@@ -409,5 +663,7 @@ def generate_test_set(self, meal_name, quality_level="quick", **kwargs):
 | segment\_size 缩减影响 evidence 验证通过率 | 中  | 中  | 先 A/B 测试对比通过率，再决定是否全量切换            |
 | auto-approve 误放过低质量题              | 低  | 高  | 保守判定规则 + 人工抽检 10% auto\_approved 题 |
 | 双链路融合破坏现有实验配置                     | 低  | 高  | 向后兼容层 + 渐进式迁移                      |
-| metrics\_tier 导致历史数据不可比           | 中  | 中  | 保留 full tier 作为选项，版本发布时用 full 对标   |
+| metrics\_preset 导致历史数据不可比         | 中  | 中  | 保留 full preset 作为选项，版本发布时用 full 对标 |
+| MetricResolver 分配逻辑与用户预期不符        | 低  | 中  | validate() 方法 + 日志输出分配方案 + 文档说明    |
+| comparison 模式 token 开销过大          | 低  | 中  | 配置文档明确说明成本，建议仅在版本发布时使用             |
 
