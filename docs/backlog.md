@@ -13,8 +13,8 @@
 | 类型 | 待处理 | 进行中 | 已完成 | 已延期 |
 |------|--------|--------|--------|--------|
 | Bug | 8 | 0 | 18 | 2 |
-| Feature | 27 | 0 | 20 | 0 |
-| Refactor | 8 | 0 | 14 | 1 |
+| Feature | 26 | 0 | 21 | 0 |
+| Refactor | 5 | 0 | 17 | 1 |
 | Optimization | 7 | 0 | 2 | 0 |
 | Investigation | 4 | 0 | 17 | 1 |
 | Test | 0 | 0 | 8 | 0 |
@@ -80,7 +80,7 @@
 | FEAT-031 | golden_qa.json 重做与回归测试更新 | [INV-006 调查](reviews/investigations/inv-006-golden-test.md) | 📋 待处理 | 中 | 使用 document-based 策略重做，迁移为 TestSetManager 格式 |
 | FEAT-032 | 评估模型与生成模型分离配置 | [INV-007 调查](reviews/investigations/inv-007-eval-system-reliability.md) | 📋 待处理 | 中 | 解决 faithfulness/answer_relevancy 自评偏差问题 |
 | FEAT-033 | 增强日志系统覆盖率与 pytest 集成 | [INV-003 调查](reviews/investigations/inv-003-logging.md) | 📋 待处理 | 中 | pytest-loguru 集成、配置加载日志、文件写入结构化日志 |
-| FEAT-034 | 开源准备度完善 | [INV-005 调查](reviews/investigations/inv-005-open-source.md) | 📋 待处理 | 中 | CONTRIBUTING.md、README 更新、可选 SECURITY.md |
+| FEAT-034 | 开源准备度完善 | [INV-005 调查](reviews/investigations/inv-005-open-source.md) | ✅ 已完成 | 中 | CONTRIBUTING.md 已创建，README 已更新至 v0.1.8 |
 | FEAT-035 | 元数据增强（页码+标题层级） | [INV-010 调查](reviews/investigations/inv-010-metadata.md) | 📋 待处理 | 中 | chunk metadata 增加 page_number 和 headings 字段 |
 | FEAT-036 | PDF 表格解析质量提升 | [INV-016 调查](reviews/investigations/inv-016-table-parsing.md) | 📋 待处理 | 中 | fitz_pdfplumber 为推荐解析器、补充 OCR 支持、表格参数调优 |
 | FEAT-037 | benchmark_use_ocr 对比维度参数化 | benchmark_use_ocr 扩展规划 | 📋 待处理 | 中 | 将 OCR 开/关硬编码改为 YAML 配置驱动，支持任意 pymupdf4llm 选项的 A/B 对比 |
@@ -96,12 +96,12 @@
 
 | ID | 描述 | 来源 | 状态 | 规模 | 备注 |
 |----|------|------|------|------|------|
-| RF-001 | CLI 输出规范化（172 处 print） | [v0.1.5 code-review](reviews/v0.1.5/code-review.md) | 📋 待处理 | 中 | 替换为 loguru 会改变输出格式 |
-| RF-002 | 项目结构整理（根目录 .py 文件） | [原 TODO.md](../TODO.md) | 📋 待处理 | 小 | lint 盲区已修复（04-25），结构整理待定；详见 [评估报告](reviews/investigations/rf-002-project-structure.md) |
+| RF-001 | CLI 输出规范化（172 处 print） | [v0.1.5 code-review](reviews/v0.1.5/code-review.md) | ✅ 已完成 | 中 | src/ 中仅剩 artifact_cli.py 的 20 处 print（CLI 工具合理用法）；pipeline.py 4 处已替换为 logger.info |
+| RF-002 | 项目结构整理（根目录 .py 文件） | [原 TODO.md](../TODO.md) | ✅ 已完成 | 小 | 方案 C：合并 interactive.py 到 main.py，新增 --interactive 参数；详见 [评估报告](reviews/investigations/rf-002-project-structure.md) |
 | RF-004 | 硬编码配置值提取到 config.yaml | v0.1.7 合并验收 | ✅ 已完成 | 中 | metrics.py/experiment_reporter.py/test_generator.py 中模型名、API URL、max_tokens、temperature 硬编码 |
 | RF-005 | Anthropic 客户端创建统一抽象 | v0.1.7 合并验收 | ✅ 已完成 | 小 | 提取 create_anthropic_client 到 src/llm_client.py，4处→1处 |
 | RF-007 | exp_configs 版本维护机制沉淀 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 随版本演进清洗模板，考虑沉淀为 skill 或系统提示词 |
-| RF-008 | backlog issue 详细信息记录 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 参考 GitHub 做法，支持超链接引用详情 |
+| RF-008 | backlog issue 详细信息记录 | [TODO.md](../TODO.md) | ✅ 已完成 | 中 | 新增 docs/reviews/issues/ 详情文件机制，backlog 备注列添加超链接；todo-archiver skill 已更新 |
 | RF-009 | commit-rule 与 CLAUDE.md 渐进式披露 | [TODO.md](../TODO.md) | ✅ 已完成 | 中 | 三层渐进式披露：commit-rule 23行+CLAUDE.md 3行+SKILL.md+docs/guides/commit-conventions.md |
 | RF-010 | lint/ruff 配置 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 添加代码检查工具 |
 | RF-011 | docs 目录组织度维护 | [TODO.md](../TODO.md) | ✅ 已完成 | 小 | 打扫卫生时考量 docs 目录组织度，恢复整洁度 |
@@ -197,6 +197,7 @@
 | FEAT-019 | .trae 目录 plan/spec 文档定期归档机制 | [TODO.md](../TODO.md) | 2026-04-21 |
 | FEAT-029 | 项目记忆系统 Skill（project-memory） | [TODO.md](../TODO.md) | 2026-04-24 |
 | FEAT-042 | 实验成功后才生成 LLM 报告 | [TODO.md](../TODO.md) | 2026-04-26 |
+| FEAT-034 | 开源准备度完善 | [INV-005 调查](reviews/investigations/inv-005-open-source.md) | 2026-04-26 |
 | FEAT-011 | 补做 LLM 报告功能 | [TODO.md](../TODO.md) | 2026-04-24 |
 | FEAT-DONE-001 | 文档系统重构 | [原 TODO.md](../TODO.md) | 2026-04-18 |
 | FEAT-DONE-002 | LLM 报告功能修复 | [原 TODO.md](../TODO.md) | 2026-04-17 |
@@ -221,6 +222,9 @@
 | BUG-026 | 全量缓存 hash 路径不一致 → pipeline.py 改用 ArtifactCache 动态计算 | [TODO.md](../TODO.md) | 2026-04-26 |
 | BUG-027 | Token 统计按 variant 区分 → 新增 get_summary_by_variant() | [TODO.md](../TODO.md) | 2026-04-26 |
 | OPT-009 | chunker 日志降噪 → 逐文件 INFO→DEBUG | [TODO.md](../TODO.md) | 2026-04-26 |
+| RF-001 | CLI 输出规范化 → src/ 中仅剩 artifact_cli.py 的 20 处 print（合理用法） | [v0.1.5 code-review](reviews/v0.1.5/code-review.md) | 2026-04-26 |
+| RF-002 | 项目结构整理 → 方案 C：合并 interactive.py 到 main.py | [原 TODO.md](../TODO.md) | 2026-04-26 |
+| RF-008 | backlog issue 详细信息记录 → 新增 docs/reviews/issues/ 详情文件机制 | [TODO.md](../TODO.md) | 2026-04-26 |
 
 ### Investigation
 
