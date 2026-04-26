@@ -1259,7 +1259,7 @@ class TestGenerateDocumentBasedQuestionsSupplemental:
                     "answer_sources": [],
                     "evidence": [
                         {
-                            "quote": "文档",
+                            "quote": "文档内容营收增长数据分析",
                             "segment_index": 0,
                             "match_type": "exact",
                         }
@@ -1834,15 +1834,30 @@ class TestValidateEvidence:
         }
         self.generator = TestSetGenerator(self.config)
         self.segments = [
-            {"text": "第一段内容，包含营收数据。", "segment_index": 0},
-            {"text": "第二段内容，包含利润数据。", "segment_index": 1},
-            {"text": "第三段内容，包含增长数据。", "segment_index": 2},
+            {
+                "text": "第一段内容，包含营收数据及相关分析，同比增长显著。",
+                "segment_index": 0,
+            },
+            {
+                "text": "第二段内容，包含利润数据及趋势预测，环比有所改善。",
+                "segment_index": 1,
+            },
+            {
+                "text": "第三段内容，包含增长数据及市场前景，展望较为乐观。",
+                "segment_index": 2,
+            },
         ]
 
     def test_valid_evidence_all_quotes_found(self):
         evidence_list = [
-            {"segment_index": 0, "quote": "营收数据"},
-            {"segment_index": 1, "quote": "利润数据"},
+            {
+                "segment_index": 0,
+                "quote": "包含营收数据及相关分析，同比增长显著",
+            },
+            {
+                "segment_index": 1,
+                "quote": "包含利润数据及趋势预测，环比有所改善",
+            },
         ]
         result = self.generator._validate_evidence(evidence_list, self.segments)
         assert result["valid"] is True
@@ -1853,8 +1868,14 @@ class TestValidateEvidence:
 
     def test_invalid_evidence_some_quotes_not_found(self):
         evidence_list = [
-            {"segment_index": 0, "quote": "营收数据"},
-            {"segment_index": 1, "quote": "不存在的数据"},
+            {
+                "segment_index": 0,
+                "quote": "包含营收数据及相关分析，同比增长显著",
+            },
+            {
+                "segment_index": 1,
+                "quote": "这段完全不存在的数据内容无法匹配原文信息",
+            },
         ]
         result = self.generator._validate_evidence(evidence_list, self.segments)
         assert result["valid"] is False
@@ -1864,7 +1885,10 @@ class TestValidateEvidence:
 
     def test_invalid_segment_index(self):
         evidence_list = [
-            {"segment_index": 99, "quote": "营收数据"},
+            {
+                "segment_index": 99,
+                "quote": "包含营收数据及相关分析，同比增长显著",
+            },
         ]
         result = self.generator._validate_evidence(evidence_list, self.segments)
         assert result["valid"] is False
@@ -1873,7 +1897,7 @@ class TestValidateEvidence:
 
     def test_missing_segment_index(self):
         evidence_list = [
-            {"quote": "营收数据"},
+            {"quote": "包含营收数据及相关分析，同比增长显著"},
         ]
         result = self.generator._validate_evidence(evidence_list, self.segments)
         assert result["valid"] is False
@@ -1888,7 +1912,10 @@ class TestValidateEvidence:
 
     def test_evidence_with_fuzzy_match(self):
         evidence_list = [
-            {"segment_index": 0, "quote": "营收数据。"},
+            {
+                "segment_index": 0,
+                "quote": "包含营收数据及相关分析，同比增长显著。",
+            },
         ]
         result = self.generator._validate_evidence(evidence_list, self.segments)
         assert result["verified_evidence"][0]["verified"] is True
@@ -2072,13 +2099,22 @@ class TestHallucinationDetection:
         }
         self.generator = TestSetGenerator(self.config)
         self.segments = [
-            {"text": "第一段内容，包含营收数据。", "segment_index": 0},
-            {"text": "第二段内容，包含利润数据。", "segment_index": 1},
+            {
+                "text": "第一段内容，包含营收数据及相关分析，同比增长显著。",
+                "segment_index": 0,
+            },
+            {
+                "text": "第二段内容，包含利润数据及趋势预测，环比有所改善。",
+                "segment_index": 1,
+            },
         ]
 
     def test_invalid_quote_detected_in_result(self):
         evidence_list = [
-            {"segment_index": 0, "quote": "不存在的引用内容"},
+            {
+                "segment_index": 0,
+                "quote": "这段完全不存在的引用内容无法匹配原文信息",
+            },
         ]
         result = self.generator._validate_evidence(evidence_list, self.segments)
 
@@ -2088,7 +2124,10 @@ class TestHallucinationDetection:
 
     def test_valid_quote_no_invalid_entries(self):
         evidence_list = [
-            {"segment_index": 0, "quote": "营收数据"},
+            {
+                "segment_index": 0,
+                "quote": "包含营收数据及相关分析，同比增长显著",
+            },
         ]
         result = self.generator._validate_evidence(evidence_list, self.segments)
 
@@ -2097,8 +2136,14 @@ class TestHallucinationDetection:
 
     def test_multiple_invalid_quotes_all_detected(self):
         evidence_list = [
-            {"segment_index": 0, "quote": "不存在的引用1"},
-            {"segment_index": 1, "quote": "不存在的引用2"},
+            {
+                "segment_index": 0,
+                "quote": "这段完全不存在的引用内容一无法匹配原文",
+            },
+            {
+                "segment_index": 1,
+                "quote": "这段完全不存在的引用内容二无法匹配原文",
+            },
         ]
         result = self.generator._validate_evidence(evidence_list, self.segments)
 

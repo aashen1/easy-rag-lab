@@ -442,6 +442,142 @@ class TestAuditTestset:
         assert report["numerical_accuracy"]["issues_found"] >= 1
 
 
+class TestValidateAnswerConsistency:
+    def setup_method(self):
+        self.config = {"test_generation": {}}
+        self.generator = TestSetGenerator(self.config)
+
+    def test_positive_number_described_as_negative(self):
+        q = {
+            "answer": "经营性现金流短期债务比为778.37倍，这个数值为负值",
+            "ground_truth_excerpt": "均为负值，其中酒鬼酒778.37倍",
+        }
+        is_consistent, warning = self.generator._validate_answer_consistency(q)
+        assert not is_consistent
+        assert "negative" in warning.lower() or "负" in warning
+
+    def test_consistent_answer_passes(self):
+        q = {
+            "answer": "经营性现金流短期债务比为-778.37倍，为负值",
+            "ground_truth_excerpt": "均为负值，其中酒鬼酒-778.37倍",
+        }
+        is_consistent, warning = self.generator._validate_answer_consistency(q)
+        assert is_consistent
+
+    def test_no_negative_description_passes(self):
+        q = {
+            "answer": "营收增长15.3%，达到100亿元",
+            "ground_truth_excerpt": "营收同比增长15.3%，达到100亿元",
+        }
+        is_consistent, warning = self.generator._validate_answer_consistency(q)
+        assert is_consistent
+
+    def test_empty_answer_passes(self):
+        q = {"answer": "", "ground_truth_excerpt": "some text"}
+        is_consistent, warning = self.generator._validate_answer_consistency(q)
+        assert is_consistent
+
+
+class TestValidateEvidenceMinQuoteLength:
+    def setup_method(self):
+        self.config = {"test_generation": {}}
+        self.generator = TestSetGenerator(self.config)
+
+    def test_short_quote_rejected(self):
+        segments = [
+            {"text": "即时型消费成为增量引擎，推动行业增长", "segment_index": 0}
+        ]
+        evidence = [{"segment_index": 0, "quote": "即时型消费", "relevance": "test"}]
+        result = self.generator._validate_evidence(evidence, segments)
+        assert result["verified_evidence"][0]["verified"] is False
+        assert "too short" in result["invalid_quotes"][0]["reason"].lower()
+
+    def test_long_quote_accepted(self):
+        segments = [
+            {
+                "text": "即时零售推动了即时型消费成为增量引擎，2025年B级城市增速达70%",
+                "segment_index": 0,
+            }
+        ]
+        evidence = [
+            {
+                "segment_index": 0,
+                "quote": "即时零售推动了即时型消费成为增量引擎，2025年B级城市增速达70%",
+                "relevance": "test",
+            }
+        ]
+        result = self.generator._validate_evidence(evidence, segments)
+        assert result["verified_evidence"][0]["verified"] is True
+
+
+class TestValidateEvidenceDocumentFallback:
+    def setup_method(self):
+        self.config = {"test_generation": {}}
+        self.generator = TestSetGenerator(self.config)
+
+    def test_invalid_segment_index_found_in_doc(self):
+        segments = [{"text": "some other text", "segment_index": 0}]
+        doc_content = "即时零售推动了即时型消费成为增量引擎，2025年B级城市增速达70%"
+        evidence = [
+            {
+                "segment_index": 5,
+                "quote": "即时零售推动了即时型消费成为增量引擎，2025年B级城市增速达70%",
+                "relevance": "test",
+            }
+        ]
+        result = self.generator._validate_evidence(
+            evidence, segments, "unknown", doc_content
+        )
+        assert result["verified_evidence"][0]["verified"] is True
+        assert result["verified_evidence"][0]["match_type"] == "document_fuzzy"
+
+    def test_invalid_segment_index_not_in_doc(self):
+        segments = [{"text": "some other text", "segment_index": 0}]
+        doc_content = "完全不同的文档内容，没有任何关联信息"
+        evidence = [
+            {
+                "segment_index": 5,
+                "quote": "即时零售推动了即时型消费成为增量引擎，2025年B级城市增速达70%",
+                "relevance": "test",
+            }
+        ]
+        result = self.generator._validate_evidence(
+            evidence, segments, "unknown", doc_content
+        )
+        assert result["verified_evidence"][0]["verified"] is False
+
+    def test_quote_not_in_segment_but_in_doc(self):
+        segments = [{"text": "这是片段0的内容，关于市场概况", "segment_index": 0}]
+        doc_content = "这是片段0的内容，关于市场概况。即时零售推动了即时型消费成为增量引擎，2025年增速达70%"
+        evidence = [
+            {
+                "segment_index": 0,
+                "quote": "即时零售推动了即时型消费成为增量引擎，2025年增速达70%",
+                "relevance": "test",
+            }
+        ]
+        result = self.generator._validate_evidence(
+            evidence, segments, "unknown", doc_content
+        )
+        assert result["verified_evidence"][0]["verified"] is True
+        assert result["verified_evidence"][0]["match_type"] == "document_fuzzy"
+
+
+class TestChineseToTypeKey:
+    def setup_method(self):
+        self.config = {"test_generation": {}}
+        self.generator = TestSetGenerator(self.config)
+
+    def test_known_type(self):
+        assert self.generator._chinese_to_type_key("单知识点查询") == "single_fact"
+
+    def test_multi_fact(self):
+        assert self.generator._chinese_to_type_key("多知识点综合") == "multi_fact"
+
+    def test_unknown_type(self):
+        assert self.generator._chinese_to_type_key("未知类型") is None
+
+
 class TestFormatProgressBar:
     def test_zero_total(self):
         from scripts.review_golden_testset import format_progress_bar

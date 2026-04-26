@@ -229,6 +229,13 @@ EVIDENCE_AWARE_PROMPT = """你是一位金融行业从业者，正在阅读一�
 2. 答案基于文档内容，用【原文引用】标注引用
 3. 证据引用必须与片段原文逐字一致，说明如何支撑答案
 
+## 引用规则（极其重要）
+- quote字段必须是从片段原文中完整摘抄的连续句子，不得改写、压缩、合并或概括
+- 引用长度至少20个字符，不要只引用标题、小节名或短语
+- 错误示例："即时型消费成为增量引擎"（太短，像标题而非原文句子）
+- 正确示例："即时零售推动了即时型消费成为增量引擎，2025年B级及以下城市美团闪购酒饮消费金额增速高达70%左右"
+- segment_index必须与片段编号对应（片段0对应segment_index: 0）
+
 ## 输出格式
 严格按JSON格式输出：
 {{
@@ -398,6 +405,11 @@ EVIDENCE_ADVERSARIAL_SUPPLEMENT = """
 - 答案必须指出文档中的正确信息，并说明问题中的诱饵
 - 问题要口语化，像在问同事，不要用"请说明""根据文档"等学术化措辞
 - 好的例子："光模块市场增长了15%吗？"（文档实际是12.5%，测试系统是否会纠正）
+
+反驳要求（极其重要）：
+- 反驳必须直接针对问题中的核心主张，不能用泛泛的行业数据代替对具体主张的回应
+- 错误示例：问"X产品是否意味着Y已实现？" → 回答"行业整体投入节奏比海外慢"（太泛，未针对X产品本身）
+- 正确示例：问"X产品是否意味着Y已实现？" → 回答"X产品在Z维度上仍落后于竞品A，具体表现为..."（直接针对X产品的能力）
 
 证据要求：
 - 必须提供包含正确信息的原文引用
@@ -1621,6 +1633,7 @@ class TestSetGenerator:
                     generator=generator,
                     source_path=source_path,
                     doc_name=doc_name,
+                    doc_content=doc_content,
                 )
 
                 if qa is not None:
@@ -1743,6 +1756,7 @@ class TestSetGenerator:
                     generator=generator,
                     source_path=source_path,
                     doc_name=doc_name,
+                    doc_content=doc_content,
                 )
 
                 if qa is not None:
@@ -1996,6 +2010,7 @@ class TestSetGenerator:
                     generator=generator,
                     source_path=source_path,
                     doc_name=doc_name,
+                    doc_content=doc_content,
                 )
 
                 if qa is not None:
@@ -2030,6 +2045,18 @@ class TestSetGenerator:
                             )
                         qa.setdefault("metadata", {})
                         qa["metadata"]["numerical_auto_corrected"] = True
+
+                    is_consistent, consistency_warning = (
+                        self._validate_answer_consistency(qa)
+                    )
+                    if not is_consistent:
+                        logger.warning(
+                            f"Answer consistency issue: {consistency_warning}"
+                        )
+                        qa.setdefault("metadata", {})
+                        qa["metadata"]["answer_consistency_warning"] = (
+                            consistency_warning
+                        )
 
                     excerpt = qa.get("ground_truth_excerpt", "")
                     if excerpt and q_type not in ("irrelevant",):
@@ -2078,6 +2105,24 @@ class TestSetGenerator:
                 f"Main loop generated {len(questions)}/{num_questions}. "
                 f"Supplementing {deficit} more..."
             )
+
+            actual_type_counts: dict[str, int] = {}
+            for q in questions:
+                qt = q.get("question_type", "")
+                qt_key = self._chinese_to_type_key(qt)
+                if qt_key:
+                    actual_type_counts[qt_key] = actual_type_counts.get(qt_key, 0) + 1
+
+            type_deficits: dict[str, int] = {}
+            for qt, target in type_counts.items():
+                actual = actual_type_counts.get(qt, 0)
+                gap = target - actual
+                if gap > 0:
+                    type_deficits[qt] = gap
+
+            if type_deficits:
+                logger.info(f"Type deficits after main loop: {type_deficits}")
+
             doc_names = list(filtered_contents.keys())
             all_types = list(type_distribution.keys())
             type_weights = [type_distribution[t] for t in all_types]
@@ -2097,12 +2142,20 @@ class TestSetGenerator:
             while len(questions) < num_questions and extra_attempt < max_extra_attempts:
                 extra_attempt += 1
                 doc_name = doc_names[extra_attempt % len(doc_names)]
-                r = random.random()
-                q_type = all_types[0]
-                for t, threshold in weighted_types:
-                    if r <= threshold:
-                        q_type = t
-                        break
+
+                if type_deficits:
+                    max_deficit = max(type_deficits.values())
+                    deficit_types = [
+                        t for t, d in type_deficits.items() if d == max_deficit
+                    ]
+                    q_type = deficit_types[extra_attempt % len(deficit_types)]
+                else:
+                    r = random.random()
+                    q_type = all_types[0]
+                    for t, threshold in weighted_types:
+                        if r <= threshold:
+                            q_type = t
+                            break
                 doc_data = filtered_contents[doc_name]
                 doc_content = doc_data["content"]
                 source_path = doc_data["source_path"]
@@ -2127,6 +2180,7 @@ class TestSetGenerator:
                     generator=generator,
                     source_path=source_path,
                     doc_name=doc_name,
+                    doc_content=doc_content,
                 )
 
                 if qa is not None:
@@ -2159,6 +2213,18 @@ class TestSetGenerator:
                         qa.setdefault("metadata", {})
                         qa["metadata"]["numerical_auto_corrected"] = True
 
+                    is_consistent, consistency_warning = (
+                        self._validate_answer_consistency(qa)
+                    )
+                    if not is_consistent:
+                        logger.warning(
+                            f"Answer consistency issue: {consistency_warning}"
+                        )
+                        qa.setdefault("metadata", {})
+                        qa["metadata"]["answer_consistency_warning"] = (
+                            consistency_warning
+                        )
+
                     excerpt = qa.get("ground_truth_excerpt", "")
                     if excerpt and q_type not in ("irrelevant",):
                         excerpt_verified = self._verify_excerpt_in_document(
@@ -2188,6 +2254,15 @@ class TestSetGenerator:
                     questions.append(qa)
                     seen_questions.add(question_text)
                     question_id += 1
+
+                    if q_type in type_deficits:
+                        type_deficits[q_type] -= 1
+                        if type_deficits[q_type] <= 0:
+                            del type_deficits[q_type]
+                            if type_deficits:
+                                logger.debug(
+                                    f"Remaining type deficits: {type_deficits}"
+                                )
                 else:
                     failed_count += 1
                     logger.warning(
@@ -2319,6 +2394,7 @@ class TestSetGenerator:
         generator: Generator,
         source_path: str,
         doc_name: str = "",
+        doc_content: str = "",
     ) -> dict[str, Any] | None:
         """Generate a single question using hybrid strategy.
 
@@ -2329,6 +2405,10 @@ class TestSetGenerator:
             question_type: Type of question to generate.
             generator: Generator instance for LLM calls.
             source_path: Source path of the document.
+            doc_name: Name of the document (used to derive topic for
+                irrelevant questions).
+            doc_content: Full document content for fallback evidence
+                verification.
 
         Returns:
             Dictionary with question data including verified evidence and
@@ -2386,13 +2466,18 @@ class TestSetGenerator:
                 continue
 
             validation = self._validate_evidence(
-                evidence_list, selected_segments, question_type
+                evidence_list, selected_segments, question_type, doc_content
+            )
+
+            verified_count = sum(
+                1 for e in validation["verified_evidence"] if e.get("verified", False)
             )
 
             if not validation["valid"]:
                 logger.debug(
                     f"Evidence validation failed on attempt {attempt + 1}: "
-                    f"{len(validation['invalid_quotes'])} invalid quotes"
+                    f"{len(validation['invalid_quotes'])} invalid quotes, "
+                    f"{verified_count} verified"
                 )
                 if attempt < self.max_retries - 1:
                     continue
@@ -2574,6 +2659,75 @@ class TestSetGenerator:
             return False, correction
 
         return True, None
+
+    def _validate_answer_consistency(
+        self, question_data: dict[str, Any]
+    ) -> tuple[bool, str]:
+        """Validate answer for internal consistency, especially sign contradictions.
+
+        Detects cases where an answer describes a value as negative but
+        presents it as a positive number (or vice versa), which commonly
+        occurs when the source text omits a negative sign.
+
+        Args:
+            question_data: Dictionary containing 'answer' and
+                'ground_truth_excerpt'.
+
+        Returns:
+            Tuple of (is_consistent, warning_message). is_consistent is
+            True if no contradictions found. warning_message describes
+            the issue if found.
+        """
+        answer = question_data.get("answer", "")
+        excerpt = question_data.get("ground_truth_excerpt", "")
+
+        if not answer:
+            return True, ""
+
+        negative_indicators = ["负值", "为负", "负数", "均为负", "均为负值"]
+        has_negative_description = any(ind in answer for ind in negative_indicators)
+
+        if not has_negative_description:
+            return True, ""
+
+        answer_numbers = re.findall(r"(-?\d+[\d,.]*\d*|-?\d+)", answer)
+        positive_numbers = []
+        for num_str in answer_numbers:
+            try:
+                val = float(num_str.replace(",", ""))
+                if val > 0:
+                    positive_numbers.append(val)
+            except ValueError:
+                continue
+
+        if not positive_numbers:
+            return True, ""
+
+        excerpt_negative_indicators = ["负", "-"]
+        excerpt_has_negative = any(
+            ind in excerpt for ind in excerpt_negative_indicators
+        )
+
+        if excerpt_has_negative:
+            for num in positive_numbers:
+                neg_form = f"-{num}"
+                neg_form_comma = f"-{num:,.2f}"
+                if neg_form in excerpt or neg_form_comma in excerpt:
+                    return False, (
+                        f"Answer describes value as negative but presents "
+                        f"positive number {num}. Source text implies "
+                        f"negative value."
+                    )
+
+        large_positive_with_negative_desc = any(n > 10 for n in positive_numbers)
+        if large_positive_with_negative_desc and has_negative_description:
+            return False, (
+                f"Answer contains positive numbers {positive_numbers} "
+                f"but describes them as negative. Likely missing "
+                f"negative sign from source text."
+            )
+
+        return True, ""
 
     def _verify_excerpt_in_document(
         self,
@@ -2849,6 +3003,8 @@ class TestSetGenerator:
                         total_confidence += 1.0
                     elif match_type == "fuzzy":
                         total_confidence += 0.9
+                    elif match_type == "document_fuzzy":
+                        total_confidence += 0.8
 
         quote_verification_rate = questions_with_verified_quotes / total
 
@@ -3460,6 +3616,18 @@ class TestSetGenerator:
                 logger.error(f"Failed to load {md_file}: {str(e)}")
 
         return documents
+
+    def _chinese_to_type_key(self, chinese_type: str) -> str | None:
+        """Convert a Chinese question type label to its English key.
+
+        Args:
+            chinese_type: Chinese label like '单知识点查询'.
+
+        Returns:
+            English key like 'single_fact', or None if not found.
+        """
+        reverse_map = {v: k for k, v in self.QUESTION_TYPES.items()}
+        return reverse_map.get(chinese_type)
 
     def _calculate_question_distribution(
         self,
@@ -4277,17 +4445,21 @@ class TestSetGenerator:
 
         return {"found": False, "position": None, "similarity": best_similarity}
 
+    MIN_QUOTE_LENGTH = 15
+
     def _validate_evidence(
         self,
         evidence_list: list[dict[str, Any]],
         segments: list[dict[str, Any]],
         question_type: str = "unknown",
+        doc_content: str = "",
     ) -> dict[str, Any]:
         """Validate evidence entries against document segments.
 
         For each evidence entry, verifies that the segment_index is valid
-        and that the quote exists in the specified segment. Records
-        verification results and detects potential hallucinations.
+        and that the quote exists in the specified segment. When the
+        segment_index is invalid, falls back to searching the full document.
+        Quotes shorter than MIN_QUOTE_LENGTH are rejected as too fragmented.
 
         Args:
             evidence_list: List of evidence dictionaries, each containing
@@ -4296,6 +4468,8 @@ class TestSetGenerator:
                 and 'segment_index' keys.
             question_type: Type of question for logging context. Defaults
                 to "unknown".
+            doc_content: Full document content for fallback verification
+                when segment_index is invalid.
 
         Returns:
             Dictionary with keys:
@@ -4333,7 +4507,39 @@ class TestSetGenerator:
                 )
                 continue
 
+            quote_clean = re.sub(r"\s+", "", quote)
+            if len(quote_clean) < self.MIN_QUOTE_LENGTH:
+                verified_evidence.append({**evidence, "verified": False})
+                invalid_quotes.append(
+                    {
+                        "quote": quote[:50] + "..." if len(quote) > 50 else quote,
+                        "reason": f"Quote too short (< {self.MIN_QUOTE_LENGTH} chars)",
+                    }
+                )
+                logger.debug(
+                    f"Quote too short ({len(quote_clean)} chars): "
+                    f"'{quote[:30]}...' Question type: {question_type}"
+                )
+                continue
+
             if segment_index not in segment_map:
+                if doc_content:
+                    doc_verified = self._verify_excerpt_in_document(quote, doc_content)
+                    if doc_verified:
+                        verified_evidence.append(
+                            {
+                                **evidence,
+                                "verified": True,
+                                "match_type": "document_fuzzy",
+                                "position": None,
+                            }
+                        )
+                        logger.debug(
+                            f"Quote found in document (not in segment "
+                            f"{segment_index}): '{quote[:30]}...'"
+                        )
+                        continue
+
                 verified_evidence.append({**evidence, "verified": False})
                 invalid_quotes.append(
                     {
@@ -4358,6 +4564,23 @@ class TestSetGenerator:
                     }
                 )
             else:
+                if doc_content:
+                    doc_verified = self._verify_excerpt_in_document(quote, doc_content)
+                    if doc_verified:
+                        verified_evidence.append(
+                            {
+                                **evidence,
+                                "verified": True,
+                                "match_type": "document_fuzzy",
+                                "position": None,
+                            }
+                        )
+                        logger.debug(
+                            f"Quote found in document (not in segment "
+                            f"{segment_index}): '{quote[:30]}...'"
+                        )
+                        continue
+
                 verified_evidence.append({**evidence, "verified": False})
                 truncated_quote = quote[:50] + "..." if len(quote) > 50 else quote
                 invalid_quotes.append(
