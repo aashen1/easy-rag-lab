@@ -20,6 +20,7 @@ test_sets:
         comparative: 0.15
         missing: 0.10
         irrelevant: 0.05
+        adversarial: 0.00
 
 variants:
   - name: "overlap_0"
@@ -51,6 +52,7 @@ variants:
         chunk_overlap: 128
 
 evaluation:
+  backends: ["builtin"]
   llm_preset: "default"
   metrics:
     retrieval:

@@ -109,6 +109,12 @@ variants:
 # evaluation — 评测配置
 # ------------------------------------------------------------
 evaluation:
+  # backends — 评测后端列表
+  #   "builtin" : 自研评测系统，支持检索指标和生成指标
+  #   "ragas"   : RAGAS评测框架，支持更丰富的生成质量指标
+  #   可同时启用多个后端：["builtin", "ragas"]
+  backends: ["builtin"]
+
   # llm_preset — 评测时使用的LLM预设名称
   #   对应 config.yaml 中 llm_presets 下的某个预设。
   #   "default" 通常指向性价比最高的模型（如 GPT-4o-mini）。

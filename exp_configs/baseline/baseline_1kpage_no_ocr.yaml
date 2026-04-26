@@ -24,6 +24,7 @@ variants:
     config_overrides: {}
 
 evaluation:
+  backends: ["builtin"]
   llm_preset: "default"
   llm_report: false
   metrics:

@@ -27,6 +27,7 @@ variants:
         chunk_overlap: 50
 
 evaluation:
+  backends: ["builtin"]
   llm_preset: "default"
   llm_report: true
   metrics:

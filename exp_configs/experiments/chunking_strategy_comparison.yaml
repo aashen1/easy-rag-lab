@@ -55,6 +55,7 @@ variants:
           min_chunk_size: 100
 
 evaluation:
+  backends: ["builtin"]
   llm_preset: "default"
   metrics:
     retrieval:

@@ -140,6 +140,7 @@ variants:
           top_n: 5
 
 evaluation:
+  backends: ["builtin"]
   llm_preset: "default"
   metrics:
     retrieval:

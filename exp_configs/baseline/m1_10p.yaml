@@ -23,6 +23,7 @@ variants:
         chunk_size: 512
         chunk_overlap: 0
 evaluation:
+  backends: ["builtin"]
   llm_preset: "default"
   llm_report: true
   metrics:

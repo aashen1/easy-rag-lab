@@ -59,6 +59,7 @@ test_sets:
         comparative: 0.15
         missing: 0.10
         irrelevant: 0.05
+        adversarial: 0.00
 
 # ------------------------------------------------------------
 # 变体配置 - 核心实验参数
@@ -124,6 +125,7 @@ variants:
 # 评测配置
 # ------------------------------------------------------------
 evaluation:
+  backends: ["builtin"]
   llm_preset: "default"
   llm_report: false
   metrics:

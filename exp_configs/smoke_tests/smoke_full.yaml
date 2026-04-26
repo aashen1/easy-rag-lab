@@ -20,6 +20,7 @@ test_sets:
         comparative: 0.15
         missing: 0.15
         irrelevant: 0.15
+        adversarial: 0.00
 
 variants:
   - name: "baseline"
@@ -86,6 +87,7 @@ variants:
           min_chunk_size: 100
 
 evaluation:
+  backends: ["builtin"]
   llm_preset: "default"
   llm_report: true
   metrics:

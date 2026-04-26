@@ -101,6 +101,7 @@ variants:
           strategy: "hyde"
 
 evaluation:
+  backends: ["builtin"]
   llm_preset: "default"
   metrics:
     retrieval:

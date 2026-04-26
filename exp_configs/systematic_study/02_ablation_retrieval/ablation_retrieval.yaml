@@ -126,6 +126,7 @@ variants:
           rrf_k: 60
 
 evaluation:
+  backends: ["builtin"]
   llm_preset: "default"
   metrics:
     retrieval:

@@ -62,6 +62,7 @@ variants:
           bm25_weight: 0.5
 
 evaluation:
+  backends: ["builtin"]
   llm_preset: "default"
   metrics:
     retrieval:

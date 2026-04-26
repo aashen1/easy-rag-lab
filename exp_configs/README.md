@@ -114,20 +114,20 @@ variants:
    ```bash
    # 确保已安装 pixi
    pixi --version
-   
+
    # 安装项目依赖
    pixi install
    ```
 
 2. **配置环境变量**
-   
+
    参考 `.env.example` 文件，确保以下环境变量已配置：
    - `LLM_API_KEY`: LLM API 密钥
    - `LLM_BASE_URL`: LLM API 基础 URL
    - 其他必要的 API 配置
 
 3. **准备 PDF 文件**
-   
+
    将金融研报 PDF 文件放入 `data/raw/` 目录：
    ```bash
    # 查看当前 PDF 文件
@@ -184,6 +184,7 @@ test_sets:
         comparative: 0.05
         missing: 0.0
         irrelevant: 0.0
+        adversarial: 0.0
 
 variants:
   - name: "baseline"
@@ -191,6 +192,7 @@ variants:
     config_overrides: {}      # 使用默认配置
 
 evaluation:
+  backends: ["builtin"]
   llm_preset: "default"
   metrics:
     retrieval:
@@ -285,6 +287,7 @@ test_sets:
         comparative: 0.05
         missing: 0.0
         irrelevant: 0.0
+        adversarial: 0.0
   - name: "multi_fact_test"
     on_missing: "auto"
     generation:
@@ -298,6 +301,7 @@ test_sets:
         comparative: 0.05
         missing: 0.0
         irrelevant: 0.0
+        adversarial: 0.0
 
 variants:
   - name: "chunk_512_overlap_0"
@@ -308,6 +312,7 @@ variants:
         chunk_overlap: 0
 
 evaluation:
+  backends: ["builtin"]
   llm_preset: "default"
   metrics:
     retrieval:
@@ -361,6 +366,7 @@ test_sets:
         comparative: 0.05
         missing: 0.0
         irrelevant: 0.0
+        adversarial: 0.0
   - name: "boundary_test"
     on_missing: "auto"
     generation:
@@ -374,6 +380,7 @@ test_sets:
         comparative: 0.15
         missing: 0.10
         irrelevant: 0.0
+        adversarial: 0.0
   - name: "multi_hop_test"
     on_missing: "auto"
     generation:
@@ -387,6 +394,7 @@ test_sets:
         comparative: 0.15
         missing: 0.05
         irrelevant: 0.0
+        adversarial: 0.0
 
 variants:
   - name: "chunk_256_overlap_0"
@@ -432,6 +440,7 @@ variants:
         chunk_overlap: 256
 
 evaluation:
+  backends: ["builtin"]
   llm_preset: "default"
   metrics:
     retrieval:
@@ -491,6 +500,7 @@ test_sets:
         comparative: 0.05
         missing: 0.0
         irrelevant: 0.0
+        adversarial: 0.0
   - name: "boundary_test"
     on_missing: "auto"
     generation:
@@ -504,6 +514,7 @@ test_sets:
         comparative: 0.15
         missing: 0.10
         irrelevant: 0.0
+        adversarial: 0.0
   - name: "multi_hop_test"
     on_missing: "auto"
     generation:
@@ -517,6 +528,7 @@ test_sets:
         comparative: 0.15
         missing: 0.05
         irrelevant: 0.0
+        adversarial: 0.0
 
 variants:
   - name: "baseline"
@@ -558,6 +570,7 @@ variants:
         top_k: 10
 
 evaluation:
+  backends: ["builtin"]
   llm_preset: "default"
   metrics:
     retrieval:
@@ -589,18 +602,18 @@ pixi run python eval/run_experiment.py --config exp_configs/multi_variant.yaml
    ```
 
 2. **复现特定实验**
-   
+
    ```bash
    # 完整复现（包含 PDF 哈希验证）
    pixi run python eval/run_experiment.py --reproduce data/exp_reports/exp_20250416_103500_baseline
-   
+
    # 跳过哈希验证（更快）
    pixi run python eval/run_experiment.py --reproduce data/exp_reports/exp_20250416_103500_baseline --skip-hash-verification
-   
+
    # 跳过所有验证
    pixi run python eval/run_experiment.py --reproduce data/exp_reports/exp_20250416_103500_baseline --skip-verification
    ```
-   
+
 3. **对比原实验与复现实验**
    ```bash
    pixi run python eval/run_experiment.py --compare exp_20250416_103500_baseline exp_20250416_110000_baseline_reproduced
@@ -1055,7 +1068,7 @@ LLM 报告使用更专业、更流畅的表达方式，适合：
    ```bash
    # 先生成模板报告
    pixi run python eval/run_experiment.py --config exp_configs/baseline.yaml
-   
+
    # 再生成 LLM 报告（使用不同文件名）
    # 注意：当前版本会覆盖，建议手动备份
    ```

@@ -20,6 +20,7 @@ test_sets:
         comparative: 0.15
         missing: 0.10
         irrelevant: 0.05
+        adversarial: 0.00
 
 x-base-config: &base-config
   retrieval:
@@ -60,6 +61,7 @@ variants:
         chunk_overlap: 0
 
 evaluation:
+  backends: ["builtin"]
   llm_preset: "default"
   metrics:
     retrieval:
