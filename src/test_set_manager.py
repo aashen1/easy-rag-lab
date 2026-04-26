@@ -836,6 +836,7 @@ class TestSetManager:
         llm_preset: str = "default",
         token_tracker: Any | None = None,
         chunks_dir: Path | None = None,
+        force_regenerate: bool = False,
     ) -> dict[str, Any]:
         """
         Resolve a test set according to the experiment configuration.
@@ -863,6 +864,8 @@ class TestSetManager:
             token_tracker: Optional token tracker.
             chunks_dir: Optional path to chunks directory for answer chunk
                 location during test generation.
+            force_regenerate: If True, skip cache lookup and force regeneration
+                of the test set.
 
         Returns:
             Resolved test set dictionary.
@@ -873,6 +876,8 @@ class TestSetManager:
         if test_set_config.get("golden"):
             golden_name = test_set_config.get("name", "golden_150")
             try:
+                if force_regenerate:
+                    raise TestSetError("Force regenerate requested")
                 return self.load_golden_testset(golden_name)
             except TestSetError:
                 if generator is None:
@@ -895,45 +900,51 @@ class TestSetManager:
             name = self._derive_test_set_name(generation_config)
             logger.info(f"Auto-derived test set name: '{name}'")
 
-        test_set_data = self.find_by_name(meal_name, name)
+        if not force_regenerate:
+            test_set_data = self.find_by_name(meal_name, name)
 
-        if test_set_data is not None:
-            is_valid, invalid_questions = self.validate_test_set(
-                test_set_data, meal_config
-            )
-
-            if is_valid:
-                return test_set_data
-
-            if on_missing == "strict":
-                raise TestSetError(
-                    f'Test set "{name}" is invalid (some data sources missing) '
-                    f'and on_missing is "strict".'
+            if test_set_data is not None:
+                is_valid, invalid_questions = self.validate_test_set(
+                    test_set_data, meal_config
                 )
 
-            user_defined = test_set_data["metadata"].get("user_defined", False)
+                if is_valid:
+                    return test_set_data
 
-            if user_defined:
-                return self._clean_user_test_set(
-                    test_set_data,
-                    meal_config,
-                    invalid_questions,
-                    generator,
-                    llm_preset,
-                    token_tracker,
-                    chunks_dir=chunks_dir,
-                )
-            else:
-                return self._clean_machine_test_set(
-                    test_set_data,
-                    meal_config,
-                    invalid_questions,
-                    generation_config,
-                    generator,
-                    llm_preset,
-                    token_tracker,
-                    chunks_dir=chunks_dir,
-                )
+                if on_missing == "strict":
+                    raise TestSetError(
+                        f'Test set "{name}" is invalid (some data sources missing) '
+                        f'and on_missing is "strict".'
+                    )
+
+                user_defined = test_set_data["metadata"].get("user_defined", False)
+
+                if user_defined:
+                    return self._clean_user_test_set(
+                        test_set_data,
+                        meal_config,
+                        invalid_questions,
+                        generator,
+                        llm_preset,
+                        token_tracker,
+                        chunks_dir=chunks_dir,
+                    )
+                else:
+                    return self._clean_machine_test_set(
+                        test_set_data,
+                        meal_config,
+                        invalid_questions,
+                        generation_config,
+                        generator,
+                        llm_preset,
+                        token_tracker,
+                        chunks_dir=chunks_dir,
+                    )
+        else:
+            logger.info(f"Force overwrite: regenerating test set '{name}'")
+            test_set_data = self.find_by_name(meal_name, name)
+            if test_set_data is not None:
+                self.delete_test_set(meal_name, name)
 
         if on_missing == "clean_only":
             raise TestSetError(

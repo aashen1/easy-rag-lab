@@ -317,6 +317,9 @@ def prepare_meal(
     system_config: dict[str, Any],
     exp_config: ExperimentConfig,
     skip_preprocessing: bool = False,
+    force_meal: bool = False,
+    force_parse: bool = False,
+    force_chunk: bool = False,
 ) -> dict[str, Any]:
     """
     Prepare meal for experiment.
@@ -328,6 +331,9 @@ def prepare_meal(
         system_config: System configuration dictionary.
         exp_config: Experiment configuration.
         skip_preprocessing: If True, skip preprocessing even if meal doesn't exist.
+        force_meal: If True, delete existing meal and recreate from scratch.
+        force_parse: If True, re-parse PDFs even if cached parsed artifacts exist.
+        force_chunk: If True, re-chunk documents even if cached chunk artifacts exist.
 
     Returns:
         Dictionary containing meal configuration and status.
@@ -343,6 +349,21 @@ def prepare_meal(
         raise ConfigurationError(
             "Experiment configuration must specify a meal name in data.meal field"
         )
+
+    if force_meal and meal_manager.meal_exists(meal_name):
+        logger.warning(
+            f"Force overwrite: deleting existing meal '{meal_name}' and recreating"
+        )
+        import shutil
+
+        meal_dir = meal_manager.get_meal_dir(meal_name)
+        trashbin = Path(project_root) / ".trashbin"
+        trashbin.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        trashed_name = f"{meal_name}_{timestamp}"
+        trashed_path = trashbin / trashed_name
+        shutil.move(str(meal_dir), str(trashed_path))
+        logger.info(f"Moved existing meal to trashbin: {trashed_path}")
 
     if meal_manager.meal_exists(meal_name):
         logger.info(f"Meal '{meal_name}' found, loading...")
@@ -411,6 +432,8 @@ def prepare_meal(
             name=meal_name,
             sampling_config=sampling_config,
             seed=seed,
+            force_parse=force_parse,
+            force_chunk=force_chunk,
         )
         logger.success(f"Meal '{meal_name}' created successfully")
 
@@ -587,6 +610,7 @@ def prepare_test_sets(
     skip_preprocessing: bool = False,
     token_tracker: TokenTracker | None = None,
     chunks_dir: Path | None = None,
+    force_testset: bool = False,
 ) -> list[dict[str, Any]]:
     """
     Prepare test sets for experiment.
@@ -601,6 +625,7 @@ def prepare_test_sets(
         skip_preprocessing: If True, skip generation even if test sets don't exist.
         token_tracker: Optional token tracker.
         chunks_dir: Optional path to chunks directory for answer chunk location.
+        force_testset: If True, force regeneration of test sets, ignoring cache.
 
     Returns:
         List of test set dictionaries.
@@ -644,6 +669,7 @@ def prepare_test_sets(
                     llm_preset=llm_preset,
                     token_tracker=token_tracker,
                     chunks_dir=chunks_dir,
+                    force_regenerate=force_testset,
                 )
             test_sets.append(test_set_data)
         else:
@@ -678,6 +704,7 @@ def prepare_variant_chunks(
     merged_config: dict[str, Any],
     meal_config: MealConfig,
     variant_name: str,
+    force_chunk: bool = False,
 ) -> Path:
     """Build chunks for a variant if not already cached.
 
@@ -688,6 +715,7 @@ def prepare_variant_chunks(
         merged_config: Merged configuration dictionary.
         meal_config: Meal configuration object.
         variant_name: Name of the variant.
+        force_chunk: If True, delete existing chunks and rebuild from scratch.
 
     Returns:
         Path to the chunks directory for this variant.
@@ -714,6 +742,7 @@ def prepare_variant_chunks(
         chunker_config,
         model_name=chunker_config.get("model_name")
         or embedding_config.get("model_name"),
+        force=force_chunk,
     )
 
     logger.info(f"Chunks ready for variant '{variant_name}': {chunks_dir}")
@@ -724,6 +753,7 @@ def prepare_index_for_variant(
     merged_config: dict[str, Any],
     meal_config: MealConfig,
     variant_name: str,
+    force_index: bool = False,
 ) -> VectorIndexer:
     """
     Prepare or retrieve index for a variant.
@@ -735,6 +765,7 @@ def prepare_index_for_variant(
         merged_config: Merged configuration dictionary.
         meal_config: Meal configuration object.
         variant_name: Name of the variant.
+        force_index: If True, delete existing index and rebuild from scratch.
 
     Returns:
         Configured VectorIndexer instance.
@@ -770,10 +801,19 @@ def prepare_index_for_variant(
         collection_info is not None and collection_info.get("points_count", 0) > 0
     )
 
+    if force_index and index_exists:
+        logger.info(
+            f"Force overwrite: deleting existing index for variant '{variant_name}'"
+        )
+        indexer.delete_collection()
+        indexer.close()
+        index_exists = False
+
     if not index_exists:
         logger.info(f"Building index for variant '{variant_name}'...")
 
-        indexer.close()
+        if not force_index:
+            indexer.close()
 
         artifacts_config = merged_config.get("artifacts") or {}
         artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
@@ -1601,6 +1641,7 @@ def run_variant_evaluation(
     exp_dir: Path,
     test_generation_tracker: TokenTracker | None = None,
     profiler: PipelineProfiler | None = None,
+    force_index: bool = False,
 ) -> dict[str, Any]:
     """
     Run evaluation for a single variant.
@@ -1614,6 +1655,7 @@ def run_variant_evaluation(
         exp_dir: Experiment directory path.
         test_generation_tracker: TokenTracker from test set generation phase.
         profiler: Optional PipelineProfiler for performance tracking.
+        force_index: If True, delete existing index and rebuild from scratch.
 
     Returns:
         Evaluation result dictionary.
@@ -1656,7 +1698,9 @@ def run_variant_evaluation(
 
         if profiler:
             profiler.begin_stage("S3")
-        indexer = prepare_index_for_variant(merged_config, meal_config, variant_name)
+        indexer = prepare_index_for_variant(
+            merged_config, meal_config, variant_name, force_index=force_index
+        )
         pipeline.indexer = indexer
         if profiler:
             profiler.end_stage()
@@ -1963,9 +2007,30 @@ def run_experiment(
         logger.info("Performance profiling disabled by config")
 
     try:
+        force_meal = exp_config.should_force("meal")
+        force_parsed = exp_config.should_force("parsed")
+        force_chunk = exp_config.should_force("chunk")
+        force_vector = exp_config.should_force("vector")
+        force_testset = exp_config.should_force("testset")
+
+        if exp_config.force_overwrite:
+            stages = (
+                "all"
+                if exp_config.force_overwrite == "all"
+                else ", ".join(exp_config.force_overwrite)
+            )
+            logger.info(f"Force overwrite enabled for: {stages}")
+
         logger.info("Step 1: Preparing meal...")
         with profiler.profile_stage("S1", {"meal_name": exp_config.data.get("meal")}):
-            meal_info = prepare_meal(system_config, exp_config, skip_preprocessing)
+            meal_info = prepare_meal(
+                system_config,
+                exp_config,
+                skip_preprocessing,
+                force_meal=force_meal,
+                force_parse=force_parsed,
+                force_chunk=force_chunk,
+            )
 
         test_generation_tracker = TokenTracker()
 
@@ -1979,6 +2044,7 @@ def run_experiment(
                     merged_config,
                     meal_info["config"],
                     variant_name,
+                    force_chunk=force_chunk,
                 )
                 if first_chunks_dir is None:
                     first_chunks_dir = chunks_dir
@@ -1992,6 +2058,7 @@ def run_experiment(
                 skip_preprocessing,
                 token_tracker=test_generation_tracker,
                 chunks_dir=first_chunks_dir,
+                force_testset=force_testset,
             )
 
         if profiler:
@@ -2058,6 +2125,7 @@ def run_experiment(
                     exp_dir=exp_dir,
                     test_generation_tracker=test_generation_tracker,
                     profiler=profiler,
+                    force_index=force_vector,
                 )
 
                 exp_manager.save_variant_result(exp_dir, variant_name, variant_result)

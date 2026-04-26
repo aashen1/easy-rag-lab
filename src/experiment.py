@@ -79,6 +79,9 @@ def get_test_set_name(test_set_config: dict[str, Any]) -> str:
     return f"auto_{strategy}_n{num_questions}"
 
 
+VALID_FORCE_OVERWRITE_STAGES = {"parsed", "chunk", "vector", "testset", "meal"}
+
+
 @dataclass
 class ExperimentConfig:
     """
@@ -92,6 +95,10 @@ class ExperimentConfig:
         variants: List of hyperparameter variants to test.
         evaluation: Evaluation configuration.
         llm: LLM configuration for different tasks.
+        force_overwrite: Stages whose cache should be forcibly overwritten.
+            Can be a list of stage names (e.g. ["parsed", "chunk"]) or the
+            string "all" to force-overwrite every stage.  Valid stage names:
+            parsed, chunk, vector, testset, meal.
 
     Returns:
         ExperimentConfig instance.
@@ -107,6 +114,20 @@ class ExperimentConfig:
     variants: list[dict[str, Any]]
     evaluation: dict[str, Any]
     llm: dict[str, Any] = field(default_factory=dict)
+    force_overwrite: list[str] | str = field(default_factory=list)
+
+    def should_force(self, stage: str) -> bool:
+        """Check whether a given pipeline stage should force-overwrite its cache.
+
+        Args:
+            stage: One of "parsed", "chunk", "vector", "testset", "meal".
+
+        Returns:
+            True if the stage should skip cache and force regeneration.
+        """
+        if self.force_overwrite == "all":
+            return True
+        return stage in self.force_overwrite
 
     def to_dict(self) -> dict[str, Any]:
         """
@@ -123,6 +144,7 @@ class ExperimentConfig:
             "variants": self.variants,
             "evaluation": self.evaluation,
             "llm": self.llm,
+            "force_overwrite": self.force_overwrite,
         }
 
     @classmethod
@@ -159,6 +181,7 @@ class ExperimentConfig:
             variants=data["variants"],
             evaluation=data["evaluation"],
             llm=data.get("llm", {}),
+            force_overwrite=data.get("force_overwrite", []),
         )
 
     @property
@@ -382,6 +405,23 @@ class ExperimentConfig:
                     f"Invalid retrieval_granularity: '{granularity}'. "
                     f"Valid options: {sorted(valid_granularities)}"
                 )
+
+        if self.force_overwrite and self.force_overwrite != "all":
+            if not isinstance(self.force_overwrite, list):
+                errors.append(
+                    "force_overwrite must be a list of stage names or the string 'all'"
+                )
+            else:
+                invalid_stages = [
+                    s
+                    for s in self.force_overwrite
+                    if s not in VALID_FORCE_OVERWRITE_STAGES
+                ]
+                if invalid_stages:
+                    errors.append(
+                        f"Invalid force_overwrite stages: {invalid_stages}. "
+                        f"Valid options: {sorted(VALID_FORCE_OVERWRITE_STAGES)}"
+                    )
 
         return errors
 

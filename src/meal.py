@@ -298,6 +298,7 @@ def build_chunks_if_needed(
     chunks_dir: Path,
     chunker_config: dict[str, Any],
     model_name: str | None = None,
+    force: bool = False,
 ) -> None:
     """
     Build chunks from parsed files if no chunk files exist.
@@ -312,9 +313,16 @@ def build_chunks_if_needed(
         chunker_config: Chunker configuration dictionary.
         model_name: Hugging Face model identifier for BGE tokenizer.
             Required when chunker encoding is "bge". Defaults to None.
+        force: If True, delete existing chunks and rebuild from scratch.
     """
-    if chunks_dir.exists() and any(chunks_dir.rglob("*.jsonl")):
+    if not force and chunks_dir.exists() and any(chunks_dir.rglob("*.jsonl")):
         return
+
+    if force and chunks_dir.exists():
+        import shutil
+
+        logger.info(f"Force overwrite: clearing existing chunks in {chunks_dir}")
+        shutil.rmtree(chunks_dir, ignore_errors=True)
 
     logger.info("Chunking documents...")
 
@@ -855,6 +863,7 @@ class MealManager:
         sampling_config: SamplingConfig,
         seed: int | None = None,
         force_parse: bool = False,
+        force_chunk: bool = False,
     ) -> MealConfig:
         """Create a new meal by sampling PDFs, parsing, chunking, and indexing.
 
@@ -863,6 +872,7 @@ class MealManager:
             sampling_config: Configuration controlling how PDFs are sampled.
             seed: Random seed for reproducible sampling. If None, a random seed is used.
             force_parse: If True, re-parse PDFs even if cached parsed artifacts exist.
+            force_chunk: If True, re-chunk documents even if cached chunk artifacts exist.
 
         Returns:
             MealConfig object for the newly created meal.
@@ -989,18 +999,24 @@ class MealManager:
             else:
                 expected_jsonl_names.append(Path(md_name).with_suffix(".jsonl").name)
 
-        if self.cache.chunks_exist(data_id, chunker_hash, expected_jsonl_names):
+        if not force_chunk and self.cache.chunks_exist(
+            data_id, chunker_hash, expected_jsonl_names
+        ):
             logger.info(
                 f"Cache HIT: Chunked artifacts exist for chunker_hash={chunker_hash}"
             )
             cache_hit_chunk = True
         else:
-            logger.info(f"Step 2: Chunking files for meal '{name}'...")
+            if force_chunk:
+                logger.info(f"Force overwrite: re-chunking for meal '{name}'...")
+            else:
+                logger.info(f"Step 2: Chunking files for meal '{name}'...")
             build_chunks_if_needed(
                 parsed_dir,
                 chunks_dir,
                 chunker_config,
                 model_name=embedding_config.get("model_name"),
+                force=force_chunk,
             )
 
         logger.info(
