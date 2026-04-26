@@ -112,4 +112,3 @@ chunk_hr = chunk_metrics.get("avg_hit_rate") if chunk_metrics else None
 1. LLM 生成的报告将正确解读 FPR 指标，FPR > 0.3 会触发警告
 2. Chunk-level 指标将正确显示在报告中（Hit Rate: 0.8333, MRR: 0.5833, NDCG: 0.4261）
 3. 文档系统保持整洁
-

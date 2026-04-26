@@ -334,4 +334,3 @@ pixi run python scripts/review_golden_testset.py --audit --input data/golden_tes
 * **不扔掉 round-robin**：保留其类型均匀分散逻辑，只修好它依赖的前提
 
 * **不硬编码 max\_per\_doc**：改为渐进式幂次加权分配，max\_per\_doc 仅作可选安全阀
-

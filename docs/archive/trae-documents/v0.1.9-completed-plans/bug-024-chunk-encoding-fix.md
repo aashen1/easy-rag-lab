@@ -178,4 +178,3 @@ def chunk_text(text, chunk_size=512, overlap=0, encoding_name="cl100k_base", mod
 2. **BGE tokenizer 兼容性**：需验证 HuggingFace tokenizer 的单 token decode 是否与 tiktoken 行为一致
 3. **数据迁移**：旧的 chunk JSONL 文件需要全部重新生成，artifact 缓存可能需要失效
 4. **向后兼容**：`chunk_text()` 的返回格式不变，只是 `text` 字段的生成方式改变
-

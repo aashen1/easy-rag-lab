@@ -1,6 +1,6 @@
 # 文档导航索引
 
-> 最后更新: 2026-04-24
+> 最后更新: 2026-04-27
 
 本文档是项目文档的唯一入口，提供全局导航。
 
@@ -34,6 +34,7 @@
 - [RAG 优化实现与测试保障](guides/operations/rag-optimization-implementation.md)
 - [测试集管理](guides/operations/test-set-management.md)
 - [Golden Testset 生成](guides/operations/golden-testset-generation.md)
+- [Artifact 路径迁移](guides/operations/artifact-path-migration.md)
 
 ### 开发指南
 
@@ -45,6 +46,8 @@
 
 - [评测指标 Bug 修复](troubleshooting/eval-metrics-bugfix.md)
 - [评测系统验收修复](troubleshooting/eval-system-acceptance-fix.md)
+- [Irrelevant 问题指标修复](troubleshooting/irrelevant-question-metrics-fix.md)
+- [缓存分析](troubleshooting/cache-analysis.md)
 
 ### 已解决问题归档
 
@@ -80,7 +83,8 @@ docs/
 │   │   ├── rag-optimization-implementation.md
 │   │   ├── test-set-management.md
 │   │   ├── golden-testset-generation.md
-│   │   └── pdf-parsing.md
+│   │   ├── pdf-parsing.md
+│   │   └── artifact-path-migration.md
 │   └── development/           # 开发规范与工具指南
 │       ├── testing.md
 │       ├── lint-and-precommit.md
@@ -104,16 +108,20 @@ docs/
 ├── troubleshooting/           # 故障排查
 │   ├── eval-metrics-bugfix.md
 │   ├── eval-system-acceptance-fix.md
+│   ├── irrelevant-question-metrics-fix.md
+│   ├── cache-analysis.md
 │   └── resolved/              # 已修复问题归档
 │       ├── pytest-basetemp-fileexistserror.md
 │       └── ghost-folder-mkdir.md
 │
 ├── archive/                   # 历史归档
 │   ├── archive-log.md         # 归档日志
-│   ├── trae-plans/            # .trae 计划书归档
+│   ├── trae-documents/        # .trae 计划书归档
+│   │   └── v0.1.9-completed-plans/
 │   ├── trae-specs/            # .trae Spec 归档
-│   ├── trae-reports/          # .trae 报告归档
-│   └── ...
+│   │   └── v0.1.9-completed-specs/
+│   ├── trae-plans/            # 旧版计划书归档
+│   └── trae-reports/          # .trae 报告归档
 │
 ├── inbox/                     # 待处理文档收件箱
 └── inbox-processed/           # 已处理的原始文件
