@@ -183,6 +183,6 @@ llm:
 #
 # 用法二：全部重来
 #   force_overwrite: "all"
-#
-# 默认：不覆盖任何缓存（空列表）
-# force_overwrite: []
+
+# 注意：force_overwrite 是顶层配置，不是 llm 的子键！
+force_overwrite: []
