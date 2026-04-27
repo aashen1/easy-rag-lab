@@ -387,46 +387,112 @@ streamlit-pdf-viewer = ">=0.0.28, <1"
 - `streamlit-pdf-viewer` 与 Streamlit ≥ 1.41 存在已知兼容性问题（st.dialog 关闭后滚动位置重置），但因已改用 Tab 方案，此问题不影响。
 - 页码跳转时组件需重新渲染（通过 key 变化），大 PDF 可能需要几秒加载。
 
-### 10.3 2026-04-28：原生 PDF 渲染替代 streamlit-pdf-viewer
+### 10.3 2026-04-28：原生 PDF 渲染替代 streamlit-pdf-viewer（完整迭代记录）
 
-**问题**：`streamlit-pdf-viewer`（pdf.js）将每页 PDF 渲染为 canvas 位图，100 页研报 ≈ 100 MB 像素数据，浏览器资源开销暴增。而原来 `st.pdf()` 使用浏览器原生 PDF 渲染器（Chrome PDFium），仅渲染可视区域，内存 ~2-4 MB。
+这是一次五轮迭代的技术攻坚，记录完整过程以供参考。
 
-**技术方案**：
+#### 第一轮：streamlit-pdf-viewer 全量渲染
 
-1. **轻量 HTTP 文件服务**：新增 `pdf_server.py`，使用 Python `http.server.HTTPServer` 在后台守护线程上服务 `data/raw/` 目录，端口从 8502 开始自动探测。通过 `@st.cache_resource` 保证单例启动。
+**方案**：用 `streamlit-pdf-viewer`（基于 pdf.js）替代 `st.pdf()`，支持 `scroll_to_page` 页码跳转。
 
-2. **原生渲染 + 页码跳转**：用 `st.iframe(f"http://localhost:{port}/path/to/file.pdf#page={page}")` 嵌入 PDF。浏览器原生 PDF 渲染器负责显示（懒加载 + GPU 加速 + 连续滚动），`#page=N` 是 PDF Open Parameters 标准，浏览器原生支持页码跳转。
+**结果**：功能正常，但浏览器资源开销暴增——100 页研报 = 100 个 canvas ≈ 100 MB 像素数据，风扇呼呼转。
 
-3. **移除 streamlit-pdf-viewer**：从 `pixi.toml` 移除依赖，从 `qa_demo.py` 移除导入和调用。
+**根因**：pdf.js 将每页 PDF 渲染为独立 canvas 位图，全量预渲染塞入 DOM。而 `st.pdf()` 使用浏览器原生 PDF 渲染器（Chrome PDFium），仅渲染可视区域，内存 ~2-4 MB。
 
-4. **路径安全**：`_SecuredHandler` 继承 `SimpleHTTPRequestHandler`，额外校验 `os.path.realpath()` 防止路径穿越。
+#### 第二轮：streamlit-pdf-viewer 单页渲染
 
-**为什么不用 `st.components.v1.html`（blob URL 方案）**：
+**方案**：用 `pages_to_render=[current_page]` 只渲染当前页。
 
-`st.components.v1.html` 已在 Streamlit 1.56 标记弃用（2026-06-01 后移除），替代品是 `st.iframe`。而 `st.iframe` 对本地 PDF 文件走 Streamlit 内部 media storage，无法在 URL 上追加 `#page=N`。所以需要独立 HTTP 服务提供可控 URL。
+**结果**：资源降下来了，但体验暴跌——无法连续滚动，只能一页一页翻，像看 PPT。
 
-**资源对比**：
+**用户反馈**：「这体验不是直接暴跌了吗？我问的是为什么会这么大开销。」
 
-| 方案 | 100 页研报内存 | 滚动 | 页码跳转 | API 弃用 |
-|------|-------------|------|---------|---------|
-| st.pdf()（旧弹窗） | ~2-4 MB | ✅ 原生 | ❌ | ✅ 安全 |
-| streamlit-pdf-viewer 全量 | ~100 MB | ✅ | ✅ | ✅ 安全 |
-| **HTTP 服务 + st.iframe** | **~2-4 MB** | **✅ 原生** | **✅** | **✅ 安全** |
+#### 第三轮：HTTP 服务器 + st.iframe（首次尝试）
 
-**新增文件**：
+**方案**：启动轻量 HTTP 服务器（Python `http.server`）服务 `data/raw/` 目录，用 `st.iframe("http://localhost:8502/path.pdf#page=N")` 嵌入 PDF。浏览器原生渲染器负责显示（懒加载 + GPU 加速 + 连续滚动），`#page=N` 实现页码跳转。
 
-| 文件 | 作用 |
-|------|------|
-| `src/app_pages/pdf_server.py` | 轻量 PDF 文件服务器（`PdfServer` / `start_pdf_server()`） |
+**为什么不用 `st.components.v1.html`（blob URL 方案）**：`st.components.v1.html` 已在 Streamlit 1.56 标记弃用（2026-06-01 后移除），替代品是 `st.iframe`。而 `st.iframe` 对本地 PDF 文件走 Streamlit 内部 media storage，无法在 URL 上追加 `#page=N`。所以需要独立 HTTP 服务提供可控 URL。
 
-**移除依赖**：
+**结果**：Chrome 和 Edge 均报「此页面已被屏蔽」。
 
-```toml
-# 已从 pixi.toml 移除
-streamlit-pdf-viewer = ">=0.0.28, <1"
+**根因**：`st.iframe()` 内部生成的 iframe 带有 `sandbox` 属性，浏览器安全策略阻止了跨端口（8501 → 8502）的 iframe 加载。
+
+#### 第四轮：修复服务器重复创建 + URL 编码
+
+**日志暴露的问题**：
+
+```
+[pdf-server] Serving data/raw on http://localhost:8502
+[pdf-server] Serving data/raw on http://localhost:8503
+[pdf-server] Serving data/raw on http://localhost:8504
+[pdf-server] Serving data/raw on http://localhost:8505
 ```
 
-**已知限制**：
+每次 Streamlit rerun 都重新创建服务器实例，端口一路递增。`@st.cache_resource` 没有生效（原因可能是 Streamlit 运行时上下文问题）。
+
+**修复**：
+
+1. `pdf_server.py` 改用模块级单例模式（双重检查锁 `get_or_create_pdf_server()`），不依赖 Streamlit 缓存机制
+2. 中文路径 URL 编码：`urllib.parse.quote(rel_path)` 处理 `贵州茅台2023年年度报告.pdf` 等中文文件名
+3. 移除 `app.py` 中的模块级服务器启动（之前尝试的方案，与单例模式冲突）
+
+**结果**：服务器只创建一次了，但 `st.iframe` 仍然被浏览器屏蔽。
+
+#### 第五轮：st.markdown 原生 HTML iframe（最终方案）
+
+**方案**：用 `st.markdown(unsafe_allow_html=True)` 直接渲染 `<iframe>` 标签，绕过 Streamlit 的沙箱限制。
+
+```python
+st.markdown(
+    f'<iframe src="{pdf_url}" width="100%" height="800" '
+    f'style="border:none;"></iframe>',
+    unsafe_allow_html=True,
+)
+```
+
+**结果**：✅ 成功！Edge/Chrome 原生 PDF 阅读器 UI，连续滚动 + 页码跳转 + 内存 ~2-4 MB。
+
+**关键差异**：`st.iframe()` 在生成的 iframe 上添加了 `sandbox` 属性，限制了跨源加载。而 `st.markdown(unsafe_allow_html=True)` 生成的原生 `<iframe>` 没有沙箱限制，可以自由加载 localhost 上的 PDF。
+
+#### 最终架构
+
+```
+┌─────────────────────────────────────────────────┐
+│  Streamlit App (localhost:8501)                  │
+│                                                  │
+│  ┌─────────────────────────────────────────────┐│
+│  │  PDF 预览 Tab                               ││
+│  │  ┌─────────────────────────────────────────┐││
+│  │  │  <iframe src="http://localhost:8502/    │││
+│  │  │   annual_reports/2023/%E8%B4%B5...pdf   │││
+│  │  │   #page=5" />                           │││
+│  │  └─────────────────────────────────────────┘││
+│  └─────────────────────────────────────────────┘│
+│                                                  │
+│  PDF HTTP Server (localhost:8502, daemon thread) │
+│  └── serves data/raw/ with path traversal guard │
+└─────────────────────────────────────────────────┘
+```
+
+#### 资源对比
+
+| 方案 | 100 页研报内存 | 滚动 | 页码跳转 | API 弃用 | 浏览器兼容 |
+|------|-------------|------|---------|---------|----------|
+| st.pdf()（旧弹窗） | ~2-4 MB | ✅ 原生 | ❌ | ✅ 安全 | ✅ |
+| streamlit-pdf-viewer 全量 | ~100 MB | ✅ | ✅ | ✅ 安全 | ✅ |
+| streamlit-pdf-viewer 单页 | ~1 MB | ❌ | ✅ | ✅ 安全 | ✅ |
+| st.iframe + HTTP 服务 | ~2-4 MB | ✅ 原生 | ✅ | ✅ 安全 | ❌ 沙箱阻止 |
+| **st.markdown + HTTP 服务** | **~2-4 MB** | **✅ 原生** | **✅** | **✅ 安全** | **✅** |
+
+#### 文件变更汇总
+
+| 文件 | 变更 |
+|------|------|
+| `src/app_pages/pdf_server.py` | 新增：轻量 PDF 文件服务器（单例模式） |
+| `src/app_pages/qa_demo.py` | 改造：移除 streamlit-pdf-viewer，改用 st.markdown + iframe |
+| `pixi.toml` | 移除 `streamlit-pdf-viewer` 依赖 |
+
+#### 已知限制
 
 - 远程访问时 `localhost` 不可达，当前为本地开发工具暂不处理
 - Safari 对 `#page=N` 支持不完整，Chrome/Edge/Firefox 均正常
