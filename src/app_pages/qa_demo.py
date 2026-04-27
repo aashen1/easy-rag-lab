@@ -124,11 +124,35 @@ def render_pdf_preview() -> None:
     total_pages = _get_pdf_page_count(file_path)
     current_page = st.session_state.get("_pdf_preview_page", 1)
 
+    col_prev, col_info, col_next = st.columns([1, 3, 1])
+    with col_prev:
+        if st.button("◀ 上一页", disabled=(current_page <= 1), key="prev_page"):
+            st.session_state._pdf_preview_page = current_page - 1
+            st.rerun()
+    with col_info:
+        page_label = (
+            f"第 **{current_page}** / {total_pages} 页"
+            if total_pages > 0
+            else f"第 **{current_page}** 页"
+        )
+        st.markdown(
+            f"<div style='text-align:center; padding-top:8px'>{page_label}</div>",
+            unsafe_allow_html=True,
+        )
+    with col_next:
+        if st.button(
+            "下一页 ▶",
+            disabled=(total_pages > 0 and current_page >= total_pages),
+            key="next_page",
+        ):
+            st.session_state._pdf_preview_page = current_page + 1
+            st.rerun()
+
     with st.form("pdf_page_jump_form"):
-        col_page, col_jump, col_info = st.columns([1, 1, 3])
+        col_page, col_jump = st.columns([1, 1])
         with col_page:
             page_num = st.number_input(
-                "页码",
+                "跳转到页码",
                 min_value=1,
                 max_value=total_pages if total_pages > 0 else 9999,
                 value=current_page,
@@ -136,23 +160,16 @@ def render_pdf_preview() -> None:
         with col_jump:
             st.markdown("<br>", unsafe_allow_html=True)
             submitted = st.form_submit_button("跳转")
-        with col_info:
-            page_info = f"共 **{total_pages}** 页" if total_pages > 0 else "页数未知"
-            st.markdown(f"<br>{page_info}", unsafe_allow_html=True)
+        if submitted:
+            st.session_state._pdf_preview_page = page_num
+            st.rerun()
 
-    if submitted:
-        st.session_state._pdf_preview_page = page_num
-        st.rerun()
-
-    target_page = st.session_state.get("_pdf_preview_page", 1)
     pdf_viewer(
         file_path,
         width="90%",
-        scroll_to_page=target_page,
-        scroll_behavior="instant",
+        pages_to_render=[current_page],
         render_text=True,
-        show_page_separator=True,
-        key=f"pdf_viewer_p{target_page}",
+        key=f"pdf_viewer_p{current_page}",
     )
 
 
