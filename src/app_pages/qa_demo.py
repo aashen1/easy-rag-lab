@@ -1,6 +1,3 @@
-import threading
-import uuid
-from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -11,8 +8,6 @@ from src.meal import MealConfig, MealManager
 from src.pipeline import RAGPipeline
 from src.sampler import SamplingConfig, count_pdf_pages
 from src.utils import load_config
-
-_query_store: dict[str, dict[str, Any]] = {}
 
 
 @st.cache_resource
@@ -76,16 +71,6 @@ def _open_pdf_preview(file_path: str, file_name: str) -> None:
     st.session_state._pdf_preview_path = file_path
     st.session_state._pdf_preview_name = file_name
     st.session_state._pdf_preview_page = 1
-
-
-def _run_query(query_id: str, question: str, meal_name: str | None) -> None:
-    try:
-        pipeline = get_pipeline(meal_name)
-        result = pipeline.query(question)
-        _query_store[query_id] = {"status": "done", "result": result}
-    except Exception as e:
-        logger.error(f"Query failed: {e}")
-        _query_store[query_id] = {"status": "error", "error": str(e)}
 
 
 @st.cache_data
@@ -236,51 +221,8 @@ def _init_session_state():
         st.session_state.last_result = None
     if "saved_question" not in st.session_state:
         st.session_state.saved_question = ""
-    if "query_running" not in st.session_state:
-        st.session_state.query_running = False
-    if "current_query_id" not in st.session_state:
-        st.session_state.current_query_id = None
     if "query_error" not in st.session_state:
         st.session_state.query_error = None
-
-
-def _check_completed_query():
-    query_id = st.session_state.get("current_query_id")
-    if not query_id or not st.session_state.get("query_running"):
-        return
-    entry = _query_store.pop(query_id, None)
-    if entry is None:
-        return
-    if entry["status"] == "done":
-        st.session_state.last_result = entry["result"]
-        st.session_state.query_running = False
-        st.session_state.current_query_id = None
-    elif entry["status"] == "error":
-        st.session_state.query_running = False
-        st.session_state.current_query_id = None
-        st.session_state.query_error = entry["error"]
-
-
-@st.fragment(run_every=timedelta(seconds=1))
-def _render_query_status():
-    query_id = st.session_state.get("current_query_id")
-    if not query_id or not st.session_state.get("query_running"):
-        return
-    entry = _query_store.pop(query_id, None)
-    if entry is not None:
-        if entry["status"] == "done":
-            st.session_state.last_result = entry["result"]
-            st.session_state.query_running = False
-            st.session_state.current_query_id = None
-            st.rerun()
-        elif entry["status"] == "error":
-            st.session_state.query_running = False
-            st.session_state.current_query_id = None
-            st.session_state.query_error = entry["error"]
-            st.rerun()
-    else:
-        with st.status("🔍 检索中...", expanded=True):
-            st.write("正在检索相关文档并生成答案，可切换到其他页面等待...")
 
 
 def _render_meal_files(meal_config: MealConfig | None) -> None:
@@ -313,7 +255,6 @@ def _render_meal_files(meal_config: MealConfig | None) -> None:
 
 def render_qa_demo():
     _init_session_state()
-    _check_completed_query()
 
     st.title("🏦 金融研报问答系统")
     st.markdown("基于 RAG 的金融研报智能问答演示")
@@ -428,18 +369,11 @@ def render_qa_demo():
             "启用查询改写", value=False, key="use_query_rewrite"
         )
 
-    if st.session_state.query_running:
-        st.info("⏳ 查询进行中，请稍候...")
-
     if st.button("🗑️ 清空结果", key="clear_btn"):
         st.session_state.last_result = None
         st.session_state.saved_question = ""
-        st.session_state.query_running = False
-        st.session_state.current_query_id = None
         st.session_state.query_error = None
         st.rerun()
-
-    _render_query_status()
 
     if st.session_state.query_error:
         st.error(f"查询失败: {st.session_state.query_error}")
@@ -458,19 +392,17 @@ def render_qa_demo():
     )
 
     if question:
-        if st.session_state.query_running:
-            st.warning("已有查询正在进行中，请稍候")
-        else:
-            st.session_state.saved_question = question
-            st.session_state.query_running = True
-            st.session_state.last_result = None
-            st.session_state.query_error = None
-            query_id = str(uuid.uuid4())
-            st.session_state.current_query_id = query_id
-            thread = threading.Thread(
-                target=_run_query,
-                args=(query_id, question, meal_name),
-                daemon=True,
-            )
-            thread.start()
-            st.rerun()
+        st.session_state.saved_question = question
+        st.session_state.last_result = None
+        st.session_state.query_error = None
+
+        with st.spinner("🔍 正在检索相关文档并生成答案..."):
+            try:
+                pipeline = get_pipeline(meal_name)
+                result = pipeline.query(question)
+                st.session_state.last_result = result
+            except Exception as e:
+                logger.error(f"Query failed: {e}")
+                st.session_state.query_error = str(e)
+
+        st.rerun()

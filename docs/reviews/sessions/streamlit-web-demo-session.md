@@ -206,6 +206,18 @@ warnings.filterwarnings("ignore", message="Accessing `__path__` from", category=
    - `last_result`：保存查询结果
 3. text_area 使用 `saved_question` 作为默认值
 
+### 4.5 Fragment run_every 与 st.rerun() 冲突
+
+**问题**：`@st.fragment(run_every=1s)` 内调用 `st.rerun()` 后，控制台持续输出警告：
+
+```
+The fragment with id xxx does not exist anymore - it might have been removed during a preceding full-app rerun.
+```
+
+**原因**：`st.rerun()` 触发全应用重跑，销毁 fragment，但 `run_every` 定时器仍持续触发，反复访问已销毁的 fragment
+
+**解决方案**：移除 `@st.fragment(run_every=...)` 异步轮询，改用 `st.spinner()` + 同步调用。详见迭代记录 10.3。
+
 ---
 
 ## 五、Pixi Task
@@ -374,3 +386,40 @@ streamlit-pdf-viewer = ">=0.0.28, <1"
 
 - `streamlit-pdf-viewer` 与 Streamlit ≥ 1.41 存在已知兼容性问题（st.dialog 关闭后滚动位置重置），但因已改用 Tab 方案，此问题不影响。
 - 页码跳转时组件需重新渲染（通过 key 变化），大 PDF 可能需要几秒加载。
+
+### 10.3 2026-04-28：移除 fragment 轮询，改用同步查询
+
+**问题**：`@st.fragment(run_every=1s)` + `st.rerun()` 导致大量控制台警告：
+
+```
+The fragment with id xxx does not exist anymore - it might have been removed during a preceding full-app rerun.
+```
+
+**根因**：fragment 内部调用 `st.rerun()` 触发全应用重跑，销毁了 fragment 自身，但 `run_every` 定时器仍在触发，反复尝试访问已销毁的 fragment。
+
+**修复方案**：移除 `@st.fragment(run_every=...)` 异步轮询机制，改用 `st.spinner()` + 同步调用 `pipeline.query()`。对于 Demo 应用，查询期间 UI 短暂冻结完全可以接受。
+
+**移除代码**：
+
+| 代码 | 原因 |
+|------|------|
+| `_query_store` 全局字典 | 不再需要后台线程通信 |
+| `_run_query()` | 不再需要后台线程执行 |
+| `_check_completed_query()` | 不再需要轮询检查 |
+| `_render_query_status()` (fragment) | 不再需要 fragment 轮询 |
+| `import threading, uuid, timedelta` | 不再需要 |
+| `query_running` / `current_query_id` session state | 不再需要异步状态追踪 |
+
+**简化后的查询流程**：
+
+```python
+if question:
+    with st.spinner("🔍 正在检索相关文档并生成答案..."):
+        try:
+            pipeline = get_pipeline(meal_name)
+            result = pipeline.query(question)
+            st.session_state.last_result = result
+        except Exception as e:
+            st.session_state.query_error = str(e)
+    st.rerun()
+```
