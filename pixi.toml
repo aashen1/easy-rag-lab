@@ -144,7 +144,7 @@ extra-index-urls = ["https://pypi.org/simple"]
 index-strategy = "unsafe-best-match"
 find-links = [
     { path = 'B:/useradmin/torch_cache' },
-] # Use local torch cuda whl cache
+] # Use local torch cuda whl cache, modify or delete this
 
 # --- torch whl download ---
 # torch official site: "https://download.pytorch.org/whl/cu126"

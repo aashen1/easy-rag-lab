@@ -1,25 +1,33 @@
 # Easy RAG Lab - 金融研报问答系统
 
-一个简单易学的 RAG（检索增强生成）系统，用于金融研报的智能问答。
-
 ![Version](https://img.shields.io/badge/version-v0.1.8-blue)![Status](https://img.shields.io/badge/status-active-green)![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
 
 ## 项目简介
 
-本项目旨在构建一个最小可运行的 RAG 系统，用于金融研报的智能问答，并建立 baseline 评测基准。
+RAG（检索增强生成）作为让大模型从海量文档中提取目标信息的一种手段，基本已经成为目前大模型工具的标配。但从PDF到答案的整个处理链路中存在大量的可选“零部件”，例如PDF解析策略、分块策略、召回策略等，各步都有多种可选的超参数配置与技术选择。
+
+本项目旨在构建一个“RAG 实验室”，以金融领域的企业年报/行业研报为例，开展对 RAG 系统各“零件”对最终问答效果影响的对比研究。
 
 ### 核心功能
 
-- **PDF 解析**：支持 pymupdf4llm 和 fitz_pdfplumber 两种解析器
-- **文本分块**：固定长度 / 语义分块，可配置 chunk_size 和 overlap
+本项目的构成可以分为RAG链路本身和测试系统两部分来看。
+
+RAG链路：
+
+- **PDF 解析**：支持 `pymupdf4llm` 和 `fitz+pdfplumber` 两条解析链路
+- **文本分块**：固定长度 / 语义分块，指定 `chunk_size` 和 `overlap`
 - **向量检索**：BAAI/bge-large-zh-v1.5 Embedding + Qdrant 向量存储
 - **混合检索**：BM25 + 向量检索 + Reranker 重排 + 查询改写
 - **智能问答**：基于检索结果生成准确回答
-- **评测系统**：RAGAS + Builtin 双线评测，五大核心指标 + Recall@K
+
+测试系统：
+
+- **指标评测**：RAGAS + 内部实现双线评测，支持众多常用指标 + Recall@K
 - **实验管理**：多变体对比实验，自动生成 LLM 分析报告
-- **Meal 体系**：数据集快照管理，测试集版本追踪
-- **Artifact 体系**：中间产物缓存与 Pointer 指针机制，避免重复计算
-- **对抗性评测**：adversarial 问题类型支持，数值精度校验
+- **Meal**：（名称取自“套餐”）数据集快照管理，测试集版本追踪
+- **Artifact**：中间产物缓存与 Pointer 指针机制，避免重复计算
+- **Exp**：自定义实验脚本，一键运行多种变体对比实验
+- **TestSet**：使用大模型生成指定数量的问题集，随后搭配交互式审核脚本，修改或剔除那些质量不理想的问题，方便地打造高质量测试集
 
 ### 技术栈
 

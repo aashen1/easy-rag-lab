@@ -4,7 +4,7 @@
 
 > 创建日期：2026-04-27
 > 最后更新：2026-04-27
-> 版本：v0.2.0
+> 版本：v0.1.8
 > 核心模块: [`scripts/review_golden_testset.py`](../../scripts/review_golden_testset.py)
 > AI审核: [`scripts/ai_reviewer.py`](../../scripts/ai_reviewer.py)
 > PDF查看: [`scripts/pdf_viewer.py`](../../scripts/pdf_viewer.py)

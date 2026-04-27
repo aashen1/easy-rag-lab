@@ -4,7 +4,7 @@
 
 > 创建日期：2026-04-25
 > 最后更新：2026-04-26
-> 版本：v0.1.9
+> 版本：v0.1.8
 > 核心模块: [`src/test_generator.py`](../../src/test_generator.py) → `TestSetGenerator.generate_golden_testset()`
 > CLI 入口: [`scripts/generate_golden_testset.py`](../../scripts/generate_golden_testset.py)
 > 审核工具: [`scripts/review_golden_testset.py`](../../scripts/review_golden_testset.py)
