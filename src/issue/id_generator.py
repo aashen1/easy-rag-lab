@@ -2,10 +2,9 @@
 
 Generates unique IDs in format: <TYPE>-<YYYYMMDD>-<SEQ>-<WTID>
 Sequence numbers are stored per worktree per date.
-Includes collision detection against existing issue files.
+Includes lightweight collision detection via file existence check.
 """
 
-import re
 from datetime import datetime
 from pathlib import Path
 
@@ -17,22 +16,20 @@ SEQUENCES_DIR = Path(".issues/sequences")
 ISSUES_DIR = Path(".issues")
 
 
-def _scan_existing_ids(issues_dir: Path | None = None) -> set[str]:
-    """Scan all issue files and collect existing IDs.
+def _id_file_exists(issue_id: str, issues_dir: Path | None = None) -> bool:
+    """Check if an issue file with the given ID already exists.
 
-    Searches active/, completed/, deferred/, and cancelled/ directories
-    for issue markdown files and extracts their IDs from filenames.
+    Searches across all issue directories for a file whose name
+    starts with the given ID prefix.
 
     Args:
+        issue_id: Issue ID to check (e.g., BUG-20260428-001-wt1)
         issues_dir: Root issues directory. Defaults to .issues/
 
     Returns:
-        Set of existing issue ID strings
+        True if a file with this ID prefix exists, False otherwise
     """
     base = issues_dir or ISSUES_DIR
-    existing_ids: set[str] = set()
-
-    id_pattern = re.compile(r"^(BUG|FEAT|RF|OPT|INV|TEST)-\d{8}-\d{3}-\w+")
 
     for subdir in ["active", "completed", "deferred", "cancelled"]:
         target = base / subdir
@@ -41,11 +38,10 @@ def _scan_existing_ids(issues_dir: Path | None = None) -> set[str]:
         for file_path in target.glob("**/*.md"):
             if file_path.name.startswith("_") or file_path.name.startswith("."):
                 continue
-            match = id_pattern.match(file_path.name)
-            if match:
-                existing_ids.add(match.group(0))
+            if file_path.name.startswith(issue_id):
+                return True
 
-    return existing_ids
+    return False
 
 
 def generate_id(
@@ -55,21 +51,22 @@ def generate_id(
     sequences_dir: Path | None = None,
     issues_dir: Path | None = None,
 ) -> str:
-    """Generate a unique issue ID with collision detection.
+    """Generate a unique issue ID with lightweight collision detection.
 
     Format: <TYPE>-<YYYYMMDD>-<SEQ>-<WTID>
     Example: BUG-20260427-001-wt1
 
-    If the generated ID collides with an existing issue (e.g., after
-    migration that bypassed the sequence file), the sequence is
-    incremented until a unique ID is found.
+    Uses the sequence file as the primary ID source (fast O(1) read).
+    Only falls back to collision checking if the generated ID happens
+    to match an existing file (rare edge case: sequence file desync
+    after migration or manual file creation).
 
     Args:
         issue_type: Type of issue (BUG, FEAT, etc.)
         wt_id: Worktree identifier
         date: Date for ID generation. Defaults to current date.
         sequences_dir: Directory for sequence files. Defaults to .issues/sequences/
-        issues_dir: Root issues directory for collision scan. Defaults to .issues/
+        issues_dir: Root issues directory for collision check. Defaults to .issues/
 
     Returns:
         str: Generated issue ID guaranteed to be unique
@@ -77,20 +74,18 @@ def generate_id(
     dt = date or datetime.now()
     date_str = dt.strftime("%Y%m%d")
 
-    existing_ids = _scan_existing_ids(issues_dir)
-
     seq = get_next_sequence(wt_id, dt, sequences_dir)
 
     issue_id = f"{issue_type.value}-{date_str}-{seq:03d}-{wt_id}"
 
     max_attempts = 999
     attempts = 0
-    while issue_id in existing_ids and attempts < max_attempts:
+    while _id_file_exists(issue_id, issues_dir) and attempts < max_attempts:
         attempts += 1
         seq = get_next_sequence(wt_id, dt, sequences_dir)
         issue_id = f"{issue_type.value}-{date_str}-{seq:03d}-{wt_id}"
 
-    if issue_id in existing_ids:
+    if _id_file_exists(issue_id, issues_dir):
         logger.error(f"Could not generate unique ID after {max_attempts} attempts")
 
     logger.debug(f"Generated issue ID: {issue_id}")
