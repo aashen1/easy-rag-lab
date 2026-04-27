@@ -1,11 +1,12 @@
 import os
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
 import streamlit as st
 from loguru import logger
 
-from src.app_pages.pdf_server import PdfServer, start_pdf_server
+from src.app_pages.pdf_server import PdfServer
 from src.meal import MealConfig, MealManager
 from src.pipeline import RAGPipeline
 from src.sampler import SamplingConfig, count_pdf_pages
@@ -19,9 +20,9 @@ def get_pipeline(meal_name: str | None) -> RAGPipeline:
 
 @st.cache_resource
 def get_pdf_server() -> PdfServer:
-    config = load_config()
-    raw_dir = config.get("parser", {}).get("input_dir", "data/raw")
-    return start_pdf_server(raw_dir)
+    from src.app_pages import _pdf_server_ref
+
+    return _pdf_server_ref
 
 
 def get_meals() -> list[Any]:
@@ -159,7 +160,8 @@ def render_pdf_preview() -> None:
     server = get_pdf_server()
     raw_dir = _get_raw_dir()
     rel_path = os.path.relpath(file_path, raw_dir).replace("\\", "/")
-    pdf_url = f"{server.base_url}/{rel_path}#page={current_page}"
+    encoded_path = urllib.parse.quote(rel_path)
+    pdf_url = f"{server.base_url}/{encoded_path}#page={current_page}"
     st.iframe(pdf_url, height=800)
 
 

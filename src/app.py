@@ -22,8 +22,13 @@ setup_logger(config)
 
 import streamlit as st  # noqa: E402
 
+import src.app_pages as _app_pages  # noqa: E402
 from src.app_pages.about import render_about  # noqa: E402
+from src.app_pages.pdf_server import start_pdf_server  # noqa: E402
 from src.app_pages.qa_demo import render_pdf_preview, render_qa_demo  # noqa: E402
+
+_pdf_server = start_pdf_server(config.get("parser", {}).get("input_dir", "data/raw"))
+_app_pages._pdf_server_ref = _pdf_server
 
 st.set_page_config(
     page_title="Easy RAG Lab",
