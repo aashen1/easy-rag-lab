@@ -1,6 +1,6 @@
 # 贡献指南
 
-感谢你对 ASH Easy RAG 项目的关注！本文档介绍如何参与项目开发。
+感谢你对 Easy RAG Lab 项目的关注！本文档介绍如何参与项目开发。
 
 ---
 
@@ -16,7 +16,7 @@
 
 ```bash
 git clone <repo-url>
-cd ash-easy-rag
+cd easy-rag-lab
 pixi install
 ```
 

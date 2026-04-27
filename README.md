@@ -1,4 +1,4 @@
-# ASH Easy RAG - 金融研报问答系统
+# Easy RAG Lab - 金融研报问答系统
 
 一个简单易学的 RAG（检索增强生成）系统，用于金融研报的智能问答。
 
@@ -96,7 +96,7 @@ pixi run lint
 ## 项目结构
 
 ```
-ash-easy-rag/
+easy-rag-lab/
 ├── main.py              # 主入口（CLI + 交互式问答）
 ├── config.yaml          # 配置文件
 ├── src/                 # 核心模块

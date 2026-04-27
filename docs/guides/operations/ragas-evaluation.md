@@ -127,7 +127,7 @@ pixi run python eval/run_experiment.py --config exp_configs/ragas_evaluation/rag
 
 ```bash
 # 1. Clone 代码库并进入目录
-git clone <repo-url> && cd ash-easy-rag
+git clone <repo-url> && cd easy-rag-lab
 
 # 2. 安装 pixi（如果尚未安装）
 # 参见 https://pixi.sh/latest/ 安装指南
