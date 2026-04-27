@@ -1,9 +1,11 @@
+import os
 from pathlib import Path
 from typing import Any
 
 import streamlit as st
 from loguru import logger
 
+from src.app_pages.pdf_server import PdfServer, start_pdf_server
 from src.meal import MealConfig, MealManager
 from src.pipeline import RAGPipeline
 from src.sampler import SamplingConfig, count_pdf_pages
@@ -13,6 +15,13 @@ from src.utils import load_config
 @st.cache_resource
 def get_pipeline(meal_name: str | None) -> RAGPipeline:
     return RAGPipeline(config_path="config.yaml", meal_name=meal_name)
+
+
+@st.cache_resource
+def get_pdf_server() -> PdfServer:
+    config = load_config()
+    raw_dir = config.get("parser", {}).get("input_dir", "data/raw")
+    return start_pdf_server(raw_dir)
 
 
 def get_meals() -> list[Any]:
@@ -82,8 +91,6 @@ def _get_pdf_page_count(file_path: str) -> int:
 
 
 def render_pdf_preview() -> None:
-    from streamlit_pdf_viewer import pdf_viewer
-
     file_path = st.session_state.get("_pdf_preview_path", "")
     file_name = st.session_state.get("_pdf_preview_name", "")
 
@@ -149,13 +156,11 @@ def render_pdf_preview() -> None:
             st.session_state._pdf_preview_page = page_num
             st.rerun()
 
-    pdf_viewer(
-        file_path,
-        width="90%",
-        pages_to_render=[current_page],
-        render_text=True,
-        key=f"pdf_viewer_p{current_page}",
-    )
+    server = get_pdf_server()
+    raw_dir = _get_raw_dir()
+    rel_path = os.path.relpath(file_path, raw_dir).replace("\\", "/")
+    pdf_url = f"{server.base_url}/{rel_path}#page={current_page}"
+    st.iframe(pdf_url, height=800)
 
 
 def _display_result(result: dict[str, Any], meal_config: MealConfig | None):

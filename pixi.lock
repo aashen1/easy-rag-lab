@@ -194,7 +194,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/47/9e/fd90114059175cac64e4fafa9bf3ac20584384d66de40793ae2e2f26f3bb/sqlalchemy-2.0.49-cp312-cp312-win_amd64.whl
       - pypi: https://files.pythonhosted.org/packages/e4/91/cb6f13a89e376ef179309d74f37a70ea0041d5e4b5ba5c4836dbf6e020ad/streamlit-1.56.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/65/57/ba77126eed2cb516feaf19b9f9d39af5be110b0a692415e772c7bbab7ed3/streamlit_pdf-2.0.1-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/30/d3/1d303fa1418d81a8216913ee4161e18ad178386b4fd605901349cf21f5e8/streamlit_pdf_viewer-0.0.29-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/a3/cf/0fea4f4ba3fc2772ac2419278aa9f6964124d4302117d61bc055758e000c/striprtf-0.0.26-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/b2/fe/81695a1aa331a842b582453b605175f419fe8540355886031328089d840a/sympy-1.13.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/99/55/db07de81b5c630da5cbf5c7df646580ca26dfaefa593667fc6f2fe016d2e/tabulate-0.10.0-py3-none-any.whl
@@ -3011,14 +3010,6 @@ packages:
   - pytest-rerunfailures==12.0 ; extra == 'devel'
   - streamlit>=1.51.0 ; extra == 'with-streamlit'
   requires_python: '>=3.9'
-- pypi: https://files.pythonhosted.org/packages/30/d3/1d303fa1418d81a8216913ee4161e18ad178386b4fd605901349cf21f5e8/streamlit_pdf_viewer-0.0.29-py3-none-any.whl
-  name: streamlit-pdf-viewer
-  version: 0.0.29
-  sha256: 7e6ec7ed52658fd4c6cc880538cbbec624920480e83f41b7814936e7508eb72b
-  requires_dist:
-  - streamlit>=0.63
-  - wheel ; extra == 'devel'
-  requires_python: '>=3.7'
 - pypi: https://files.pythonhosted.org/packages/a3/cf/0fea4f4ba3fc2772ac2419278aa9f6964124d4302117d61bc055758e000c/striprtf-0.0.26-py3-none-any.whl
   name: striprtf
   version: 0.0.26
