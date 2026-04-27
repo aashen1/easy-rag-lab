@@ -9,7 +9,7 @@
 ### Plans (docs/archive/trae-plans/)
 - backlog-cleanup-plan.md
 - downstream-pipeline-adaptation-plan.md
-- experiment_report_accuracy_improvement_plan.md
+- experiment-report-accuracy-improvement-plan.md
 - feat-023-context-length-control.md
 - fix-document-loader-multi-format.md
 - housekeeping-and-backlog-review-plan.md
@@ -24,12 +24,12 @@
 - rf-015-update-hyperparameter-guide.md
 - solid-rag-baseline-optimization-plan.md
 - stream2-chunking-metrics-fixes.md
-- testset_design_plan.md
-- 评估积压 Issue 及修复计划.md
+- testset-design-plan.md
+- backlog-issue-assessment-and-fix-plan.md
 
 ### Reports (docs/archive/trae-reports/)
 - baseline-evaluation-deep-inspection-report.md
-- merge-conflict-analysis-2026-04-23-23-52.md
+- merge-conflict-analysis-2026-04-23.md
 - three-way-merge-analysis.md
 - v019-priority-issues-deep-analysis.md
 
@@ -53,23 +53,76 @@
 - plan-project-memory-skill.md (FEAT-029)
 - safe-issue-cleanup-plan.md (multiple issues)
 - unify-golden-testset-generation.md (FEAT-031)
-- 测试覆盖增强计划.md (TEST-001~008) — **待重命名**: test-coverage-enhancement-plan.md
-- eval-metrics-fix-and-enhancement.md (评测指标修复)
-- experiment-report-metrics-fix-plan.md (实验报告指标修复)
+- test-coverage-enhancement-plan.md (TEST-001~008)
+- eval-metrics-fix-and-enhancement.md
+- experiment-report-metrics-fix-plan.md
 - fix-evaluation-bugs.md (BUG-029/030/031)
-- fix-golden-testset-generation.md (Golden 生成修复)
-- fix_hybrid_ground_truth_excerpt.md (Hybrid 策略修复)
+- fix-golden-testset-generation.md
+- fix-hybrid-ground-truth-excerpt.md
 
 ### Specs (docs/archive/trae-specs/v0.1.9-completed-specs/)
-- add-unified-document-loader/ (统一文档加载器)
-- fix-cache-pollution-risks/ (缓存污染修复)
-- hybrid-question-generation-strategy/ (混合问题生成策略)
+- add-unified-document-loader/
+- fix-cache-pollution-risks/
+- hybrid-question-generation-strategy/
 
-### 待手动处理事项
-1. 重命名归档文档（中文→英文）:
-   - `docs/archive/trae-documents/v0.1.9-completed-plans/测试覆盖增强计划.md` → `test-coverage-enhancement-plan.md`
-2. 重命名 `.trae/documents` 中的文档（中文→英文）:
-   - `统一解析链路与全量解析支持计划.md` → `unify-parsing-pipeline-full-support-plan.md`
-3. 移动文档位置:
-   - `docs/guides/profiling-configuration.md` → `docs/guides/operations/`
-   - `docs/reviews/issue-fix-batch-2026-04-26.md` → `docs/reviews/sessions/`
+## 2026-04-27 — Archive reorganization
+
+### Summary
+Reorganized archive directory from fragmented structure (6+ top-level directories with overlapping content) into 3 clean categories: `plans/`, `reports/`, `specs/`.
+
+### Deleted (moved to .trashbin)
+- `.trae-docs/` — 4 files duplicated in trae-plans/ and trae-reports/
+- `测试覆盖增强计划.md` — already renamed to English version
+
+### Renamed (Chinese → English, underscore → hyphen)
+| Old name | New name |
+|----------|----------|
+| 评估积压 Issue 及修复计划.md | backlog-issue-assessment-and-fix-plan.md |
+| v0.1.8 Release Plan - RAG 增强功能全链路验证.md | v0.1.8-release-plan-rag-enhancement-verification.md |
+| RAG评测系统修复-spec.md | spec.md |
+| RAG评测系统修复-checklist.md | checklist.md |
+| RAG评测系统修复-tasks.md | tasks.md |
+| RAG评测系统问题分析.md | problem-analysis.md |
+| 文档管理重构计划.md | docs-management-refactoring-plan.md |
+| 文档管理重构需求文档.md | docs-management-refactoring-requirements.md |
+| Evaluation_System_Integration_Analysis_and_Cleanup_Plan.md | evaluation-system-integration-analysis-and-cleanup-plan.md |
+| exp_configs_analysis_and_improvement_plan.md | exp-configs-analysis-and-improvement-plan.md |
+| fix_hybrid_ground_truth_excerpt.md | fix-hybrid-ground-truth-excerpt.md |
+| experiment_report_accuracy_improvement_plan.md | experiment-report-accuracy-improvement-plan.md |
+| testset_design_plan.md | testset-design-plan.md |
+| flagembedding_to_transformers/ | flagembedding-to-transformers/ |
+| transformers_compatibility_issue.md | transformers-compatibility-issue.md |
+| transformers_compatibility_issue_reply.md | transformers-compatibility-issue-reply.md |
+| merge-conflict-analysis-2026-04-23-23-52.md | merge-conflict-analysis-2026-04-23.md |
+
+### Directory merges
+- `trae-plans/` + `trae-documents/` + root plans → `plans/`
+  - v0.1.8 plans → `plans/v0.1.8/`
+  - v0.1.9 plans → `plans/v0.1.9/`
+  - documents-refactor → `plans/documents-refactor/`
+- `trae-reports/` + research docs → `reports/`
+- `trae-specs/` + `specs/` + `trae-documents/specs/` → `specs/`
+  - v0.1.9 specs → `specs/v0.1.9/`
+
+### Removed empty directories (moved to .trashbin)
+- `trae-plans/`
+- `trae-reports/`
+- `trae-specs/`
+- `trae-documents/`
+
+### New directory structure
+```
+docs/archive/
+├── archive-log.md
+├── idea-ai-era-git-practice.md
+├── plans/
+│   ├── v0.1.8/
+│   ├── v0.1.9/
+│   └── documents-refactor/
+├── reports/
+├── specs/
+│   └── v0.1.9/
+├── flagembedding-to-transformers/
+├── meal/
+└── test-suite-analysis/
+```

@@ -116,12 +116,16 @@ docs/
 │
 ├── archive/                   # 历史归档
 │   ├── archive-log.md         # 归档日志
-│   ├── trae-documents/        # .trae 计划书归档
-│   │   └── v0.1.9-completed-plans/
-│   ├── trae-specs/            # .trae Spec 归档
-│   │   └── v0.1.9-completed-specs/
-│   ├── trae-plans/            # 旧版计划书归档
-│   └── trae-reports/          # .trae 报告归档
+│   ├── plans/                 # 计划书归档
+│   │   ├── v0.1.8/            # v0.1.8 相关计划
+│   │   ├── v0.1.9/            # v0.1.9 相关计划
+│   │   └── documents-refactor/
+│   ├── reports/               # 报告归档
+│   ├── specs/                 # Spec 三件套归档
+│   │   └── v0.1.9/            # v0.1.9 相关 spec
+│   ├── flagembedding-to-transformers/
+│   ├── meal/
+│   └── test-suite-analysis/
 │
 ├── inbox/                     # 待处理文档收件箱
 └── inbox-processed/           # 已处理的原始文件
