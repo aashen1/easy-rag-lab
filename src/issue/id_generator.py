@@ -2,8 +2,10 @@
 
 Generates unique IDs in format: <TYPE>-<YYYYMMDD>-<SEQ>-<WTID>
 Sequence numbers are stored per worktree per date.
+Includes collision detection against existing issue files.
 """
 
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -12,6 +14,38 @@ from loguru import logger
 from src.issue.models import IssueType
 
 SEQUENCES_DIR = Path(".issues/sequences")
+ISSUES_DIR = Path(".issues")
+
+
+def _scan_existing_ids(issues_dir: Path | None = None) -> set[str]:
+    """Scan all issue files and collect existing IDs.
+
+    Searches active/, completed/, deferred/, and cancelled/ directories
+    for issue markdown files and extracts their IDs from filenames.
+
+    Args:
+        issues_dir: Root issues directory. Defaults to .issues/
+
+    Returns:
+        Set of existing issue ID strings
+    """
+    base = issues_dir or ISSUES_DIR
+    existing_ids: set[str] = set()
+
+    id_pattern = re.compile(r"^(BUG|FEAT|RF|OPT|INV|TEST)-\d{8}-\d{3}-\w+")
+
+    for subdir in ["active", "completed", "deferred", "cancelled"]:
+        target = base / subdir
+        if not target.exists():
+            continue
+        for file_path in target.glob("**/*.md"):
+            if file_path.name.startswith("_") or file_path.name.startswith("."):
+                continue
+            match = id_pattern.match(file_path.name)
+            if match:
+                existing_ids.add(match.group(0))
+
+    return existing_ids
 
 
 def generate_id(
@@ -19,27 +53,46 @@ def generate_id(
     wt_id: str,
     date: datetime | None = None,
     sequences_dir: Path | None = None,
+    issues_dir: Path | None = None,
 ) -> str:
-    """Generate a unique issue ID.
+    """Generate a unique issue ID with collision detection.
 
     Format: <TYPE>-<YYYYMMDD>-<SEQ>-<WTID>
     Example: BUG-20260427-001-wt1
+
+    If the generated ID collides with an existing issue (e.g., after
+    migration that bypassed the sequence file), the sequence is
+    incremented until a unique ID is found.
 
     Args:
         issue_type: Type of issue (BUG, FEAT, etc.)
         wt_id: Worktree identifier
         date: Date for ID generation. Defaults to current date.
         sequences_dir: Directory for sequence files. Defaults to .issues/sequences/
+        issues_dir: Root issues directory for collision scan. Defaults to .issues/
 
     Returns:
-        str: Generated issue ID
+        str: Generated issue ID guaranteed to be unique
     """
     dt = date or datetime.now()
     date_str = dt.strftime("%Y%m%d")
 
+    existing_ids = _scan_existing_ids(issues_dir)
+
     seq = get_next_sequence(wt_id, dt, sequences_dir)
 
     issue_id = f"{issue_type.value}-{date_str}-{seq:03d}-{wt_id}"
+
+    max_attempts = 999
+    attempts = 0
+    while issue_id in existing_ids and attempts < max_attempts:
+        attempts += 1
+        seq = get_next_sequence(wt_id, dt, sequences_dir)
+        issue_id = f"{issue_type.value}-{date_str}-{seq:03d}-{wt_id}"
+
+    if issue_id in existing_ids:
+        logger.error(f"Could not generate unique ID after {max_attempts} attempts")
+
     logger.debug(f"Generated issue ID: {issue_id}")
     return issue_id
 

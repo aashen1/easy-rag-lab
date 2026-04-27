@@ -514,6 +514,11 @@ def list_issues(
 
     if not issues:
         click.echo("No issues found.")
+        from src.issue.config import load_config
+
+        config = load_config()
+        if config.summary.list_snapshot:
+            _save_list_snapshot(issues, config.summary.snapshot_file, ctx)
         return
 
     col_id_width = 22
@@ -560,7 +565,7 @@ def list_issues(
             "review": "magenta",
             "done": "green",
             "deferred": "yellow",
-            "cancelled": "dim",
+            "cancelled": "bright_black",
         }.get(status_str, "white")
 
         click.echo(
@@ -573,6 +578,12 @@ def list_issues(
 
     click.echo()
     click.echo(f"Total: {len(issues)} issue(s)")
+
+    from src.issue.config import load_config
+
+    config = load_config()
+    if config.summary.list_snapshot:
+        _save_list_snapshot(issues, config.summary.snapshot_file, ctx)
 
 
 @cli.command()
@@ -784,6 +795,52 @@ def cancel_issue(ctx: click.Context, issue_id: str) -> None:
     from src.issue.models import IssueStatus
 
     _transition_issue(ctx, issue_id, IssueStatus.CANCELLED, "cancel")
+
+
+def _save_list_snapshot(issues: list, snapshot_file: str, ctx: click.Context) -> None:
+    """Save issue list query result to snapshot file.
+
+    Args:
+        issues: List of Issue objects from the query
+        snapshot_file: Filename for the snapshot (relative to .issues/)
+        ctx: Click context
+    """
+    from datetime import datetime
+    from pathlib import Path
+
+    snapshot_path = Path(".issues") / snapshot_file
+
+    filters = []
+    for key in ("status_filter", "type_filter", "priority_filter", "labels_filter"):
+        val = ctx.params.get(key)
+        if val:
+            filters.append(f"{key}={val}")
+    all_dirs = ctx.params.get("all_dirs", False)
+    if all_dirs:
+        filters.append("all=true")
+
+    filter_desc = ", ".join(filters) if filters else "active only"
+
+    lines = ["# Issue 查询快照", ""]
+    lines.append(f"> 更新时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    lines.append(f"> 过滤条件：{filter_desc}")
+    lines.append(f"> 共 {len(issues)} 条")
+    lines.append("")
+    lines.append("| ID | 类型 | 状态 | 优先级 | 标题 |")
+    lines.append("|----|------|------|--------|------|")
+
+    for issue in issues:
+        lines.append(
+            f"| {issue.id} | {issue.type.value} | {issue.status.value} "
+            f"| {issue.priority.value} | {issue.title} |"
+        )
+
+    lines.append("")
+
+    content = "\n".join(lines)
+    snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+    snapshot_path.write_text(content, encoding="utf-8")
+    logger.debug(f"Saved list snapshot to {snapshot_path}")
 
 
 def _transition_issue(
