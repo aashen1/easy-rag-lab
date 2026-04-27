@@ -1654,7 +1654,7 @@ class TestSetGenerator:
                         qa["source_files"] = [source_path]
                         qa["source_chunks"] = []
                         qa["expect_no_answer"] = True
-                        qa["expect_retrieval"] = True
+                        qa["expect_retrieval"] = False
                     else:
                         qa["source_files"] = [source_path]
 
@@ -1777,7 +1777,7 @@ class TestSetGenerator:
                         qa["source_files"] = [source_path]
                         qa["source_chunks"] = []
                         qa["expect_no_answer"] = True
-                        qa["expect_retrieval"] = True
+                        qa["expect_retrieval"] = False
                     else:
                         qa["source_files"] = [source_path]
 
@@ -2031,7 +2031,7 @@ class TestSetGenerator:
                         qa["source_files"] = [source_path]
                         qa["source_chunks"] = []
                         qa["expect_no_answer"] = True
-                        qa["expect_retrieval"] = True
+                        qa["expect_retrieval"] = False
                     else:
                         qa["source_files"] = [source_path]
 
@@ -2201,7 +2201,7 @@ class TestSetGenerator:
                         qa["source_files"] = [source_path]
                         qa["source_chunks"] = []
                         qa["expect_no_answer"] = True
-                        qa["expect_retrieval"] = True
+                        qa["expect_retrieval"] = False
                     else:
                         qa["source_files"] = [source_path]
 
@@ -3179,7 +3179,7 @@ class TestSetGenerator:
                         qa["source_files"] = [source_path]
                         qa["source_chunks"] = []
                         qa["expect_no_answer"] = True
-                        qa["expect_retrieval"] = True
+                        qa["expect_retrieval"] = False
                     else:
                         qa["source_files"] = [source_path]
                         answer_text = qa.get("answer", "")
@@ -3240,7 +3240,7 @@ class TestSetGenerator:
                         qa["source_files"] = [source_path]
                         qa["source_chunks"] = []
                         qa["expect_no_answer"] = True
-                        qa["expect_retrieval"] = True
+                        qa["expect_retrieval"] = False
                     else:
                         qa["source_files"] = [source_path]
                         answer_text = qa.get("answer", "")
@@ -3399,7 +3399,7 @@ class TestSetGenerator:
                     qa["source_files"] = [source_path]
                     qa["source_chunks"] = []
                     qa["expect_no_answer"] = True
-                    qa["expect_retrieval"] = True
+                    qa["expect_retrieval"] = False
                 else:
                     qa["source_files"] = [source_path]
                     answer_text = qa.get("answer", "")
