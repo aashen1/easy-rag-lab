@@ -387,6 +387,50 @@ streamlit-pdf-viewer = ">=0.0.28, <1"
 - `streamlit-pdf-viewer` 与 Streamlit ≥ 1.41 存在已知兼容性问题（st.dialog 关闭后滚动位置重置），但因已改用 Tab 方案，此问题不影响。
 - 页码跳转时组件需重新渲染（通过 key 变化），大 PDF 可能需要几秒加载。
 
+### 10.3 2026-04-28：原生 PDF 渲染替代 streamlit-pdf-viewer
+
+**问题**：`streamlit-pdf-viewer`（pdf.js）将每页 PDF 渲染为 canvas 位图，100 页研报 ≈ 100 MB 像素数据，浏览器资源开销暴增。而原来 `st.pdf()` 使用浏览器原生 PDF 渲染器（Chrome PDFium），仅渲染可视区域，内存 ~2-4 MB。
+
+**技术方案**：
+
+1. **轻量 HTTP 文件服务**：新增 `pdf_server.py`，使用 Python `http.server.HTTPServer` 在后台守护线程上服务 `data/raw/` 目录，端口从 8502 开始自动探测。通过 `@st.cache_resource` 保证单例启动。
+
+2. **原生渲染 + 页码跳转**：用 `st.iframe(f"http://localhost:{port}/path/to/file.pdf#page={page}")` 嵌入 PDF。浏览器原生 PDF 渲染器负责显示（懒加载 + GPU 加速 + 连续滚动），`#page=N` 是 PDF Open Parameters 标准，浏览器原生支持页码跳转。
+
+3. **移除 streamlit-pdf-viewer**：从 `pixi.toml` 移除依赖，从 `qa_demo.py` 移除导入和调用。
+
+4. **路径安全**：`_SecuredHandler` 继承 `SimpleHTTPRequestHandler`，额外校验 `os.path.realpath()` 防止路径穿越。
+
+**为什么不用 `st.components.v1.html`（blob URL 方案）**：
+
+`st.components.v1.html` 已在 Streamlit 1.56 标记弃用（2026-06-01 后移除），替代品是 `st.iframe`。而 `st.iframe` 对本地 PDF 文件走 Streamlit 内部 media storage，无法在 URL 上追加 `#page=N`。所以需要独立 HTTP 服务提供可控 URL。
+
+**资源对比**：
+
+| 方案 | 100 页研报内存 | 滚动 | 页码跳转 | API 弃用 |
+|------|-------------|------|---------|---------|
+| st.pdf()（旧弹窗） | ~2-4 MB | ✅ 原生 | ❌ | ✅ 安全 |
+| streamlit-pdf-viewer 全量 | ~100 MB | ✅ | ✅ | ✅ 安全 |
+| **HTTP 服务 + st.iframe** | **~2-4 MB** | **✅ 原生** | **✅** | **✅ 安全** |
+
+**新增文件**：
+
+| 文件 | 作用 |
+|------|------|
+| `src/app_pages/pdf_server.py` | 轻量 PDF 文件服务器（`PdfServer` / `start_pdf_server()`） |
+
+**移除依赖**：
+
+```toml
+# 已从 pixi.toml 移除
+streamlit-pdf-viewer = ">=0.0.28, <1"
+```
+
+**已知限制**：
+
+- 远程访问时 `localhost` 不可达，当前为本地开发工具暂不处理
+- Safari 对 `#page=N` 支持不完整，Chrome/Edge/Firefox 均正常
+
 ### 10.3 2026-04-28：移除 fragment 轮询，改用同步查询
 
 **问题**：`@st.fragment(run_every=1s)` + `st.rerun()` 导致大量控制台警告：
