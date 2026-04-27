@@ -41,9 +41,24 @@
 
 ### 项目记忆
 - 本项目文档系统同时服务于人类与 AI，是跨 session 的项目记忆系统
-- 新 session 启动时必须先读 CLAUDE.md + backlog.md + version-history.md 理解项目状态
+- 新 session 启动时必须先读 CLAUDE.md + `.issues/context.md` + version-history.md 理解项目状态
 - 代码变更必须同步更新文档，确保下个 session 能理解本次变更意图
 - 详细方法论：调用 skill `project-memory`；完整参考：[docs/methodology.md](docs/methodology.md)
+
+### Issue 系统
+- 项目使用 `.issues/` 目录管理 issue，替代旧的 `docs/backlog.md`
+- 所有 issue 通过 CLI 管理：`pixi run issue <command>`
+- 常用命令：
+  - `pixi run issue create -t <type> -T "<title>"` — 创建 issue
+  - `pixi run issue list` — 列出活跃 issue
+  - `pixi run issue show <id>` — 查看 issue 详情
+  - `pixi run issue start <id>` — 开始处理 issue
+  - `pixi run issue done <id>` — 完成 issue
+  - `pixi run issue summary` — 生成统计摘要
+  - `pixi run issue context` — 显示当前聚焦 issue
+- Issue 类型：`bug` / `feat` / `rf` / `opt` / `inv` / `test`
+- Issue 状态流：`todo → in_progress → review → done`（可延期或取消）
+- 目录结构：`.issues/active/`（活跃）、`.issues/completed/`（已完成）、`.issues/deferred/`（延期）、`.issues/cancelled/`（取消）
 
 ---
 
@@ -54,7 +69,7 @@
 - 版本发布后，创建 `docs/reviews/vX.X.X/` 目录下的验收报告
 - 代码变更必须同步更新相关文档
 - 文档文件名统一使用英文
-- code-review 中"建议单开"的内容必须同时添加到 `docs/backlog.md`
+- code-review 中"建议单开"的内容必须同时创建 issue（使用 `pixi run issue create`）
 - 聊天记录入库前必须精简内容、规范命名
 
 ### 收件箱检查规则
@@ -69,9 +84,9 @@
 - 每次对话开始时，检查 `TODO.md` 中是否有未归档的 issue（即 `- [ ]` 且无 `📋` 标记的条目）
 - 如有未归档 issue，提示用户"发现 TODO.md 有 N 条未归档 issue，是否执行归档？"
 - 用户说"打扫卫生""归档TODO"等指令时，也触发归档流程
-- 归档流程：调用 todo-archiver skill，将 issue 单向归档到 `docs/backlog.md`
+- 归档流程：调用 todo-archiver skill，使用 `pixi run issue create` 创建 issue 文件
 - 归档后在 TODO.md 原条目追加 `📋 YYYY-MM-DD 归档为 [ID]` 时间戳，不删除原内容，不打钩
-- 如发现已归档 issue 在 backlog 中已完成，则打钩、追加 `✅ YYYY-MM-DD 该issue已确认完成` 时间戳、移动到对应日期标题下
+- 如发现已归档 issue 在 `.issues/` 中已完成，则打钩、追加 `✅ YYYY-MM-DD 该issue已确认完成` 时间戳、移动到对应日期标题下
 - 为每个日期标题的 verbose 生成 summary 摘要
 
 ---
@@ -107,7 +122,7 @@
 - RF-014：normalize_source 已确认使用 include_parent=True
 - RF-020：Golden 独立生成链路收编入 TestSetGenerator，消除重复代码
 
-**待做事项**：参见 [docs/backlog.md](docs/backlog.md)
+**待做事项**：参见 `.issues/active/` 目录或运行 `pixi run issue list`
 
 **下版本方向**：参见 [docs/reviews/v0.1.9/release-summary.md](docs/reviews/v0.1.9/release-summary.md)
 

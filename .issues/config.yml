@@ -1,0 +1,18 @@
+version: '1.0'
+worktree_mapping:
+  w1-easy-rag: wt1
+worktree_names:
+  wt1: main-dev
+summary:
+  auto_generate: false
+  output_file: _summary.md
+  max_length: 80
+  include_labels: true
+  include_milestone: true
+status_flow:
+- todo
+- in_progress
+- review
+- done
+- deferred
+- cancelled
