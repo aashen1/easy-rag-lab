@@ -197,20 +197,17 @@ class RAGPipeline:
                 f"Sampled {len(sampled_pdf_files)} PDFs from {len(all_pdfs)} total"
             )
 
-        artifacts_config = self.config.get("artifacts", {})
-        artifacts_dir = artifacts_config.get("dir", "data/artifacts")
-        raw_dir = Path(parser_config["input_dir"])
-
         from src.meal import (
-            ArtifactCache,
             MealFile,
             compute_chunker_config_hash,
             compute_data_id,
             compute_file_sha256,
             compute_parser_config_hash,
+            create_artifact_cache,
         )
 
-        cache = ArtifactCache(Path(artifacts_dir), raw_dir)
+        cache = create_artifact_cache(self.config)
+        raw_dir = cache.raw_dir
         all_pdf_files = sorted(raw_dir.rglob("*.pdf"))
         meal_files = []
         for pdf_path in all_pdf_files:
@@ -235,7 +232,7 @@ class RAGPipeline:
         logger.info("Step 1: Parsing PDFs...")
         parse_results = parse_all_pdfs_unified(
             input_dir=parser_config["input_dir"],
-            artifacts_dir=artifacts_dir,
+            artifacts_dir=str(cache.artifacts_dir),
             force=force_parse,
             parser_options=parser_config.get("pymupdf4llm"),
         )
@@ -419,12 +416,9 @@ class RAGPipeline:
             self.retrieval_method in ("bm25", "hybrid")
             and self.bm25_retriever is not None
         ):
-            from src.meal import ArtifactCache
+            from src.meal import create_artifact_cache
 
-            artifacts_config = self.config.get("artifacts", {})
-            artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
-            raw_dir = Path(self.config.get("parser", {}).get("input_dir", "data/raw"))
-            cache = ArtifactCache(artifacts_dir, raw_dir)
+            cache = create_artifact_cache(self.config)
             chunker_hash = self.meal_config.config_hashes.get("chunker", "")
             chunks_dir = cache.get_chunks_dir(self.meal_config.data_id, chunker_hash)
             if chunks_dir.exists():

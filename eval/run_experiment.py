@@ -40,7 +40,6 @@ from src.experiment import (  # noqa: E402
 from src.generator import Generator  # noqa: E402
 from src.hybrid_retriever import HybridRetriever  # noqa: E402
 from src.meal import (  # noqa: E402
-    ArtifactCache,
     MealManager,
     MealStatus,
     build_chunks_if_needed,
@@ -48,6 +47,7 @@ from src.meal import (  # noqa: E402
     compute_chunker_config_hash,
     compute_file_sha256,
     compute_index_key,
+    create_artifact_cache,
     generate_collection_name,
 )
 from src.pipeline import RAGPipeline  # noqa: E402
@@ -726,10 +726,7 @@ def prepare_variant_chunks(
 
     chunker_hash = compute_chunker_config_hash(chunker_config)
 
-    artifacts_config = merged_config.get("artifacts") or {}
-    artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
-    raw_dir = Path(merged_config.get("parser", {}).get("input_dir", "data/raw"))
-    cache = ArtifactCache(artifacts_dir, raw_dir)
+    cache = create_artifact_cache(merged_config)
 
     parsed_dir = cache.get_parsed_dir(
         meal_config.data_id,
@@ -816,10 +813,7 @@ def prepare_index_for_variant(
         if not force_index:
             indexer.close()
 
-        artifacts_config = merged_config.get("artifacts") or {}
-        artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
-        raw_dir = Path(merged_config.get("parser", {}).get("input_dir", "data/raw"))
-        cache = ArtifactCache(artifacts_dir, raw_dir)
+        cache = create_artifact_cache(merged_config)
 
         parsed_dir = cache.get_parsed_dir(
             meal_config.data_id,
@@ -1726,12 +1720,8 @@ def run_variant_evaluation(
         ):
             if profiler:
                 profiler.begin_stage("S4")
-            from src.meal import ArtifactCache
 
-            artifacts_config = merged_config.get("artifacts", {})
-            artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
-            raw_dir = Path(merged_config.get("parser", {}).get("input_dir", "data/raw"))
-            cache = ArtifactCache(artifacts_dir, raw_dir)
+            cache = create_artifact_cache(merged_config)
             chunker_hash = meal_config.config_hashes.get("chunker", "")
             chunks_dir = cache.get_chunks_dir(meal_config.data_id, chunker_hash)
             if chunks_dir.exists():

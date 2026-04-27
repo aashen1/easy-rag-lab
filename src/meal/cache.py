@@ -387,3 +387,10 @@ class ArtifactCache:
         except Exception as e:
             logger.warning(f"Full parsed validation failed: {str(e)}")
             return False
+
+
+def create_artifact_cache(config: dict[str, Any]) -> ArtifactCache:
+    artifacts_config = config.get("artifacts") or {}
+    artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
+    raw_dir = Path(config.get("parser", {}).get("input_dir", "data/raw"))
+    return ArtifactCache(artifacts_dir, raw_dir)

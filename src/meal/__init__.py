@@ -1,5 +1,5 @@
 from src.meal.builders import build_chunks_if_needed, build_index_from_chunks
-from src.meal.cache import ArtifactCache
+from src.meal.cache import ArtifactCache, create_artifact_cache
 from src.meal.hashes import (
     compute_chunker_config_hash,
     compute_data_id,
@@ -32,6 +32,7 @@ __all__ = [
     "compute_file_sha256",
     "compute_index_key",
     "compute_parser_config_hash",
+    "create_artifact_cache",
     "generate_collection_name",
     "generate_timestamp_name",
     "validate_meal_name",
