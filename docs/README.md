@@ -23,6 +23,7 @@
 
 ### 使用指南
 
+- [Streamlit Web Demo](guides/operations/streamlit-web-demo.md)
 - [Meal 数据管理系统](guides/operations/meal-system.md)
 - [实验评测系统](guides/operations/experiment-system.md)
 - [PDF 解析指南](guides/operations/pdf-parsing.md)
@@ -73,6 +74,7 @@ docs/
 │
 ├── guides/                    # 使用与开发指南
 │   ├── operations/            # 系统运维与使用指南
+│   │   ├── streamlit-web-demo.md
 │   │   ├── meal-system.md
 │   │   ├── experiment-system.md
 │   │   ├── question-generation.md
@@ -96,6 +98,7 @@ docs/
 │   ├── v0.1.7/
 │   ├── v0.1.8/
 │   ├── sessions/              # 开发会话记录
+│   │   ├── streamlit-web-demo-session.md
 │   │   ├── baseline-evaluation-fix-record.md
 │   │   └── independent-issues-batch-session.md
 │   └── investigations/        # 技术调研报告

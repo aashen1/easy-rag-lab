@@ -50,6 +50,18 @@ pixi run interactive
 pixi run python main.py --interactive
 ```
 
+### 4. Web 可视化界面
+
+启动 Web 界面，可视化问答演示：
+
+```bash
+pixi run web
+```
+
+浏览器将自动打开 `http://localhost:8501`。
+
+详见 [Streamlit Web Demo 使用指南](guides/operations/streamlit-web-demo.md)。
+
 ---
 
 ## 常用命令速查
