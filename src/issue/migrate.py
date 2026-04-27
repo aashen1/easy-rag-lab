@@ -447,8 +447,8 @@ class BacklogMigrator:
         """Run migration from backlog.md to issue files.
 
         Uses a global sequence counter (shared across all types) to match
-        the normal ID generation behavior. After migration, updates the
-        sequence file so future issue creation won't collide.
+        the normal ID generation behavior. Sequence numbers are derived
+        from existing files, so no post-migration state update is needed.
 
         Returns:
             MigrationStats with results
@@ -492,40 +492,7 @@ class BacklogMigrator:
                 logger.error(f"Failed to migrate {parsed.legacy_id}: {e}")
                 self.stats.errors += 1
 
-        if not self.dry_run and self._global_sequence > 0:
-            self._update_sequence_file(migration_date)
-
         return self.stats
-
-    def _update_sequence_file(self, date: datetime) -> None:
-        """Update the sequence file after migration.
-
-        Writes the global sequence counter to the sequence file so that
-        future issue creation via generate_id won't produce colliding IDs.
-
-        Args:
-            date: Migration date used for ID generation
-        """
-        from src.issue.id_generator import SEQUENCES_DIR
-
-        date_str = date.strftime("%Y%m%d")
-        seq_file = SEQUENCES_DIR / self.wt_id / f"{date_str}.txt"
-
-        seq_file.parent.mkdir(parents=True, exist_ok=True)
-
-        try:
-            current = 0
-            if seq_file.exists():
-                try:
-                    current = int(seq_file.read_text(encoding="utf-8").strip())
-                except (ValueError, OSError):
-                    current = 0
-
-            new_seq = max(current, self._global_sequence)
-            seq_file.write_text(str(new_seq), encoding="utf-8")
-            logger.info(f"Updated sequence file for {self.wt_id}/{date_str}: {new_seq}")
-        except OSError as e:
-            logger.warning(f"Failed to update sequence file after migration: {e}")
 
     def _save_issue_file(self, issue: Issue) -> Path:
         """Save issue to appropriate directory.
