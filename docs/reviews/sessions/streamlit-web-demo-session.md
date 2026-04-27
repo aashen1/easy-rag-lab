@@ -233,12 +233,15 @@ pixi run web
 - [x] 检索策略配置
 - [x] 结果展示（答案、来源、Token）
 - [x] 状态跨 Tabs 保持
+- [x] 当前 Meal 文件列表展示（侧边栏 expander）
+- [x] PDF 预览弹窗（st.dialog + st.pdf）
+- [x] 来源文档可点击预览（检索结果中 📄预览 按钮）
 
 ### 6.2 待实现
 
 - [ ] 配置热切换（检索策略、Top-K、Reranker 实时生效）
 - [ ] 实验对比页（加载 `data/exp_reports/` 结果，可视化对比）
-- [ ] PDF 来源预览（点击来源文档可预览 PDF）
+- [x] PDF 来源预览（点击来源文档可预览 PDF）
 - [ ] 历史记录（保存问答历史，支持回溯）
 - [ ] Streamlit Cloud 部署
 
@@ -307,3 +310,35 @@ plotly = ">=6.7.0, <7"  # 可选，用于图表
 
 - 用户指南：[docs/guides/operations/streamlit-web-demo.md](../../guides/operations/streamlit-web-demo.md)
 - Spec 文件：[.trae/specs/streamlit-web-demo/](../../../../.trae/specs/streamlit-web-demo/)
+
+---
+
+## 十、迭代记录
+
+### 10.1 2026-04-28：Meal 文件列表 + PDF 预览
+
+**需求**：在问答界面中查看当前 Meal 可用的文件名，并支持 PDF 预览。
+
+**技术方案**：
+
+1. **Meal 文件列表**：在侧边栏 Meal 选择器下方，使用 `st.expander` 展示当前 Meal 包含的 PDF 文件名和大小。每个文件旁有 📄 按钮可打开预览。
+
+2. **PDF 预览弹窗**：使用 Streamlit 1.49+ 原生 `st.pdf()` 组件 + `@st.dialog` 装饰器实现模态弹窗预览。弹窗宽度设为 `large`，PDF 渲染高度 700px，带"关闭预览"按钮。
+
+3. **来源文档可点击**：在检索结果的"来源文档"Tab 中，每个来源文档旁增加 📄预览 按钮。通过 `_source_to_pdf_path()` 函数将 chunk 的 source 路径（如 `company/report.md`）映射回原始 PDF 路径（如 `company/report.pdf`），匹配策略为：先精确匹配替换后缀的路径，再按文件名 stem 模糊匹配。
+
+**新增函数**：
+
+| 函数 | 作用 |
+|------|------|
+| `_get_raw_dir()` | 从 config 获取 PDF 原始目录路径 |
+| `_format_file_size()` | 格式化文件大小（MB/KB/B） |
+| `_source_to_pdf_path()` | 将 chunk source 路径映射到 PDF 文件路径 |
+| `_open_pdf_preview()` | 设置 session_state 触发 PDF 预览弹窗 |
+| `_pdf_preview_dialog()` | `@st.dialog` 装饰的 PDF 预览弹窗 |
+| `_render_meal_files()` | 渲染侧边栏 Meal 文件列表 |
+
+**已知限制**：
+
+- `@st.dialog` 关闭时（点击 X），`_pdf_preview_path` 状态未清除，下次 rerun 会重新打开弹窗。用户需点击弹窗内的"关闭预览"按钮才能正确关闭。这是 Streamlit dialog 的已知行为，暂无优雅解决方案。
+- PDF 预览不支持跳转到特定页面（`st.pdf` 暂无 page 参数）。
