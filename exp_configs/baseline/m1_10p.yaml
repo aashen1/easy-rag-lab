@@ -11,7 +11,7 @@ test_sets:
   - name: "m1t1_q20"
     on_missing: "auto"
     generation:
-      strategy: "document"
+      strategy: "hybrid"
       num_questions: 20
 
 variants:

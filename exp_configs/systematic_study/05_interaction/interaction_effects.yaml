@@ -36,7 +36,7 @@ test_sets:
   - name: "interaction_eval"
     on_missing: "auto"
     generation:
-      strategy: "document"
+      strategy: "hybrid"
       num_questions: 65
 
 variants:

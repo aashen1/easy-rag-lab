@@ -11,7 +11,7 @@ test_sets:
   - name: "baseline_test_10pct"
     on_missing: "auto"
     generation:
-      strategy: "document"
+      strategy: "hybrid"
       num_questions: 35
 
 variants:

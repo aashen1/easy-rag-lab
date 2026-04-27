@@ -11,7 +11,7 @@ test_sets:
   - name: "smoke_quick_test"
     on_missing: "auto"
     generation:
-      strategy: "document"
+      strategy: "hybrid"
       num_questions: 1
 
 variants:

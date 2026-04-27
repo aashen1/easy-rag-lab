@@ -174,7 +174,7 @@ test_sets:
   - name: "factual_test"
     on_missing: "auto"
     generation:
-      strategy: "document"
+      strategy: "hybrid"
       num_questions: 10
       seed: 100
       type_distribution:
@@ -277,7 +277,7 @@ test_sets:
   - name: "single_fact_test"
     on_missing: "auto"
     generation:
-      strategy: "document"
+      strategy: "hybrid"
       num_questions: 20
       seed: 100
       type_distribution:
@@ -291,7 +291,7 @@ test_sets:
   - name: "multi_fact_test"
     on_missing: "auto"
     generation:
-      strategy: "document"
+      strategy: "hybrid"
       num_questions: 15
       seed: 101
       type_distribution:
@@ -356,7 +356,7 @@ test_sets:
   - name: "single_fact_test"
     on_missing: "auto"
     generation:
-      strategy: "document"
+      strategy: "hybrid"
       num_questions: 30
       seed: 200
       type_distribution:
@@ -370,7 +370,7 @@ test_sets:
   - name: "boundary_test"
     on_missing: "auto"
     generation:
-      strategy: "document"
+      strategy: "hybrid"
       num_questions: 25
       seed: 201
       type_distribution:
@@ -384,7 +384,7 @@ test_sets:
   - name: "multi_hop_test"
     on_missing: "auto"
     generation:
-      strategy: "document"
+      strategy: "hybrid"
       num_questions: 15
       seed: 202
       type_distribution:
@@ -490,7 +490,7 @@ test_sets:
   - name: "single_fact_test"
     on_missing: "auto"
     generation:
-      strategy: "document"
+      strategy: "hybrid"
       num_questions: 25
       seed: 300
       type_distribution:
@@ -504,7 +504,7 @@ test_sets:
   - name: "boundary_test"
     on_missing: "auto"
     generation:
-      strategy: "document"
+      strategy: "hybrid"
       num_questions: 20
       seed: 301
       type_distribution:
@@ -518,7 +518,7 @@ test_sets:
   - name: "multi_hop_test"
     on_missing: "auto"
     generation:
-      strategy: "document"
+      strategy: "hybrid"
       num_questions: 10
       seed: 302
       type_distribution:
@@ -1112,7 +1112,7 @@ test_sets:
   - name: "golden_test"
     on_missing: "auto"
     generation:
-      strategy: "document"
+      strategy: "hybrid"
       num_questions: 20
       seed: 100
       type_distribution:
@@ -1125,7 +1125,7 @@ test_sets:
   - name: "golden_test_2"
     on_missing: "auto"
     generation:
-      strategy: "document"
+      strategy: "hybrid"
       num_questions: 15
       seed: 101
       type_distribution:
@@ -1138,9 +1138,11 @@ test_sets:
 ```
 
 **支持的生成策略**：
-- `document`: 基于完整文档生成问题（推荐）
+- `hybrid`: 混合策略（推荐，分段采样+引用追踪+引用定位，问题自然且Ground Truth精确）
   - 通过 `type_distribution` 控制问题类型分布
-  - 类型包括：`single_fact`（单知识点）、`multi_fact`（多知识点）、`reasoning`（推理）、`comparative`（对比）、`missing`（缺失）、`irrelevant`（无关）
+  - 类型包括：`single_fact`（单知识点）、`multi_fact`（多知识点）、`reasoning`（推理）、`comparative`（对比）、`missing`（缺失）、`irrelevant`（无关）、`adversarial`（对抗性）
+- `document`: 基于完整文档生成问题（已自动委托为hybrid，保留兼容）
+- `chunk`: 基于单个chunk生成问题（问题更局部）
 
 **命名规范**：
 - 每个 test set 必须有 `name` 字段

@@ -31,7 +31,7 @@ test_sets:
   - name: "ablation_chunking_eval"
     on_missing: "auto"
     generation:
-      strategy: "document"
+      strategy: "hybrid"
       num_questions: 65
 
 # 公共检索配置：hybrid_rrf + reranker(top5)

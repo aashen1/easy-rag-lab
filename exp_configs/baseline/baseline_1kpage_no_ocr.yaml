@@ -15,7 +15,7 @@ test_sets:
   - name: "baseline_test_1kpage_no_ocr"
     on_missing: "auto"
     generation:
-      strategy: "document"
+      strategy: "hybrid"
       num_questions: 10
       seed: 42
 

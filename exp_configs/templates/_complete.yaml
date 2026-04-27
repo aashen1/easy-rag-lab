@@ -41,15 +41,19 @@ data:
 #       test_sets:
 #         - on_missing: "auto"
 #           generation:
-#             strategy: "document"
+#             strategy: "hybrid"
 #             num_questions: 20
-#       # 自动命名为 "document_n20"，下次运行同配置可复用
+#       # 自动命名为 "hybrid_n20"，下次运行同配置可复用
 # ------------------------------------------------------------
 test_sets:
   - name: "golden_test"
     on_missing: "auto"
     generation:
-      strategy: "document"
+      # strategy — 问题生成策略
+      #   "hybrid"   : 混合策略（推荐，分段采样+引用追踪+引用定位，问题自然且Ground Truth精确）
+      #   "document" : 基于整篇文档生成问题（已自动委托为hybrid，保留兼容）
+      #   "chunk"    : 基于单个chunk生成问题（问题更局部）
+      strategy: "hybrid"
       num_questions: 20
       seed: 100
       type_distribution:
@@ -120,6 +124,16 @@ variants:
           enabled: true
           strategy: "hyde"
           num_queries: 3
+
+  - name: "custom_test_generation"
+    description: "自定义测试生成配置 - 调整hybrid策略参数"
+    config_overrides:
+      test_generation:
+        segment_size: 6000
+        compact_segment_max_chars: 4000
+        segment_sampling_strategy: "sequential"
+        quote_fuzzy_match_threshold: 0.90
+        multi_hop_candidate_count: 4
 
 # ------------------------------------------------------------
 # 评测配置

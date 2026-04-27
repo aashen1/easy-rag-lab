@@ -11,7 +11,7 @@ test_sets:
   - name: "chunk_eval"
     on_missing: "auto"
     generation:
-      strategy: "document"
+      strategy: "hybrid"
       num_questions: 50
       type_distribution:
         single_fact: 0.30

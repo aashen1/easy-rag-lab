@@ -1,5 +1,5 @@
 name: "strategy_comparison"
-description: "问题生成策略对比实验 - 比较不同类型分布在问答质量上的差异"
+description: "问题生成策略对比实验 - 比较不同类型分布在问答质量上的差异（hybrid策略）"
 
 data:
   meal: "meal_strategy_comparison"
@@ -11,7 +11,7 @@ test_sets:
   - name: "single_fact_focused"
     on_missing: "auto"
     generation:
-      strategy: "document"
+      strategy: "hybrid"
       num_questions: 5
       seed: 700
       type_distribution:
@@ -25,7 +25,7 @@ test_sets:
   - name: "multi_fact_focused"
     on_missing: "auto"
     generation:
-      strategy: "document"
+      strategy: "hybrid"
       num_questions: 5
       seed: 701
       type_distribution:
@@ -39,7 +39,7 @@ test_sets:
   - name: "reasoning_focused"
     on_missing: "auto"
     generation:
-      strategy: "document"
+      strategy: "hybrid"
       num_questions: 5
       seed: 702
       type_distribution:
@@ -50,10 +50,10 @@ test_sets:
         missing: 0.0
         irrelevant: 0.0
         adversarial: 0.0
-  - name: "balanced_document"
+  - name: "balanced_hybrid"
     on_missing: "auto"
     generation:
-      strategy: "document"
+      strategy: "hybrid"
       num_questions: 15
       type_distribution:
         single_fact: 0.30

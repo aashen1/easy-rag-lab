@@ -65,9 +65,10 @@ test_sets:
     # generation — 测试集生成配置
     generation:
       # strategy — 问题生成策略
-      #   "document" : 基于整篇文档生成问题（推荐，问题更自然）
+      #   "hybrid"   : 混合策略（推荐，分段采样+引用追踪+引用定位，问题自然且Ground Truth精确）
+      #   "document" : 基于整篇文档生成问题（已自动委托为hybrid，保留兼容）
       #   "chunk"    : 基于单个chunk生成问题（问题更局部）
-      strategy: "document"
+      strategy: "hybrid"
 
       # num_questions — 生成的问题数量
       #   10题适合快速验证，50-100题适合正式评测。

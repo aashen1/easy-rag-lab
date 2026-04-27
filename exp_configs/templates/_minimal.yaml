@@ -11,7 +11,7 @@ test_sets:
   - name: "my_test_set"
     on_missing: "auto"
     generation:
-      strategy: "document"
+      strategy: "hybrid"
       num_questions: 10
 
 variants:
