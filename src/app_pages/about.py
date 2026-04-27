@@ -30,7 +30,7 @@ def _render_mermaid(chart: str):
                 font-size:13px; line-height:1.6; color:#333; margin-top:36px;
                 border:1px solid #e5e7eb;
             }}
-            #mc #diagram-view {{ margin-top:36px; }}
+            #mc #diagram-view {{ margin-top:36px; background:#e8edf5; border-radius:8px; padding:12px; }}
         </style>
         <div id="mc">
             <div class="toggle-bar">
