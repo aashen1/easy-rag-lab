@@ -1679,6 +1679,174 @@ class TestSegmentDocument:
         assert covered_chars == expected_chars
 
 
+class TestBuildSegmentsFromPages:
+    def setup_method(self):
+        self.config = {
+            "test_generation": {
+                "segment_size": 8000,
+                "default_num_questions": 10,
+            }
+        }
+        self.generator = TestSetGenerator(self.config)
+
+    def test_empty_pages_returns_empty(self):
+        segments = self.generator._build_segments_from_pages([])
+        assert segments == []
+
+    def test_single_short_page_returns_single_segment(self):
+        pages = [{"page_number": 1, "text": "短文档内容"}]
+        segments = self.generator._build_segments_from_pages(pages, target_chars=8000)
+        assert len(segments) == 1
+        assert segments[0]["page_numbers"] == [1]
+        assert segments[0]["source_type"] == "pages_json"
+        assert segments[0]["segment_index"] == 0
+
+    def test_multiple_pages_aggregate_into_segment(self):
+        pages = [
+            {"page_number": 1, "text": "第一页内容"},
+            {"page_number": 2, "text": "第二页内容"},
+        ]
+        segments = self.generator._build_segments_from_pages(pages, target_chars=8000)
+        assert len(segments) == 1
+        assert segments[0]["page_numbers"] == [1, 2]
+        assert "第一页内容" in segments[0]["text"]
+        assert "第二页内容" in segments[0]["text"]
+
+    def test_large_pages_split_into_multiple_segments(self):
+        pages = [
+            {"page_number": 1, "text": "A" * 9000},
+            {"page_number": 2, "text": "B" * 9000},
+        ]
+        segments = self.generator._build_segments_from_pages(pages, target_chars=8000)
+        assert len(segments) == 2
+        assert segments[0]["page_numbers"] == [1]
+        assert segments[1]["page_numbers"] == [2]
+        assert segments[0]["segment_index"] == 0
+        assert segments[1]["segment_index"] == 1
+
+    def test_pages_sorted_by_page_number(self):
+        pages = [
+            {"page_number": 3, "text": "第三页"},
+            {"page_number": 1, "text": "第一页"},
+            {"page_number": 2, "text": "第二页"},
+        ]
+        segments = self.generator._build_segments_from_pages(pages, target_chars=8000)
+        assert len(segments) == 1
+        assert segments[0]["page_numbers"] == [1, 2, 3]
+        text = segments[0]["text"]
+        assert text.index("第一页") < text.index("第二页")
+        assert text.index("第二页") < text.index("第三页")
+
+    def test_empty_pages_skipped(self):
+        pages = [
+            {"page_number": 1, "text": "有内容"},
+            {"page_number": 2, "text": ""},
+            {"page_number": 3, "text": "   "},
+            {"page_number": 4, "text": "也有内容"},
+        ]
+        segments = self.generator._build_segments_from_pages(pages, target_chars=8000)
+        assert len(segments) == 1
+        assert segments[0]["page_numbers"] == [1, 4]
+
+    def test_start_end_char_positions(self):
+        pages = [
+            {"page_number": 1, "text": "AAA"},
+            {"page_number": 2, "text": "BBB"},
+        ]
+        segments = self.generator._build_segments_from_pages(pages, target_chars=8000)
+        assert len(segments) == 1
+        assert segments[0]["start_char"] == 0
+        assert segments[0]["end_char"] == len(segments[0]["text"])
+
+
+class TestLocateSourceChunks:
+    def setup_method(self):
+        self.config = {
+            "test_generation": {
+                "segment_size": 8000,
+                "default_num_questions": 10,
+            }
+        }
+        self.generator = TestSetGenerator(self.config)
+        self.doc_chunks = [
+            {
+                "chunk_id": "doc_p1_000",
+                "text": "这是第一页的内容，包含重要信息。",
+                "metadata": {"page_number": 1},
+            },
+            {
+                "chunk_id": "doc_p1_001",
+                "text": "第一页的更多内容，关于市场分析。",
+                "metadata": {"page_number": 1},
+            },
+            {
+                "chunk_id": "doc_p2_000",
+                "text": "第二页讨论了行业趋势和前景。",
+                "metadata": {"page_number": 2},
+            },
+            {
+                "chunk_id": "doc_p3_000",
+                "text": "第三页包含财务数据和预测。",
+                "metadata": {"page_number": 3},
+            },
+        ]
+
+    def test_exact_quote_match(self):
+        result = self.generator._locate_source_chunks(
+            [1], "这是第一页的内容，包含重要信息。", self.doc_chunks
+        )
+        assert "doc_p1_000" in result
+
+    def test_page_filter_narrows_candidates(self):
+        result = self.generator._locate_source_chunks([2], "行业趋势", self.doc_chunks)
+        assert "doc_p2_000" in result
+        assert "doc_p1_000" not in result
+        assert "doc_p3_000" not in result
+
+    def test_multiple_pages_returns_chunks_from_all(self):
+        result = self.generator._locate_source_chunks(
+            [1, 2], "行业趋势", self.doc_chunks
+        )
+        assert "doc_p2_000" in result
+
+    def test_empty_page_numbers_returns_empty(self):
+        result = self.generator._locate_source_chunks([], "行业趋势", self.doc_chunks)
+        assert result == []
+
+    def test_no_matching_page_returns_empty(self):
+        result = self.generator._locate_source_chunks([99], "行业趋势", self.doc_chunks)
+        assert result == []
+
+    def test_no_quote_returns_all_page_chunks(self):
+        result = self.generator._locate_source_chunks([1], "", self.doc_chunks)
+        assert len(result) == 2
+        assert "doc_p1_000" in result
+        assert "doc_p1_001" in result
+
+    def test_quote_not_in_candidates_falls_back_to_page_level(self):
+        result = self.generator._locate_source_chunks(
+            [1], "这段话绝对不存在于任何chunk中", self.doc_chunks
+        )
+        assert len(result) == 2
+        assert "doc_p1_000" in result
+        assert "doc_p1_001" in result
+
+    def test_cross_page_chunk_mapped(self):
+        chunks = self.doc_chunks + [
+            {
+                "chunk_id": "doc_cross",
+                "text": "跨页内容",
+                "metadata": {
+                    "page_number": 2,
+                    "cross_page": True,
+                    "overlap_from_page": 1,
+                },
+            },
+        ]
+        result = self.generator._locate_source_chunks([2], "跨页内容", chunks)
+        assert "doc_cross" in result
+
+
 class TestSelectSegmentsForQuestionType:
     def setup_method(self):
         self.config = {
