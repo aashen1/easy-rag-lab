@@ -263,23 +263,10 @@ def render_qa_demo():
 
     meal_name = None if selected_meal in ["(无 Meal)", "+ 新建 Meal"] else selected_meal
 
-    default_question = st.session_state.saved_question
-    question = st.text_area(
-        "💬 输入问题",
-        value=default_question,
-        height=100,
-        key="question_input_widget",
-    )
+    if st.session_state.query_running:
+        st.info("⏳ 查询进行中，请稍候...")
 
-    col_btn, col_clear = st.columns([1, 1])
-
-    with col_btn:
-        submit_clicked = st.button("提交", type="primary", key="submit_btn")
-
-    with col_clear:
-        clear_clicked = st.button("清空", key="clear_btn")
-
-    if clear_clicked:
+    if st.button("🗑️ 清空结果", key="clear_btn"):
         st.session_state.last_result = None
         st.session_state.saved_question = ""
         st.session_state.query_running = False
@@ -287,10 +274,26 @@ def render_qa_demo():
         st.session_state.query_error = None
         st.rerun()
 
-    if submit_clicked:
-        if not question.strip():
-            st.warning("请输入问题")
-        elif st.session_state.query_running:
+    _render_query_status()
+
+    if st.session_state.query_error:
+        st.error(f"查询失败: {st.session_state.query_error}")
+        st.session_state.query_error = None
+
+    if st.session_state.last_result is not None:
+        if st.session_state.saved_question:
+            with st.chat_message("user"):
+                st.write(st.session_state.saved_question)
+        with st.chat_message("assistant"):
+            _display_result(st.session_state.last_result)
+
+    question = st.chat_input(
+        "输入问题，Enter 发送，Shift+Enter 换行",
+        key="chat_input_widget",
+    )
+
+    if question:
+        if st.session_state.query_running:
             st.warning("已有查询正在进行中，请稍候")
         else:
             st.session_state.saved_question = question
@@ -306,12 +309,3 @@ def render_qa_demo():
             )
             thread.start()
             st.rerun()
-
-    _render_query_status()
-
-    if st.session_state.query_error:
-        st.error(f"查询失败: {st.session_state.query_error}")
-        st.session_state.query_error = None
-
-    if st.session_state.last_result is not None:
-        _display_result(st.session_state.last_result)
