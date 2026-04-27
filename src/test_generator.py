@@ -441,25 +441,25 @@ class TestSetGenerator:
     }
 
     TYPE_DISTRIBUTION = {
-        "single_fact": 0.30,
-        "multi_fact": 0.25,
+        "single_fact": 0.25,
+        "multi_fact": 0.20,
         "reasoning": 0.15,
         "comparative": 0.15,
         "missing": 0.10,
         "irrelevant": 0.05,
-        "adversarial": 0.00,
+        "adversarial": 0.10,
     }
 
     DOCUMENT_TRUNCATE_MAX = 8000
 
     GOLDEN_TYPE_DISTRIBUTION = {
-        "single_fact": 0.17,
-        "multi_fact": 0.20,
-        "reasoning": 0.17,
-        "comparative": 0.17,
-        "missing": 0.13,
-        "irrelevant": 0.07,
-        "adversarial": 0.10,
+        "single_fact": 0.15,
+        "multi_fact": 0.18,
+        "reasoning": 0.15,
+        "comparative": 0.15,
+        "missing": 0.12,
+        "irrelevant": 0.05,
+        "adversarial": 0.20,
     }
 
     FAILURE_MODES = {
@@ -1688,6 +1688,22 @@ class TestSetGenerator:
                                 f"for question {qa['id']}"
                             )
 
+                    evidence_list = qa.get("evidence", [])
+                    if evidence_list and q_type not in ("irrelevant", "missing"):
+                        is_consistent, issues = (
+                            self._validate_answer_evidence_consistency(
+                                qa.get("answer", ""),
+                                evidence_list,
+                            )
+                        )
+                        if not is_consistent:
+                            logger.warning(
+                                f"Answer-evidence inconsistency for question {qa['id']}: "
+                                f"{'; '.join(issues)}"
+                            )
+                            qa.setdefault("metadata", {})
+                            qa["metadata"]["answer_evidence_issues"] = issues
+
                     question_text = qa.get("question", "")
                     if question_text in seen_questions:
                         logger.debug(
@@ -1810,6 +1826,22 @@ class TestSetGenerator:
                                 f"ground_truth_excerpt not found in document "
                                 f"for question {qa['id']}"
                             )
+
+                    evidence_list = qa.get("evidence", [])
+                    if evidence_list and q_type not in ("irrelevant", "missing"):
+                        is_consistent, issues = (
+                            self._validate_answer_evidence_consistency(
+                                qa.get("answer", ""),
+                                evidence_list,
+                            )
+                        )
+                        if not is_consistent:
+                            logger.warning(
+                                f"Answer-evidence inconsistency for question {qa['id']}: "
+                                f"{'; '.join(issues)}"
+                            )
+                            qa.setdefault("metadata", {})
+                            qa["metadata"]["answer_evidence_issues"] = issues
 
                     question_text = qa.get("question", "")
                     if question_text in seen_questions:
@@ -2077,6 +2109,22 @@ class TestSetGenerator:
                                 f"for question {qa['id']}"
                             )
 
+                    evidence_list = qa.get("evidence", [])
+                    if evidence_list and q_type not in ("irrelevant", "missing"):
+                        is_consistent, issues = (
+                            self._validate_answer_evidence_consistency(
+                                qa.get("answer", ""),
+                                evidence_list,
+                            )
+                        )
+                        if not is_consistent:
+                            logger.warning(
+                                f"Answer-evidence inconsistency for question {qa['id']}: "
+                                f"{'; '.join(issues)}"
+                            )
+                            qa.setdefault("metadata", {})
+                            qa["metadata"]["answer_evidence_issues"] = issues
+
                     qa.setdefault("metadata", {})
                     qa["metadata"]["author"] = "llm_assisted"
                     qa["metadata"]["reviewed"] = False
@@ -2238,6 +2286,22 @@ class TestSetGenerator:
                         )
                         qa.setdefault("metadata", {})
                         qa["metadata"]["excerpt_verified"] = excerpt_verified
+
+                    evidence_list = qa.get("evidence", [])
+                    if evidence_list and q_type not in ("irrelevant", "missing"):
+                        is_consistent, issues = (
+                            self._validate_answer_evidence_consistency(
+                                qa.get("answer", ""),
+                                evidence_list,
+                            )
+                        )
+                        if not is_consistent:
+                            logger.warning(
+                                f"Answer-evidence inconsistency for question {qa['id']}: "
+                                f"{'; '.join(issues)}"
+                            )
+                            qa.setdefault("metadata", {})
+                            qa["metadata"]["answer_evidence_issues"] = issues
 
                     qa.setdefault("metadata", {})
                     qa["metadata"]["author"] = "llm_assisted"
@@ -2733,6 +2797,131 @@ class TestSetGenerator:
             )
 
         return True, ""
+
+    def _validate_answer_evidence_consistency(
+        self,
+        answer: str,
+        evidence_list: list[dict[str, Any]],
+    ) -> tuple[bool, list[str]]:
+        """Validate that key information in answer appears in evidence.
+
+        Checks that numerical values, proper nouns, and key terms in the
+        answer can be found in the provided evidence quotes. This helps
+        detect hallucinations where the LLM generates information not
+        supported by the source text.
+
+        Supports unit conversion (元→亿元, 万→亿) and numerical
+        approximation matching.
+
+        Args:
+            answer: The generated answer text.
+            evidence_list: List of evidence dictionaries, each containing
+                a 'quote' key with the source text.
+
+        Returns:
+            Tuple of (is_valid, issues). is_valid is True if all key
+            information is supported by evidence. issues is a list of
+            problem descriptions for unsupported claims.
+        """
+        if not answer:
+            return True, []
+
+        issues: list[str] = []
+
+        evidence_text = " ".join(
+            e.get("quote", "") for e in evidence_list if e.get("quote")
+        )
+
+        if not evidence_text:
+            return True, []
+
+        def extract_numbers_with_units(text: str) -> list[tuple[float, str, str]]:
+            """Extract numbers with units from text.
+
+            Returns list of (numeric_value, unit, original_text).
+            """
+            patterns = [
+                (r"(\d+[\d,]*\.?\d*)\s*亿元", "亿"),
+                (r"(\d+[\d,]*\.?\d*)\s*万元", "万"),
+                (r"(\d+[\d,]*\.?\d*)\s*元", "元"),
+                (r"(\d+[\d,]*\.?\d*)\s*%", "%"),
+                (r"(\d+[\d,]*\.?\d*)\s*％", "%"),
+                (r"(\d+[\d,]*\.?\d*)\s*个百分点", "百分点"),
+                (r"(\d+[\d,]*\.?\d*)\s*个", "个"),
+                (r"(\d+[\d,]*\.?\d*)", ""),
+            ]
+
+            results = []
+            for pattern, unit in patterns:
+                matches = re.findall(pattern, text)
+                for match in matches:
+                    try:
+                        val = float(match.replace(",", ""))
+                        results.append((val, unit, f"{match}{unit}"))
+                    except ValueError:
+                        continue
+            return results
+
+        def convert_to_base_unit(value: float, unit: str) -> float:
+            """Convert value to base unit (元 or 个)."""
+            if unit == "亿":
+                return value * 100_000_000
+            elif unit == "万":
+                return value * 10_000
+            elif unit in ("元", ""):
+                return value
+            else:
+                return value
+
+        answer_numbers = extract_numbers_with_units(answer)
+        evidence_numbers = extract_numbers_with_units(evidence_text)
+
+        for ans_val, ans_unit, ans_orig in answer_numbers:
+            if ans_val < 10:
+                continue
+
+            ans_base = convert_to_base_unit(ans_val, ans_unit)
+
+            found = False
+            for ev_val, ev_unit, _ev_orig in evidence_numbers:
+                ev_base = convert_to_base_unit(ev_val, ev_unit)
+
+                if abs(ans_base - ev_base) / max(ev_base, 1) < 0.01:
+                    found = True
+                    break
+
+                if (
+                    ans_unit == "亿"
+                    and ev_unit == "元"
+                    and abs(ans_val - ev_val / 100_000_000) < 0.01
+                ):
+                    found = True
+                    break
+
+                if (
+                    ans_unit == "万"
+                    and ev_unit == "元"
+                    and abs(ans_val - ev_val / 10_000) < 0.01
+                ):
+                    found = True
+                    break
+
+                if abs(ans_val - ev_val) / max(ev_val, 1) < 0.05:
+                    found = True
+                    break
+
+            if not found:
+                issues.append(f"数值 '{ans_orig}' 未在证据中找到")
+
+        proper_nouns = re.findall(
+            r"[\u4e00-\u9fff]{2,8}(?:股份|集团|公司|行业|市场|技术|产品|业务)",
+            answer,
+        )
+        for noun in proper_nouns:
+            if noun not in evidence_text:
+                issues.append(f"专有名词 '{noun}' 未在证据中找到")
+
+        return len(issues) == 0, issues
 
     def _verify_excerpt_in_document(
         self,
@@ -4450,7 +4639,7 @@ class TestSetGenerator:
 
         return {"found": False, "position": None, "similarity": best_similarity}
 
-    MIN_QUOTE_LENGTH = 15
+    MIN_QUOTE_LENGTH = 30
 
     def _validate_evidence(
         self,
