@@ -20,7 +20,7 @@ variants:
     config_overrides: {}
 
 evaluation:
-  backends: ["builtin"]
+  backends: ["builtin", "ragas"]
   llm_preset: "default"
   llm_report: true
   metrics_preset: "extended"
