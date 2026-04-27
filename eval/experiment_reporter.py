@@ -728,11 +728,6 @@ class ExperimentReporter:
             lines.append("**Technology Summary**:")
             lines.extend(self._generate_tech_summary(merged))
             lines.append("")
-            lines.append("**Configuration**:")
-            lines.append("```yaml")
-            lines.extend(self._dict_to_yaml_lines(merged))
-            lines.append("```")
-            lines.append("")
 
         return "\n".join(lines)
 
@@ -802,11 +797,6 @@ class ExperimentReporter:
                     merged = config_snapshot["merged"]
                     lines.append("**Technology Summary**:")
                     lines.extend(self._generate_tech_summary(merged))
-                    lines.append("")
-                    lines.append("**Configuration**:")
-                    lines.append("```yaml")
-                    lines.extend(self._dict_to_yaml_lines(merged))
-                    lines.append("```")
                     lines.append("")
             else:
                 error = vr.get("error", "Unknown error")
@@ -1708,6 +1698,12 @@ class ExperimentReporter:
         template_report = self._generate_variant_comparison_template(
             variant_results, meal_info, config_snapshot
         )
+        lines = template_report.split("\n")
+        if lines and lines[0].startswith("# "):
+            lines = lines[1:]
+            if lines and lines[0] == "":
+                lines = lines[1:]
+        template_report = "\n".join(lines)
 
         has_generation = any(vr.get("generation_metrics") for vr in variant_results)
 

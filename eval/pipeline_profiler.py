@@ -427,6 +427,13 @@ class PipelineProfiler:
         lines.append("## 1. 总体耗时概览")
         lines.append("")
         lines.append(
+            "> **说明**: 此报告统计的是完整 Pipeline 耗时（S1-S8 所有阶段），包含文档解析、分块、嵌入、测试集生成、检索、问答等全部环节。"
+        )
+        lines.append(
+            "> experiment_report.md 中的 `total_time_seconds` 仅统计问答阶段（S6 检索 + S7 答案生成），因此两者数值不同。"
+        )
+        lines.append("")
+        lines.append(
             "| 环节 | 名称 | 耗时(s) | 占比 | 调用次数 | CPU平均 | 内存峰值(MB) |"
         )
         lines.append(
