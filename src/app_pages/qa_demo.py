@@ -9,7 +9,7 @@ from loguru import logger
 
 from src.meal import MealConfig, MealManager
 from src.pipeline import RAGPipeline
-from src.sampler import SamplingConfig
+from src.sampler import SamplingConfig, count_pdf_pages
 from src.utils import load_config
 
 _query_store: dict[str, dict[str, Any]] = {}
@@ -75,6 +75,7 @@ def _source_to_pdf_path(source: str, meal_config: MealConfig | None) -> str | No
 def _open_pdf_preview(file_path: str, file_name: str) -> None:
     st.session_state._pdf_preview_path = file_path
     st.session_state._pdf_preview_name = file_name
+    st.session_state._pdf_preview_page = 1
 
 
 def _run_query(query_id: str, question: str, meal_name: str | None) -> None:
@@ -87,19 +88,72 @@ def _run_query(query_id: str, question: str, meal_name: str | None) -> None:
         _query_store[query_id] = {"status": "error", "error": str(e)}
 
 
-@st.dialog("PDF 预览", width="large")
-def _pdf_preview_dialog():
+@st.cache_data
+def _get_pdf_page_count(file_path: str) -> int:
+    try:
+        return count_pdf_pages(Path(file_path))
+    except Exception:
+        return 0
+
+
+def render_pdf_preview() -> None:
+    from streamlit_pdf_viewer import pdf_viewer
+
     file_path = st.session_state.get("_pdf_preview_path", "")
     file_name = st.session_state.get("_pdf_preview_name", "")
-    if file_path and Path(file_path).exists():
-        st.caption(f"📄 {file_name}")
-        st.pdf(file_path, height=700)
-    else:
+
+    if not file_path or not Path(file_path).exists():
         st.error(f"文件不存在: {file_name}")
-    if st.button("关闭预览", key="close_pdf_dialog"):
-        st.session_state.pop("_pdf_preview_path", None)
-        st.session_state.pop("_pdf_preview_name", None)
+        if st.button("关闭", key="close_pdf_missing"):
+            st.session_state.pop("_pdf_preview_path", None)
+            st.session_state.pop("_pdf_preview_name", None)
+            st.session_state.pop("_pdf_preview_page", None)
+            st.rerun()
+        return
+
+    col_title, col_close = st.columns([8, 1])
+    with col_title:
+        st.markdown(f"### 📄 {file_name}")
+    with col_close:
+        if st.button("✕", key="close_pdf_preview", help="关闭 PDF 预览"):
+            st.session_state.pop("_pdf_preview_path", None)
+            st.session_state.pop("_pdf_preview_name", None)
+            st.session_state.pop("_pdf_preview_page", None)
+            st.rerun()
+
+    total_pages = _get_pdf_page_count(file_path)
+    current_page = st.session_state.get("_pdf_preview_page", 1)
+
+    with st.form("pdf_page_jump_form"):
+        col_page, col_jump, col_info = st.columns([1, 1, 3])
+        with col_page:
+            page_num = st.number_input(
+                "页码",
+                min_value=1,
+                max_value=total_pages if total_pages > 0 else 9999,
+                value=current_page,
+            )
+        with col_jump:
+            st.markdown("<br>", unsafe_allow_html=True)
+            submitted = st.form_submit_button("跳转")
+        with col_info:
+            page_info = f"共 **{total_pages}** 页" if total_pages > 0 else "页数未知"
+            st.markdown(f"<br>{page_info}", unsafe_allow_html=True)
+
+    if submitted:
+        st.session_state._pdf_preview_page = page_num
         st.rerun()
+
+    target_page = st.session_state.get("_pdf_preview_page", 1)
+    pdf_viewer(
+        file_path,
+        width="90%",
+        scroll_to_page=target_page,
+        scroll_behavior="instant",
+        render_text=True,
+        show_page_separator=True,
+        key=f"pdf_viewer_p{target_page}",
+    )
 
 
 def _display_result(result: dict[str, Any], meal_config: MealConfig | None):
@@ -125,6 +179,7 @@ def _display_result(result: dict[str, Any], meal_config: MealConfig | None):
                         help="预览此来源 PDF 文件",
                     ):
                         _open_pdf_preview(pdf_path, Path(pdf_path).name)
+                        st.toast("📄 已打开 PDF 预览，请点击「PDF 预览」标签页查看")
         else:
             st.info("无来源文档")
 
@@ -234,6 +289,7 @@ def _render_meal_files(meal_config: MealConfig | None) -> None:
                         help=f"预览 {file_name}",
                     ):
                         _open_pdf_preview(full_path, file_name)
+                        st.toast("📄 已打开 PDF 预览，请点击「PDF 预览」标签页查看")
                 else:
                     st.caption("缺失")
 
@@ -401,6 +457,3 @@ def render_qa_demo():
             )
             thread.start()
             st.rerun()
-
-    if st.session_state.get("_pdf_preview_path"):
-        _pdf_preview_dialog()
