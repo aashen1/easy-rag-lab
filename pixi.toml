@@ -75,8 +75,8 @@ python-dotenv = ">=1.2.2, <2" # Environment variables
 pyyaml = ">=6.0.3, <7"        # YAML parsing
 tqdm = ">=4.67.3, <5"         # Progress bars
 filelock = ">=3.16.1, <4"     # File locking for concurrent access
-click = ">=8.1.8, <9"         # CLI framework
-pydantic = ">=2.11.4, <3"     # Data validation
+click = ">=8.3.3, <9"         # CLI framework
+pydantic = ">=2.13.3, <3"     # Data validation
 python-frontmatter = ">=1.1.0, <2" # Frontmatter parsing for markdown files
 
 # ==============================
@@ -146,6 +146,7 @@ matplotlib = ">=3.10.9, <4"
 # Streamlit
 # ==============================
 streamlit = ">=1.56.0, <2"
+streamlit-pdf = ">=2.0.1, <3"
 plotly = ">=6.7.0, <7"
 
 
