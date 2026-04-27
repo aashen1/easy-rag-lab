@@ -3,7 +3,7 @@ import streamlit as st
 
 def _render_mermaid(chart: str):
     escaped = chart.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    st.html(
+    st.iframe(
         f"""
         <style>
             #mc {{ position:relative; min-height:100px; padding:8px; }}
@@ -84,7 +84,7 @@ def _render_mermaid(chart: str):
             );
         </script>
         """,
-        unsafe_allow_javascript=True,
+        height="content",
     )
 
 
