@@ -210,14 +210,27 @@ def calculate_context_precision(
 
 
 def _split_into_sentences(text: str) -> list[str]:
-    """Split text into sentences.
+    """Split text into sentences, handling Markdown tables.
+
+    For Markdown tables (detected by | and ---), splits by newlines
+    to preserve table row structure. For regular text, splits by
+    punctuation marks.
 
     Args:
         text: Text to split.
 
     Returns:
-        List of sentences.
+        List of sentences or table rows.
     """
+    if "|" in text and re.search(r"\|[-]+\|", text):
+        lines = text.split("\n")
+        sentences = []
+        for line in lines:
+            line = line.strip()
+            if line and not re.match(r"^\|[-]+\|", line):
+                sentences.append(line)
+        return sentences
+
     sentences = re.split(r"[。！？.!?]", text)
     sentences = [s.strip() for s in sentences if s.strip()]
     return sentences

@@ -1194,6 +1194,38 @@ class TestSplitIntoSentences:
         assert len(sentences) == 1
         assert sentences[0] == "没有标点的文本"
 
+    def test_markdown_table(self):
+        from eval.metrics import _split_into_sentences
+
+        text = """|工序环节|传统分立光模块|硅光集成光模块|
+|---|---|---|
+|贴片|独立工序|核心工序|
+|耦合|精密对准|波导耦合|"""
+        sentences = _split_into_sentences(text)
+        assert len(sentences) == 3
+        assert sentences[0] == "|工序环节|传统分立光模块|硅光集成光模块|"
+        assert sentences[1] == "|贴片|独立工序|核心工序|"
+        assert sentences[2] == "|耦合|精密对准|波导耦合|"
+
+    def test_markdown_table_with_empty_lines(self):
+        from eval.metrics import _split_into_sentences
+
+        text = """|列1|列2|
+
+|---|---|
+|值1|值2|"""
+        sentences = _split_into_sentences(text)
+        assert len(sentences) == 2
+        assert sentences[0] == "|列1|列2|"
+        assert sentences[1] == "|值1|值2|"
+
+    def test_regular_text_with_pipe(self):
+        from eval.metrics import _split_into_sentences
+
+        text = "这是普通文本|带管道符。第二句。"
+        sentences = _split_into_sentences(text)
+        assert len(sentences) == 2
+
 
 @pytest.mark.unit
 class TestJudgeContextRelevance:
