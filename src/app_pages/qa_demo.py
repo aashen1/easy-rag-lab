@@ -1,4 +1,5 @@
 import os
+import re
 import urllib.parse
 from pathlib import Path
 from typing import Any
@@ -235,6 +236,22 @@ def _init_session_state():
         st.session_state.query_error = None
 
 
+def _extract_company_name(rel_path: str) -> str | None:
+    parts = Path(rel_path).parts
+    if len(parts) < 3:
+        return None
+    top_level_categories = {"annual_reports", "research_reports"}
+    if parts[0] not in top_level_categories:
+        return None
+    if re.match(r"^\d{4}$", parts[-2]):
+        if len(parts) >= 4:
+            return parts[-3]
+        return None
+    if parts[-2] in top_level_categories:
+        return None
+    return parts[-2]
+
+
 def _render_meal_files(meal_config: MealConfig | None) -> None:
     if meal_config is None:
         return
@@ -246,9 +263,21 @@ def _render_meal_files(meal_config: MealConfig | None) -> None:
         for mf in pdf_files:
             file_name = Path(mf.path).name
             size_str = _format_file_size(mf.size_bytes)
+            company = _extract_company_name(mf.path)
+            show_company = company is not None and company not in file_name
             col_name, col_btn = st.columns([4, 1])
             with col_name:
-                st.text(f"{file_name}  ({size_str})")
+                if show_company:
+                    st.markdown(
+                        f"{file_name} "
+                        f'<span style="background-color:#e8f0fe;color:#1a73e8;'
+                        f"padding:1px 6px;border-radius:4px;font-size:0.75em;"
+                        f'vertical-align:middle;">🏢 {company}</span>'
+                        f"  ({size_str})",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.text(f"{file_name}  ({size_str})")
             with col_btn:
                 full_path = str(raw_dir / mf.path)
                 if Path(full_path).exists():
