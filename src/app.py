@@ -23,7 +23,7 @@ setup_logger(config)
 import streamlit as st  # noqa: E402
 
 from src.app_pages.about import render_about  # noqa: E402
-from src.app_pages.qa_demo import render_qa_demo  # noqa: E402
+from src.app_pages.qa_demo import render_pdf_preview, render_qa_demo  # noqa: E402
 
 st.set_page_config(
     page_title="Easy RAG Lab",
@@ -32,10 +32,19 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-tab1, tab2 = st.tabs(["💬 问答演示", "📖 系统信息"])
+tab_names = ["💬 问答演示", "📖 系统信息"]
+has_pdf = bool(st.session_state.get("_pdf_preview_path"))
+if has_pdf:
+    tab_names.append("📄 PDF 预览")
 
-with tab1:
+tabs = st.tabs(tab_names)
+
+with tabs[0]:
     render_qa_demo()
 
-with tab2:
+with tabs[1]:
     render_about()
+
+if has_pdf:
+    with tabs[2]:
+        render_pdf_preview()
