@@ -13,7 +13,19 @@ from src.generator import Generator
 from src.hybrid_retriever import HybridRetriever
 from src.indexer import VectorIndexer
 from src.parser import parse_all_pdfs_unified
+from src.query_rewrite_strategies import (
+    HyDERewriteStrategy,
+    MultiQueryRewriteStrategy,
+    NoRewriteStrategy,
+    QueryRewriteStrategy,
+)
 from src.query_rewriter import QueryRewriter
+from src.retrieval_strategies import (
+    BM25RetrievalStrategy,
+    HybridRetrievalStrategy,
+    RetrievalStrategy,
+    VectorRetrievalStrategy,
+)
 
 if TYPE_CHECKING:
     from eval.pipeline_profiler import PipelineProfiler
@@ -473,127 +485,107 @@ class RAGPipeline:
         try:
             logger.info(f"Processing query: {question[:50]}...")
 
-            retrieval_query = question
-            if self.query_rewriter is not None:
-                logger.debug("Rewriting query...")
-                rewrite_result = self.query_rewriter.rewrite(question)
+            rewrite_strategy = self._get_rewrite_strategy()
+            rewritten = rewrite_strategy.rewrite(question)
+            retrieval_strategy = self._get_retrieval_strategy()
+            top_k = self.config["retrieval"]["top_k"]
+            is_multi = rewritten.is_multi
 
-                if rewrite_result["strategy"] == "hyde":
-                    retrieval_query = rewrite_result["rewritten"]
-                    logger.info("HyDE: using hypothetical answer for retrieval")
-                elif rewrite_result["strategy"] == "multi_query":
-                    all_results = []
-                    seen_ids = set()
-                    for sub_query in rewrite_result["rewritten"]:
-                        if (
-                            self.retrieval_method == "hybrid"
-                            and self.hybrid_retriever is not None
-                        ):
-                            sub_results = self.hybrid_retriever.retrieve(sub_query)
-                        elif (
-                            self.retrieval_method == "bm25"
-                            and self.bm25_retriever is not None
-                        ):
-                            sub_results = self.bm25_retriever.retrieve(
-                                sub_query, top_k=self.config["retrieval"]["top_k"]
-                            )
-                        else:
-                            sub_results = self.retriever.retrieve(sub_query)
-                        for r in sub_results:
-                            if r["chunk_id"] not in seen_ids:
-                                seen_ids.add(r["chunk_id"])
-                                all_results.append(r)
-
-                    all_results.sort(key=lambda x: x.get("score", 0), reverse=True)
-                    results = all_results[: self.config["retrieval"]["top_k"]]
-
-                    if self.reranker is not None and results:
-                        logger.debug("Reranking multi-query results...")
-                        results = self.reranker.rerank(
-                            question, results, top_n=self.reranker_top_n
-                        )
-
-                    contexts = [r["text"] for r in results]
-                    scores = [
-                        r.get("rerank_score", r["score"])
-                        if "rerank_score" in r
-                        else r["score"]
-                        for r in results
-                    ]
-                    sources = [r["metadata"].get("source", "Unknown") for r in results]
-                    chunk_ids = [r.get("chunk_id", "") for r in results]
-
-                    logger.debug("Generating answer...")
-                    answer = self.generator.generate(
-                        question, contexts, sources=sources
-                    )
-
-                    response = {"question": question, "answer": answer}
-                    if return_contexts:
-                        response["contexts"] = contexts
-                        response["scores"] = scores
-                        response["sources"] = sources
-                        response["chunk_ids"] = chunk_ids
-                    if self.generator.last_token_usage is not None:
-                        response["token_usage"] = (
-                            self.generator.last_token_usage.to_dict()
-                        )
-
-                    logger.success("Query processed successfully (multi-query)")
-                    return response
-
-            logger.debug("Retrieving relevant contexts...")
-            if self.profiler:
+            if not is_multi:
+                logger.debug("Retrieving relevant contexts...")
+            if not is_multi and self.profiler:
                 self.profiler.begin_stage("S6")
-            if self.retrieval_method == "hybrid" and self.hybrid_retriever is not None:
-                results = self.hybrid_retriever.retrieve(retrieval_query)
-            elif self.retrieval_method == "bm25" and self.bm25_retriever is not None:
-                results = self.bm25_retriever.retrieve(
-                    retrieval_query, top_k=self.config["retrieval"]["top_k"]
+
+            if is_multi:
+                results = self._retrieve_multi(
+                    retrieval_strategy, rewritten.queries, top_k
                 )
             else:
-                results = self.retriever.retrieve(retrieval_query)
+                results = retrieval_strategy.retrieve(
+                    rewritten.queries[0], top_k
+                ).chunks
 
             if self.reranker is not None and results:
-                logger.debug("Reranking results...")
+                logger.debug(
+                    f"Reranking {'multi-query ' if is_multi else ''}results..."
+                )
                 results = self.reranker.rerank(
                     question, results, top_n=self.reranker_top_n
                 )
-            if self.profiler:
+
+            if not is_multi and self.profiler:
                 self.profiler.end_stage()
 
-            contexts = [result["text"] for result in results]
-            scores = [result["score"] for result in results]
-            sources = [
-                result["metadata"].get("source", "Unknown") for result in results
-            ]
-            chunk_ids = [result.get("chunk_id", "") for result in results]
+            scores = self._compute_scores(results, is_multi)
+            contexts = [r["text"] for r in results]
+            sources = [r["metadata"].get("source", "Unknown") for r in results]
+            chunk_ids = [r.get("chunk_id", "") for r in results]
 
             logger.debug("Generating answer...")
-            if self.profiler:
+            if not is_multi and self.profiler:
                 self.profiler.begin_stage("S7")
             answer = self.generator.generate(question, contexts, sources=sources)
-            if self.profiler:
+            if not is_multi and self.profiler:
                 self.profiler.end_stage()
 
-            response = {
-                "question": question,
-                "answer": answer,
-            }
-
+            response = {"question": question, "answer": answer}
             if return_contexts:
                 response["contexts"] = contexts
                 response["scores"] = scores
                 response["sources"] = sources
                 response["chunk_ids"] = chunk_ids
-
             if self.generator.last_token_usage is not None:
                 response["token_usage"] = self.generator.last_token_usage.to_dict()
 
-            logger.success("Query processed successfully")
+            logger.success(
+                f"Query processed successfully{' (multi-query)' if is_multi else ''}"
+            )
             return response
 
         except Exception as e:
             error_msg = f"Failed to process query: {str(e)}"
             logger.error(error_msg)
             raise RetrievalError(error_msg) from e
+
+    def _get_retrieval_strategy(self) -> RetrievalStrategy:
+        if self.retrieval_method == "bm25" and self.bm25_retriever is not None:
+            return BM25RetrievalStrategy(self.bm25_retriever)
+        if self.retrieval_method == "hybrid" and self.hybrid_retriever is not None:
+            return HybridRetrievalStrategy(self.hybrid_retriever)
+        return VectorRetrievalStrategy(self.retriever)
+
+    def _get_rewrite_strategy(self) -> QueryRewriteStrategy:
+        if self.query_rewriter is None:
+            return NoRewriteStrategy()
+        if self.query_rewriter.strategy == "hyde":
+            return HyDERewriteStrategy(self.query_rewriter)
+        if self.query_rewriter.strategy == "multi_query":
+            return MultiQueryRewriteStrategy(self.query_rewriter)
+        return NoRewriteStrategy()
+
+    def _retrieve_multi(
+        self,
+        strategy: RetrievalStrategy,
+        queries: list[str],
+        top_k: int,
+    ) -> list[dict[str, Any]]:
+        all_results: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        for q in queries:
+            result = strategy.retrieve(q, top_k)
+            for r in result.chunks:
+                if r["chunk_id"] not in seen_ids:
+                    seen_ids.add(r["chunk_id"])
+                    all_results.append(r)
+        all_results.sort(key=lambda x: x.get("score", 0), reverse=True)
+        return all_results[:top_k]
+
+    def _compute_scores(
+        self, results: list[dict[str, Any]], is_multi: bool
+    ) -> list[float]:
+        if is_multi:
+            return [
+                r.get("rerank_score", r["score"]) if "rerank_score" in r else r["score"]
+                for r in results
+            ]
+        return [r["score"] for r in results]
