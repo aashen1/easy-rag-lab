@@ -35,6 +35,8 @@ cmd = "python main.py --interactive"
 cmd = "python -m src.issue.cli"
 
 
+[tasks.web]
+cmd = "streamlit run src/app.py --server.port 8501"
 
 [tasks._run-exp]
 args = ["config"]
@@ -139,6 +141,12 @@ pre-commit = ">=4.0.0, <5"       # Git hook manager
 # ==============================
 psutil = ">=7.2.2, <8"
 matplotlib = ">=3.10.9, <4"
+
+# ==============================
+# Streamlit
+# ==============================
+streamlit = ">=1.56.0, <2"
+plotly = ">=6.7.0, <7"
 
 
 
