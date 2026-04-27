@@ -3,16 +3,61 @@ import streamlit.components.v1 as components
 
 
 def _render_mermaid(chart: str):
-    escaped = chart.replace("`", "\\`").replace("${", "\\${")
+    escaped = chart.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     components.html(
         f"""
-        <div id="mermaid-container" style="min-height:100px;padding:8px;">
-            <div id="mermaid-fallback" style="display:none;font-family:monospace;
-                white-space:pre;background:#f0f2f6;padding:12px;border-radius:8px;
-                font-size:13px;line-height:1.5;color:#333;">{escaped}</div>
-            <div id="mermaid-chart" class="mermaid">{chart}</div>
+        <style>
+            #mc {{ position:relative; min-height:100px; padding:8px; }}
+            #mc .toggle-bar {{
+                position:absolute; top:8px; right:8px; z-index:10;
+                display:inline-flex; border-radius:6px; overflow:hidden;
+                border:1px solid #d1d5db; background:#fff;
+            }}
+            #mc .toggle-bar button {{
+                border:none; padding:4px 12px; font-size:12px; cursor:pointer;
+                background:#fff; color:#6b7280; font-family:system-ui,sans-serif;
+                transition:all .15s;
+            }}
+            #mc .toggle-bar button.active {{
+                background:#4b5563; color:#fff;
+            }}
+            #mc .toggle-bar button:not(.active):hover {{
+                background:#f3f4f6;
+            }}
+            #mc #code-view {{
+                display:none; font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+                white-space:pre; background:#f8f9fa; padding:16px; border-radius:8px;
+                font-size:13px; line-height:1.6; color:#333; margin-top:36px;
+                border:1px solid #e5e7eb;
+            }}
+            #mc #diagram-view {{ margin-top:36px; }}
+        </style>
+        <div id="mc">
+            <div class="toggle-bar">
+                <button id="btn-diagram" class="active" onclick="switchView('diagram')">Diagram</button>
+                <button id="btn-code" onclick="switchView('code')">Code</button>
+            </div>
+            <div id="diagram-view" class="mermaid">{chart}</div>
+            <div id="code-view">{escaped}</div>
         </div>
         <script>
+            function switchView(mode) {{
+                var dv = document.getElementById('diagram-view');
+                var cv = document.getElementById('code-view');
+                var bd = document.getElementById('btn-diagram');
+                var bc = document.getElementById('btn-code');
+                if (mode === 'diagram') {{
+                    dv.style.display = 'block';
+                    cv.style.display = 'none';
+                    bd.classList.add('active');
+                    bc.classList.remove('active');
+                }} else {{
+                    dv.style.display = 'none';
+                    cv.style.display = 'block';
+                    bd.classList.remove('active');
+                    bc.classList.add('active');
+                }}
+            }}
             function loadMermaid(src, fallback) {{
                 var s = document.createElement('script');
                 s.src = src;
@@ -27,8 +72,9 @@ def _render_mermaid(chart: str):
                     if (fallback) {{
                         loadMermaid(fallback, null);
                     }} else {{
-                        document.getElementById('mermaid-chart').style.display = 'none';
-                        document.getElementById('mermaid-fallback').style.display = 'block';
+                        document.getElementById('diagram-view').innerHTML =
+                            '<p style="color:#999;text-align:center;padding:40px;">' +
+                            '⚠️ Mermaid CDN 加载失败，请切换到 Code 视图查看</p>';
                     }}
                 }};
                 document.head.appendChild(s);
