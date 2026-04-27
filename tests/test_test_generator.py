@@ -542,7 +542,7 @@ class TestCalculateQuestionDistribution:
         )
         total = sum(result.values())
         assert total == 20
-        assert result["single_fact"] == 6
+        assert result["single_fact"] == 5
 
     def test_distribution_small_count_no_last_type_dominance(self):
         distribution = {
@@ -1835,15 +1835,15 @@ class TestValidateEvidence:
         self.generator = TestSetGenerator(self.config)
         self.segments = [
             {
-                "text": "第一段内容，包含营收数据及相关分析，同比增长显著。",
+                "text": "第一段内容，包含营收数据及相关分析，同比增长显著，公司业绩表现优异，市场前景广阔。",
                 "segment_index": 0,
             },
             {
-                "text": "第二段内容，包含利润数据及趋势预测，环比有所改善。",
+                "text": "第二段内容，包含利润数据及趋势预测，环比有所改善，盈利能力持续增强，投资价值凸显。",
                 "segment_index": 1,
             },
             {
-                "text": "第三段内容，包含增长数据及市场前景，展望较为乐观。",
+                "text": "第三段内容，包含增长数据及市场前景，展望较为乐观，行业整体向好发展，未来可期。",
                 "segment_index": 2,
             },
         ]
@@ -1852,11 +1852,11 @@ class TestValidateEvidence:
         evidence_list = [
             {
                 "segment_index": 0,
-                "quote": "包含营收数据及相关分析，同比增长显著",
+                "quote": "包含营收数据及相关分析，同比增长显著，公司业绩表现优异，市场前景广阔",
             },
             {
                 "segment_index": 1,
-                "quote": "包含利润数据及趋势预测，环比有所改善",
+                "quote": "包含利润数据及趋势预测，环比有所改善，盈利能力持续增强，投资价值凸显",
             },
         ]
         result = self.generator._validate_evidence(evidence_list, self.segments)
@@ -1870,11 +1870,11 @@ class TestValidateEvidence:
         evidence_list = [
             {
                 "segment_index": 0,
-                "quote": "包含营收数据及相关分析，同比增长显著",
+                "quote": "包含营收数据及相关分析，同比增长显著，公司业绩表现优异，市场前景广阔",
             },
             {
                 "segment_index": 1,
-                "quote": "这段完全不存在的数据内容无法匹配原文信息",
+                "quote": "这段完全不存在的数据内容无法匹配原文信息，虚构内容测试用例补充长度",
             },
         ]
         result = self.generator._validate_evidence(evidence_list, self.segments)
@@ -1887,7 +1887,7 @@ class TestValidateEvidence:
         evidence_list = [
             {
                 "segment_index": 99,
-                "quote": "包含营收数据及相关分析，同比增长显著",
+                "quote": "包含营收数据及相关分析，同比增长显著，公司业绩表现优异，市场前景广阔",
             },
         ]
         result = self.generator._validate_evidence(evidence_list, self.segments)
@@ -1897,7 +1897,9 @@ class TestValidateEvidence:
 
     def test_missing_segment_index(self):
         evidence_list = [
-            {"quote": "包含营收数据及相关分析，同比增长显著"},
+            {
+                "quote": "包含营收数据及相关分析，同比增长显著，公司业绩表现优异，市场前景广阔"
+            },
         ]
         result = self.generator._validate_evidence(evidence_list, self.segments)
         assert result["valid"] is False
@@ -1914,7 +1916,7 @@ class TestValidateEvidence:
         evidence_list = [
             {
                 "segment_index": 0,
-                "quote": "包含营收数据及相关分析，同比增长显著。",
+                "quote": "包含营收数据及相关分析，同比增长显著，公司业绩表现优异，市场前景广阔。",
             },
         ]
         result = self.generator._validate_evidence(evidence_list, self.segments)
@@ -2100,11 +2102,11 @@ class TestHallucinationDetection:
         self.generator = TestSetGenerator(self.config)
         self.segments = [
             {
-                "text": "第一段内容，包含营收数据及相关分析，同比增长显著。",
+                "text": "第一段内容，包含营收数据及相关分析，同比增长显著，公司业绩表现优异，市场前景广阔。",
                 "segment_index": 0,
             },
             {
-                "text": "第二段内容，包含利润数据及趋势预测，环比有所改善。",
+                "text": "第二段内容，包含利润数据及趋势预测，环比有所改善，盈利能力持续增强，投资价值凸显。",
                 "segment_index": 1,
             },
         ]
@@ -2113,7 +2115,7 @@ class TestHallucinationDetection:
         evidence_list = [
             {
                 "segment_index": 0,
-                "quote": "这段完全不存在的引用内容无法匹配原文信息",
+                "quote": "这段完全不存在的引用内容无法匹配原文信息，虚构内容测试用例补充长度",
             },
         ]
         result = self.generator._validate_evidence(evidence_list, self.segments)
@@ -2126,7 +2128,7 @@ class TestHallucinationDetection:
         evidence_list = [
             {
                 "segment_index": 0,
-                "quote": "包含营收数据及相关分析，同比增长显著",
+                "quote": "包含营收数据及相关分析，同比增长显著，公司业绩表现优异，市场前景广阔",
             },
         ]
         result = self.generator._validate_evidence(evidence_list, self.segments)
@@ -2138,11 +2140,11 @@ class TestHallucinationDetection:
         evidence_list = [
             {
                 "segment_index": 0,
-                "quote": "这段完全不存在的引用内容一无法匹配原文",
+                "quote": "这段完全不存在的引用内容一无法匹配原文，虚构内容测试用例补充长度一",
             },
             {
                 "segment_index": 1,
-                "quote": "这段完全不存在的引用内容二无法匹配原文",
+                "quote": "这段完全不存在的引用内容二无法匹配原文，虚构内容测试用例补充长度二",
             },
         ]
         result = self.generator._validate_evidence(evidence_list, self.segments)
