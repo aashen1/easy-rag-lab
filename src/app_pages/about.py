@@ -3,21 +3,43 @@ import streamlit.components.v1 as components
 
 
 def _render_mermaid(chart: str):
+    escaped = chart.replace("`", "\\`").replace("${", "\\${")
     components.html(
         f"""
-        <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
-        <script>
-            mermaid.initialize({{
-                startOnLoad: true,
-                theme: 'default',
-                flowchart: {{ useMaxWidth: true, htmlLabels: true, curve: 'basis' }}
-            }});
-        </script>
-        <div class="mermaid">
-        {chart}
+        <div id="mermaid-container" style="min-height:100px;padding:8px;">
+            <div id="mermaid-fallback" style="display:none;font-family:monospace;
+                white-space:pre;background:#f0f2f6;padding:12px;border-radius:8px;
+                font-size:13px;line-height:1.5;color:#333;">{escaped}</div>
+            <div id="mermaid-chart" class="mermaid">{chart}</div>
         </div>
+        <script>
+            function loadMermaid(src, fallback) {{
+                var s = document.createElement('script');
+                s.src = src;
+                s.onload = function() {{
+                    mermaid.initialize({{
+                        startOnLoad: true,
+                        theme: 'default',
+                        flowchart: {{ useMaxWidth: true, htmlLabels: true, curve: 'basis' }}
+                    }});
+                }};
+                s.onerror = function() {{
+                    if (fallback) {{
+                        loadMermaid(fallback, null);
+                    }} else {{
+                        document.getElementById('mermaid-chart').style.display = 'none';
+                        document.getElementById('mermaid-fallback').style.display = 'block';
+                    }}
+                }};
+                document.head.appendChild(s);
+            }}
+            loadMermaid(
+                'https://cdn.bootcdn.net/ajax/libs/mermaid/11.4.1/mermaid.min.js',
+                'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js'
+            );
+        </script>
         """,
-        height=400,
+        height=420,
         scrolling=False,
     )
 
