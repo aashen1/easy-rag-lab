@@ -1,12 +1,13 @@
 import threading
 import uuid
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 
 import streamlit as st
 from loguru import logger
 
-from src.meal import MealManager
+from src.meal import MealConfig, MealManager
 from src.pipeline import RAGPipeline
 from src.sampler import SamplingConfig
 from src.utils import load_config
@@ -43,6 +44,39 @@ def create_new_meal(
     )
 
 
+def _get_raw_dir() -> Path:
+    config = load_config()
+    return Path(config.get("parser", {}).get("input_dir", "data/raw"))
+
+
+def _format_file_size(size_bytes: int) -> str:
+    if size_bytes >= 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
+    if size_bytes >= 1024:
+        return f"{size_bytes / 1024:.0f} KB"
+    return f"{size_bytes} B"
+
+
+def _source_to_pdf_path(source: str, meal_config: MealConfig | None) -> str | None:
+    if meal_config is None:
+        return None
+    raw_dir = _get_raw_dir()
+    source_pdf = Path(source).with_suffix(".pdf").as_posix()
+    for mf in meal_config.pdf_files:
+        if mf.path == source_pdf:
+            return str(raw_dir / mf.path)
+    source_stem = Path(source).stem
+    for mf in meal_config.pdf_files:
+        if Path(mf.path).stem == source_stem:
+            return str(raw_dir / mf.path)
+    return None
+
+
+def _open_pdf_preview(file_path: str, file_name: str) -> None:
+    st.session_state._pdf_preview_path = file_path
+    st.session_state._pdf_preview_name = file_name
+
+
 def _run_query(query_id: str, question: str, meal_name: str | None) -> None:
     try:
         pipeline = get_pipeline(meal_name)
@@ -53,7 +87,22 @@ def _run_query(query_id: str, question: str, meal_name: str | None) -> None:
         _query_store[query_id] = {"status": "error", "error": str(e)}
 
 
-def _display_result(result: dict[str, Any]):
+@st.dialog("PDF 预览", width="large")
+def _pdf_preview_dialog():
+    file_path = st.session_state.get("_pdf_preview_path", "")
+    file_name = st.session_state.get("_pdf_preview_name", "")
+    if file_path and Path(file_path).exists():
+        st.caption(f"📄 {file_name}")
+        st.pdf(file_path, height=700)
+    else:
+        st.error(f"文件不存在: {file_name}")
+    if st.button("关闭预览", key="close_pdf_dialog"):
+        st.session_state.pop("_pdf_preview_path", None)
+        st.session_state.pop("_pdf_preview_name", None)
+        st.rerun()
+
+
+def _display_result(result: dict[str, Any], meal_config: MealConfig | None):
     st.markdown("### 🤖 答案")
     st.success(result["answer"])
 
@@ -65,7 +114,17 @@ def _display_result(result: dict[str, Any]):
                 zip(result["sources"], result["scores"], strict=False)
             ):
                 src_name = src.split("\\")[-1] if "\\" in src else src.split("/")[-1]
-                st.markdown(f"{i + 1}. **{src_name}** (相关度: {score:.4f})")
+                col_src, col_btn = st.columns([4, 1])
+                with col_src:
+                    st.markdown(f"{i + 1}. **{src_name}** (相关度: {score:.4f})")
+                with col_btn:
+                    pdf_path = _source_to_pdf_path(src, meal_config)
+                    if pdf_path and st.button(
+                        "📄预览",
+                        key=f"src_preview_{i}",
+                        help="预览此来源 PDF 文件",
+                    ):
+                        _open_pdf_preview(pdf_path, Path(pdf_path).name)
         else:
             st.info("无来源文档")
 
@@ -152,6 +211,33 @@ def _render_query_status():
             st.write("正在检索相关文档并生成答案，可切换到其他页面等待...")
 
 
+def _render_meal_files(meal_config: MealConfig | None) -> None:
+    if meal_config is None:
+        return
+    pdf_files = meal_config.pdf_files
+    if not pdf_files:
+        return
+    with st.expander(f"📂 当前 Meal 文件 ({len(pdf_files)})"):
+        raw_dir = _get_raw_dir()
+        for mf in pdf_files:
+            file_name = Path(mf.path).name
+            size_str = _format_file_size(mf.size_bytes)
+            col_name, col_btn = st.columns([4, 1])
+            with col_name:
+                st.text(f"{file_name}  ({size_str})")
+            with col_btn:
+                full_path = str(raw_dir / mf.path)
+                if Path(full_path).exists():
+                    if st.button(
+                        "📄",
+                        key=f"meal_file_preview_{mf.path}",
+                        help=f"预览 {file_name}",
+                    ):
+                        _open_pdf_preview(full_path, file_name)
+                else:
+                    st.caption("缺失")
+
+
 def render_qa_demo():
     _init_session_state()
     _check_completed_query()
@@ -166,6 +252,14 @@ def render_qa_demo():
 
         meal_options = [m.name for m in meals] + ["(无 Meal)", "+ 新建 Meal"]
         selected_meal = st.selectbox("Meal", meal_options, key="meal_select")
+
+        meal_config: MealConfig | None = None
+        meal_name: str | None = None
+        if selected_meal not in ("(无 Meal)", "+ 新建 Meal"):
+            meal_name = selected_meal
+            meal_config = next((m for m in meals if m.name == selected_meal), None)
+
+        _render_meal_files(meal_config)
 
         if selected_meal == "+ 新建 Meal":
             st.markdown("---")
@@ -261,8 +355,6 @@ def render_qa_demo():
             "启用查询改写", value=False, key="use_query_rewrite"
         )
 
-    meal_name = None if selected_meal in ["(无 Meal)", "+ 新建 Meal"] else selected_meal
-
     if st.session_state.query_running:
         st.info("⏳ 查询进行中，请稍候...")
 
@@ -285,7 +377,7 @@ def render_qa_demo():
             with st.chat_message("user"):
                 st.write(st.session_state.saved_question)
         with st.chat_message("assistant"):
-            _display_result(st.session_state.last_result)
+            _display_result(st.session_state.last_result, meal_config)
 
     question = st.chat_input(
         "输入问题，Enter 发送，Shift+Enter 换行",
@@ -309,3 +401,6 @@ def render_qa_demo():
             )
             thread.start()
             st.rerun()
+
+    if st.session_state.get("_pdf_preview_path"):
+        _pdf_preview_dialog()
