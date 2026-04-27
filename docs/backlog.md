@@ -2,7 +2,7 @@
 
 <!-- status: active -->
 
-> 最后更新：2026-04-26（修复 BUG-029/030/031，完成 OPT-004；RF-008：新增 issue 详情文件机制，4 个高优先级 issue 已补充详情链接）
+> 最后更新：2026-04-27（归档 BUG-032/FEAT-044/FEAT-045，同步 RF-002 完成状态）
 
 本文档是项目"卫生情况"的总入口，追踪所有非阻塞性质的待做事项。
 
@@ -12,8 +12,8 @@
 
 | 类型 | 待处理 | 进行中 | 已完成 | 已延期 |
 |------|--------|--------|--------|--------|
-| Bug | 8 | 0 | 21 | 2 |
-| Feature | 27 | 0 | 19 | 0 |
+| Bug | 9 | 0 | 21 | 2 |
+| Feature | 29 | 0 | 19 | 0 |
 | Refactor | 8 | 0 | 15 | 1 |
 | Optimization | 7 | 0 | 2 | 0 |
 | Investigation | 3 | 0 | 17 | 1 |
@@ -36,6 +36,7 @@
 | BUG-029 | irrelevant 问题 context_precision/context_recall 使用错误 ground truth | [troubleshooting](troubleshooting/irrelevant-question-metrics-fix.md) | ✅ 已完成 | builtin_evaluator 增加 expect_retrieval + expected_answer 守卫，irrelevant 问题不再计算 |
 | BUG-030 | RAGAS answer_correctness/semantic_similarity 对 irrelevant 问题循环论证 | [troubleshooting](troubleshooting/irrelevant-question-metrics-fix.md) | ✅ 已完成 | ragas_evaluator 仅 expect_retrieval=True 时回退到 expected_answer，run_experiment 过滤 irrelevant 问题的 reference-required 指标 |
 | BUG-031 | expected_answer fallback 不区分问题类型 | [troubleshooting](troubleshooting/irrelevant-question-metrics-fix.md) | ✅ 已完成 | run_experiment 中 expected_answer 仅在 expect_retrieval=True 时回退 |
+| BUG-032 | LLM 报告开头"好的"毛病反复出现 | [TODO.md](../TODO.md) | 📋 待处理 | 2026-04-26 9:29 再次出现，需重新修复 |
 
 ### 🟡 已延期
 
@@ -92,6 +93,8 @@
 | FEAT-040 | 审查脚本 PDF 高亮唤起功能 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 审查时唤起 PDF 并高亮相关段落关键词，审核完自动关闭 |
 | FEAT-041 | 多变体实验增量补做 | [TODO.md](../TODO.md) | 📋 待处理 | 大 | 支持在已跑完基线上追加 variant，只算新增部分，最终综合报告 |
 | FEAT-043 | 手动中断后部分生成报告 | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 中断后根据已完成 variant 生成部分报告，需确认中断时是否保存已完成结果 |
+| FEAT-044 | 对话历史提炼 MD 规范加入项目 | [TODO.md](../TODO.md) | 📋 待处理 | 小 | 每次结束要求 AI 提炼对话历史为 MD，考虑加入 CLAUDE/Skill/Rule |
+| FEAT-045 | issue 系统重构（单 MD 文件 + 唯一 ID） | [TODO.md](../TODO.md) | 📋 待处理 | 中 | 缓解多 worktree 冲突、状态维护不灵、token 无谓消耗三个痛点 |
 
 ---
 
