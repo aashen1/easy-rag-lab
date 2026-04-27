@@ -87,6 +87,8 @@ class SummaryConfig(BaseModel):
         max_length: Maximum characters for summary
         include_labels: Whether to include labels in summary
         include_milestone: Whether to include milestone in summary
+        list_snapshot: Whether to save list query snapshot
+        snapshot_file: Filename for list snapshot (relative to .issues/)
     """
 
     auto_generate: bool = Field(
@@ -97,6 +99,10 @@ class SummaryConfig(BaseModel):
     include_labels: bool = Field(default=True, description="Include labels in summary")
     include_milestone: bool = Field(
         default=True, description="Include milestone in summary"
+    )
+    list_snapshot: bool = Field(default=False, description="Save list query snapshot")
+    snapshot_file: str = Field(
+        default="_list_snapshot.md", description="Filename for list snapshot"
     )
 
 
