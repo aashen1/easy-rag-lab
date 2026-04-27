@@ -1011,6 +1011,12 @@ class TestSetGenerator:
     ) -> dict[int, list[str]]:
         """Map document segments to chunk IDs based on text content overlap.
 
+        .. deprecated::
+            Use :meth:`_locate_source_chunks` with ``page_numbers``
+            from page-based segments instead.  This method relies on
+            fragile text matching that fails when segment and chunk
+            texts come from different pipelines.
+
         Determines which chunks belong to each segment by checking if the
         chunk's text content overlaps with the segment's text content. Uses
         a sliding-window fuzzy match to handle OCR-induced whitespace
@@ -1055,6 +1061,10 @@ class TestSetGenerator:
     @staticmethod
     def _texts_overlap(text_a: str, text_b: str, min_overlap_chars: int = 30) -> bool:
         """Check if two texts have significant overlapping content.
+
+        .. deprecated::
+            No longer used by the primary mapping path.  Kept for
+            backward compatibility only.
 
         Uses a sliding-window approach: extracts substrings from text_a and
         checks if they appear in text_b. Handles OCR-induced whitespace
@@ -4367,6 +4377,12 @@ class TestSetGenerator:
     ) -> list[str]:
         """Locate chunk IDs that contain a verified quote text.
 
+        .. deprecated::
+            Use :meth:`_locate_source_chunks` with ``page_numbers``
+            from page-based segments instead.  This method depends on
+            the fragile ``segment_chunk_map`` produced by
+            :meth:`_map_segments_to_chunks`.
+
         Finds which segment contains the quote using character position,
         then looks up the chunk_ids from segment_chunk_map and verifies
         the quote appears in each chunk's text.
@@ -4449,6 +4465,12 @@ class TestSetGenerator:
         doc_chunks: list[dict[str, Any]],
     ) -> list[str]:
         """Locate chunk IDs for multi-hop questions from multiple evidence entries.
+
+        .. deprecated::
+            Use :meth:`_locate_source_chunks` with ``page_numbers``
+            from page-based segments instead.  This method depends on
+            the fragile ``segment_chunk_map`` produced by
+            :meth:`_map_segments_to_chunks`.
 
         For each evidence entry with a verified quote, calls
         _locate_chunks_by_quote to find the containing chunks, then
