@@ -15,7 +15,7 @@
 
 核心思路：**脚本生成初版 → 审计报告定位问题 → 人工精修 → 迭代**。脚本负责保证覆盖面和结构性质量，人工负责答案准确性和题目深度。
 
-> **v0.1.9 变更**：Golden 生成逻辑已收编入 `TestSetGenerator.generate_golden_testset()`，不再使用独立的 `scripts/generate_golden_testset.py` 中的生成逻辑。该脚本现为薄 CLI 壳，仅做参数解析后委托给 TestSetGenerator。所有问题生成策略（hybrid/document/golden）共享同一套核心逻辑。
+> **v0.1.11 变更**：Golden 生成逻辑已收编入 `TestSetGenerator.generate_golden_testset()`，不再使用独立的 `scripts/generate_golden_testset.py` 中的生成逻辑。该脚本现为薄 CLI 壳，仅做参数解析后委托给 TestSetGenerator。所有问题生成策略（hybrid/document/golden）共享同一套核心逻辑。
 
 ## 前置条件
 

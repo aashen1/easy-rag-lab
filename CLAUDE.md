@@ -93,38 +93,21 @@
 
 ## 当前状态
 
-**版本**：v0.1.9（统一测试集生成链路）
+**版本**：v0.1.13（RAG 可视化）
 
-**近期变更**：
-- 旧路径体系（data/parsed、data/chunks）已全面迁移至 Artifact 体系
-- ArtifactCache 新增 Pointer 文件机制（_pointers/full_parsed.pointer 等）
-- 新增 artifact_cli.py 命令行工具，支持 list/pointer/info 子命令
-- config.yaml 中 parser.output_dir / chunker.input_dir / chunker.output_dir 已删除
+**版本叙事**：量得准 → 解得开 → 合得拢 → 管得住 → 看得见
 
-**新功能**：
-- 统一测试集生成链路：Golden 生成逻辑收编入 TestSetGenerator
-- adversarial 问题类型：对抗性问题支持，默认分布 0%
-- 数值精度校验：10 倍换算错误自动检测修正（所有策略受益）
-- excerpt 验证：ground_truth_excerpt 原文真实性验证（所有策略受益）
-- 文档去重：内容重叠检测与补充文档排除（golden 策略专用）
-- 全量 meal 查找：MealManager.find_full_dataset_meal()
-- Golden 自动生成：resolve_test_set 中 golden 不存在时自动生成
-
-**近期修复**（2026-04-26）：
-- BUG-026：pipeline.py 全量缓存路径不一致 → 改用 ArtifactCache 动态计算
-- BUG-027：Token 统计无法按 variant 区分 → 新增 get_summary_by_variant()
-- BUG-029：irrelevant 问题 context_precision/context_recall 使用错误 ground truth → 增加 expect_retrieval 守卫
-- BUG-030：RAGAS answer_correctness/semantic_similarity 对 irrelevant 问题循环论证 → 条件 reference fallback
-- BUG-031：expected_answer fallback 不区分问题类型 → 仅 expect_retrieval=True 时回退
-- FEAT-042：实验全部失败时跳过 LLM 报告生成
-- OPT-004：Recall@3/5/10 指标已实装验证通过
-- OPT-009：chunker 逐文件日志降噪（INFO→DEBUG）
-- RF-014：normalize_source 已确认使用 include_parent=True
-- RF-020：Golden 独立生成链路收编入 TestSetGenerator，消除重复代码
+| 版本 | 主题 | 一句话 |
+|------|------|--------|
+| v0.1.9 | 评测双引擎 | 有了可信的尺子 |
+| v0.1.10 | 解析新纪元 | 有了自由的源头 |
+| v0.1.11 | 链路统一 | 有了统一的基准 |
+| v0.1.12 | 项目治理 | 有了可持续的节奏 |
+| v0.1.13 | RAG 可视化 | 有了可展示的产品 |
 
 **待做事项**：参见 `.issues/active/` 目录或运行 `pixi run issue list`
 
-**下版本方向**：参见 [docs/reviews/v0.1.9/release-summary.md](docs/reviews/v0.1.9/release-summary.md)
+**下版本方向**：透明版完整实验报告（FEAT-010）、"花头"效果验证、指标得分上下限确认
 
 ---
 

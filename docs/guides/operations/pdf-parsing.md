@@ -295,7 +295,7 @@ parser:
 | 中文扫描件 OCR 结果乱码 | `ocr_language` 仅配置英文 | 设置 `ocr_language: "chi_sim+eng"`，确认 Tesseract 中文包已安装 |
 | 双栏排版阅读顺序错乱 | 使用了 `use_layout(False)` | 保持默认 Layout 模式，不要切换 |
 | chunk 无页码信息 | `page_chunks: false` | 设置 `page_chunks: true` 启用页级输出 |
-| 解析参数变更后缓存未更新 | 旧版 `compute_parser_config_hash` 不含 options | 已在 v0.1.9 修复，options 纳入 hash 计算 |
+| 解析参数变更后缓存未更新 | 旧版 `compute_parser_config_hash` 不含 options | 已在 v0.1.10 修复，options 纳入 hash 计算 |
 
 ---
 
