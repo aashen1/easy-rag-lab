@@ -26,7 +26,7 @@ def _render_mermaid(chart: str):
             }}
             #mc #code-view {{
                 display:none; font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
-                white-space:pre; background:#f8f9fa; padding:16px; border-radius:8px;
+                white-space:pre; background:#f0f2f6; padding:16px; border-radius:8px;
                 font-size:13px; line-height:1.6; color:#333; margin-top:36px;
                 border:1px solid #e5e7eb;
             }}
