@@ -31,6 +31,9 @@ cmd = "pytest tests/ --tb=short -q --durations=10"
 [tasks.interactive]
 cmd = "python main.py --interactive"
 
+[tasks.issue]
+cmd = "python -m src.issue.cli"
+
 
 
 [tasks._run-exp]
