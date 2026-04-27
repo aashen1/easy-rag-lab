@@ -1,11 +1,17 @@
 version: '1.0'
 worktree_mapping:
+  ash-easy-rag: ash
+  w0-easy-rag: w0
   w1-easy-rag: wt1
 worktree_names:
+  ash: ash
+  w0: w0
   wt1: main-dev
 summary:
-  auto_generate: false
-  output_file: _summary.md
+  auto_generate: true
+  list_snapshot: true
+  summary_file: _summary.md
+  snapshot_file: _snapshot.md
   max_length: 80
   include_labels: true
   include_milestone: true

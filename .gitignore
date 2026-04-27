@@ -216,6 +216,3 @@ data/*
 # custom dev settings
 plgd/
 .trashbin/
-
-# issue system generated files
-.issues/_summary.md

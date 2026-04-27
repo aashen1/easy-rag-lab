@@ -1,9 +1,11 @@
 """Issue ID generation logic.
 
 Generates unique IDs in format: <TYPE>-<YYYYMMDD>-<SEQ>-<WTID>
-Sequence numbers are stored per worktree per date.
+Sequence numbers are derived dynamically from existing issue files,
+eliminating the need for external sequence state files.
 """
 
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -11,134 +13,83 @@ from loguru import logger
 
 from src.issue.models import IssueType
 
-SEQUENCES_DIR = Path(".issues/sequences")
+ISSUES_DIR = Path(".issues")
+
+_ID_PATTERN = re.compile(r"^(?:BUG|FEAT|RF|OPT|INV|TEST)-(\d{8})-(\d{3})-(\w+)")
+
+
+def _find_max_sequence(
+    date_str: str,
+    wt_id: str,
+    issues_dir: Path | None = None,
+) -> int:
+    """Find the maximum sequence number for a given date and worktree.
+
+    Scans all issue directories and extracts sequence numbers from
+    filenames matching the pattern *-YYYYMMDD-NNN-WTID*.
+
+    Args:
+        date_str: Date string in YYYYMMDD format
+        wt_id: Worktree identifier
+        issues_dir: Root issues directory. Defaults to .issues/
+
+    Returns:
+        Maximum sequence number found, or 0 if no matching issues exist
+    """
+    base = issues_dir or ISSUES_DIR
+    max_seq = 0
+
+    for subdir in ["active", "completed", "deferred", "cancelled"]:
+        target = base / subdir
+        if not target.exists():
+            continue
+        for file_path in target.glob("**/*.md"):
+            if file_path.name.startswith("_") or file_path.name.startswith("."):
+                continue
+            match = _ID_PATTERN.match(file_path.name)
+            if not match:
+                continue
+            file_date, file_seq, file_wt = (
+                match.group(1),
+                int(match.group(2)),
+                match.group(3),
+            )
+            if file_date == date_str and file_wt == wt_id:
+                max_seq = max(max_seq, file_seq)
+
+    return max_seq
 
 
 def generate_id(
     issue_type: IssueType,
     wt_id: str,
     date: datetime | None = None,
-    sequences_dir: Path | None = None,
+    issues_dir: Path | None = None,
 ) -> str:
-    """Generate a unique issue ID.
+    """Generate a unique issue ID derived from existing files.
 
     Format: <TYPE>-<YYYYMMDD>-<SEQ>-<WTID>
     Example: BUG-20260427-001-wt1
+
+    Scans existing issue files to find the max sequence for the given
+    date and worktree, then increments by 1. No external state files
+    are needed — the truth is always in the issue files themselves.
 
     Args:
         issue_type: Type of issue (BUG, FEAT, etc.)
         wt_id: Worktree identifier
         date: Date for ID generation. Defaults to current date.
-        sequences_dir: Directory for sequence files. Defaults to .issues/sequences/
+        issues_dir: Root issues directory. Defaults to .issues/
 
     Returns:
-        str: Generated issue ID
+        str: Generated issue ID guaranteed to be unique
     """
     dt = date or datetime.now()
     date_str = dt.strftime("%Y%m%d")
 
-    seq = get_next_sequence(wt_id, dt, sequences_dir)
+    max_seq = _find_max_sequence(date_str, wt_id, issues_dir)
+    next_seq = max_seq + 1
 
-    issue_id = f"{issue_type.value}-{date_str}-{seq:03d}-{wt_id}"
-    logger.debug(f"Generated issue ID: {issue_id}")
+    issue_id = f"{issue_type.value}-{date_str}-{next_seq:03d}-{wt_id}"
+    logger.debug(f"Generated issue ID: {issue_id} (max existing seq: {max_seq})")
     return issue_id
-
-
-def get_next_sequence(
-    wt_id: str,
-    date: datetime,
-    sequences_dir: Path | None = None,
-) -> int:
-    """Get the next sequence number for a worktree on a given date.
-
-    Reads and increments the sequence counter stored in:
-    .issues/sequences/{wt_id}/{YYYYMMDD}.txt
-
-    Args:
-        wt_id: Worktree identifier
-        date: Date for sequence lookup
-        sequences_dir: Directory for sequence files. Defaults to .issues/sequences/
-
-    Returns:
-        int: Next sequence number (1-indexed)
-    """
-    base_dir = sequences_dir or SEQUENCES_DIR
-    date_str = date.strftime("%Y%m%d")
-    seq_file = base_dir / wt_id / f"{date_str}.txt"
-
-    seq_file.parent.mkdir(parents=True, exist_ok=True)
-
-    current_seq = 0
-    if seq_file.exists():
-        try:
-            current_seq = int(seq_file.read_text(encoding="utf-8").strip())
-        except (ValueError, OSError) as e:
-            logger.warning(
-                f"Failed to read sequence file {seq_file}: {e}, starting from 1"
-            )
-            current_seq = 0
-
-    next_seq = current_seq + 1
-
-    try:
-        seq_file.write_text(str(next_seq), encoding="utf-8")
-        logger.debug(f"Updated sequence for {wt_id}/{date_str}: {next_seq}")
-    except OSError as e:
-        logger.error(f"Failed to write sequence file {seq_file}: {e}")
-        raise
-
-    return next_seq
-
-
-def peek_next_sequence(
-    wt_id: str,
-    date: datetime,
-    sequences_dir: Path | None = None,
-) -> int:
-    """Peek at the next sequence number without incrementing.
-
-    Args:
-        wt_id: Worktree identifier
-        date: Date for sequence lookup
-        sequences_dir: Directory for sequence files. Defaults to .issues/sequences/
-
-    Returns:
-        int: Next sequence number that would be assigned
-    """
-    base_dir = sequences_dir or SEQUENCES_DIR
-    date_str = date.strftime("%Y%m%d")
-    seq_file = base_dir / wt_id / f"{date_str}.txt"
-
-    if seq_file.exists():
-        try:
-            current_seq = int(seq_file.read_text(encoding="utf-8").strip())
-            return current_seq + 1
-        except (ValueError, OSError):
-            pass
-
-    return 1
-
-
-def reset_sequence(
-    wt_id: str,
-    date: datetime,
-    sequences_dir: Path | None = None,
-) -> None:
-    """Reset sequence counter for a worktree on a given date.
-
-    Args:
-        wt_id: Worktree identifier
-        date: Date for sequence reset
-        sequences_dir: Directory for sequence files. Defaults to .issues/sequences/
-    """
-    base_dir = sequences_dir or SEQUENCES_DIR
-    date_str = date.strftime("%Y%m%d")
-    seq_file = base_dir / wt_id / f"{date_str}.txt"
-
-    if seq_file.exists():
-        try:
-            seq_file.unlink()
-            logger.info(f"Reset sequence for {wt_id}/{date_str}")
-        except OSError as e:
-            logger.error(f"Failed to reset sequence file {seq_file}: {e}")
-            raise

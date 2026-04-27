@@ -441,9 +441,14 @@ class BacklogMigrator:
         self.dry_run = dry_run
         self.stats = MigrationStats()
         self.manager = IssueManager(issues_dir=issues_dir)
+        self._global_sequence = 0
 
     def migrate(self) -> MigrationStats:
         """Run migration from backlog.md to issue files.
+
+        Uses a global sequence counter (shared across all types) to match
+        the normal ID generation behavior. Sequence numbers are derived
+        from existing files, so no post-migration state update is needed.
 
         Returns:
             MigrationStats with results
@@ -457,13 +462,12 @@ class BacklogMigrator:
 
         logger.info(f"Parsed {len(parsed_issues)} issues from backlog")
 
-        sequence_counters: dict[IssueType, int] = {t: 0 for t in IssueType}
         migration_date = datetime.now()
 
         for parsed in parsed_issues:
             try:
-                sequence_counters[parsed.issue_type] += 1
-                seq = sequence_counters[parsed.issue_type]
+                self._global_sequence += 1
+                seq = self._global_sequence
 
                 issue = generate_new_issue(parsed, self.wt_id, seq, migration_date)
 
