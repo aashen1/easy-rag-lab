@@ -1,4 +1,5 @@
 import copy
+import json
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -824,8 +825,6 @@ class ExperimentManager:
 
             meal_snapshot_path = exp_dir / "meal_snapshot.json"
             with open(meal_snapshot_path, "w", encoding="utf-8") as f:
-                import json
-
                 json.dump(meal_snapshot, f, ensure_ascii=False, indent=2)
             logger.info(f"Saved meal snapshot to {meal_snapshot_path}")
 
@@ -834,16 +833,12 @@ class ExperimentManager:
                 strategy = snapshot.get("strategy", f"test_set_{i}")
                 snapshot_path = test_sets_dir / f"{strategy}.json"
                 with open(snapshot_path, "w", encoding="utf-8") as f:
-                    import json
-
                     json.dump(snapshot, f, ensure_ascii=False, indent=2)
                 logger.info(f"Saved test set snapshot to {snapshot_path}")
 
             manifest = self._create_manifest(exp_dir, config, test_set_snapshots)
             manifest_path = exp_dir / "manifest.json"
             with open(manifest_path, "w", encoding="utf-8") as f:
-                import json
-
                 json.dump(manifest, f, ensure_ascii=False, indent=2)
             logger.info(f"Saved manifest to {manifest_path}")
 
@@ -902,8 +897,6 @@ class ExperimentManager:
             FileNotFoundError: If required files are missing.
             ValueError: If manifest or result files are invalid.
         """
-        import json
-
         manifest_path = exp_dir / "manifest.json"
         if not manifest_path.exists():
             raise ConfigurationError(f"Manifest file not found: {manifest_path}")
@@ -990,8 +983,6 @@ class ExperimentManager:
         Returns:
             List of dictionaries containing experiment info.
         """
-        import json
-
         experiments = []
 
         if not self._exp_dir.exists():
@@ -1074,8 +1065,6 @@ class ExperimentManager:
         Raises:
             OSError: If file writing fails.
         """
-        import json
-
         manifest_path = exp_dir / "manifest.json"
         if not manifest_path.exists():
             logger.warning(
@@ -1114,8 +1103,6 @@ class ExperimentManager:
         Raises:
             OSError: If file writing fails.
         """
-        import json
-
         results_dir = exp_dir / "results"
         results_dir.mkdir(exist_ok=True)
 
