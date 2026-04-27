@@ -6,7 +6,7 @@ from typing import Any
 import streamlit as st
 from loguru import logger
 
-from src.app_pages.pdf_server import PdfServer
+from src.app_pages.pdf_server import PdfServer, get_or_create_pdf_server
 from src.meal import MealConfig, MealManager
 from src.pipeline import RAGPipeline
 from src.sampler import SamplingConfig, count_pdf_pages
@@ -18,11 +18,10 @@ def get_pipeline(meal_name: str | None) -> RAGPipeline:
     return RAGPipeline(config_path="config.yaml", meal_name=meal_name)
 
 
-@st.cache_resource
-def get_pdf_server() -> PdfServer:
-    from src.app_pages import _pdf_server_ref
-
-    return _pdf_server_ref
+def _ensure_pdf_server() -> PdfServer:
+    config = load_config()
+    raw_dir = config.get("parser", {}).get("input_dir", "data/raw")
+    return get_or_create_pdf_server(raw_dir)
 
 
 def get_meals() -> list[Any]:
@@ -157,12 +156,16 @@ def render_pdf_preview() -> None:
             st.session_state._pdf_preview_page = page_num
             st.rerun()
 
-    server = get_pdf_server()
+    server = _ensure_pdf_server()
     raw_dir = _get_raw_dir()
     rel_path = os.path.relpath(file_path, raw_dir).replace("\\", "/")
     encoded_path = urllib.parse.quote(rel_path)
     pdf_url = f"{server.base_url}/{encoded_path}#page={current_page}"
-    st.iframe(pdf_url, height=800)
+    st.markdown(
+        f'<iframe src="{pdf_url}" width="100%" height="800" '
+        f'style="border:none;"></iframe>',
+        unsafe_allow_html=True,
+    )
 
 
 def _display_result(result: dict[str, Any], meal_config: MealConfig | None):

@@ -6,6 +6,9 @@ from typing import Any
 
 from loguru import logger
 
+_server_instance: "PdfServer | None" = None
+_server_lock = threading.Lock()
+
 
 class _SecuredHandler(SimpleHTTPRequestHandler):
     serve_dir: str = ""
@@ -47,7 +50,7 @@ def _find_available_port(start: int = 8502, max_tries: int = 10) -> int:
     raise RuntimeError(msg)
 
 
-def start_pdf_server(serve_dir: str) -> PdfServer:
+def _start_server(serve_dir: str) -> PdfServer:
     port = _find_available_port()
     _SecuredHandler.serve_dir = serve_dir
     server = HTTPServer(("127.0.0.1", port), _SecuredHandler)
@@ -56,3 +59,14 @@ def start_pdf_server(serve_dir: str) -> PdfServer:
     base_url = f"http://localhost:{port}"
     logger.info(f"[pdf-server] Serving {serve_dir} on {base_url}")
     return PdfServer(base_url=base_url, port=port, serve_dir=serve_dir)
+
+
+def get_or_create_pdf_server(serve_dir: str) -> PdfServer:
+    global _server_instance
+    if _server_instance is not None:
+        return _server_instance
+    with _server_lock:
+        if _server_instance is not None:
+            return _server_instance
+        _server_instance = _start_server(serve_dir)
+        return _server_instance
