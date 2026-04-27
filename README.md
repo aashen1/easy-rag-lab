@@ -71,6 +71,9 @@ pixi run python main.py --query "中芯国际2024年的营业收入是多少？"
 # 交互式问答
 pixi run interactive
 
+# Web 可视化界面
+pixi run web
+
 # 构建向量索引
 pixi run python main.py --build-index --sample-count 5
 

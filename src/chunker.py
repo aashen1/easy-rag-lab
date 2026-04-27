@@ -246,8 +246,6 @@ def chunk_text(
         logger.warning("Text encoded to zero tokens")
         return []
 
-    logger.debug(f"Text has {total_tokens} tokens")
-
     token_char_offsets = _build_token_char_offsets(encoding, tokens, text)
 
     chunks = []
@@ -284,7 +282,6 @@ def chunk_text(
 
         start = end - overlap if overlap > 0 else end
 
-    logger.debug(f"Created {len(chunks)} chunks from text with {total_tokens} tokens")
     return chunks
 
 
