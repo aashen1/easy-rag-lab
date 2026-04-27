@@ -591,6 +591,92 @@ class TestSetGenerator:
 
         return segments
 
+    def _build_segments_from_pages(
+        self,
+        pages: list[dict[str, Any]],
+        target_chars: int = 8000,
+    ) -> list[dict[str, Any]]:
+        """Build segments by aggregating pages from parser output.
+
+        Unlike :meth:`_segment_document` which re-segments from full
+        document text, this method groups whole pages together so that
+        each segment carries ``page_numbers`` for reliable chunk
+        mapping.  Segments are cut only at page boundaries, preserving
+        text integrity.
+
+        Args:
+            pages: List of page dicts, each containing ``page_number``
+                and ``text`` keys.
+            target_chars: Target character count per segment.  A
+                segment is finalised once the accumulated page text
+                reaches this threshold.  Defaults to 8000.
+
+        Returns:
+            List of segment dictionaries, each containing:
+
+                - text: Concatenated page text.
+                - segment_index: Zero-based index.
+                - page_numbers: Sorted list of page numbers included.
+                - start_char: Start character position in the
+                  concatenated text.
+                - end_char: End character position.
+                - source_type: ``"pages_json"``.
+        """
+        if not pages:
+            return []
+
+        sorted_pages = sorted(pages, key=lambda p: p.get("page_number", 0))
+
+        segments: list[dict[str, Any]] = []
+        current_pages: list[dict[str, Any]] = []
+        current_chars = 0
+        segment_index = 0
+
+        for page in sorted_pages:
+            page_text = page.get("text", "")
+            if not page_text or not page_text.strip():
+                continue
+
+            current_pages.append(page)
+            current_chars += len(page_text)
+
+            if current_chars >= target_chars:
+                page_numbers = sorted(p.get("page_number", 0) for p in current_pages)
+                text = "\n\n".join(p.get("text", "") for p in current_pages)
+                segments.append(
+                    {
+                        "text": text,
+                        "segment_index": segment_index,
+                        "page_numbers": page_numbers,
+                        "start_char": 0,
+                        "end_char": len(text),
+                        "source_type": "pages_json",
+                    }
+                )
+                segment_index += 1
+                current_pages = []
+                current_chars = 0
+
+        if current_pages:
+            page_numbers = sorted(p.get("page_number", 0) for p in current_pages)
+            text = "\n\n".join(p.get("text", "") for p in current_pages)
+            segments.append(
+                {
+                    "text": text,
+                    "segment_index": segment_index,
+                    "page_numbers": page_numbers,
+                    "start_char": 0,
+                    "end_char": len(text),
+                    "source_type": "pages_json",
+                }
+            )
+
+        for i, seg in enumerate(segments):
+            seg["start_char"] = sum(len(segments[j]["text"]) + 2 for j in range(i))
+            seg["end_char"] = seg["start_char"] + len(seg["text"])
+
+        return segments
+
     def _compact_segments(
         self,
         segments: list[dict[str, Any]],
@@ -1576,6 +1662,8 @@ class TestSetGenerator:
             meal_config, document_contents, chunks_dir
         )
 
+        doc_pages_map = self._load_document_pages(meal_config)
+
         type_counts = self._calculate_question_distribution(
             num_questions, type_distribution
         )
@@ -1616,12 +1704,17 @@ class TestSetGenerator:
             source_path = doc_data["source_path"]
             doc_chunks = doc_chunks_map.get(doc_name, [])
 
-            segments = self._segment_document(doc_content, self.segment_size)
+            pages = doc_pages_map.get(doc_name, [])
+            if pages:
+                segments = self._build_segments_from_pages(pages, self.segment_size)
+            else:
+                segments = self._segment_document(doc_content, self.segment_size)
+                for seg in segments:
+                    seg["page_numbers"] = []
+                    seg["source_type"] = "fallback"
             if not segments:
                 logger.warning(f"No segments generated for document: {doc_name}")
                 continue
-
-            segment_chunk_map = self._map_segments_to_chunks(segments, doc_chunks)
 
             for q_type in assigned_types:
                 total_attempts += 1
@@ -1633,7 +1726,6 @@ class TestSetGenerator:
                 qa = self._generate_hybrid_question(
                     segments=segments,
                     doc_chunks=doc_chunks,
-                    segment_chunk_map=segment_chunk_map,
                     question_type=q_type,
                     generator=generator,
                     source_path=source_path,
@@ -1758,11 +1850,16 @@ class TestSetGenerator:
                 source_path = doc_data["source_path"]
                 doc_chunks = doc_chunks_map.get(doc_name, [])
 
-                segments = self._segment_document(doc_content, self.segment_size)
+                pages = doc_pages_map.get(doc_name, [])
+                if pages:
+                    segments = self._build_segments_from_pages(pages, self.segment_size)
+                else:
+                    segments = self._segment_document(doc_content, self.segment_size)
+                    for seg in segments:
+                        seg["page_numbers"] = []
+                        seg["source_type"] = "fallback"
                 if not segments:
                     continue
-
-                segment_chunk_map = self._map_segments_to_chunks(segments, doc_chunks)
 
                 logger.info(
                     f"Supplemental question {len(questions) + 1}/{num_questions} "
@@ -1772,7 +1869,6 @@ class TestSetGenerator:
                 qa = self._generate_hybrid_question(
                     segments=segments,
                     doc_chunks=doc_chunks,
-                    segment_chunk_map=segment_chunk_map,
                     question_type=q_type,
                     generator=generator,
                     source_path=source_path,
@@ -1962,6 +2058,8 @@ class TestSetGenerator:
 
         doc_chunks_map = self._load_document_chunks(meal_config, document_contents)
 
+        doc_pages_map = self._load_document_pages(meal_config)
+
         doc_list = [
             {"doc_id": doc_name, "content": doc_data["content"]}
             for doc_name, doc_data in document_contents.items()
@@ -2023,12 +2121,17 @@ class TestSetGenerator:
             source_path = doc_data["source_path"]
             doc_chunks = doc_chunks_map.get(doc_name, [])
 
-            segments = self._segment_document(doc_content, self.segment_size)
+            pages = doc_pages_map.get(doc_name, [])
+            if pages:
+                segments = self._build_segments_from_pages(pages, self.segment_size)
+            else:
+                segments = self._segment_document(doc_content, self.segment_size)
+                for seg in segments:
+                    seg["page_numbers"] = []
+                    seg["source_type"] = "fallback"
             if not segments:
                 logger.warning(f"No segments for document: {doc_name}")
                 continue
-
-            segment_chunk_map = self._map_segments_to_chunks(segments, doc_chunks)
 
             for q_type in assigned_types:
                 if len(questions) >= num_questions:
@@ -2042,7 +2145,6 @@ class TestSetGenerator:
                 qa = self._generate_hybrid_question(
                     segments=segments,
                     doc_chunks=doc_chunks,
-                    segment_chunk_map=segment_chunk_map,
                     question_type=q_type,
                     generator=generator,
                     source_path=source_path,
@@ -2214,11 +2316,16 @@ class TestSetGenerator:
                 source_path = doc_data["source_path"]
                 doc_chunks = doc_chunks_map.get(doc_name, [])
 
-                segments = self._segment_document(doc_content, self.segment_size)
+                pages = doc_pages_map.get(doc_name, [])
+                if pages:
+                    segments = self._build_segments_from_pages(pages, self.segment_size)
+                else:
+                    segments = self._segment_document(doc_content, self.segment_size)
+                    for seg in segments:
+                        seg["page_numbers"] = []
+                        seg["source_type"] = "fallback"
                 if not segments:
                     continue
-
-                segment_chunk_map = self._map_segments_to_chunks(segments, doc_chunks)
 
                 logger.info(
                     f"Supplemental question {len(questions) + 1}/{num_questions} "
@@ -2228,7 +2335,6 @@ class TestSetGenerator:
                 qa = self._generate_hybrid_question(
                     segments=segments,
                     doc_chunks=doc_chunks,
-                    segment_chunk_map=segment_chunk_map,
                     question_type=q_type,
                     generator=generator,
                     source_path=source_path,
@@ -2458,7 +2564,6 @@ class TestSetGenerator:
         self,
         segments: list[dict[str, Any]],
         doc_chunks: list[dict[str, Any]],
-        segment_chunk_map: dict[int, list[str]],
         question_type: str,
         generator: Generator,
         source_path: str,
@@ -2470,7 +2575,6 @@ class TestSetGenerator:
         Args:
             segments: List of document segments.
             doc_chunks: List of chunk dictionaries for the document.
-            segment_chunk_map: Mapping from segment index to chunk IDs.
             question_type: Type of question to generate.
             generator: Generator instance for LLM calls.
             source_path: Source path of the document.
@@ -2554,12 +2658,22 @@ class TestSetGenerator:
             qa["evidence"] = validation["verified_evidence"]
 
             if question_type in multi_hop_types:
-                source_chunks = self._locate_multi_hop_chunks(
-                    validation["verified_evidence"],
-                    selected_segments,
-                    segment_chunk_map,
-                    doc_chunks,
-                )
+                all_page_numbers: set[int] = set()
+                all_quotes: list[str] = []
+                for seg in selected_segments:
+                    all_page_numbers.update(seg.get("page_numbers", []))
+                for ev in validation["verified_evidence"]:
+                    q = ev.get("quote", "")
+                    if q:
+                        all_quotes.append(q)
+
+                chunk_id_set: set[str] = set()
+                for q in all_quotes:
+                    chunk_ids = self._locate_source_chunks(
+                        sorted(all_page_numbers), q, doc_chunks
+                    )
+                    chunk_id_set.update(chunk_ids)
+                source_chunks = sorted(chunk_id_set)
             else:
                 first_evidence = (
                     validation["verified_evidence"][0]
@@ -2567,8 +2681,11 @@ class TestSetGenerator:
                     else {}
                 )
                 quote = first_evidence.get("quote", "")
-                source_chunks = self._locate_chunks_by_quote(
-                    quote, selected_segments, segment_chunk_map, doc_chunks
+                page_numbers = []
+                if selected_segments:
+                    page_numbers = selected_segments[0].get("page_numbers", [])
+                source_chunks = self._locate_source_chunks(
+                    page_numbers, quote, doc_chunks
                 )
 
             qa["source_chunks"] = source_chunks
@@ -3666,6 +3783,72 @@ class TestSetGenerator:
 
         return existing_test_set
 
+    def _load_document_pages(
+        self,
+        meal_config: MealConfig,
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Load per-page data from ``.pages.json`` files.
+
+        Reads each ``.pages.json`` file under the parsed directory,
+        filters by the meal's PDF file list, and returns a mapping
+        from document name to a list of ``{page_number, text}`` dicts.
+
+        Args:
+            meal_config: MealConfig whose ``pdf_files`` determine which
+                documents to load.
+
+        Returns:
+            Dictionary mapping document names to lists of page dicts.
+            Each page dict contains ``page_number`` (int) and ``text``
+            (str).  Returns an empty dict when the parsed directory
+            cannot be resolved or contains no matching files.
+        """
+        parsed_dir = self._resolve_parsed_dir(meal_config)
+        if not parsed_dir or not parsed_dir.exists():
+            logger.warning(f"Parsed directory not found: {parsed_dir}")
+            return {}
+
+        source_filter: set[str] = set()
+        for mf in meal_config.pdf_files:
+            pages_rel = Path(mf.path).with_suffix(".pages.json").as_posix()
+            source_filter.add(pages_rel)
+
+        result: dict[str, list[dict[str, Any]]] = {}
+        pages_files = list(parsed_dir.rglob("*.pages.json"))
+
+        for pages_file in pages_files:
+            try:
+                rel_path = pages_file.relative_to(parsed_dir).as_posix()
+                if source_filter and rel_path not in source_filter:
+                    continue
+
+                with open(pages_file, encoding="utf-8") as f:
+                    pages_data = json.load(f)
+
+                if not isinstance(pages_data, list):
+                    continue
+
+                doc_name = pages_file.stem.replace(".pages", "")
+                page_list: list[dict[str, Any]] = []
+                for page in pages_data:
+                    if not isinstance(page, dict):
+                        continue
+                    text = page.get("text", "")
+                    page_number = page.get("page_number", 0)
+                    if text and text.strip():
+                        page_list.append({"page_number": page_number, "text": text})
+
+                if page_list:
+                    result[doc_name] = page_list
+                    logger.debug(
+                        f"Loaded {len(page_list)} pages for document: {doc_name}"
+                    )
+            except Exception as e:
+                logger.error(f"Failed to load {pages_file}: {str(e)}")
+                continue
+
+        return result
+
     def _load_full_documents(
         self, meal_config: MealConfig
     ) -> dict[str, dict[str, str]]:
@@ -4108,6 +4291,72 @@ class TestSetGenerator:
             "authenticity_pass_rate": authenticity_passed / total,
             "type_distribution": type_counts,
         }
+
+    def _locate_source_chunks(
+        self,
+        page_numbers: list[int],
+        quote: str,
+        doc_chunks: list[dict[str, Any]],
+    ) -> list[str]:
+        """Locate chunk IDs via two-stage mapping: page filter then quote match.
+
+        Stage 1 narrows candidates to chunks whose ``page_number`` is
+        in *page_numbers*.  Stage 2 matches *quote* text inside each
+        candidate chunk (exact then fuzzy).  If stage 2 finds no
+        matches the method falls back to returning **all** candidate
+        chunk IDs so that ``source_chunks`` is never empty when pages
+        are known.
+
+        Args:
+            page_numbers: Page numbers associated with the segment.
+            quote: Verified quote text to locate within candidate
+                chunks.
+            doc_chunks: All chunk dictionaries for the document, each
+                containing ``chunk_id``, ``text``, and ``metadata``.
+
+        Returns:
+            Sorted list of chunk_id strings.  Empty only when
+            *page_numbers* yields zero candidates.
+        """
+        if not page_numbers or not doc_chunks:
+            return []
+
+        page_set = set(page_numbers)
+        candidate_chunks = [
+            chunk
+            for chunk in doc_chunks
+            if chunk.get("metadata", {}).get("page_number") in page_set
+        ]
+
+        if not candidate_chunks:
+            logger.debug(f"No chunks found for pages {page_numbers}")
+            return []
+
+        if not quote or not quote.strip():
+            return sorted(c.get("chunk_id", "") for c in candidate_chunks)
+
+        matching_ids: list[str] = []
+        for chunk in candidate_chunks:
+            chunk_text = chunk.get("text", "")
+            chunk_id = chunk.get("chunk_id", "")
+            if not chunk_text or not chunk_id:
+                continue
+
+            if quote in chunk_text:
+                matching_ids.append(chunk_id)
+            else:
+                verification = self._verify_quote_in_segment(quote, chunk_text)
+                if verification.get("found"):
+                    matching_ids.append(chunk_id)
+
+        if not matching_ids:
+            logger.debug(
+                f"Quote not found in candidate chunks, "
+                f"falling back to page-level mapping for pages {page_numbers}"
+            )
+            return sorted(c.get("chunk_id", "") for c in candidate_chunks)
+
+        return sorted(matching_ids)
 
     def _locate_chunks_by_quote(
         self,
@@ -4758,7 +5007,34 @@ class TestSetGenerator:
                     }
                 )
             else:
-                if doc_content:
+                page_numbers = segment.get("page_numbers", [])
+                page_verified = False
+                if page_numbers:
+                    for other_seg in segments:
+                        if other_seg.get("segment_index") == segment_index:
+                            continue
+                        other_pages = other_seg.get("page_numbers", [])
+                        if set(other_pages) & set(page_numbers):
+                            other_text = other_seg.get("text", "")
+                            other_v = self._verify_quote_in_segment(quote, other_text)
+                            if other_v["found"]:
+                                verified_evidence.append(
+                                    {
+                                        **evidence,
+                                        "verified": True,
+                                        "match_type": other_v["match_type"],
+                                        "position": other_v["position"],
+                                    }
+                                )
+                                page_verified = True
+                                logger.debug(
+                                    f"Quote found in sibling segment "
+                                    f"(same pages {page_numbers}): "
+                                    f"'{quote[:30]}...'"
+                                )
+                                break
+
+                if not page_verified and doc_content:
                     doc_verified = self._verify_excerpt_in_document(quote, doc_content)
                     if doc_verified:
                         verified_evidence.append(
