@@ -1,14 +1,28 @@
 import streamlit as st
+import streamlit.components.v1 as components
 
 
-def render_about():
-    st.title("📖 系统信息")
+def _render_mermaid(chart: str):
+    components.html(
+        f"""
+        <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+        <script>
+            mermaid.initialize({{
+                startOnLoad: true,
+                theme: 'default',
+                flowchart: {{ useMaxWidth: true, htmlLabels: true, curve: 'basis' }}
+            }});
+        </script>
+        <div class="mermaid">
+        {chart}
+        </div>
+        """,
+        height=400,
+        scrolling=False,
+    )
 
-    st.markdown("## RAG 链路流程图")
 
-    st.markdown("""
-```mermaid
-flowchart LR
+_RAG_FLOWCHART = """flowchart LR
     A[PDF 文档] --> B[PDF 解析]
     B --> C[文本分块]
     C --> D[向量化]
@@ -33,8 +47,15 @@ flowchart LR
         F3[混合检索]
         F4[Reranker]
     end
-```
-""")
+"""
+
+
+def render_about():
+    st.title("📖 系统信息")
+
+    st.markdown("## RAG 链路流程图")
+
+    _render_mermaid(_RAG_FLOWCHART)
 
     st.markdown("---")
 
