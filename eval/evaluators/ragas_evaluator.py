@@ -502,6 +502,21 @@ class RagasEvaluator(BaseEvaluator):
             error=error,
         )
 
+    def _has_reference(self, sample: dict[str, Any]) -> bool:
+        """
+        Check if a sample has a valid reference for metrics that require it.
+
+        Args:
+            sample: Sample dictionary.
+
+        Returns:
+            True if sample has a valid reference, False otherwise.
+        """
+        reference = sample.get("ground_truth_excerpt")
+        if not reference and sample.get("expect_retrieval", True):
+            reference = sample.get("expected_answer")
+        return bool(reference)
+
     def evaluate_batch(
         self,
         samples: list[dict[str, Any]],
@@ -524,19 +539,27 @@ class RagasEvaluator(BaseEvaluator):
         if generation_metrics is None:
             generation_metrics = self._generation_metrics
 
-        samples_without_ref = [s for s in samples if s.get("expected_answer") is None]
-        if samples_without_ref:
-            ref_required = [
-                m for m in generation_metrics if m in REFERENCE_REQUIRED_METRICS
-            ]
-            if ref_required:
-                logger.warning(
-                    f"Metrics {ref_required} require reference (expected_answer) "
-                    f"but {len(samples_without_ref)}/{len(samples)} samples lack it. "
-                    f"These metrics may return NaN for those samples."
-                )
+        ref_required_metrics = [
+            m for m in generation_metrics if m in REFERENCE_REQUIRED_METRICS
+        ]
+        non_ref_metrics = [
+            m for m in generation_metrics if m not in REFERENCE_REQUIRED_METRICS
+        ]
 
-        results = []
+        samples_with_ref = [
+            (i, s) for i, s in enumerate(samples) if self._has_reference(s)
+        ]
+        samples_without_ref = [
+            (i, s) for i, s in enumerate(samples) if not self._has_reference(s)
+        ]
+
+        if samples_without_ref and ref_required_metrics:
+            logger.info(
+                f"{len(samples_without_ref)} samples lack reference, "
+                f"skipping {ref_required_metrics} for them"
+            )
+
+        results: list[EvaluationResult | None] = [None] * len(samples)
 
         try:
             if not llm_config:
@@ -548,99 +571,130 @@ class RagasEvaluator(BaseEvaluator):
             if self._embeddings is None and self.config:
                 self._embeddings = self._create_embeddings(self.config)
 
-            metrics = self._create_metrics(
-                generation_metrics, self._llm, self._embeddings
-            )
-
-            dataset = self._build_ragas_dataset(samples)
-
-            logger.info(f"Running RAGAS evaluation on {len(samples)} samples...")
-
-            from ragas import evaluate
-
             run_config = self._build_run_config()
 
-            eval_result = evaluate(
-                dataset=dataset,
-                metrics=metrics,
-                run_config=run_config,
-                show_progress=True,
-                raise_exceptions=False,
-            )
+            if samples_with_ref:
+                ref_samples = [s for _, s in samples_with_ref]
+                ref_indices = [i for i, _ in samples_with_ref]
 
-            if hasattr(eval_result, "scores") and eval_result.scores:
-                for i, score_dict in enumerate(eval_result.scores):
-                    generation_results = {}
-                    if isinstance(score_dict, dict):
-                        for metric_name in generation_metrics:
-                            if (
-                                metric_name in score_dict
-                                and score_dict[metric_name] is not None
-                            ):
-                                try:
-                                    generation_results[metric_name] = float(
-                                        score_dict[metric_name]
-                                    )
-                                except (TypeError, ValueError):
-                                    logger.warning(
-                                        f"Could not convert score for {metric_name}: {score_dict[metric_name]}"
-                                    )
+                metrics_with_ref = self._create_metrics(
+                    generation_metrics, self._llm, self._embeddings
+                )
+                dataset_with_ref = self._build_ragas_dataset(ref_samples)
 
-                    results.append(
-                        EvaluationResult(
-                            question_id=samples[i].get("question_id", f"sample_{i}"),
-                            question=samples[i].get("question", ""),
-                            answer=samples[i].get("answer", ""),
-                            contexts=samples[i].get("contexts", []),
+                logger.info(
+                    f"Running RAGAS evaluation on {len(ref_samples)} samples with reference..."
+                )
+
+                from ragas import evaluate
+
+                eval_result = evaluate(
+                    dataset=dataset_with_ref,
+                    metrics=metrics_with_ref,
+                    run_config=run_config,
+                    show_progress=True,
+                    raise_exceptions=False,
+                )
+
+                if hasattr(eval_result, "scores") and eval_result.scores:
+                    for j, score_dict in enumerate(eval_result.scores):
+                        generation_results = {}
+                        if isinstance(score_dict, dict):
+                            for metric_name in generation_metrics:
+                                if (
+                                    metric_name in score_dict
+                                    and score_dict[metric_name] is not None
+                                ):
+                                    try:
+                                        generation_results[metric_name] = float(
+                                            score_dict[metric_name]
+                                        )
+                                    except (TypeError, ValueError):
+                                        logger.warning(
+                                            f"Could not convert score for {metric_name}: {score_dict[metric_name]}"
+                                        )
+
+                        results[ref_indices[j]] = EvaluationResult(
+                            question_id=ref_samples[j].get(
+                                "question_id", f"sample_{j}"
+                            ),
+                            question=ref_samples[j].get("question", ""),
+                            answer=ref_samples[j].get("answer", ""),
+                            contexts=ref_samples[j].get("contexts", []),
                             retrieval_metrics={},
                             generation_metrics=generation_results,
                         )
-                    )
-            elif hasattr(eval_result, "to_pandas"):
-                df = eval_result.to_pandas()
-                for i, row in df.iterrows():
-                    generation_results = {}
-                    for metric_name in generation_metrics:
-                        if metric_name in row and row[metric_name] is not None:
-                            try:
-                                generation_results[metric_name] = float(
-                                    row[metric_name]
-                                )
-                            except (TypeError, ValueError):
-                                logger.warning(
-                                    f"Could not convert score for {metric_name}: {row[metric_name]}"
-                                )
 
-                    results.append(
-                        EvaluationResult(
-                            question_id=samples[i].get("question_id", f"sample_{i}"),
-                            question=samples[i].get("question", ""),
-                            answer=samples[i].get("answer", ""),
-                            contexts=samples[i].get("contexts", []),
+            if samples_without_ref and non_ref_metrics:
+                non_ref_samples = [s for _, s in samples_without_ref]
+                non_ref_indices = [i for i, _ in samples_without_ref]
+
+                metrics_without_ref = self._create_metrics(
+                    non_ref_metrics, self._llm, self._embeddings
+                )
+                dataset_without_ref = self._build_ragas_dataset(non_ref_samples)
+
+                logger.info(
+                    f"Running RAGAS evaluation on {len(non_ref_samples)} samples without reference..."
+                )
+
+                from ragas import evaluate
+
+                eval_result = evaluate(
+                    dataset=dataset_without_ref,
+                    metrics=metrics_without_ref,
+                    run_config=run_config,
+                    show_progress=True,
+                    raise_exceptions=False,
+                )
+
+                if hasattr(eval_result, "scores") and eval_result.scores:
+                    for j, score_dict in enumerate(eval_result.scores):
+                        generation_results = {}
+                        if isinstance(score_dict, dict):
+                            for metric_name in non_ref_metrics:
+                                if (
+                                    metric_name in score_dict
+                                    and score_dict[metric_name] is not None
+                                ):
+                                    try:
+                                        generation_results[metric_name] = float(
+                                            score_dict[metric_name]
+                                        )
+                                    except (TypeError, ValueError):
+                                        logger.warning(
+                                            f"Could not convert score for {metric_name}: {score_dict[metric_name]}"
+                                        )
+
+                        results[non_ref_indices[j]] = EvaluationResult(
+                            question_id=non_ref_samples[j].get(
+                                "question_id", f"sample_{j}"
+                            ),
+                            question=non_ref_samples[j].get("question", ""),
+                            answer=non_ref_samples[j].get("answer", ""),
+                            contexts=non_ref_samples[j].get("contexts", []),
                             retrieval_metrics={},
                             generation_metrics=generation_results,
                         )
-                    )
-            else:
-                for i, sample in enumerate(samples):
-                    results.append(
-                        EvaluationResult(
-                            question_id=sample.get("question_id", f"sample_{i}"),
-                            question=sample.get("question", ""),
-                            answer=sample.get("answer", ""),
-                            contexts=sample.get("contexts", []),
-                            retrieval_metrics={},
-                            generation_metrics={},
-                            error="Failed to parse RAGAS results",
-                        )
+
+            for i, result in enumerate(results):
+                if result is None:
+                    results[i] = EvaluationResult(
+                        question_id=samples[i].get("question_id", f"sample_{i}"),
+                        question=samples[i].get("question", ""),
+                        answer=samples[i].get("answer", ""),
+                        contexts=samples[i].get("contexts", []),
+                        retrieval_metrics={},
+                        generation_metrics={},
+                        error="Failed to evaluate sample",
                     )
 
         except Exception as e:
             error_msg = str(e)
             logger.error(f"RAGAS batch evaluation failed: {error_msg}")
             for i, sample in enumerate(samples):
-                results.append(
-                    EvaluationResult(
+                if results[i] is None:
+                    results[i] = EvaluationResult(
                         question_id=sample.get("question_id", f"sample_{i}"),
                         question=sample.get("question", ""),
                         answer=sample.get("answer", ""),
@@ -649,6 +703,5 @@ class RagasEvaluator(BaseEvaluator):
                         generation_metrics={},
                         error=error_msg,
                     )
-                )
 
-        return results
+        return [r for r in results if r is not None]

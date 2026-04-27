@@ -250,10 +250,10 @@ evaluation:
     enabled: false
     llm_backend: "anthropic"        # 使用 LangChain Anthropic 接口（推荐）
     embeddings_backend: "local"     # 使用本地 BGE 或 "openai"
-    max_tokens: 4096               # RAGAS 评测需要更大的 max_tokens（默认 LLM 的 1024 不够）
+    max_tokens: 8192               # RAGAS 评测需要更大的 max_tokens（默认 LLM 的 1024 不够）
     run_config:
       max_workers: 5
-      timeout: 120                # RAGAS 评测可能需要更长时间
+      timeout: 180                # RAGAS 评测可能需要更长时间
       max_retries: 3
 
 # ============================================================
