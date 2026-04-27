@@ -63,7 +63,7 @@ def _render_mermaid(chart: str):
                 s.onload = function() {{
                     mermaid.initialize({{
                         startOnLoad: true,
-                        theme: 'default',
+                        theme: 'dark',
                         flowchart: {{ useMaxWidth: true, htmlLabels: true, curve: 'basis' }}
                     }});
                 }};
