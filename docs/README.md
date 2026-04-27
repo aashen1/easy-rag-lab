@@ -17,7 +17,7 @@
 ### 开发者
 
 1. [版本演进年轮](version-history.md) — 项目版本迭代历程
-2. [待做事项总表](backlog.md) — 项目"卫生情况"总入口
+2. [待做事项](../.issues/) — 运行 `pixi run issue list` 查看
 3. [抛接球年轮方法论](methodology.md) — AI 时代的版本演进管理方法论
 4. [配置参考](config-reference.md) — config.yaml 完整说明
 
@@ -31,6 +31,7 @@
 - [评测指标详解](guides/operations/evaluation-metrics.md)
 - [RAGAS 评测系统](guides/operations/ragas-evaluation.md)
 - [Token 追踪](guides/operations/token-tracking.md)
+- [Issue 管理系统](guides/operations/issue-system.md)
 - [RAG 泛超参数使用指南](guides/operations/hyperparameter-guide.md)
 - [RAG 优化实现与测试保障](guides/operations/rag-optimization-implementation.md)
 - [测试集管理](guides/operations/test-set-management.md)
@@ -42,6 +43,7 @@
 - [测试运行指南](guides/development/testing.md)
 - [Lint 与 pre-commit](guides/development/lint-and-precommit.md)
 - [Commit 规范](guides/development/commit-conventions.md)
+- [Issue 系统开发手记](guides/development/issue-system-dev-notes.md)
 
 ### 故障排查
 
@@ -63,7 +65,6 @@
 docs/
 ├── README.md                  # 本文档（导航索引）
 ├── version-history.md         # 版本演进年轮
-├── backlog.md                 # 待做事项总表
 ├── methodology.md             # 抛接球年轮方法论
 ├── inbox-log.md               # 收件箱处理日志
 │
@@ -81,6 +82,7 @@ docs/
 │   │   ├── evaluation-metrics.md
 │   │   ├── ragas-evaluation.md
 │   │   ├── token-tracking.md
+│   │   ├── issue-system.md
 │   │   ├── hyperparameter-guide.md
 │   │   ├── rag-optimization-implementation.md
 │   │   ├── test-set-management.md
@@ -90,7 +92,8 @@ docs/
 │   └── development/           # 开发规范与工具指南
 │       ├── testing.md
 │       ├── lint-and-precommit.md
-│       └── commit-conventions.md
+│       ├── commit-conventions.md
+│       └── issue-system-dev-notes.md
 │
 ├── reviews/                   # 版本验收与审查报告
 │   ├── v0.1.5/
@@ -146,13 +149,14 @@ docs/
 
 ## TODO 归档机制
 
-`TODO.md`（人类管理）与 `docs/backlog.md`（AI 管理）构成双向异步 issue 追踪体系：
+`TODO.md`（人类管理）与 `.issues/` 目录（AI 管理）构成 issue 追踪体系：
 
-- **归档**：AI 自动将 TODO.md 中未归档的 issue 单向归档到 backlog.md，追加 `📋` 时间戳
-- **完成同步**：backlog 中已完成的 issue 同步回 TODO.md，打钩并移动到对应日期标题
+- **归档**：AI 自动将 TODO.md 中未归档的 issue 创建为 `.issues/active/` 下的文件，追加 `📋` 时间戳
+- **完成同步**：`.issues/` 中已完成的 issue 同步回 TODO.md，打钩并移动到对应日期标题
 - **触发**：每次对话开始自动检查，或用户说"打扫卫生""归档TODO"
+- **工具**：使用 `pixi run issue create` 创建 issue
 
-详见 [抛接球年轮方法论](methodology.md) 中的"TODO ↔ Backlog 双向异步机制"章节。
+详见 [Issue 管理系统使用指南](guides/operations/issue-system.md)。
 
 ---
 
@@ -177,5 +181,5 @@ docs/
 |------|---------|
 | 代码注释能说明的问题 | 直接写在代码里 |
 | API 变更 | 更新 `CHANGELOG.md` |
-| 临时想法/TODO | 添加到 `docs/backlog.md` |
+| 临时想法/TODO | 运行 `pixi run issue create` 创建 issue |
 | AI 对话原始记录 | 精简后入库，或直接删除 |
