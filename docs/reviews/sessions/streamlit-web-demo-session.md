@@ -323,9 +323,7 @@ plotly = ">=6.7.0, <7"  # 可选，用于图表
 
 1. **Meal 文件列表**：在侧边栏 Meal 选择器下方，使用 `st.expander` 展示当前 Meal 包含的 PDF 文件名和大小。每个文件旁有 📄 按钮可打开预览。
 
-2. **PDF 预览弹窗**：使用 Streamlit 1.49+ 原生 `st.pdf()` 组件 + `@st.dialog` 装饰器实现模态弹窗预览。弹窗宽度设为 `large`，PDF 渲染高度 700px，带"关闭预览"按钮。
-
-3. **来源文档可点击**：在检索结果的"来源文档"Tab 中，每个来源文档旁增加 📄预览 按钮。通过 `_source_to_pdf_path()` 函数将 chunk 的 source 路径（如 `company/report.md`）映射回原始 PDF 路径（如 `company/report.pdf`），匹配策略为：先精确匹配替换后缀的路径，再按文件名 stem 模糊匹配。
+2. **来源文档可点击**：在检索结果的"来源文档"Tab 中，每个来源文档旁增加 📄预览 按钮。通过 `_source_to_pdf_path()` 函数将 chunk 的 source 路径（如 `company/report.md`）映射回原始 PDF 路径（如 `company/report.pdf`），匹配策略为：先精确匹配替换后缀的路径，再按文件名 stem 模糊匹配。
 
 **新增函数**：
 
@@ -334,11 +332,45 @@ plotly = ">=6.7.0, <7"  # 可选，用于图表
 | `_get_raw_dir()` | 从 config 获取 PDF 原始目录路径 |
 | `_format_file_size()` | 格式化文件大小（MB/KB/B） |
 | `_source_to_pdf_path()` | 将 chunk source 路径映射到 PDF 文件路径 |
-| `_open_pdf_preview()` | 设置 session_state 触发 PDF 预览弹窗 |
-| `_pdf_preview_dialog()` | `@st.dialog` 装饰的 PDF 预览弹窗 |
+| `_open_pdf_preview()` | 设置 session_state 触发 PDF 预览 |
 | `_render_meal_files()` | 渲染侧边栏 Meal 文件列表 |
+
+### 10.2 2026-04-28：Tab 式 PDF 预览 + 页码跳转
+
+**需求**：dialog 弹窗预览手感差，改为独立 Tab 页，增加页码跳转和关闭按钮。
+
+**技术方案**：
+
+1. **Tab 式预览**：`app.py` 中根据 `_pdf_preview_path` session state 动态添加第三个 Tab「📄 PDF 预览」。点击预览按钮时设置 session state 并触发 rerun，新 Tab 自动出现。点击 ✕ 关闭按钮清除 state 后 Tab 消失。
+
+2. **PDF 渲染**：使用 `streamlit-pdf-viewer`（基于 pdf.js）替代原生 `st.pdf()`，支持 `scroll_to_page` 页码跳转、`render_text` 文本选择、`show_page_separator` 页面分隔线。
+
+3. **页码跳转**：使用 `st.form` 包裹页码输入和跳转按钮，避免输入时触发不必要的 rerun。点击跳转后更新 `_pdf_preview_page` session state，通过 `key=f"pdf_viewer_p{target_page}"` 强制组件重新渲染到目标页。
+
+4. **总页数**：使用 `count_pdf_pages()`（来自 `src/sampler`）+ `@st.cache_data` 获取并缓存 PDF 总页数。
+
+5. **Toast 提示**：点击预览按钮时弹出 toast，提醒用户切换到「PDF 预览」Tab。
+
+**新增依赖**：
+
+```toml
+streamlit-pdf-viewer = ">=0.0.28, <1"
+```
+
+**新增/变更函数**：
+
+| 函数 | 作用 |
+|------|------|
+| `render_pdf_preview()` | PDF 预览 Tab 页面渲染（含页码跳转、关闭按钮） |
+| `_get_pdf_page_count()` | 缓存 PDF 总页数 |
+
+**移除函数**：
+
+| 函数 | 原因 |
+|------|------|
+| `_pdf_preview_dialog()` | dialog 方案已废弃 |
 
 **已知限制**：
 
-- `@st.dialog` 关闭时（点击 X），`_pdf_preview_path` 状态未清除，下次 rerun 会重新打开弹窗。用户需点击弹窗内的"关闭预览"按钮才能正确关闭。这是 Streamlit dialog 的已知行为，暂无优雅解决方案。
-- PDF 预览不支持跳转到特定页面（`st.pdf` 暂无 page 参数）。
+- `streamlit-pdf-viewer` 与 Streamlit ≥ 1.41 存在已知兼容性问题（st.dialog 关闭后滚动位置重置），但因已改用 Tab 方案，此问题不影响。
+- 页码跳转时组件需重新渲染（通过 key 变化），大 PDF 可能需要几秒加载。
