@@ -25,11 +25,11 @@ def _render_mermaid(chart: str):
             }}
             #mc #code-view {{
                 display:none; font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
-                white-space:pre; background:#f0f2f6; padding:16px; border-radius:8px;
-                font-size:13px; line-height:1.6; color:#333; margin-top:36px;
-                border:1px solid #e5e7eb;
+                white-space:pre; background:#1e293b; padding:16px; border-radius:8px;
+                font-size:13px; line-height:1.6; color:#e2e8f0; margin-top:36px;
+                border:1px solid #334155;
             }}
-            #mc #diagram-view {{ margin-top:36px; background:#e8edf5; border-radius:8px; padding:12px; }}
+            #mc #diagram-view {{ margin-top:36px; background:#1e293b; border-radius:8px; padding:12px; }}
         </style>
         <div id="mc">
             <div class="toggle-bar">
