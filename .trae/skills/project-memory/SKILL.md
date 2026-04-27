@@ -35,35 +35,36 @@ When a new session starts, follow this ordered reading sequence:
 
 ### Tier 1: Essential (always read first)
 
-| Order | File | Purpose |
-|-------|------|---------|
+| Order | File/Command | Purpose |
+|-------|--------------|---------|
 | 1 | `CLAUDE.md` | Project identity, current version, dev conventions, active rules |
-| 2 | `docs/backlog.md` statistics table | Issue backlog health — pending/completed/deferred counts |
-| 3 | `TODO.md` "My Backlog" section | Human's latest unstructured intent and notes |
+| 2 | `.issues/context.md` or `pixi run issue context` | Current focused issues — what's in progress |
+| 3 | `pixi run issue summary` | Issue backlog health — pending/completed/deferred counts |
+| 4 | `TODO.md` "My Backlog" section | Human's latest unstructured intent and notes |
 
 ### Tier 2: Contextual (read based on task)
 
 | Order | File | Purpose |
 |-------|------|---------|
-| 4 | `docs/version-history.md` | Version evolution timeline — understand how we got here |
-| 5 | `docs/inbox/` | Check for unprocessed incoming documents |
-| 6 | `docs/reviews/vX.X.X/` | Latest version's acceptance report and known issues |
+| 5 | `docs/version-history.md` | Version evolution timeline — understand how we got here |
+| 6 | `docs/inbox/` | Check for unprocessed incoming documents |
+| 7 | `docs/reviews/vX.X.X/` | Latest version's acceptance report and known issues |
 
 ### Tier 3: Deep Dive (read when working on specific areas)
 
 | Order | File | Purpose |
 |-------|------|---------|
-| 7 | `docs/guides/operations/<topic>.md` | Detailed feature documentation |
-| 8 | `docs/guides/development/<topic>.md` | Development workflow guides |
-| 9 | `docs/architecture.md` | System architecture overview |
-| 10 | `docs/config-reference.md` | Configuration parameter reference |
+| 8 | `docs/guides/operations/<topic>.md` | Detailed feature documentation |
+| 9 | `docs/guides/development/<topic>.md` | Development workflow guides |
+| 10 | `docs/architecture.md` | System architecture overview |
+| 11 | `docs/config-reference.md` | Configuration parameter reference |
 
 ### Reading Anti-Patterns
 
 - ❌ Starting to code without reading CLAUDE.md first
 - ❌ Reading only code and ignoring docs when investigating an issue
 - ❌ Assuming you understand the project from the task description alone
-- ❌ Skipping the backlog when planning work — you may duplicate or conflict with existing issues
+- ❌ Skipping issue context when planning work — you may duplicate or conflict with existing issues
 
 ## Writing Memory: Session Output Checklist
 
@@ -83,9 +84,9 @@ Before ending a session (or after completing a logical work unit), ensure:
 
 | Discovery Type | Memory Action |
 |----------------|---------------|
-| New bug/feature idea | Archive to `docs/backlog.md` (use `todo-archiver` skill) |
-| Code review finding | Add to backlog with source reference |
-| Deferred work | Mark in backlog with reason and conditions for resuming |
+| New bug/feature idea | Archive to `.issues/` via `pixi run issue create` (use `todo-archiver` skill) |
+| Code review finding | Create issue with source reference |
+| Deferred work | Use `pixi run issue defer <id>` |
 
 ### Decision Documentation
 
@@ -93,14 +94,14 @@ Before ending a session (or after completing a logical work unit), ensure:
 |---------------|---------------|
 | Architecture choice | Record in relevant guide: options considered, choice made, rationale |
 | Technology selection | Record in guide: alternatives, trade-offs, why this one |
-| Scope change | Update backlog + version direction doc |
+| Scope change | Update issue context + version direction doc |
 
 ### Progress Preservation
 
 | Situation | Memory Action |
 |-----------|---------------|
-| Incomplete work | Leave progress note in TODO.md or backlog.md with current state |
-| Blocked task | Document blocker in backlog + what's needed to unblock |
+| Incomplete work | Leave progress note in TODO.md or issue body with current state |
+| Blocked task | Document blocker in issue + what's needed to unblock |
 | Partial implementation | Document what's done, what's remaining, and any gotchas |
 
 ## Cross-Session Relay Principles
@@ -135,20 +136,69 @@ Before ending a session (or after completing a logical work unit), ensure:
 │  │    skill      │  │  enforcer    │  │  mechanism   │  │
 │  │              │  │    skill     │  │              │  │
 │  │ Issue CRUD   │  │ Atomic       │  │ External     │  │
-│  │ TODO↔backlog │  │ commits      │  │ info ingest  │  │
+│  │ TODO→.issues │  │ commits      │  │ info ingest  │  │
 │  └──────────────┘  └──────────────┘  └──────────────┘  │
 │                                                          │
 │  ┌──────────────────────────────────────────────────┐   │
 │  │           Evolution Ring (年轮) System            │   │
-│  │  version-history.md + reviews/vX.X.X/ + backlog  │   │
+│  │  version-history.md + reviews/vX.X.X/ + .issues  │   │
 │  └──────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────┘
 ```
 
-- **todo-archiver skill**: Manages issue lifecycle (TODO → backlog → completion sync)
+- **todo-archiver skill**: Manages issue lifecycle (TODO → .issues/ → completion sync)
 - **auto-commit-enforcer skill**: Ensures atomic commits that preserve history
 - **inbox mechanism**: External information ingestion pipeline
 - **Evolution Ring system**: Version-level documentation (reviews, outcomes, directions)
+
+## Issue System Quick Reference
+
+### CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `pixi run issue create -t <type> -T "<title>"` | Create new issue |
+| `pixi run issue list` | List active issues |
+| `pixi run issue list --all` | List all issues (including completed) |
+| `pixi run issue show <id>` | Show issue details |
+| `pixi run issue start <id>` | Mark issue as in_progress |
+| `pixi run issue done <id>` | Mark issue as done |
+| `pixi run issue summary` | Generate statistics summary |
+| `pixi run issue context` | Show focused issues |
+
+### Issue Types
+
+| Type | Description |
+|------|-------------|
+| `bug` | Something broken or incorrect |
+| `feat` | New feature |
+| `rf` | Refactoring |
+| `opt` | Performance optimization |
+| `inv` | Investigation/research |
+| `test` | Test-related work |
+
+### Issue Status Flow
+
+```
+todo → in_progress → review → done
+  ↓         ↓          ↓
+  └─────────┴──────────┴──→ deferred
+                              ↓
+                           cancelled
+```
+
+### Directory Structure
+
+```
+.issues/
+├── active/           # todo, in_progress, review status
+├── completed/        # done status (organized by YYYY-MM/)
+├── deferred/         # deferred status
+├── cancelled/        # cancelled status
+├── context.md        # current focused issues
+├── config.yml        # worktree mappings
+└── sequences/        # ID sequence counters
+```
 
 ## When to Invoke This Skill
 
