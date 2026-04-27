@@ -235,5 +235,337 @@ def name(ctx: click.Context, wt_id: str, name: str) -> None:
     click.echo(f"Set name for {wt_id}: {name}")
 
 
+@cli.command()
+@click.option(
+    "--type",
+    "-t",
+    "issue_type",
+    type=click.Choice(
+        ["bug", "feat", "rf", "opt", "inv", "test"], case_sensitive=False
+    ),
+    required=True,
+    help="Issue type (bug/feat/rf/opt/inv/test)",
+)
+@click.option("--title", "-T", required=True, help="Issue title")
+@click.option(
+    "--priority",
+    "-p",
+    type=click.Choice(["high", "medium", "low"], case_sensitive=False),
+    default="medium",
+    help="Issue priority (default: medium)",
+)
+@click.option("--labels", "-l", help="Comma-separated labels")
+@click.option("--milestone", "-m", help="Target milestone")
+@click.option("--source", "-s", help="Source file path")
+@click.pass_context
+def create(
+    ctx: click.Context,
+    issue_type: str,
+    title: str,
+    priority: str,
+    labels: str | None,
+    milestone: str | None,
+    source: str | None,
+) -> None:
+    """Create a new issue.
+
+    Creates an issue file in .issues/active/ with auto-generated ID and template.
+
+    Example:
+        pixi run issue create --type bug --title "Fix login error"
+        pixi run issue create -t feat -T "Add dark mode" -p high -l "ui,urgent"
+    """
+    from pathlib import Path
+
+    from src.issue.manager import IssueManager
+    from src.issue.models import IssuePriority, IssueType
+
+    type_map = {
+        "bug": IssueType.BUG,
+        "feat": IssueType.FEAT,
+        "rf": IssueType.RF,
+        "opt": IssueType.OPT,
+        "inv": IssueType.INV,
+        "test": IssueType.TEST,
+    }
+
+    priority_map = {
+        "high": IssuePriority.HIGH,
+        "medium": IssuePriority.MEDIUM,
+        "low": IssuePriority.LOW,
+    }
+
+    parsed_type = type_map[issue_type.lower()]
+    parsed_priority = priority_map[priority.lower()]
+
+    parsed_labels: list[str] = []
+    if labels:
+        parsed_labels = [label.strip() for label in labels.split(",") if label.strip()]
+
+    manager = IssueManager(issues_dir=Path(".issues"))
+
+    try:
+        issue = manager.create_issue(
+            type=parsed_type,
+            title=title,
+            priority=parsed_priority,
+            labels=parsed_labels,
+            milestone=milestone,
+            source=source,
+        )
+
+        click.echo(click.style("✓ Issue created successfully!", fg="green", bold=True))
+        click.echo(f"  ID: {issue.id}")
+        click.echo(f"  Title: {issue.title}")
+        click.echo(f"  Type: {issue.type.value}")
+        click.echo(f"  Priority: {issue.priority.value}")
+        click.echo(f"  Status: {issue.status.value}")
+        if issue.labels:
+            click.echo(f"  Labels: {', '.join(issue.labels)}")
+        if issue.milestone:
+            click.echo(f"  Milestone: {issue.milestone}")
+        click.echo(
+            f"  File: .issues/active/{issue.id}-{title.lower().replace(' ', '-')[:30]}.md"
+        )
+
+    except ValueError as e:
+        click.echo(click.style(f"Error: {e}", fg="red"), err=True)
+        raise SystemExit(1) from None
+    except OSError as e:
+        click.echo(click.style(f"Failed to create issue: {e}", fg="red"), err=True)
+        raise SystemExit(1) from None
+
+
+@cli.command("show")
+@click.argument("issue_id")
+@click.pass_context
+def show_issue(ctx: click.Context, issue_id: str) -> None:
+    """Show details of a specific issue.
+
+    ISSUE_ID can be a full ID (e.g., BUG-20260428-001-wt1) or partial ID
+    (e.g., BUG-20260428 or 001-wt1). Displays full YAML front matter and body.
+
+    Example:
+        pixi run issue show BUG-20260428-001-wt1
+        pixi run issue show BUG-20260428
+        pixi run issue show 001-wt1
+    """
+    from pathlib import Path
+
+    from src.issue.manager import IssueManager
+
+    manager = IssueManager(issues_dir=Path(".issues"))
+
+    try:
+        issue = manager.load_issue(issue_id)
+
+        click.echo(click.style(f"Issue: {issue.id}", fg="cyan", bold=True))
+        click.echo(click.style("=" * 60, fg="cyan"))
+        click.echo()
+        click.echo(click.style("YAML Front Matter:", fg="yellow", bold=True))
+        click.echo(click.style("---", fg="yellow"))
+        click.echo(f"id: {issue.id}")
+        click.echo(f"title: {issue.title}")
+        click.echo(f"type: {issue.type.value}")
+        click.echo(f"status: {issue.status.value}")
+        click.echo(f"priority: {issue.priority.value}")
+        if issue.labels:
+            click.echo(f"labels: {issue.labels}")
+        else:
+            click.echo("labels: []")
+        click.echo(f"assignee: {issue.assignee or '-'}")
+        click.echo(f"milestone: {issue.milestone or '-'}")
+        click.echo(f"created_at: {issue.created_at.isoformat()}")
+        click.echo(f"updated_at: {issue.updated_at.isoformat()}")
+        click.echo(f"source: {issue.source or '-'}")
+        click.echo(f"legacy_id: {issue.legacy_id or '-'}")
+        click.echo(click.style("---", fg="yellow"))
+        click.echo()
+        click.echo(click.style("Body:", fg="yellow", bold=True))
+        click.echo(issue.body if issue.body else "(empty)")
+
+    except FileNotFoundError:
+        click.echo(
+            click.style(f"Error: Issue '{issue_id}' not found", fg="red"), err=True
+        )
+        raise SystemExit(1) from None
+    except ValueError as e:
+        click.echo(click.style(f"Error: {e}", fg="red"), err=True)
+        raise SystemExit(1) from None
+
+
+@cli.command("list")
+@click.option(
+    "--status",
+    "-s",
+    "status_filter",
+    type=click.Choice(
+        ["todo", "in_progress", "review", "done", "deferred", "cancelled"],
+        case_sensitive=False,
+    ),
+    help="Filter by status",
+)
+@click.option(
+    "--type",
+    "-t",
+    "type_filter",
+    type=click.Choice(
+        ["bug", "feat", "rf", "opt", "inv", "test"], case_sensitive=False
+    ),
+    help="Filter by type",
+)
+@click.option(
+    "--priority",
+    "-p",
+    "priority_filter",
+    type=click.Choice(["high", "medium", "low"], case_sensitive=False),
+    help="Filter by priority",
+)
+@click.option(
+    "--labels",
+    "-l",
+    "labels_filter",
+    help="Filter by labels (comma-separated, AND logic)",
+)
+@click.option(
+    "--all",
+    "-a",
+    "all_dirs",
+    is_flag=True,
+    help="Include issues from all directories (active, completed, deferred, cancelled)",
+)
+@click.pass_context
+def list_issues(
+    ctx: click.Context,
+    status_filter: str | None,
+    type_filter: str | None,
+    priority_filter: str | None,
+    labels_filter: str | None,
+    all_dirs: bool,
+) -> None:
+    """List issues in table format.
+
+    By default, shows only active issues. Use --all to include completed,
+    deferred, and cancelled issues.
+
+    Example:
+        pixi run issue list
+        pixi run issue list --all
+        pixi run issue list --status in_progress
+        pixi run issue list --type bug --priority high
+        pixi run issue list --labels "ui,urgent"
+    """
+    from pathlib import Path
+
+    from src.issue.manager import IssueManager
+    from src.issue.models import IssuePriority, IssueStatus, IssueType
+
+    type_map = {
+        "bug": IssueType.BUG,
+        "feat": IssueType.FEAT,
+        "rf": IssueType.RF,
+        "opt": IssueType.OPT,
+        "inv": IssueType.INV,
+        "test": IssueType.TEST,
+    }
+
+    priority_map = {
+        "high": IssuePriority.HIGH,
+        "medium": IssuePriority.MEDIUM,
+        "low": IssuePriority.LOW,
+    }
+
+    status_map = {
+        "todo": IssueStatus.TODO,
+        "in_progress": IssueStatus.IN_PROGRESS,
+        "review": IssueStatus.REVIEW,
+        "done": IssueStatus.DONE,
+        "deferred": IssueStatus.DEFERRED,
+        "cancelled": IssueStatus.CANCELLED,
+    }
+
+    parsed_status = status_map[status_filter.lower()] if status_filter else None
+    parsed_type = type_map[type_filter.lower()] if type_filter else None
+    parsed_priority = priority_map[priority_filter.lower()] if priority_filter else None
+
+    parsed_labels: list[str] | None = None
+    if labels_filter:
+        parsed_labels = [
+            label.strip() for label in labels_filter.split(",") if label.strip()
+        ]
+
+    manager = IssueManager(issues_dir=Path(".issues"))
+
+    issues = manager.list_issues(
+        status=parsed_status,
+        type=parsed_type,
+        priority=parsed_priority,
+        labels=parsed_labels,
+        all=all_dirs,
+    )
+
+    if not issues:
+        click.echo("No issues found.")
+        return
+
+    col_id_width = 22
+    col_type_width = 6
+    col_status_width = 12
+    col_priority_width = 8
+    col_title_max = 40
+
+    header = (
+        f"{'ID':<{col_id_width}}  "
+        f"{'Type':<{col_type_width}}  "
+        f"{'Status':<{col_status_width}}  "
+        f"{'Priority':<{col_priority_width}}  "
+        f"Title"
+    )
+    click.echo(click.style(header, bold=True))
+    click.echo(
+        "-"
+        * (col_id_width + col_type_width + col_status_width + col_priority_width + 42)
+    )
+
+    for issue in issues:
+        title = issue.title
+        if len(title) > col_title_max:
+            title = title[: col_title_max - 3] + "..."
+
+        id_str = issue.id
+        if len(id_str) > col_id_width:
+            id_str = id_str[: col_id_width - 3] + "..."
+
+        status_str = issue.status.value
+        priority_str = issue.priority.value
+        type_str = issue.type.value
+
+        priority_color = {
+            "high": "red",
+            "medium": "yellow",
+            "low": "green",
+        }.get(priority_str, "white")
+
+        status_color = {
+            "todo": "white",
+            "in_progress": "blue",
+            "review": "magenta",
+            "done": "green",
+            "deferred": "yellow",
+            "cancelled": "dim",
+        }.get(status_str, "white")
+
+        click.echo(
+            f"{id_str:<{col_id_width}}  "
+            f"{type_str:<{col_type_width}}  "
+            f"{click.style(status_str, fg=status_color):<{col_status_width}}  "
+            f"{click.style(priority_str, fg=priority_color):<{col_priority_width}}  "
+            f"{title}"
+        )
+
+    click.echo()
+    click.echo(f"Total: {len(issues)} issue(s)")
+
+
 if __name__ == "__main__":
     cli()
