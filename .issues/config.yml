@@ -1,22 +1,18 @@
-# .issues/config.yml（只有一份，在 main worktree 维护，通过 git 同步）
-# 基于路径映射自动识别 wt_id，避免多 worktree 的 config.yml 冲突
-
+version: '1.0'
 worktree_mapping:
-  "w1-easy-rag": wt1
-
+  w1-easy-rag: wt1
 worktree_names:
   wt1: main-dev
-
-# 汇总表配置
 summary:
-  auto_generate: false              # 是否在 issue 变更时自动生成
-  output_file: _summary.md          # 输出文件名
-
-# 状态流转规则
+  auto_generate: false
+  output_file: _summary.md
+  max_length: 80
+  include_labels: true
+  include_milestone: true
 status_flow:
-  - todo
-  - in_progress
-  - review
-  - done
-  - deferred
-  - cancelled
+- todo
+- in_progress
+- review
+- done
+- deferred
+- cancelled
