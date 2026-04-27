@@ -1168,8 +1168,8 @@ class TestMergeMeals:
         self._save_meal(manager, meal_b)
 
         with (
-            patch("src.meal.build_index_from_chunks") as mock_build_index,
-            patch("src.meal.build_chunks_if_needed"),
+            patch("src.meal.manager.build_index_from_chunks") as mock_build_index,
+            patch("src.meal.manager.build_chunks_if_needed"),
             patch("src.sampler.count_pdf_pages", return_value=10),
         ):
             mock_build_index.return_value = MagicMock()
@@ -1212,8 +1212,8 @@ class TestMergeMeals:
         self._save_meal(manager, meal_b)
 
         with (
-            patch("src.meal.build_index_from_chunks") as mock_build_index,
-            patch("src.meal.build_chunks_if_needed"),
+            patch("src.meal.manager.build_index_from_chunks") as mock_build_index,
+            patch("src.meal.manager.build_chunks_if_needed"),
             patch("src.sampler.count_pdf_pages", return_value=10),
         ):
             mock_build_index.return_value = MagicMock()
@@ -1255,8 +1255,8 @@ class TestMergeMeals:
         self._save_meal(manager, meal_b)
 
         with (
-            patch("src.meal.build_index_from_chunks") as mock_build_index,
-            patch("src.meal.build_chunks_if_needed"),
+            patch("src.meal.manager.build_index_from_chunks") as mock_build_index,
+            patch("src.meal.manager.build_chunks_if_needed"),
             patch("src.sampler.count_pdf_pages", return_value=10),
         ):
             mock_build_index.return_value = MagicMock()
@@ -1287,8 +1287,8 @@ class TestMergeMeals:
         self._save_meal(manager, meal_a)
 
         with (
-            patch("src.meal.build_index_from_chunks") as mock_build_index,
-            patch("src.meal.build_chunks_if_needed"),
+            patch("src.meal.manager.build_index_from_chunks") as mock_build_index,
+            patch("src.meal.manager.build_chunks_if_needed"),
             patch("src.sampler.count_pdf_pages", return_value=10),
         ):
             mock_build_index.return_value = MagicMock()
@@ -1314,8 +1314,8 @@ class TestMergeMeals:
         self._save_meal(manager, meal_a)
 
         with (
-            patch("src.meal.build_index_from_chunks") as mock_build_index,
-            patch("src.meal.build_chunks_if_needed"),
+            patch("src.meal.manager.build_index_from_chunks") as mock_build_index,
+            patch("src.meal.manager.build_chunks_if_needed"),
             patch("src.sampler.count_pdf_pages", return_value=10),
         ):
             mock_build_index.return_value = MagicMock()
@@ -1474,8 +1474,8 @@ class TestExtendMeal:
 
         with (
             patch.object(manager, "_parse_pdfs_with_registry") as mock_parse,
-            patch("src.meal.build_chunks_if_needed") as mock_chunk,
-            patch("src.meal.build_index_from_chunks") as mock_index,
+            patch("src.meal.manager.build_chunks_if_needed") as mock_chunk,
+            patch("src.meal.manager.build_index_from_chunks") as mock_index,
         ):
             result = manager.extend_meal(
                 "source_meal", ["reports/report_1.pdf"], name="extended_meal"
@@ -1514,8 +1514,8 @@ class TestExtendMeal:
 
         with (
             patch.object(manager, "_parse_pdfs_with_registry") as mock_parse,
-            patch("src.meal.build_chunks_if_needed"),
-            patch("src.meal.build_index_from_chunks"),
+            patch("src.meal.manager.build_chunks_if_needed"),
+            patch("src.meal.manager.build_index_from_chunks"),
         ):
             result = manager.extend_meal(
                 "source_meal",
@@ -1551,8 +1551,8 @@ class TestExtendMeal:
 
         with (
             patch.object(manager, "_parse_pdfs_with_registry"),
-            patch("src.meal.build_chunks_if_needed"),
-            patch("src.meal.build_index_from_chunks"),
+            patch("src.meal.manager.build_chunks_if_needed"),
+            patch("src.meal.manager.build_index_from_chunks"),
         ):
             result = manager.extend_meal(
                 "source_meal", ["reports/report_1.pdf"], name="extended_meal"
@@ -1601,8 +1601,8 @@ class TestExtendMeal:
 
         with (
             patch.object(manager, "_parse_pdfs_with_registry"),
-            patch("src.meal.build_chunks_if_needed"),
-            patch("src.meal.build_index_from_chunks"),
+            patch("src.meal.manager.build_chunks_if_needed"),
+            patch("src.meal.manager.build_index_from_chunks"),
         ):
             result = manager.extend_meal(
                 "source_meal", ["reports/report_1.pdf"], name="extended_meal"
@@ -1638,8 +1638,8 @@ class TestExtendMeal:
 
         with (
             patch.object(manager, "_parse_pdfs_with_registry"),
-            patch("src.meal.build_chunks_if_needed"),
-            patch("src.meal.build_index_from_chunks"),
+            patch("src.meal.manager.build_chunks_if_needed"),
+            patch("src.meal.manager.build_index_from_chunks"),
         ):
             result = manager.extend_meal(
                 "source_meal", [pdf_path_1], name="extended_meal"
@@ -1671,8 +1671,8 @@ class TestExtendMeal:
 
         with (
             patch.object(manager, "_parse_pdfs_with_registry"),
-            patch("src.meal.build_chunks_if_needed"),
-            patch("src.meal.build_index_from_chunks"),
+            patch("src.meal.manager.build_chunks_if_needed"),
+            patch("src.meal.manager.build_index_from_chunks"),
         ):
             result = manager.extend_meal(
                 "source_meal", [P("reports/report_1.pdf")], name="extended_meal"
@@ -1702,8 +1702,8 @@ class TestExtendMeal:
 
         with (
             patch.object(manager, "_parse_pdfs_with_registry"),
-            patch("src.meal.build_chunks_if_needed"),
-            patch("src.meal.build_index_from_chunks"),
+            patch("src.meal.manager.build_chunks_if_needed"),
+            patch("src.meal.manager.build_index_from_chunks"),
         ):
             result = manager.extend_meal("source_meal", ["reports/report_1.pdf"])
 
