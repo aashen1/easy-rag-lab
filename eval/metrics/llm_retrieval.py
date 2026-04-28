@@ -4,31 +4,19 @@ from typing import Any
 
 from loguru import logger
 
-from eval.metrics.utils import _create_llm_client
+from eval.metrics.utils import (
+    DEFAULT_EVAL_BASE_CONFIG,
+    _create_llm_client,
+    get_eval_config,
+)
 
 DEFAULT_EVAL_CONFIG = {
-    "model_name": "LongCat-Flash-Lite",
-    "base_url": "https://api.longcat.chat/anthropic",
+    **DEFAULT_EVAL_BASE_CONFIG,
     "context_precision": {"temperature": 0.0, "max_tokens": 256},
     "context_recall": {"temperature": 0.0, "max_tokens": 256},
     "context_relevance": {"temperature": 0.0, "max_tokens": 256},
     "infer_check": {"temperature": 0.0, "max_tokens": 64},
 }
-
-
-def _get_eval_config(config: dict[str, Any] = None) -> dict[str, Any]:
-    """Get LLM evaluator config, merging with defaults.
-
-    Args:
-        config: Optional config dict with 'llm_evaluator' section.
-
-    Returns:
-        Merged config dict.
-    """
-    merged = dict(DEFAULT_EVAL_CONFIG)
-    if config and "llm_evaluator" in config:
-        merged.update(config["llm_evaluator"])
-    return merged
 
 
 CONTEXT_PRECISION_PROMPT = """你是一个专业的信息检索评估专家。请判断以下检索到的上下文是否与问题相关。
@@ -173,10 +161,12 @@ def calculate_context_precision(
         logger.warning("Empty retrieval context for context precision calculation")
         return 0.0
 
-    eval_cfg = _get_eval_config(config)
-    base_url = base_url or eval_cfg.get("base_url", DEFAULT_EVAL_CONFIG["base_url"])
+    eval_cfg = get_eval_config(config, DEFAULT_EVAL_CONFIG)
+    base_url = base_url or eval_cfg.get(
+        "base_url", DEFAULT_EVAL_BASE_CONFIG["base_url"]
+    )
     model_name = model_name or eval_cfg.get(
-        "model_name", DEFAULT_EVAL_CONFIG["model_name"]
+        "model_name", DEFAULT_EVAL_BASE_CONFIG["model_name"]
     )
 
     relevance_verdicts = []
@@ -340,10 +330,12 @@ def calculate_context_recall(
         logger.warning("Empty retrieval context for context recall calculation")
         return 0.0
 
-    eval_cfg = _get_eval_config(config)
-    base_url = base_url or eval_cfg.get("base_url", DEFAULT_EVAL_CONFIG["base_url"])
+    eval_cfg = get_eval_config(config, DEFAULT_EVAL_CONFIG)
+    base_url = base_url or eval_cfg.get(
+        "base_url", DEFAULT_EVAL_BASE_CONFIG["base_url"]
+    )
     model_name = model_name or eval_cfg.get(
-        "model_name", DEFAULT_EVAL_CONFIG["model_name"]
+        "model_name", DEFAULT_EVAL_BASE_CONFIG["model_name"]
     )
 
     sentences = _split_into_sentences(ground_truth)

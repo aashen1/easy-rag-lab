@@ -1,6 +1,34 @@
 from pathlib import Path
 from typing import Any
 
+DEFAULT_EVAL_BASE_CONFIG = {
+    "model_name": "LongCat-Flash-Lite",
+    "base_url": "https://api.longcat.chat/anthropic",
+}
+
+
+def get_eval_config(user_config: dict | None, default_config: dict) -> dict:
+    """Get LLM evaluator config, merging user config into defaults.
+
+    Merges in order: DEFAULT_EVAL_BASE_CONFIG → default_config →
+    user_config["llm_evaluator"].  This ensures that model_name and
+    base_url always fall back to DEFAULT_EVAL_BASE_CONFIG values when
+    not overridden.
+
+    Args:
+        user_config: Optional config dict that may contain an
+            'llm_evaluator' section.
+        default_config: Domain-specific default config dict (e.g.
+            generation or retrieval sub-configs).
+
+    Returns:
+        Merged config dict.
+    """
+    merged = {**DEFAULT_EVAL_BASE_CONFIG, **default_config}
+    if user_config and "llm_evaluator" in user_config:
+        merged.update(user_config["llm_evaluator"])
+    return merged
+
 
 def normalize_source(source: str, include_parent: bool = False) -> str:
     """Normalize source path to a comparable form.

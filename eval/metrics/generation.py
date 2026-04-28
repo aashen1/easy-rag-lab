@@ -5,32 +5,20 @@ from typing import Any
 from anthropic import Anthropic
 from loguru import logger
 
-from eval.metrics.utils import _create_llm_client
+from eval.metrics.utils import (
+    DEFAULT_EVAL_BASE_CONFIG,
+    _create_llm_client,
+    get_eval_config,
+)
 from src.exceptions import EvaluationError
 
 DEFAULT_EVAL_CONFIG = {
-    "model_name": "LongCat-Flash-Lite",
-    "base_url": "https://api.longcat.chat/anthropic",
+    **DEFAULT_EVAL_BASE_CONFIG,
     "extract_statements": {"temperature": 0.0, "max_tokens": 1024},
     "verify_statements": {"temperature": 0.0, "max_tokens": 1024},
     "faithfulness": {"temperature": 0.0, "max_tokens": 512},
     "answer_relevancy": {"temperature": 0.0, "max_tokens": 512},
 }
-
-
-def _get_eval_config(config: dict[str, Any] = None) -> dict[str, Any]:
-    """Get LLM evaluator config, merging with defaults.
-
-    Args:
-        config: Optional config dict with 'llm_evaluator' section.
-
-    Returns:
-        Merged config dict.
-    """
-    merged = dict(DEFAULT_EVAL_CONFIG)
-    if config and "llm_evaluator" in config:
-        merged.update(config["llm_evaluator"])
-    return merged
 
 
 FAITHFULNESS_STATEMENT_PROMPT = """请分析以下回答，提取其中的所有事实陈述（statements）。
@@ -313,10 +301,12 @@ def calculate_faithfulness(
         logger.warning("Answer is empty after stripping whitespace")
         return 0.0
 
-    eval_cfg = _get_eval_config(config)
-    base_url = base_url or eval_cfg.get("base_url", DEFAULT_EVAL_CONFIG["base_url"])
+    eval_cfg = get_eval_config(config, DEFAULT_EVAL_CONFIG)
+    base_url = base_url or eval_cfg.get(
+        "base_url", DEFAULT_EVAL_BASE_CONFIG["base_url"]
+    )
     model_name = model_name or eval_cfg.get(
-        "model_name", DEFAULT_EVAL_CONFIG["model_name"]
+        "model_name", DEFAULT_EVAL_BASE_CONFIG["model_name"]
     )
 
     extract_cfg = eval_cfg.get(
@@ -458,10 +448,12 @@ def calculate_answer_relevancy(
     if not answer or not isinstance(answer, str):
         raise EvaluationError("Answer must be a non-empty string")
 
-    eval_cfg = _get_eval_config(config)
-    base_url = base_url or eval_cfg.get("base_url", DEFAULT_EVAL_CONFIG["base_url"])
+    eval_cfg = get_eval_config(config, DEFAULT_EVAL_CONFIG)
+    base_url = base_url or eval_cfg.get(
+        "base_url", DEFAULT_EVAL_BASE_CONFIG["base_url"]
+    )
     model_name = model_name or eval_cfg.get(
-        "model_name", DEFAULT_EVAL_CONFIG["model_name"]
+        "model_name", DEFAULT_EVAL_BASE_CONFIG["model_name"]
     )
     relevancy_cfg = eval_cfg.get(
         "answer_relevancy", DEFAULT_EVAL_CONFIG["answer_relevancy"]
