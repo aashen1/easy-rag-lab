@@ -1,61 +1,59 @@
 # 文档导航索引
 
-> 最后更新: 2026-04-27
+> 最后更新: 2026-04-29
 
 本文档是项目文档的唯一入口，提供全局导航。
 
 ---
 
-## 快速导航
+## 三通道导航
 
-### 新用户
+### 👤 用户通道
+
+面向普通用户，使用系统功能：
 
 1. [快速上手](getting-started.md) — 5 分钟内跑通系统
-2. [系统架构](architecture.md) — 了解系统整体设计
-3. [CLI 参考](cli-reference.md) — 命令行使用指南
+2. [CLI 参考](user-guides/cli-reference.md) — 命令行使用指南
+3. [配置参考](user-guides/config-reference.md) — config.yaml 完整说明
 
-### 开发者
+**功能指南**：
 
-1. [版本演进年轮](version-history.md) — 项目版本迭代历程
-2. [待做事项](../.issues/) — 运行 `pixi run issue list` 查看
-3. [抛接球年轮方法论](methodology.md) — AI 时代的版本演进管理方法论
-4. [配置参考](config-reference.md) — config.yaml 完整说明
+- [Streamlit Web Demo](user-guides/streamlit-web-demo.md)
+- [Meal 数据管理系统](user-guides/meal-system.md)
+- [实验评测系统](user-guides/experiment-system.md)
+- [PDF 解析指南](user-guides/pdf-parsing.md)
+- [文档级问题生成](user-guides/question-generation.md)
+- [评测指标详解](user-guides/evaluation-metrics.md)
+- [RAGAS 评测系统](user-guides/ragas-evaluation.md)
+- [Token 追踪](user-guides/token-tracking.md)
+- [Issue 管理系统](user-guides/issue-system.md)
+- [RAG 泛超参数使用指南](user-guides/hyperparameter-guide.md)
+- [测试集管理](user-guides/test-set-management.md)
+- [Golden Testset 生成](user-guides/golden-testset-generation.md)
+- [Golden Test 审查](user-guides/golden-test-review.md)
 
-### 使用指南
+### 🔧 开发者通道
 
-- [Streamlit Web Demo](guides/operations/streamlit-web-demo.md)
-- [Meal 数据管理系统](guides/operations/meal-system.md)
-- [实验评测系统](guides/operations/experiment-system.md)
-- [PDF 解析指南](guides/operations/pdf-parsing.md)
-- [文档级问题生成](guides/operations/question-generation.md)
-- [评测指标详解](guides/operations/evaluation-metrics.md)
-- [RAGAS 评测系统](guides/operations/ragas-evaluation.md)
-- [Token 追踪](guides/operations/token-tracking.md)
-- [Issue 管理系统](guides/operations/issue-system.md)
-- [RAG 泛超参数使用指南](guides/operations/hyperparameter-guide.md)
-- [RAG 优化实现与测试保障](guides/operations/rag-optimization-implementation.md)
-- [测试集管理](guides/operations/test-set-management.md)
-- [Golden Testset 生成](guides/operations/golden-testset-generation.md)
-- [Artifact 路径迁移](guides/operations/artifact-path-migration.md)
+面向开发人员，了解技术实现：
 
-### 开发指南
+1. [系统架构](dev-guides/architecture.md) — 系统整体设计
+2. [测试运行指南](dev-guides/testing.md) — 测试策略与运行
+3. [RAG 优化实现与测试保障](dev-guides/rag-optimization-implementation.md) — 优化实现细节
+4. [性能分析配置](dev-guides/profiling-configuration.md) — 性能调优
+5. [Lint 与 pre-commit](dev-guides/lint-and-precommit.md) — 代码规范
+6. [Commit 规范](dev-guides/commit-conventions.md) — 提交规范
+7. [Ruff 使用指南](dev-guides/ruff-usage-guide.md) — Ruff 实操手册
+8. [发版节奏](dev-guides/release-cadence.md) — 版本节奏与流程
+9. [测试分层与时间预算](dev-guides/test-layering-and-time-budgets.md) — 测试架构
 
-- [测试运行指南](guides/development/testing.md)
-- [Lint 与 pre-commit](guides/development/lint-and-precommit.md)
-- [Commit 规范](guides/development/commit-conventions.md)
-- [Issue 系统开发手记](guides/development/issue-system-dev-notes.md)
+### 🏛️ 项目博物馆
 
-### 故障排查
+面向项目历史爱好者和面试官：
 
-- [评测指标 Bug 修复](troubleshooting/eval-metrics-bugfix.md)
-- [评测系统验收修复](troubleshooting/eval-system-acceptance-fix.md)
-- [Irrelevant 问题指标修复](troubleshooting/irrelevant-question-metrics-fix.md)
-- [缓存分析](troubleshooting/cache-analysis.md)
-
-### 已解决问题归档
-
-- [pytest tmp 目录 FileExistsError](troubleshooting/resolved/pytest-basetemp-fileexistserror.md)
-- [幽灵文件夹问题](troubleshooting/resolved/ghost-folder-mkdir.md)
+1. [时间线导览](.archive/timeline.md) — 按版本浏览项目演进（推荐入口）
+2. [版本演进年轮](version-history.md) — 项目版本迭代历程
+3. [开发随笔](dev-story.md) — 开发者的人文叙事
+4. [抛接球年轮方法论](methodology.md) — AI 时代的版本演进管理方法论
 
 ---
 
@@ -63,100 +61,55 @@
 
 ```
 docs/
-├── README.md                  # 本文档（导航索引）
-├── version-history.md         # 版本演进年轮
-├── methodology.md             # 抛接球年轮方法论
-├── inbox-log.md               # 收件箱处理日志
+├── README.md                    # 本文档（导航索引）
+├── getting-started.md           # 快速上手
+├── version-history.md           # 版本演进年轮
+├── methodology.md               # 抛接球年轮方法论
+├── dev-story.md                 # 开发随笔
 │
-├── getting-started.md         # 快速上手
-├── architecture.md            # 系统架构
-├── cli-reference.md           # CLI 参考
-├── config-reference.md        # 配置参考
+├── user-guides/                 # 👤 用户指南
+│   ├── cli-reference.md
+│   ├── config-reference.md
+│   ├── streamlit-web-demo.md
+│   ├── meal-system.md
+│   ├── experiment-system.md
+│   ├── pdf-parsing.md
+│   ├── question-generation.md
+│   ├── evaluation-metrics.md
+│   ├── ragas-evaluation.md
+│   ├── token-tracking.md
+│   ├── issue-system.md
+│   ├── hyperparameter-guide.md
+│   ├── test-set-management.md
+│   ├── golden-testset-generation.md
+│   └── golden-test-review.md
 │
-├── guides/                    # 使用与开发指南
-│   ├── operations/            # 系统运维与使用指南
-│   │   ├── streamlit-web-demo.md
-│   │   ├── meal-system.md
-│   │   ├── experiment-system.md
-│   │   ├── question-generation.md
-│   │   ├── evaluation-metrics.md
-│   │   ├── ragas-evaluation.md
-│   │   ├── token-tracking.md
-│   │   ├── issue-system.md
-│   │   ├── hyperparameter-guide.md
-│   │   ├── rag-optimization-implementation.md
-│   │   ├── test-set-management.md
-│   │   ├── golden-testset-generation.md
-│   │   ├── pdf-parsing.md
-│   │   └── artifact-path-migration.md
-│   └── development/           # 开发规范与工具指南
-│       ├── testing.md
-│       ├── lint-and-precommit.md
-│       ├── commit-conventions.md
-│       └── issue-system-dev-notes.md
+├── dev-guides/                  # 🔧 开发者指南
+│   ├── architecture.md
+│   ├── testing.md
+│   ├── rag-optimization-implementation.md
+│   ├── profiling-configuration.md
+│   ├── lint-and-precommit.md
+│   ├── commit-conventions.md
+│   ├── ruff-usage-guide.md
+│   ├── release-cadence.md
+│   └── test-layering-and-time-budgets.md
 │
-├── reviews/                   # 版本验收与审查报告
-│   ├── v0.1.5/
-│   ├── v0.1.6/
-│   ├── v0.1.7/
-│   ├── v0.1.8/
-│   ├── sessions/              # 开发会话记录
-│   │   ├── streamlit-web-demo-session.md
-│   │   ├── baseline-evaluation-fix-record.md
-│   │   └── independent-issues-batch-session.md
-│   └── investigations/        # 技术调研报告
-│       ├── inv-017-boundary-condition-test-coverage.md
-│       ├── inv-018-exception-path-test-coverage.md
-│       ├── inv-019-test-parallelization.md
-│       ├── inv-021-file-path-security.md
-│       └── rf-002-project-structure.md
-│
-├── troubleshooting/           # 故障排查
-│   ├── eval-metrics-bugfix.md
-│   ├── eval-system-acceptance-fix.md
-│   ├── irrelevant-question-metrics-fix.md
-│   ├── cache-analysis.md
-│   └── resolved/              # 已修复问题归档
-│       ├── pytest-basetemp-fileexistserror.md
-│       └── ghost-folder-mkdir.md
-│
-├── archive/                   # 历史归档
-│   ├── archive-log.md         # 归档日志
-│   ├── plans/                 # 计划书归档
-│   │   ├── v0.1.8/            # v0.1.8 相关计划
-│   │   ├── v0.1.9-v0.1.13/   # v0.1.9~v0.1.13 相关计划
-│   │   └── documents-refactor/
-│   ├── reports/               # 报告归档
-│   ├── specs/                 # Spec 三件套归档
-│   │   └── v0.1.9-v0.1.13/   # v0.1.9~v0.1.13 相关 spec
-│   ├── flagembedding-to-transformers/
-│   ├── meal/
-│   └── test-suite-analysis/
-│
-├── inbox/                     # 待处理文档收件箱
-└── inbox-processed/           # 已处理的原始文件
+└── .archive/                    # 🏛️ 项目博物馆
+    ├── README.md                # 博物馆指南
+    ├── timeline.md              # 时间线导览
+    ├── archive-log.md           # 归档日志
+    ├── v0.1.0-v0.1.5-mvp-era/
+    ├── v0.1.6-hygiene-era/
+    ├── v0.1.7-evaluation-era/
+    ├── v0.1.8-testset-era/
+    ├── v0.1.9-dual-eval-era/
+    ├── v0.1.10-parsing-era/
+    ├── v0.1.11-unification-era/
+    ├── v0.1.12-governance-era/
+    ├── v0.1.13-visualization-era/
+    └── cross-version/
 ```
-
----
-
-## 收件箱机制
-
-将网页端导出的聊天记录放入 `docs/inbox/` 目录，AI 会在下次对话时提示处理。
-
-处理结果记录在 `inbox-log.md` 中。
-
----
-
-## TODO 归档机制
-
-`TODO.md`（人类管理）与 `.issues/` 目录（AI 管理）构成 issue 追踪体系：
-
-- **归档**：AI 自动将 TODO.md 中未归档的 issue 创建为 `.issues/active/` 下的文件，追加 `📋` 时间戳
-- **完成同步**：`.issues/` 中已完成的 issue 同步回 TODO.md，打钩并移动到对应日期标题
-- **触发**：每次对话开始自动检查，或用户说"打扫卫生""归档TODO"
-- **工具**：使用 `pixi run issue create` 创建 issue
-
-详见 [Issue 管理系统使用指南](guides/operations/issue-system.md)。
 
 ---
 

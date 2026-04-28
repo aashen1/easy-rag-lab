@@ -129,7 +129,7 @@ RAG 一直是命令行里的黑盒。现在你能看见它、摸到它、和它�
 ### 版本验收
 
 - Git tag: `v0.1.11`
-- [完成报告](reviews/v0.1.11/completion-report.md)
+- [完成报告](.archive/v0.1.11-unification-era/release/v0.1.11/completion-report.md)
 
 ---
 
@@ -238,8 +238,7 @@ TestSet 独立管理系统
 ### 版本验收
 
 - Git tag: `v0.1.8`
-- [Spec 文档](../.trae/specs/test-set-independent-management/spec.md)
-- [实现指南](guides/test-set-management.md)
+- [实现指南](user-guides/test-set-management.md)
 
 ---
 
@@ -266,7 +265,7 @@ TestSet 独立管理系统
 ### 版本验收
 
 - Git tag: `v0.1.7`
-- [交付对照](reviews/v0.1.7/outcome.md)
+- [交付对照](.archive/v0.1.7-evaluation-era/release/v0.1.7/outcome.md)
 
 ---
 
@@ -292,7 +291,7 @@ TestSet 独立管理系统
 ### 版本验收
 
 - Git tag: `v0.1.6`
-- [交付对照](reviews/v0.1.6/outcome.md)
+- [交付对照](.archive/v0.1.6-hygiene-era/release/v0.1.6/outcome.md)
 
 ---
 
@@ -320,8 +319,8 @@ MVP RAG + Baseline 评测 + 自动化实验系统
 ### 版本验收
 
 - Git tag: `v0.1.5`
-- [代码审查报告](reviews/v0.1.5/code-review.md)
-- [交付对照](reviews/v0.1.5/outcome.md)
+- [代码审查报告](.archive/v0.1.0-v0.1.5-mvp-era/release/v0.1.5/code-review.md)
+- [交付对照](.archive/v0.1.0-v0.1.5-mvp-era/release/v0.1.5/outcome.md)
 
 ---
 

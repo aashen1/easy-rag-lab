@@ -253,7 +253,6 @@ docs/inbox-processed/ # 已处理的原始文件（定期清理）
 ## 相关文档
 
 - [版本演进年轮](version-history.md)
-- [版本节奏：如何避免发版阻塞与功能堆积](guides/development/release-cadence.md)
-- [待做事项总表](backlog.md)
-- [版本验收报告](reviews/v0.1.5/)
-- [项目记忆系统使用指南](../.trae/skills/project-memory/SKILL.md) — 跨 session 项目记忆读写方法论
+- [版本节奏：如何避免发版阻塞与功能堆积](dev-guides/release-cadence.md)
+- [待做事项](../.issues/) — 运行 `pixi run issue list` 查看（原 backlog.md 已迁移至 Issue 系统）
+- [版本验收报告](.archive/v0.1.0-v0.1.5-mvp-era/release/v0.1.5/)

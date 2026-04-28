@@ -60,7 +60,7 @@ pixi run web
 
 浏览器将自动打开 `http://localhost:8501`。
 
-详见 [Streamlit Web Demo 使用指南](guides/operations/streamlit-web-demo.md)。
+详见 [Streamlit Web Demo 使用指南](user-guides/streamlit-web-demo.md)。
 
 ---
 
@@ -106,6 +106,6 @@ pixi run python eval/run_experiment.py --list
 
 ## 下一步
 
-- [系统架构](architecture.md) — 了解系统整体设计
-- [CLI 参考](cli-reference.md) — 完整的命令行使用指南
-- [配置参考](config-reference.md) — config.yaml 完整说明
+- [系统架构](dev-guides/architecture.md) — 了解系统整体设计
+- [CLI 参考](user-guides/cli-reference.md) — 完整的命令行使用指南
+- [配置参考](user-guides/config-reference.md) — config.yaml 完整说明
