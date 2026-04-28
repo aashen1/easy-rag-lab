@@ -743,7 +743,7 @@ class TestCleanImmutablePolicy:
                 {"id": 1, "question": "Q1", "source_files": ["reports/report_0.pdf"]},
             ],
         }
-        result = manager._clean_immutable_policy(test_set_data, meal_config, [])
+        result = manager.cleaner.clean_immutable(test_set_data, meal_config, [])
         assert result["metadata"]["meal_id"] == "new_meal_id"
         assert result["metadata"]["updated_at"] != "2026-04-20T10:00:00"
 
@@ -766,7 +766,7 @@ class TestCleanImmutablePolicy:
             {"id": 1, "question": "Q1", "source_files": ["missing.pdf"]}
         ]
         with pytest.raises(TestSetError) as exc_info:
-            manager._clean_immutable_policy(
+            manager.cleaner.clean_immutable(
                 test_set_data, meal_config, invalid_questions
             )
         assert "immutable policy" in str(exc_info.value).lower()
@@ -793,7 +793,7 @@ class TestCleanImmutablePolicy:
             {"id": 2, "question": "Q2"},
         ]
         with pytest.raises(TestSetError) as exc_info:
-            manager._clean_immutable_policy(
+            manager.cleaner.clean_immutable(
                 test_set_data, meal_config, invalid_questions
             )
         assert "2 invalid questions" in str(exc_info.value)
@@ -831,7 +831,7 @@ class TestCleanTrimPolicy:
         invalid_questions = [
             {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
         ]
-        result = manager._clean_trim_policy(
+        result = manager.cleaner.clean_trim(
             test_set_data, meal_config, invalid_questions
         )
         assert len(result["questions"]) == 2
@@ -865,7 +865,7 @@ class TestCleanTrimPolicy:
             {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]},
         ]
         with pytest.raises(TestSetError) as exc_info:
-            manager._clean_trim_policy(test_set_data, meal_config, invalid_questions)
+            manager.cleaner.clean_trim(test_set_data, meal_config, invalid_questions)
         assert "all" in str(exc_info.value).lower()
         assert "invalid" in str(exc_info.value).lower()
 
@@ -893,7 +893,7 @@ class TestCleanTrimPolicy:
         invalid_questions = [
             {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
         ]
-        manager._clean_trim_policy(test_set_data, meal_config, invalid_questions)
+        manager.cleaner.clean_trim(test_set_data, meal_config, invalid_questions)
         test_sets_dir = Path(config["meals"]["dir"]) / meal_config.name / "test_sets"
         archive_files = list(test_sets_dir.glob("trim_set.archive.*.json"))
         assert len(archive_files) == 1
@@ -922,7 +922,7 @@ class TestCleanTrimPolicy:
         invalid_questions = [
             {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
         ]
-        manager._clean_trim_policy(test_set_data, meal_config, invalid_questions)
+        manager.cleaner.clean_trim(test_set_data, meal_config, invalid_questions)
         loaded = manager.load_test_set(meal_config.name, "trim_set")
         assert len(loaded["questions"]) == 1
         assert loaded["questions"][0]["id"] == 1
@@ -952,7 +952,7 @@ class TestCleanRegeneratePolicy:
         }
         invalid_questions = [{"id": 1, "question": "Q1"}]
         with pytest.raises(TestSetError) as exc_info:
-            manager._clean_regenerate_policy(
+            manager.cleaner.clean_regenerate(
                 test_set_data, meal_config, invalid_questions, None, "default", None
             )
         assert "generation config" in str(exc_info.value).lower()
@@ -973,7 +973,7 @@ class TestCleanRegeneratePolicy:
         }
         invalid_questions = [{"id": 1, "question": "Q1"}]
         with pytest.raises(TestSetError) as exc_info:
-            manager._clean_regenerate_policy(
+            manager.cleaner.clean_regenerate(
                 test_set_data, meal_config, invalid_questions, None, "default", None
             )
         assert "generation config" in str(exc_info.value).lower()
@@ -1003,7 +1003,7 @@ class TestCleanRegeneratePolicy:
         invalid_questions = [
             {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
         ]
-        result = manager._clean_regenerate_policy(
+        result = manager.cleaner.clean_regenerate(
             test_set_data, meal_config, invalid_questions, None, "default", None
         )
         assert len(result["questions"]) == 1
@@ -1034,7 +1034,7 @@ class TestCleanRegeneratePolicy:
         invalid_questions = [
             {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
         ]
-        manager._clean_regenerate_policy(
+        manager.cleaner.clean_regenerate(
             test_set_data, meal_config, invalid_questions, None, "default", None
         )
         test_sets_dir = Path(config["meals"]["dir"]) / meal_config.name / "test_sets"
@@ -1066,7 +1066,7 @@ class TestCleanRegeneratePolicy:
         invalid_questions = [
             {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
         ]
-        result = manager._clean_regenerate_policy(
+        result = manager.cleaner.clean_regenerate(
             test_set_data, meal_config, invalid_questions, None, "default", None
         )
         assert len(result["metadata"]["audit_log"]) == 1
@@ -1099,7 +1099,7 @@ class TestCleanRegeneratePolicy:
             {"id": 1, "question": "Q1", "source_files": ["missing.pdf"]},
             {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]},
         ]
-        result = manager._clean_regenerate_policy(
+        result = manager.cleaner.clean_regenerate(
             test_set_data, meal_config, invalid_questions, None, "default", None
         )
         entry = result["metadata"]["audit_log"][0]
@@ -1139,7 +1139,7 @@ class TestCleanRegeneratePolicy:
         invalid_questions = [
             {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
         ]
-        result = manager._clean_regenerate_policy(
+        result = manager.cleaner.clean_regenerate(
             test_set_data,
             meal_config,
             invalid_questions,
@@ -1173,7 +1173,7 @@ class TestCleanUserTestSet:
             },
             "questions": [{"id": 1, "question": "Q1"}],
         }
-        result = manager._clean_user_test_set(test_set_data, meal_config, [])
+        result = manager.cleaner.clean_user_test_set(test_set_data, meal_config, [])
         assert result["metadata"]["meal_id"] == "new_meal_id"
 
     def test_routes_to_trim_policy(self, env):
@@ -1200,7 +1200,7 @@ class TestCleanUserTestSet:
         invalid_questions = [
             {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
         ]
-        result = manager._clean_user_test_set(
+        result = manager.cleaner.clean_user_test_set(
             test_set_data, meal_config, invalid_questions
         )
         assert len(result["questions"]) == 1
@@ -1230,7 +1230,7 @@ class TestCleanUserTestSet:
         invalid_questions = [
             {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
         ]
-        result = manager._clean_user_test_set(
+        result = manager.cleaner.clean_user_test_set(
             test_set_data, meal_config, invalid_questions
         )
         assert len(result["questions"]) == 1
@@ -1250,7 +1250,7 @@ class TestCleanUserTestSet:
             "questions": [],
         }
         with pytest.raises(TestSetError) as exc_info:
-            manager._clean_user_test_set(test_set_data, meal_config, [])
+            manager.cleaner.clean_user_test_set(test_set_data, meal_config, [])
         assert "unknown invalid_policy" in str(exc_info.value).lower()
 
 
@@ -1271,7 +1271,7 @@ class TestCleaningWarnings:
             },
             "questions": [],
         }
-        should_warn, message = manager._should_warn_about_cleaning(test_set_data)
+        should_warn, message = manager.cleaner.should_warn_about_cleaning(test_set_data)
         assert should_warn is False
         assert message == ""
 
@@ -1292,7 +1292,7 @@ class TestCleaningWarnings:
             },
             "questions": [],
         }
-        should_warn, message = manager._should_warn_about_cleaning(test_set_data)
+        should_warn, message = manager.cleaner.should_warn_about_cleaning(test_set_data)
         assert should_warn is False
         assert message == ""
 
@@ -1313,7 +1313,7 @@ class TestCleaningWarnings:
             },
             "questions": [],
         }
-        should_warn, message = manager._should_warn_about_cleaning(test_set_data)
+        should_warn, message = manager.cleaner.should_warn_about_cleaning(test_set_data)
         assert should_warn is True
         assert "trimmed" in message.lower()
         assert "3 questions" in message
@@ -1335,7 +1335,7 @@ class TestCleaningWarnings:
             },
             "questions": [],
         }
-        should_warn, message = manager._should_warn_about_cleaning(test_set_data)
+        should_warn, message = manager.cleaner.should_warn_about_cleaning(test_set_data)
         assert should_warn is True
         assert "regenerated" in message.lower()
         assert "5 questions" in message
@@ -1357,7 +1357,7 @@ class TestCleaningWarnings:
             },
             "questions": [],
         }
-        should_warn, message = manager._should_warn_about_cleaning(test_set_data)
+        should_warn, message = manager.cleaner.should_warn_about_cleaning(test_set_data)
         assert should_warn is True
         assert "full regeneration" in message.lower()
         assert "all questions were replaced" in message.lower()
@@ -1384,7 +1384,7 @@ class TestCleaningWarnings:
             },
             "questions": [],
         }
-        should_warn, message = manager._should_warn_about_cleaning(test_set_data)
+        should_warn, message = manager.cleaner.should_warn_about_cleaning(test_set_data)
         assert should_warn is True
         assert "trimmed" in message.lower()
 
@@ -1401,7 +1401,7 @@ class TestCleaningWarnings:
             },
             "questions": [],
         }
-        should_warn, message = manager._should_warn_about_cleaning(test_set_data)
+        should_warn, message = manager.cleaner.should_warn_about_cleaning(test_set_data)
         assert should_warn is False
         assert message == ""
 
@@ -1438,7 +1438,7 @@ class TestCleanMachineTestSet:
         invalid_questions = [
             {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
         ]
-        result = manager._clean_machine_test_set(
+        result = manager.cleaner.clean_machine_test_set(
             test_set_data, meal_config, invalid_questions
         )
         assert len(result["questions"]) == 2
@@ -1489,7 +1489,7 @@ class TestCleanMachineTestSet:
         invalid_questions = [
             {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
         ]
-        result = manager._clean_machine_test_set(
+        result = manager.cleaner.clean_machine_test_set(
             test_set_data, meal_config, invalid_questions, generator=MockGenerator()
         )
         assert len(result["questions"]) == 3
@@ -1518,7 +1518,7 @@ class TestCleanMachineTestSet:
                 {"id": 1, "question": "Q1", "source_files": ["reports/report_0.pdf"]},
             ],
         }
-        result = manager._clean_machine_test_set(test_set_data, meal_config, [])
+        result = manager.cleaner.clean_machine_test_set(test_set_data, meal_config, [])
         assert result["metadata"]["meal_id"] == "new_meal_id"
         assert result["metadata"]["updated_at"] != "2026-04-20T10:00:00"
 
@@ -1546,7 +1546,7 @@ class TestCleanMachineTestSet:
         invalid_questions = [
             {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
         ]
-        result = manager._clean_machine_test_set(
+        result = manager.cleaner.clean_machine_test_set(
             test_set_data, meal_config, invalid_questions
         )
         assert len(result["metadata"]["audit_log"]) == 1
@@ -1579,7 +1579,7 @@ class TestCleanMachineTestSet:
             ],
         }
         new_generation_config = {"strategy": "random", "num_questions": 10, "seed": 42}
-        result = manager._clean_machine_test_set(
+        result = manager.cleaner.clean_machine_test_set(
             test_set_data, meal_config, [], generation_config=new_generation_config
         )
         assert len(result["metadata"]["audit_log"]) == 2
@@ -1619,7 +1619,7 @@ class TestCleanMachineTestSet:
             {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]},
             {"id": 3, "question": "Q3", "source_files": ["missing2.pdf"]},
         ]
-        result = manager._clean_machine_test_set(
+        result = manager.cleaner.clean_machine_test_set(
             test_set_data, meal_config, invalid_questions
         )
         assert len(result["questions"]) == 1
@@ -1651,7 +1651,9 @@ class TestCleanMachineTestSet:
         invalid_questions = [
             {"id": 2, "question": "Q2", "source_files": ["missing.pdf"]}
         ]
-        manager._clean_machine_test_set(test_set_data, meal_config, invalid_questions)
+        manager.cleaner.clean_machine_test_set(
+            test_set_data, meal_config, invalid_questions
+        )
         loaded = manager.load_test_set(meal_config.name, "machine_set")
         assert len(loaded["questions"]) == 1
         assert loaded["questions"][0]["id"] == 1
@@ -1677,7 +1679,7 @@ class TestCleanMachineTestSet:
                 {"id": 1, "question": "Q1", "source_files": ["reports/report_0.pdf"]},
             ],
         }
-        result = manager._clean_machine_test_set(test_set_data, meal_config, [])
+        result = manager.cleaner.clean_machine_test_set(test_set_data, meal_config, [])
         assert len(result["questions"]) == 1
         assert result["metadata"]["meal_id"] == "new_meal_id"
         assert result["metadata"]["audit_log"][0]["removed_count"] == 0
