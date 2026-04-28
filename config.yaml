@@ -80,6 +80,7 @@ parser:
     use_ocr: true              # Keep OCR fallback for scanned pages
     ocr_language: "chi_sim+eng"  # Chinese + English OCR support
     show_progress: true        # Show parsing progress
+    clean_degenerate_tables: true  # Remove empty markdown table rows (|||||) from parser output
   fitz_pdfplumber:
     header_filter: true
     footer_filter: true

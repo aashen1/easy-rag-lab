@@ -236,8 +236,13 @@ def validate_answer_evidence_consistency(
     answer_numbers = extract_numbers_with_units(answer)
     evidence_numbers = extract_numbers_with_units(evidence_text)
 
+    time_expr_pattern = re.compile(r"\d+[\d,]*\.?\d*\s*(?:月|年|季度|季度末|周|日|天)")
+
     for ans_val, ans_unit, ans_orig in answer_numbers:
         if ans_val < 10:
+            continue
+
+        if time_expr_pattern.search(ans_orig):
             continue
 
         ans_base = convert_to_base_unit(ans_val, ans_unit)
@@ -280,11 +285,18 @@ def validate_answer_evidence_consistency(
     for noun in proper_nouns:
         if noun in evidence_text:
             continue
+        stripped = re.sub(r"^\d+", "", noun)
+        if stripped and stripped in evidence_text:
+            continue
         core_found = False
         for suffix in PROPER_NOUN_SUFFIXES:
             if noun.endswith(suffix):
                 core = noun[: -len(suffix)]
                 if len(core) >= 2 and core in evidence_text:
+                    core_found = True
+                    break
+                stripped_core = re.sub(r"^\d+", "", core)
+                if len(stripped_core) >= 2 and stripped_core in evidence_text:
                     core_found = True
                     break
         if not core_found:
