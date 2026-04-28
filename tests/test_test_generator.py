@@ -2531,6 +2531,9 @@ class TestQuestionDeduplication:
                     "base_url": "http://test",
                 },
             ),
+            pytest.warns(
+                DeprecationWarning, match="_locate_answer_chunks is deprecated"
+            ),
         ):
             result = self.generator.supplement_document_based_questions(
                 meal_name="test_meal",
@@ -2618,6 +2621,9 @@ class TestQuestionDeduplication:
                     "api_key": "test",
                     "base_url": "http://test",
                 },
+            ),
+            pytest.warns(
+                DeprecationWarning, match="_locate_answer_chunks is deprecated"
             ),
         ):
             result = self.generator.supplement_document_based_questions(
