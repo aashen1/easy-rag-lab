@@ -63,9 +63,9 @@
 
 ## 文档维护规则
 
-- 创建新功能时，同步创建 `docs/guides/<feature>.md`
-- 修复疑难 bug 时，创建 `docs/troubleshooting/<bug-name>.md`
-- 版本发布后，创建 `docs/reviews/vX.X.X/` 目录下的验收报告
+- 创建新功能时，同步创建 `docs/user-guides/<feature>.md`（用户向）或 `docs/dev-guides/<feature>.md`（开发向）
+- 修复疑难 bug 时，在 `.archive/` 对应版本目录下记录
+- 版本发布后，在 `.archive/v0.1.X-xxx-era/release/` 目录下创建验收报告
 - 代码变更必须同步更新相关文档
 - 文档文件名统一使用英文
 - code-review 中"建议单开"的内容必须同时创建 issue（使用 `pixi run issue create`）
