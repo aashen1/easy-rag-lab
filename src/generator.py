@@ -287,29 +287,3 @@ class Generator:
             error_msg = f"Failed to generate answer: {str(e)}"
             logger.error(error_msg)
             raise GenerationError(error_msg) from e
-
-
-if __name__ == "__main__":
-    from src.utils import get_llm_config, load_config, setup_logger
-
-    config = load_config()
-    setup_logger(config)
-
-    llm_config = get_llm_config(config)
-
-    generator = Generator(
-        model_name=llm_config["model_name"],
-        api_key=llm_config["api_key"],
-        base_url=llm_config["base_url"],
-        temperature=llm_config["temperature"],
-        max_tokens=llm_config["max_tokens"],
-    )
-
-    query = "贵州茅台2023年的营业收入是多少？"
-    contexts = [
-        "贵州茅台2023年年度报告显示，公司实现营业收入1505.60亿元，同比增长18.04%。",
-        "贵州茅台2023年归属于上市公司股东的净利润为747.34亿元，同比增长19.14%。",
-    ]
-
-    answer = generator.generate(query, contexts)
-    logger.info(f"\nAnswer:\n{answer}")

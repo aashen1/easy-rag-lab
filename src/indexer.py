@@ -299,34 +299,3 @@ class VectorIndexer:
                 )
         except Exception as e:
             logger.warning(f"Error closing Qdrant client: {str(e)}")
-
-
-if __name__ == "__main__":
-    from src.utils import load_config, setup_logger
-
-    config = load_config()
-    setup_logger(config)
-
-    vector_store_config = config["vector_store"]
-    embedding_config = config["embedding"]
-
-    indexer = VectorIndexer(
-        persist_dir=vector_store_config["persist_dir"],
-        collection_name=vector_store_config["collection_name"],
-        distance=vector_store_config["distance"],
-    )
-
-    embedder = Embedder(
-        model_name=embedding_config["model_name"],
-        device=embedding_config["device"],
-    )
-
-    indexer.build_index(
-        chunks_dir=config["chunker"]["output_dir"],
-        embedder=embedder,
-        batch_size=embedding_config["batch_size"],
-        rebuild=True,
-    )
-
-    info = indexer.get_collection_info()
-    logger.info(f"Collection info: {info}")

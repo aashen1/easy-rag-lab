@@ -232,26 +232,3 @@ class QueryRewriter:
             error_msg = f"LLM call failed: {str(e)}"
             logger.error(error_msg)
             raise GenerationError(error_msg) from e
-
-
-if __name__ == "__main__":
-    from src.utils import get_env_var, load_config, setup_logger
-
-    config = load_config()
-    setup_logger(config)
-
-    llm_config = config["llm_presets"]["default"]
-
-    rewriter = QueryRewriter(
-        strategy="hyde",
-        llm_model_name=llm_config["model_name"],
-        llm_api_key=get_env_var(llm_config["api_key"]),
-        llm_base_url=get_env_var(llm_config["base_url"]),
-    )
-
-    query = "贵州茅台2023年的营业收入是多少？"
-    result = rewriter.rewrite(query)
-
-    logger.info(f"Strategy: {result['strategy']}")
-    logger.info(f"Original: {result['original_query']}")
-    logger.info(f"Rewritten: {result['rewritten'][:200]}...")
