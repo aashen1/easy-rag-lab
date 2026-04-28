@@ -371,6 +371,47 @@ EVIDENCE_MISSING_SUPPLEMENT = """
 - 不要编造信息
 """
 
+MISSING_INDEPENDENT_PROMPT = """你是一位金融行业从业者，正在阅读一份研究报告的若干片段。
+
+你的任务是：生成一个**文档中明显没有答案**的问题，测试RAG系统的拒答能力。
+
+## 步骤
+
+第一步：分析文档已覆盖的主题
+仔细阅读以下片段，列出文档**已经覆盖**的主题和数据维度。
+
+第二步：选择未覆盖的维度
+从金融行业从业者可能关心的角度，选择一个文档**明显没有涉及**的维度。
+
+第三步：提出问题
+围绕这个未覆盖的维度，提出一个自然的问题。问题要口语化，像在问同事。
+
+## 输出格式
+
+严格按照以下JSON格式输出，不要输出任何其他内容：
+
+```json
+{{
+    "question": "你提出的问题",
+    "answer": "文档未提及该信息。",
+    "question_type": "缺失知识点",
+    "difficulty": "medium",
+    "evidence": [],
+    "selected_segments": []
+}}
+```
+
+## 关键要求
+
+- evidence 必须为空数组 []
+- 答案必须明确说明"文档未提及该信息"
+- 不要试图从文档中找到答案
+- 问题要像真实的金融从业者会问的，不要用"请说明""根据文档"等学术化措辞
+
+## 文档片段
+
+{segments_text}"""
+
 EVIDENCE_IRRELEVANT_SUPPLEMENT = """
 ## 无关问题的特别说明
 
@@ -2618,7 +2659,13 @@ class TestSetGenerator:
                 generator=generator,
             )
 
-        compact_types = {"single_fact", "missing", "adversarial"}
+        if question_type == "missing":
+            return self._generate_missing_question(
+                selected_segments=selected_segments,
+                generator=generator,
+            )
+
+        compact_types = {"single_fact", "adversarial"}
         if question_type in compact_types and selected_segments:
             selected_segments = self._compact_segments(
                 selected_segments, self.compact_segment_max_chars
@@ -2638,14 +2685,7 @@ class TestSetGenerator:
 
             evidence_list = qa.get("evidence", [])
             if not evidence_list:
-                if question_type == "missing":
-                    qa["ground_truth_excerpt"] = ""
-                    return qa
                 logger.debug(f"No evidence provided for question type: {question_type}")
-                continue
-
-            if question_type == "missing":
-                logger.debug("Missing type question has evidence, retrying...")
                 continue
 
             validation = self._validate_evidence(
@@ -2715,6 +2755,61 @@ class TestSetGenerator:
             qa["ground_truth_excerpt"] = "\n".join(all_quotes) if all_quotes else ""
 
             return qa
+
+        return None
+
+    def _generate_missing_question(
+        self,
+        selected_segments: list[dict[str, Any]],
+        generator: Generator,
+    ) -> dict[str, Any] | None:
+        """Generate a missing-type question using MISSING_INDEPENDENT_PROMPT.
+
+        Uses a dedicated prompt that first analyzes what the document covers,
+        then asks about a dimension clearly NOT covered. This avoids the
+        contradiction of using evidence-aware prompts for questions that
+        should have no evidence.
+
+        Args:
+            selected_segments: List of selected segment dictionaries.
+            generator: Generator instance for LLM calls.
+
+        Returns:
+            Dictionary with question data, or None if generation fails.
+        """
+        segments_text = ""
+        for i, seg in enumerate(selected_segments):
+            segments_text += f"片段{i}:\n{seg.get('text', '')}\n\n"
+
+        prompt = MISSING_INDEPENDENT_PROMPT.format(segments_text=segments_text.strip())
+
+        for _attempt in range(self.max_retries):
+            try:
+                response = generator.generate(
+                    query=prompt,
+                    contexts=[],
+                    system_prompt="你是一位金融行业从业者。请严格按照要求的JSON格式输出，不要输出任何其他内容。",
+                    category="test_generation",
+                    allow_no_contexts=True,
+                )
+
+                qa = self._parse_evidence_question_response(response)
+                if qa is None:
+                    continue
+
+                qa["question_type"] = self.QUESTION_TYPES.get("missing", "缺失知识点")
+
+                evidence_list = qa.get("evidence", [])
+                if evidence_list:
+                    logger.debug("Missing question has evidence, retrying...")
+                    continue
+
+                qa["ground_truth_excerpt"] = ""
+                return qa
+
+            except Exception as e:
+                logger.warning(f"Failed to generate missing question: {str(e)}")
+                continue
 
         return None
 
