@@ -2294,6 +2294,35 @@ class TestSetGenerator:
                             qa.setdefault("metadata", {})
                             qa["metadata"]["answer_evidence_issues"] = issues
 
+                    if issues and q_type not in (
+                        "irrelevant",
+                        "missing",
+                        "adversarial",
+                    ):
+                        evidence_list = qa.get("evidence", [])
+                        updated_evidence, remaining_issues = (
+                            self._supplement_evidence_for_uncovered_numbers(
+                                qa.get("answer", ""),
+                                evidence_list,
+                                issues,
+                                doc_content,
+                            )
+                        )
+                        if len(updated_evidence) > len(evidence_list):
+                            qa["evidence"] = updated_evidence
+                            supplemented_count = len(updated_evidence) - len(
+                                evidence_list
+                            )
+                            logger.info(
+                                f"Auto-supplemented {supplemented_count} evidence entries "
+                                f"for {qa['id']}"
+                            )
+                        qa["metadata"]["answer_evidence_issues"] = remaining_issues
+
+                    answer_text = qa.get("answer", "")
+                    answer_limit = self.ANSWER_LENGTH_LIMITS.get(q_type, 300)
+                    self._truncate_answer(qa, answer_text, answer_limit)
+
                     qa.setdefault("metadata", {})
                     qa["metadata"]["author"] = "llm_assisted"
                     qa["metadata"]["reviewed"] = False
@@ -2475,6 +2504,31 @@ class TestSetGenerator:
                             )
                             qa.setdefault("metadata", {})
                             qa["metadata"]["answer_evidence_issues"] = issues
+
+                    if issues and q_type not in (
+                        "irrelevant",
+                        "missing",
+                        "adversarial",
+                    ):
+                        evidence_list = qa.get("evidence", [])
+                        updated_evidence, remaining_issues = (
+                            self._supplement_evidence_for_uncovered_numbers(
+                                qa.get("answer", ""),
+                                evidence_list,
+                                issues,
+                                doc_content,
+                            )
+                        )
+                        if len(updated_evidence) > len(evidence_list):
+                            qa["evidence"] = updated_evidence
+                            supplemented_count = len(updated_evidence) - len(
+                                evidence_list
+                            )
+                            logger.info(
+                                f"Auto-supplemented {supplemented_count} evidence entries "
+                                f"for {qa['id']}"
+                            )
+                        qa["metadata"]["answer_evidence_issues"] = remaining_issues
 
                     qa.setdefault("metadata", {})
                     qa["metadata"]["author"] = "llm_assisted"
@@ -3068,6 +3122,84 @@ class TestSetGenerator:
             f"Answer truncated for {qa.get('id', 'unknown')}: "
             f"{len(answer_text)} -> {len(qa['answer'])} chars"
         )
+
+    def _supplement_evidence_for_uncovered_numbers(
+        self,
+        answer: str,
+        evidence_list: list[dict[str, Any]],
+        issues: list[str],
+        doc_content: str,
+    ) -> tuple[list[dict[str, Any]], list[str]]:
+        """Supplement evidence with document context for uncovered numbers.
+
+        When answer-evidence consistency check finds numbers in the answer
+        that are not covered by evidence quotes, this method searches the
+        full document for those numbers and appends surrounding context
+        as additional evidence entries.
+
+        Args:
+            answer: The generated answer text.
+            evidence_list: Current list of evidence dictionaries.
+            issues: List of issues from consistency check.
+            doc_content: Full document content for searching.
+
+        Returns:
+            Tuple of (updated_evidence_list, remaining_issues).
+        """
+        if not doc_content or not issues:
+            return evidence_list, issues
+
+        number_issues = [i for i in issues if i.startswith("数值 '")]
+        if not number_issues:
+            return evidence_list, issues
+
+        supplemented_evidence = list(evidence_list)
+        remaining_issues = [i for i in issues if not i.startswith("数值 '")]
+        supplemented_numbers: set[str] = set()
+
+        for issue in number_issues:
+            num_match = re.search(r"'([^']+)'", issue)
+            if not num_match:
+                remaining_issues.append(issue)
+                continue
+
+            num_str = num_match.group(1)
+            core_num = re.sub(r"[亿万元个百分点个%％]+$", "", num_str)
+            if not core_num or core_num in supplemented_numbers:
+                remaining_issues.append(issue)
+                continue
+
+            search_pattern = core_num.replace(",", r"[,\s]*")
+            try:
+                found_in_doc = False
+                for match in re.finditer(search_pattern, doc_content):
+                    start = max(0, match.start() - 80)
+                    end = min(len(doc_content), match.end() + 80)
+                    context = doc_content[start:end].strip()
+                    if start > 0:
+                        context = "..." + context
+                    if end < len(doc_content):
+                        context = context + "..."
+                    supplemented_evidence.append(
+                        {
+                            "segment_index": -1,
+                            "quote": context,
+                            "relevance": f"Auto-supplemented: contains number '{num_str}' from answer",
+                            "verified": True,
+                            "match_type": "auto_supplemented",
+                            "position": None,
+                        }
+                    )
+                    supplemented_numbers.add(core_num)
+                    found_in_doc = True
+                    break
+                if not found_in_doc:
+                    remaining_issues.append(issue)
+            except re.error:
+                remaining_issues.append(issue)
+                continue
+
+        return supplemented_evidence, remaining_issues
 
     def _validate_answer_evidence_consistency(
         self,
