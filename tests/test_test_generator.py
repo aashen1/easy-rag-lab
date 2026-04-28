@@ -1085,8 +1085,9 @@ class TestLoadFullDocuments:
             MagicMock(path="research_reports/2026年光伏行业分析.pdf")
         ]
 
-        with patch.object(
-            self.generator, "_resolve_parsed_dir", return_value=parsed_dir
+        with patch(
+            "src.test_generation.document_loader.resolve_parsed_dir",
+            return_value=parsed_dir,
         ):
             result = self.generator._load_full_documents(meal_config)
 
@@ -1102,7 +1103,9 @@ class TestLoadFullDocuments:
         meal_config.data_id = None
         meal_config.pdf_files = []
 
-        with patch.object(self.generator, "_resolve_parsed_dir", return_value=None):
+        with patch(
+            "src.test_generation.document_loader.resolve_parsed_dir", return_value=None
+        ):
             result = self.generator._load_full_documents(meal_config)
 
         assert result == {}
@@ -1167,11 +1170,13 @@ class TestDocumentBasedQuestionsSourceFiles:
         )
 
         with (
-            patch.object(
-                self.generator, "_resolve_parsed_dir", return_value=parsed_dir
+            patch(
+                "src.test_generation.document_loader.resolve_parsed_dir",
+                return_value=parsed_dir,
             ),
-            patch.object(
-                self.generator, "_resolve_chunks_dir", return_value=chunks_dir
+            patch(
+                "src.test_generation.document_loader.resolve_chunks_dir",
+                return_value=chunks_dir,
             ),
             patch(
                 "src.test_generation.generator.MealManager",
@@ -1276,8 +1281,9 @@ class TestGenerateDocumentBasedQuestionsSupplemental:
         mock_llm_generator.generate.side_effect = mock_generate
 
         with (
-            patch.object(
-                self.generator, "_resolve_parsed_dir", return_value=parsed_dir
+            patch(
+                "src.test_generation.document_loader.resolve_parsed_dir",
+                return_value=parsed_dir,
             ),
             patch(
                 "src.test_generation.generator.MealManager",
@@ -1316,8 +1322,9 @@ class TestGenerateDocumentBasedQuestionsSupplemental:
         mock_llm_generator.generate.return_value = "invalid json"
 
         with (
-            patch.object(
-                self.generator, "_resolve_parsed_dir", return_value=parsed_dir
+            patch(
+                "src.test_generation.document_loader.resolve_parsed_dir",
+                return_value=parsed_dir,
             ),
             patch(
                 "src.test_generation.generator.MealManager",
@@ -1518,8 +1525,9 @@ class TestSupplementDocumentBasedQuestions:
         }
 
         with (
-            patch.object(
-                self.generator, "_resolve_parsed_dir", return_value=parsed_dir
+            patch(
+                "src.test_generation.document_loader.resolve_parsed_dir",
+                return_value=parsed_dir,
             ),
             patch(
                 "src.test_generation.generator.MealManager",
@@ -1592,8 +1600,9 @@ class TestSupplementDocumentBasedQuestions:
         }
 
         with (
-            patch.object(
-                self.generator, "_resolve_parsed_dir", return_value=parsed_dir
+            patch(
+                "src.test_generation.document_loader.resolve_parsed_dir",
+                return_value=parsed_dir,
             ),
             patch(
                 "src.test_generation.generator.MealManager",
@@ -2547,8 +2556,9 @@ class TestQuestionDeduplication:
         }
 
         with (
-            patch.object(
-                self.generator, "_resolve_parsed_dir", return_value=parsed_dir
+            patch(
+                "src.test_generation.document_loader.resolve_parsed_dir",
+                return_value=parsed_dir,
             ),
             patch(
                 "src.test_generation.generator.MealManager",
@@ -2644,8 +2654,9 @@ class TestQuestionDeduplication:
         }
 
         with (
-            patch.object(
-                self.generator, "_resolve_parsed_dir", return_value=parsed_dir
+            patch(
+                "src.test_generation.document_loader.resolve_parsed_dir",
+                return_value=parsed_dir,
             ),
             patch(
                 "src.test_generation.generator.MealManager",
