@@ -7,6 +7,11 @@ from typing import Any
 
 from loguru import logger
 
+from src.test_generation.models import (
+    DOMAIN_KEYWORDS,
+    PROPER_NOUN_PATTERN,
+)
+
 
 def verify_quote_in_segment(
     quote: str,
@@ -484,41 +489,12 @@ def extract_key_terms(answer: str) -> list[str]:
     terms.extend(number_patterns)
 
     proper_nouns = re.findall(
-        r"[\u4e00-\u9fff]{2,8}(?:股份|集团|公司|行业|市场|技术|产品|业务|报告|年度)",
+        PROPER_NOUN_PATTERN,
         answer,
     )
     terms.extend(proper_nouns)
 
-    domain_keywords = [
-        "增长",
-        "下降",
-        "上升",
-        "减少",
-        "增加",
-        "收入",
-        "利润",
-        "营收",
-        "市值",
-        "占比",
-        "规模",
-        "产量",
-        "销量",
-        "价格",
-        "成本",
-        "投资",
-        "融资",
-        "估值",
-        "盈利",
-        "亏损",
-        "负债",
-        "资产",
-        "现金流",
-        "毛利率",
-        "净利率",
-        "ROE",
-        "ROA",
-    ]
-    for kw in domain_keywords:
+    for kw in DOMAIN_KEYWORDS:
         if kw in answer:
             terms.append(kw)
 

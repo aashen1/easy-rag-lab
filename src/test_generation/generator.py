@@ -42,10 +42,12 @@ from src.test_generation.chunk_locator import (
 from src.test_generation.models import (
     ANSWER_LENGTH_LIMITS,
     DOCUMENT_TRUNCATE_MAX,
+    DOMAIN_KEYWORDS,
     EVIDENCE_MAX_TOKENS,
     FAILURE_MODES,
     GOLDEN_TYPE_DISTRIBUTION,
     MIN_QUOTE_LENGTH,
+    PROPER_NOUN_PATTERN,
     QUESTION_TYPES,
     TYPE_DISTRIBUTION,
 )
@@ -567,39 +569,12 @@ class TestSetGenerator:
         keywords.update(numbers_with_units)
 
         proper_nouns = re.findall(
-            r"[\u4e00-\u9fff]{2,8}(?:股份|集团|公司|行业|市场|技术|产品|业务)",
+            PROPER_NOUN_PATTERN,
             text,
         )
         keywords.update(proper_nouns)
 
-        domain_keywords = [
-            "增长",
-            "下降",
-            "上升",
-            "减少",
-            "增加",
-            "收入",
-            "利润",
-            "营收",
-            "市值",
-            "占比",
-            "规模",
-            "产量",
-            "销量",
-            "价格",
-            "成本",
-            "投资",
-            "融资",
-            "估值",
-            "盈利",
-            "亏损",
-            "负债",
-            "资产",
-            "现金流",
-            "毛利率",
-            "净利率",
-        ]
-        for kw in domain_keywords:
+        for kw in DOMAIN_KEYWORDS:
             if kw in text:
                 keywords.add(kw)
 
