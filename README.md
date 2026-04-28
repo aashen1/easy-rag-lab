@@ -47,6 +47,8 @@ RAG链路：
 - [字节 TRAE CN](https://www.trae.cn/) - 主力开发工具（常用模型：GLM-5.1、GLM-5、Qwen-3.6Plus、Kimi-K2.6等，排名按开发者个人使用偏好递减，不代表模型能力）
 - [美团 LongCat AI](https://longcat.chat/) - API 调用（LongCat-Flash-Lite 模型）
 
+> 重要：本项目的 LLM 代码调用为适应 LongCat API 配置，使用了特殊的`api_key="dummy"`形式，使用其他 API 源可能存在问题。
+
 
 ---
 
