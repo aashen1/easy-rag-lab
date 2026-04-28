@@ -11,6 +11,55 @@ from typing import Any
 
 
 @dataclass
+class EvaluationSample:
+    """
+    Unified input for evaluator methods.
+
+    Encapsulates all data needed for a single evaluation, replacing
+    the long parameter lists that violated Liskov Substitution Principle.
+
+    Args:
+        question_id: Unique identifier for the question.
+        question: The question text.
+        answer: The generated answer.
+        contexts: List of retrieved context strings (text content).
+        expected_sources: Optional list of expected source documents.
+        expected_answer: Optional expected answer for reference.
+        llm_config: Optional LLM configuration for generation metrics.
+        retrieval_metrics: Optional list of retrieval metrics to compute.
+        generation_metrics: Optional list of generation metrics to compute.
+        chunk_ids: Optional list of retrieved chunk identifiers.
+        expected_chunks: Optional list of expected chunk identifiers.
+        equivalence_groups: Optional dict mapping group keys to lists of
+            equivalent file paths for dedup normalization.
+        expect_retrieval: Whether the question expects retrieval results.
+        expect_no_answer: Whether the answer is not expected to be found.
+        retrieved_sources: Optional list of retrieved source file paths.
+        question_type: Optional question type string.
+
+    Returns:
+        EvaluationSample instance.
+    """
+
+    question_id: str = ""
+    question: str = ""
+    answer: str = ""
+    contexts: list[str] = field(default_factory=list)
+    expected_sources: list[str] | None = None
+    expected_answer: str | None = None
+    llm_config: dict[str, str] | None = None
+    retrieval_metrics: list[str] | None = None
+    generation_metrics: list[str] | None = None
+    chunk_ids: list[str] | None = None
+    expected_chunks: list[str] | None = None
+    equivalence_groups: dict[str, list[str]] | None = None
+    expect_retrieval: bool = True
+    expect_no_answer: bool = False
+    retrieved_sources: list[str] | None = None
+    question_type: str | None = None
+
+
+@dataclass
 class EvaluationResult:
     """
     Unified evaluation result format.
@@ -113,27 +162,12 @@ class BaseEvaluator(ABC):
         pass
 
     @abstractmethod
-    def evaluate_single(
-        self,
-        question_id: str,
-        question: str,
-        answer: str,
-        contexts: list[str],
-        expected_sources: list[str] | None = None,
-        expected_answer: str | None = None,
-        llm_config: dict[str, str] | None = None,
-    ) -> EvaluationResult:
+    def evaluate_single(self, sample: EvaluationSample) -> EvaluationResult:
         """
         Evaluate a single sample.
 
         Args:
-            question_id: Unique identifier for the question.
-            question: The question text.
-            answer: The generated answer.
-            contexts: List of retrieved context strings.
-            expected_sources: Optional list of expected source documents.
-            expected_answer: Optional expected answer for reference.
-            llm_config: Optional LLM configuration for generation metrics.
+            sample: EvaluationSample containing all data needed for evaluation.
 
         Returns:
             EvaluationResult containing the evaluation scores.
@@ -142,7 +176,7 @@ class BaseEvaluator(ABC):
 
     def evaluate_batch(
         self,
-        samples: list[dict[str, Any]],
+        samples: list[EvaluationSample],
         llm_config: dict[str, str] | None = None,
         retrieval_metrics: list[str] | None = None,
         generation_metrics: list[str] | None = None,
@@ -150,32 +184,41 @@ class BaseEvaluator(ABC):
         """
         Evaluate a batch of samples.
 
+        The default implementation iterates over samples, merges batch-level
+        configuration into each sample, and calls evaluate_single.
+
         Args:
-            samples: List of sample dictionaries, each containing:
-                - question_id: Unique identifier
-                - question: Question text
-                - answer: Generated answer
-                - contexts: Retrieved contexts
-                - expected_sources: Optional expected sources
-                - expected_answer: Optional expected answer
-            llm_config: Optional LLM configuration for generation metrics.
-            retrieval_metrics: Optional list of retrieval metrics to compute.
-            generation_metrics: Optional list of generation metrics to compute.
+            samples: List of EvaluationSample objects.
+            llm_config: Optional LLM configuration (overrides per-sample config).
+            retrieval_metrics: Optional list of retrieval metrics to compute
+                (overrides per-sample config).
+            generation_metrics: Optional list of generation metrics to compute
+                (overrides per-sample config).
 
         Returns:
             List of EvaluationResult objects.
         """
         results = []
         for sample in samples:
-            result = self.evaluate_single(
-                question_id=sample.get("question_id", ""),
-                question=sample.get("question", ""),
-                answer=sample.get("answer", ""),
-                contexts=sample.get("contexts", []),
-                expected_sources=sample.get("expected_sources"),
-                expected_answer=sample.get("expected_answer"),
-                llm_config=llm_config,
+            merged = EvaluationSample(
+                question_id=sample.question_id,
+                question=sample.question,
+                answer=sample.answer,
+                contexts=sample.contexts,
+                expected_sources=sample.expected_sources,
+                expected_answer=sample.expected_answer,
+                llm_config=llm_config or sample.llm_config,
+                retrieval_metrics=retrieval_metrics or sample.retrieval_metrics,
+                generation_metrics=generation_metrics or sample.generation_metrics,
+                chunk_ids=sample.chunk_ids,
+                expected_chunks=sample.expected_chunks,
+                equivalence_groups=sample.equivalence_groups,
+                expect_retrieval=sample.expect_retrieval,
+                expect_no_answer=sample.expect_no_answer,
+                retrieved_sources=sample.retrieved_sources,
+                question_type=sample.question_type,
             )
+            result = self.evaluate_single(merged)
             results.append(result)
         return results
 

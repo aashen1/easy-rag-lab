@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from eval.evaluators.base import EvaluationResult
+from eval.evaluators.base import EvaluationResult, EvaluationSample
 from eval.evaluators.builtin_evaluator import BuiltinEvaluator
 from eval.evaluators.ragas_evaluator import RagasEvaluator
 
@@ -69,6 +69,49 @@ class TestEvaluationResult:
         assert "generation_metrics" in result_dict
 
 
+class TestEvaluationSample:
+    """Tests for EvaluationSample dataclass."""
+
+    def test_evaluation_sample_creation(self):
+        """Test creating an EvaluationSample instance."""
+        sample = EvaluationSample(
+            question_id="test_001",
+            question="What is Python?",
+            answer="Python is a programming language.",
+            contexts=["Python is a high-level programming language."],
+            expected_sources=["doc1.pdf"],
+        )
+
+        assert sample.question_id == "test_001"
+        assert sample.question == "What is Python?"
+        assert sample.answer == "Python is a programming language."
+        assert len(sample.contexts) == 1
+        assert sample.expected_sources == ["doc1.pdf"]
+        assert sample.expect_retrieval is True
+        assert sample.expect_no_answer is False
+
+    def test_evaluation_sample_defaults(self):
+        """Test EvaluationSample default values."""
+        sample = EvaluationSample()
+
+        assert sample.question_id == ""
+        assert sample.question == ""
+        assert sample.answer == ""
+        assert sample.contexts == []
+        assert sample.expected_sources is None
+        assert sample.expected_answer is None
+        assert sample.llm_config is None
+        assert sample.retrieval_metrics is None
+        assert sample.generation_metrics is None
+        assert sample.chunk_ids is None
+        assert sample.expected_chunks is None
+        assert sample.equivalence_groups is None
+        assert sample.expect_retrieval is True
+        assert sample.expect_no_answer is False
+        assert sample.retrieved_sources is None
+        assert sample.question_type is None
+
+
 class TestBuiltinEvaluator:
     """Tests for BuiltinEvaluator."""
 
@@ -108,11 +151,13 @@ class TestBuiltinEvaluator:
         evaluator = BuiltinEvaluator()
 
         result = evaluator.evaluate_single(
-            question_id="test_001",
-            question="What is Python?",
-            answer="Python is a programming language.",
-            contexts=["doc1.pdf", "doc2.pdf", "doc3.pdf"],
-            expected_sources=["doc1.pdf", "doc4.pdf"],
+            EvaluationSample(
+                question_id="test_001",
+                question="What is Python?",
+                answer="Python is a programming language.",
+                contexts=["doc1.pdf", "doc2.pdf", "doc3.pdf"],
+                expected_sources=["doc1.pdf", "doc4.pdf"],
+            )
         )
 
         assert result.question_id == "test_001"
@@ -127,10 +172,12 @@ class TestBuiltinEvaluator:
         evaluator = BuiltinEvaluator()
 
         result = evaluator.evaluate_single(
-            question_id="test_002",
-            question="What is Python?",
-            answer="Python is a programming language.",
-            contexts=["doc1.pdf", "doc2.pdf"],
+            EvaluationSample(
+                question_id="test_002",
+                question="What is Python?",
+                answer="Python is a programming language.",
+                contexts=["doc1.pdf", "doc2.pdf"],
+            )
         )
 
         assert "hit_rate" not in result.retrieval_metrics
@@ -166,14 +213,16 @@ class TestBuiltinEvaluator:
         evaluator = BuiltinEvaluator()
 
         result = evaluator.evaluate_single(
-            question_id="test_chunk_001",
-            question="What is the revenue?",
-            answer="Revenue is $1M.",
-            contexts=["doc1.pdf", "doc2.pdf"],
-            expected_sources=["doc1.pdf"],
-            chunk_ids=["doc1::chunk::001", "doc2::chunk::003"],
-            expected_chunks=["doc1::chunk::001", "doc1::chunk::002"],
-            retrieval_metrics=["chunk_hit_rate", "chunk_mrr", "chunk_ndcg"],
+            EvaluationSample(
+                question_id="test_chunk_001",
+                question="What is the revenue?",
+                answer="Revenue is $1M.",
+                contexts=["doc1.pdf", "doc2.pdf"],
+                expected_sources=["doc1.pdf"],
+                chunk_ids=["doc1::chunk::001", "doc2::chunk::003"],
+                expected_chunks=["doc1::chunk::001", "doc1::chunk::002"],
+                retrieval_metrics=["chunk_hit_rate", "chunk_mrr", "chunk_ndcg"],
+            )
         )
 
         assert "chunk_hit_rate" in result.retrieval_metrics
@@ -188,12 +237,14 @@ class TestBuiltinEvaluator:
         evaluator = BuiltinEvaluator()
 
         result = evaluator.evaluate_single(
-            question_id="test_chunk_002",
-            question="What is the revenue?",
-            answer="Revenue is $1M.",
-            contexts=["doc1.pdf"],
-            expected_sources=["doc1.pdf"],
-            retrieval_metrics=["chunk_hit_rate", "chunk_mrr", "chunk_ndcg"],
+            EvaluationSample(
+                question_id="test_chunk_002",
+                question="What is the revenue?",
+                answer="Revenue is $1M.",
+                contexts=["doc1.pdf"],
+                expected_sources=["doc1.pdf"],
+                retrieval_metrics=["chunk_hit_rate", "chunk_mrr", "chunk_ndcg"],
+            )
         )
 
         assert "chunk_hit_rate" not in result.retrieval_metrics
@@ -205,12 +256,14 @@ class TestBuiltinEvaluator:
         evaluator = BuiltinEvaluator()
 
         result = evaluator.evaluate_single(
-            question_id="test_dedup_001",
-            question="What is the revenue?",
-            answer="Revenue is $1M.",
-            contexts=["doc1.pdf", "doc1.pdf", "doc2.pdf"],
-            expected_sources=["doc1.pdf"],
-            retrieval_metrics=["dedup_hit_rate", "dedup_mrr", "dedup_ndcg"],
+            EvaluationSample(
+                question_id="test_dedup_001",
+                question="What is the revenue?",
+                answer="Revenue is $1M.",
+                contexts=["doc1.pdf", "doc1.pdf", "doc2.pdf"],
+                expected_sources=["doc1.pdf"],
+                retrieval_metrics=["dedup_hit_rate", "dedup_mrr", "dedup_ndcg"],
+            )
         )
 
         assert "dedup_hit_rate" in result.retrieval_metrics
@@ -228,13 +281,15 @@ class TestBuiltinEvaluator:
         }
 
         result = evaluator.evaluate_single(
-            question_id="test_dedup_eq_001",
-            question="What is the revenue?",
-            answer="Revenue is $1M.",
-            contexts=["doc1_summary.pdf", "doc2.pdf"],
-            expected_sources=["doc1.pdf"],
-            equivalence_groups=equivalence_groups,
-            retrieval_metrics=["dedup_hit_rate", "dedup_mrr", "dedup_ndcg"],
+            EvaluationSample(
+                question_id="test_dedup_eq_001",
+                question="What is the revenue?",
+                answer="Revenue is $1M.",
+                contexts=["doc1_summary.pdf", "doc2.pdf"],
+                expected_sources=["doc1.pdf"],
+                equivalence_groups=equivalence_groups,
+                retrieval_metrics=["dedup_hit_rate", "dedup_mrr", "dedup_ndcg"],
+            )
         )
 
         assert "dedup_hit_rate" in result.retrieval_metrics
@@ -246,12 +301,14 @@ class TestBuiltinEvaluator:
         evaluator = BuiltinEvaluator()
 
         result = evaluator.evaluate_single(
-            question_id="test_fpr_001",
-            question="Tell me a joke.",
-            answer="I don't know.",
-            contexts=["doc1.pdf", "doc2.pdf", "doc3.pdf"],
-            expect_retrieval=False,
-            retrieval_metrics=["false_positive_rate"],
+            EvaluationSample(
+                question_id="test_fpr_001",
+                question="Tell me a joke.",
+                answer="I don't know.",
+                contexts=["doc1.pdf", "doc2.pdf", "doc3.pdf"],
+                expect_retrieval=False,
+                retrieval_metrics=["false_positive_rate"],
+            )
         )
 
         assert "false_positive_rate" in result.retrieval_metrics
@@ -263,13 +320,15 @@ class TestBuiltinEvaluator:
         evaluator = BuiltinEvaluator()
 
         result = evaluator.evaluate_single(
-            question_id="test_fpr_002",
-            question="What is the revenue?",
-            answer="Revenue is $1M.",
-            contexts=["doc1.pdf"],
-            expected_sources=["doc1.pdf"],
-            expect_retrieval=True,
-            retrieval_metrics=["false_positive_rate"],
+            EvaluationSample(
+                question_id="test_fpr_002",
+                question="What is the revenue?",
+                answer="Revenue is $1M.",
+                contexts=["doc1.pdf"],
+                expected_sources=["doc1.pdf"],
+                expect_retrieval=True,
+                retrieval_metrics=["false_positive_rate"],
+            )
         )
 
         assert "false_positive_rate" not in result.retrieval_metrics
@@ -291,13 +350,15 @@ class TestBuiltinEvaluator:
         }
 
         result = evaluator.evaluate_single(
-            question_id="test_ctx_001",
-            question="What is the revenue?",
-            answer="Revenue is $1M.",
-            contexts=["Revenue was $1M in 2023."],
-            expected_answer="The revenue was $1 million in 2023.",
-            llm_config=llm_config,
-            retrieval_metrics=["context_precision", "context_recall"],
+            EvaluationSample(
+                question_id="test_ctx_001",
+                question="What is the revenue?",
+                answer="Revenue is $1M.",
+                contexts=["Revenue was $1M in 2023."],
+                expected_answer="The revenue was $1 million in 2023.",
+                llm_config=llm_config,
+                retrieval_metrics=["context_precision", "context_recall"],
+            )
         )
 
         assert "context_precision" in result.retrieval_metrics
@@ -319,15 +380,17 @@ class TestBuiltinEvaluator:
         }
 
         result = evaluator.evaluate_single(
-            question_id="test_ctx_err_001",
-            question="What is the revenue?",
-            answer="Revenue is $1M.",
-            contexts=["Revenue was $1M in 2023."],
-            expected_sources=["doc1.pdf"],
-            expected_answer="Revenue is $1M.",
-            expect_retrieval=True,
-            llm_config=llm_config,
-            retrieval_metrics=["context_precision"],
+            EvaluationSample(
+                question_id="test_ctx_err_001",
+                question="What is the revenue?",
+                answer="Revenue is $1M.",
+                contexts=["Revenue was $1M in 2023."],
+                expected_sources=["doc1.pdf"],
+                expected_answer="Revenue is $1M.",
+                expect_retrieval=True,
+                llm_config=llm_config,
+                retrieval_metrics=["context_precision"],
+            )
         )
 
         assert "context_precision" in result.retrieval_metrics
@@ -338,13 +401,15 @@ class TestBuiltinEvaluator:
         evaluator = BuiltinEvaluator()
 
         result = evaluator.evaluate_single(
-            question_id="test_irrelevant_001",
-            question="Tell me a joke.",
-            answer="I don't know.",
-            contexts=["doc1.pdf"],
-            expected_sources=[],
-            expect_retrieval=False,
-            retrieval_metrics=["hit_rate", "mrr", "ndcg", "false_positive_rate"],
+            EvaluationSample(
+                question_id="test_irrelevant_001",
+                question="Tell me a joke.",
+                answer="I don't know.",
+                contexts=["doc1.pdf"],
+                expected_sources=[],
+                expect_retrieval=False,
+                retrieval_metrics=["hit_rate", "mrr", "ndcg", "false_positive_rate"],
+            )
         )
 
         assert "hit_rate" not in result.retrieval_metrics
@@ -357,23 +422,23 @@ class TestBuiltinEvaluator:
         evaluator = BuiltinEvaluator()
 
         samples = [
-            {
-                "question_id": "batch_001",
-                "question": "What is the revenue?",
-                "answer": "Revenue is $1M.",
-                "contexts": ["doc1.pdf", "doc2.pdf"],
-                "expected_sources": ["doc1.pdf"],
-                "chunk_ids": ["doc1::chunk::001", "doc2::chunk::003"],
-                "expected_chunks": ["doc1::chunk::001"],
-                "expect_retrieval": True,
-            },
-            {
-                "question_id": "batch_002",
-                "question": "Tell me a joke.",
-                "answer": "I don't know.",
-                "contexts": ["doc3.pdf", "doc4.pdf"],
-                "expect_retrieval": False,
-            },
+            EvaluationSample(
+                question_id="batch_001",
+                question="What is the revenue?",
+                answer="Revenue is $1M.",
+                contexts=["doc1.pdf", "doc2.pdf"],
+                expected_sources=["doc1.pdf"],
+                chunk_ids=["doc1::chunk::001", "doc2::chunk::003"],
+                expected_chunks=["doc1::chunk::001"],
+                expect_retrieval=True,
+            ),
+            EvaluationSample(
+                question_id="batch_002",
+                question="Tell me a joke.",
+                answer="I don't know.",
+                contexts=["doc3.pdf", "doc4.pdf"],
+                expect_retrieval=False,
+            ),
         ]
 
         results = evaluator.evaluate_batch(
@@ -391,13 +456,15 @@ class TestBuiltinEvaluator:
         evaluator = BuiltinEvaluator()
 
         result = evaluator.evaluate_single(
-            question_id="test_sep_001",
-            question="What is the revenue?",
-            answer="Revenue is $1M.",
-            contexts=["Revenue was $1M in 2023.", "Profit was $500K."],
-            expected_sources=["doc1.pdf", "doc4.pdf"],
-            retrieved_sources=["doc1.pdf", "doc2.pdf", "doc3.pdf"],
-            retrieval_metrics=["hit_rate", "mrr", "ndcg"],
+            EvaluationSample(
+                question_id="test_sep_001",
+                question="What is the revenue?",
+                answer="Revenue is $1M.",
+                contexts=["Revenue was $1M in 2023.", "Profit was $500K."],
+                expected_sources=["doc1.pdf", "doc4.pdf"],
+                retrieved_sources=["doc1.pdf", "doc2.pdf", "doc3.pdf"],
+                retrieval_metrics=["hit_rate", "mrr", "ndcg"],
+            )
         )
 
         assert result.retrieval_metrics["hit_rate"] == 1.0
@@ -419,14 +486,16 @@ class TestBuiltinEvaluator:
             mock_faith.return_value = 0.9
 
             result = evaluator.evaluate_single(
-                question_id="test_sep_002",
-                question="What is the revenue?",
-                answer="Revenue is $1M.",
-                contexts=["Revenue was $1M in 2023."],
-                expected_sources=["doc1.pdf"],
-                retrieved_sources=["doc1.pdf", "doc2.pdf"],
-                llm_config=llm_config,
-                generation_metrics=["faithfulness"],
+                EvaluationSample(
+                    question_id="test_sep_002",
+                    question="What is the revenue?",
+                    answer="Revenue is $1M.",
+                    contexts=["Revenue was $1M in 2023."],
+                    expected_sources=["doc1.pdf"],
+                    retrieved_sources=["doc1.pdf", "doc2.pdf"],
+                    llm_config=llm_config,
+                    generation_metrics=["faithfulness"],
+                )
             )
 
             mock_faith.assert_called_once()
@@ -442,11 +511,13 @@ class TestBuiltinEvaluator:
         evaluator = BuiltinEvaluator()
 
         result = evaluator.evaluate_single(
-            question_id="test_compat_001",
-            question="What is Python?",
-            answer="Python is a programming language.",
-            contexts=["doc1.pdf", "doc2.pdf", "doc3.pdf"],
-            expected_sources=["doc1.pdf", "doc4.pdf"],
+            EvaluationSample(
+                question_id="test_compat_001",
+                question="What is Python?",
+                answer="Python is a programming language.",
+                contexts=["doc1.pdf", "doc2.pdf", "doc3.pdf"],
+                expected_sources=["doc1.pdf", "doc4.pdf"],
+            )
         )
 
         assert result.retrieval_metrics["hit_rate"] == 1.0
@@ -469,16 +540,18 @@ class TestBuiltinEvaluator:
         }
 
         result = evaluator.evaluate_single(
-            question_id="test_sep_ctx_001",
-            question="What is the revenue?",
-            answer="Revenue is $1M.",
-            contexts=["Revenue was $1M in 2023."],
-            expected_sources=["doc1.pdf"],
-            expected_answer="Revenue is $1M.",
-            expect_retrieval=True,
-            retrieved_sources=["doc1.pdf", "doc2.pdf"],
-            llm_config=llm_config,
-            retrieval_metrics=["context_precision", "context_recall"],
+            EvaluationSample(
+                question_id="test_sep_ctx_001",
+                question="What is the revenue?",
+                answer="Revenue is $1M.",
+                contexts=["Revenue was $1M in 2023."],
+                expected_sources=["doc1.pdf"],
+                expected_answer="Revenue is $1M.",
+                expect_retrieval=True,
+                retrieved_sources=["doc1.pdf", "doc2.pdf"],
+                llm_config=llm_config,
+                retrieval_metrics=["context_precision", "context_recall"],
+            )
         )
 
         mock_precision.assert_called_once()
@@ -498,13 +571,15 @@ class TestBuiltinEvaluator:
         evaluator = BuiltinEvaluator()
 
         result = evaluator.evaluate_single(
-            question_id="test_sep_dedup_001",
-            question="What is the revenue?",
-            answer="Revenue is $1M.",
-            contexts=["Revenue was $1M in 2023."],
-            expected_sources=["doc1.pdf"],
-            retrieved_sources=["doc1.pdf", "doc1.pdf", "doc2.pdf"],
-            retrieval_metrics=["dedup_hit_rate", "dedup_mrr", "dedup_ndcg"],
+            EvaluationSample(
+                question_id="test_sep_dedup_001",
+                question="What is the revenue?",
+                answer="Revenue is $1M.",
+                contexts=["Revenue was $1M in 2023."],
+                expected_sources=["doc1.pdf"],
+                retrieved_sources=["doc1.pdf", "doc1.pdf", "doc2.pdf"],
+                retrieval_metrics=["dedup_hit_rate", "dedup_mrr", "dedup_ndcg"],
+            )
         )
 
         assert "dedup_hit_rate" in result.retrieval_metrics
@@ -516,13 +591,15 @@ class TestBuiltinEvaluator:
         evaluator = BuiltinEvaluator()
 
         result = evaluator.evaluate_single(
-            question_id="test_sep_fpr_001",
-            question="Tell me a joke.",
-            answer="I don't know.",
-            contexts=["Some text content here."],
-            retrieved_sources=["doc1.pdf", "doc2.pdf", "doc3.pdf"],
-            expect_retrieval=False,
-            retrieval_metrics=["false_positive_rate"],
+            EvaluationSample(
+                question_id="test_sep_fpr_001",
+                question="Tell me a joke.",
+                answer="I don't know.",
+                contexts=["Some text content here."],
+                retrieved_sources=["doc1.pdf", "doc2.pdf", "doc3.pdf"],
+                expect_retrieval=False,
+                retrieval_metrics=["false_positive_rate"],
+            )
         )
 
         assert "false_positive_rate" in result.retrieval_metrics
@@ -534,24 +611,24 @@ class TestBuiltinEvaluator:
         evaluator = BuiltinEvaluator()
 
         samples = [
-            {
-                "question_id": "batch_sep_001",
-                "question": "What is the revenue?",
-                "answer": "Revenue is $1M.",
-                "contexts": ["Revenue was $1M in 2023."],
-                "expected_sources": ["doc1.pdf"],
-                "retrieved_sources": ["doc1.pdf", "doc2.pdf"],
-                "question_type": "factual",
-            },
-            {
-                "question_id": "batch_sep_002",
-                "question": "Tell me a joke.",
-                "answer": "I don't know.",
-                "contexts": ["Some text."],
-                "retrieved_sources": ["doc3.pdf"],
-                "expect_retrieval": False,
-                "question_type": "irrelevant",
-            },
+            EvaluationSample(
+                question_id="batch_sep_001",
+                question="What is the revenue?",
+                answer="Revenue is $1M.",
+                contexts=["Revenue was $1M in 2023."],
+                expected_sources=["doc1.pdf"],
+                retrieved_sources=["doc1.pdf", "doc2.pdf"],
+                question_type="factual",
+            ),
+            EvaluationSample(
+                question_id="batch_sep_002",
+                question="Tell me a joke.",
+                answer="I don't know.",
+                contexts=["Some text."],
+                retrieved_sources=["doc3.pdf"],
+                expect_retrieval=False,
+                question_type="irrelevant",
+            ),
         ]
 
         results = evaluator.evaluate_batch(
@@ -569,13 +646,15 @@ class TestBuiltinEvaluator:
         evaluator = BuiltinEvaluator()
 
         result = evaluator.evaluate_single(
-            question_id="test_missing_001",
-            question="What is the quantum computing strategy?",
-            answer="The document does not mention quantum computing.",
-            contexts=["annual_report/company_2023.pdf"],
-            expected_sources=["annual_report/company_2023.pdf"],
-            expect_retrieval=False,
-            retrieval_metrics=["hit_rate", "mrr", "ndcg", "false_positive_rate"],
+            EvaluationSample(
+                question_id="test_missing_001",
+                question="What is the quantum computing strategy?",
+                answer="The document does not mention quantum computing.",
+                contexts=["annual_report/company_2023.pdf"],
+                expected_sources=["annual_report/company_2023.pdf"],
+                expect_retrieval=False,
+                retrieval_metrics=["hit_rate", "mrr", "ndcg", "false_positive_rate"],
+            )
         )
 
         assert "hit_rate" not in result.retrieval_metrics
@@ -588,12 +667,14 @@ class TestBuiltinEvaluator:
         evaluator = BuiltinEvaluator()
 
         result = evaluator.evaluate_single(
-            question_id="test_irrelevant_001",
-            question="Tell me a joke.",
-            answer="I don't know.",
-            contexts=["doc1.pdf", "doc2.pdf"],
-            expect_retrieval=False,
-            retrieval_metrics=["hit_rate", "mrr", "ndcg", "false_positive_rate"],
+            EvaluationSample(
+                question_id="test_irrelevant_001",
+                question="Tell me a joke.",
+                answer="I don't know.",
+                contexts=["doc1.pdf", "doc2.pdf"],
+                expect_retrieval=False,
+                retrieval_metrics=["hit_rate", "mrr", "ndcg", "false_positive_rate"],
+            )
         )
 
         assert "hit_rate" not in result.retrieval_metrics
@@ -604,12 +685,14 @@ class TestBuiltinEvaluator:
         evaluator = BuiltinEvaluator()
 
         result = evaluator.evaluate_single(
-            question_id="test_diversity_001",
-            question="What is the revenue?",
-            answer="Revenue is $1M.",
-            contexts=["doc1.pdf", "doc1.pdf", "doc2.pdf"],
-            expected_sources=["doc1.pdf"],
-            retrieval_metrics=["retrieval_diversity"],
+            EvaluationSample(
+                question_id="test_diversity_001",
+                question="What is the revenue?",
+                answer="Revenue is $1M.",
+                contexts=["doc1.pdf", "doc1.pdf", "doc2.pdf"],
+                expected_sources=["doc1.pdf"],
+                retrieval_metrics=["retrieval_diversity"],
+            )
         )
 
         assert "retrieval_diversity" in result.retrieval_metrics
@@ -620,12 +703,14 @@ class TestBuiltinEvaluator:
         evaluator = BuiltinEvaluator()
 
         result = evaluator.evaluate_single(
-            question_id="test_diversity_002",
-            question="What is the revenue?",
-            answer="Revenue is $1M.",
-            contexts=["doc1.pdf", "doc1.pdf", "doc1.pdf", "doc1.pdf", "doc1.pdf"],
-            expected_sources=["doc1.pdf"],
-            retrieval_metrics=["retrieval_diversity"],
+            EvaluationSample(
+                question_id="test_diversity_002",
+                question="What is the revenue?",
+                answer="Revenue is $1M.",
+                contexts=["doc1.pdf", "doc1.pdf", "doc1.pdf", "doc1.pdf", "doc1.pdf"],
+                expected_sources=["doc1.pdf"],
+                retrieval_metrics=["retrieval_diversity"],
+            )
         )
 
         assert "retrieval_diversity" in result.retrieval_metrics
@@ -636,12 +721,14 @@ class TestBuiltinEvaluator:
         evaluator = BuiltinEvaluator()
 
         result = evaluator.evaluate_single(
-            question_id="test_recall_001",
-            question="What is the revenue?",
-            answer="Revenue is $1M.",
-            contexts=["doc1.pdf", "doc3.pdf", "doc4.pdf", "doc2.pdf", "doc5.pdf"],
-            expected_sources=["doc1.pdf", "doc2.pdf", "doc6.pdf"],
-            retrieval_metrics=["recall_3", "recall_5", "recall_10"],
+            EvaluationSample(
+                question_id="test_recall_001",
+                question="What is the revenue?",
+                answer="Revenue is $1M.",
+                contexts=["doc1.pdf", "doc3.pdf", "doc4.pdf", "doc2.pdf", "doc5.pdf"],
+                expected_sources=["doc1.pdf", "doc2.pdf", "doc6.pdf"],
+                retrieval_metrics=["recall_3", "recall_5", "recall_10"],
+            )
         )
 
         assert "recall_3" in result.retrieval_metrics
@@ -656,12 +743,14 @@ class TestBuiltinEvaluator:
         evaluator = BuiltinEvaluator()
 
         result = evaluator.evaluate_single(
-            question_id="test_recall_no_retrieval",
-            question="Tell me a joke.",
-            answer="I don't know.",
-            contexts=["doc1.pdf"],
-            expect_retrieval=False,
-            retrieval_metrics=["recall_3", "recall_5", "recall_10"],
+            EvaluationSample(
+                question_id="test_recall_no_retrieval",
+                question="Tell me a joke.",
+                answer="I don't know.",
+                contexts=["doc1.pdf"],
+                expect_retrieval=False,
+                retrieval_metrics=["recall_3", "recall_5", "recall_10"],
+            )
         )
 
         assert "recall_3" not in result.retrieval_metrics
@@ -701,10 +790,12 @@ class TestRagasEvaluator:
         evaluator = RagasEvaluator()
 
         result = evaluator.evaluate_single(
-            question_id="test_001",
-            question="What is Python?",
-            answer="Python is a programming language.",
-            contexts=["Python is a high-level programming language."],
+            EvaluationSample(
+                question_id="test_001",
+                question="What is Python?",
+                answer="Python is a programming language.",
+                contexts=["Python is a high-level programming language."],
+            )
         )
 
         assert result.error is not None
@@ -915,12 +1006,18 @@ class TestRagasEvaluatorReferenceWarning:
         evaluator = RagasEvaluator()
 
         result = evaluator.evaluate_single(
-            question_id="test_no_ref",
-            question="What is Python?",
-            answer="Python is a programming language.",
-            contexts=["Python is a high-level programming language."],
-            expected_answer=None,
-            generation_metrics=["faithfulness", "context_precision", "context_recall"],
+            EvaluationSample(
+                question_id="test_no_ref",
+                question="What is Python?",
+                answer="Python is a programming language.",
+                contexts=["Python is a high-level programming language."],
+                expected_answer=None,
+                generation_metrics=[
+                    "faithfulness",
+                    "context_precision",
+                    "context_recall",
+                ],
+            )
         )
 
         assert result.error is not None
@@ -932,12 +1029,14 @@ class TestRagasEvaluatorReferenceWarning:
         evaluator = RagasEvaluator()
 
         result = evaluator.evaluate_single(
-            question_id="test_no_ref_2",
-            question="What is Python?",
-            answer="Python is a programming language.",
-            contexts=["Python is a high-level programming language."],
-            expected_answer=None,
-            generation_metrics=["context_precision", "context_recall"],
+            EvaluationSample(
+                question_id="test_no_ref_2",
+                question="What is Python?",
+                answer="Python is a programming language.",
+                contexts=["Python is a high-level programming language."],
+                expected_answer=None,
+                generation_metrics=["context_precision", "context_recall"],
+            )
         )
 
         assert result.generation_metrics == {}
@@ -947,13 +1046,13 @@ class TestRagasEvaluatorReferenceWarning:
         evaluator = RagasEvaluator()
 
         samples = [
-            {
-                "question_id": "q1",
-                "question": "What is X?",
-                "answer": "X is Y.",
-                "contexts": ["X is Y."],
-                "expected_answer": None,
-            },
+            EvaluationSample(
+                question_id="q1",
+                question="What is X?",
+                answer="X is Y.",
+                contexts=["X is Y."],
+                expected_answer=None,
+            ),
         ]
 
         with patch.object(evaluator, "_create_llm", side_effect=Exception("no LLM")):
@@ -995,17 +1094,19 @@ class TestRagasEvaluatorMocked:
             patch("ragas.evaluate", return_value=mock_result),
         ):
             result = evaluator.evaluate_single(
-                question_id="q1",
-                question="What is RAG?",
-                answer="RAG is retrieval-augmented generation.",
-                contexts=["RAG combines retrieval and generation."],
-                expected_answer="RAG is a technique that combines retrieval with generation.",
-                llm_config={
-                    "api_key": "test",
-                    "base_url": "http://test",
-                    "model_name": "test-model",
-                },
-                generation_metrics=["faithfulness", "answer_relevancy"],
+                EvaluationSample(
+                    question_id="q1",
+                    question="What is RAG?",
+                    answer="RAG is retrieval-augmented generation.",
+                    contexts=["RAG combines retrieval and generation."],
+                    expected_answer="RAG is a technique that combines retrieval with generation.",
+                    llm_config={
+                        "api_key": "test",
+                        "base_url": "http://test",
+                        "model_name": "test-model",
+                    },
+                    generation_metrics=["faithfulness", "answer_relevancy"],
+                )
             )
 
             assert result.question_id == "q1"
@@ -1024,8 +1125,12 @@ class TestRagasEvaluatorMocked:
         ]
 
         samples = [
-            {"question_id": "q1", "question": "Q1", "answer": "A1", "contexts": ["C1"]},
-            {"question_id": "q2", "question": "Q2", "answer": "A2", "contexts": ["C2"]},
+            EvaluationSample(
+                question_id="q1", question="Q1", answer="A1", contexts=["C1"]
+            ),
+            EvaluationSample(
+                question_id="q2", question="Q2", answer="A2", contexts=["C2"]
+            ),
         ]
 
         with (
@@ -1082,20 +1187,20 @@ class TestEvaluatorIntegration:
         evaluator = BuiltinEvaluator()
 
         samples = [
-            {
-                "question_id": "test_001",
-                "question": "What is Python?",
-                "answer": "Python is a programming language.",
-                "contexts": ["doc1.pdf", "doc2.pdf"],
-                "expected_sources": ["doc1.pdf"],
-            },
-            {
-                "question_id": "test_002",
-                "question": "What is Java?",
-                "answer": "Java is a programming language.",
-                "contexts": ["doc3.pdf", "doc4.pdf"],
-                "expected_sources": ["doc3.pdf", "doc5.pdf"],
-            },
+            EvaluationSample(
+                question_id="test_001",
+                question="What is Python?",
+                answer="Python is a programming language.",
+                contexts=["doc1.pdf", "doc2.pdf"],
+                expected_sources=["doc1.pdf"],
+            ),
+            EvaluationSample(
+                question_id="test_002",
+                question="What is Java?",
+                answer="Java is a programming language.",
+                contexts=["doc3.pdf", "doc4.pdf"],
+                expected_sources=["doc3.pdf", "doc5.pdf"],
+            ),
         ]
 
         results = evaluator.evaluate_batch(samples)

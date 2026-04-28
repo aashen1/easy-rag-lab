@@ -9,7 +9,7 @@ from typing import Any
 
 from loguru import logger
 
-from eval.evaluators.base import BaseEvaluator, EvaluationResult
+from eval.evaluators.base import BaseEvaluator, EvaluationResult, EvaluationSample
 from eval.metrics import (
     calculate_answer_relevancy,
     calculate_chunk_hit_rate,
@@ -100,63 +100,31 @@ class BuiltinEvaluator(BaseEvaluator):
         """
         return self._generation_metrics
 
-    def evaluate_single(
-        self,
-        question_id: str,
-        question: str,
-        answer: str,
-        contexts: list[str],
-        expected_sources: list[str] | None = None,
-        expected_answer: str | None = None,
-        llm_config: dict[str, str] | None = None,
-        retrieval_metrics: list[str] | None = None,
-        generation_metrics: list[str] | None = None,
-        chunk_ids: list[str] | None = None,
-        expected_chunks: list[str] | None = None,
-        equivalence_groups: dict[str, list[str]] | None = None,
-        expect_retrieval: bool = True,
-        expect_no_answer: bool = False,
-        retrieved_sources: list[str] | None = None,
-        question_type: str | None = None,
-    ) -> EvaluationResult:
+    def evaluate_single(self, sample: EvaluationSample) -> EvaluationResult:
         """
         Evaluate a single sample using builtin metrics.
 
         Args:
-            question_id: Unique identifier for the question.
-            question: The question text.
-            answer: The generated answer.
-            contexts: List of retrieved context strings (text content).
-                Used for generation metrics (faithfulness, context_precision,
-                context_recall). When retrieved_sources is not provided, also
-                used as fallback for retrieval metrics.
-            expected_sources: Optional list of expected source documents.
-            expected_answer: Optional expected answer for reference.
-            llm_config: Optional LLM configuration for generation metrics.
-                Must contain api_key, base_url, and model_name keys.
-            retrieval_metrics: Optional list of retrieval metrics to compute.
-                Defaults to all supported retrieval metrics.
-            generation_metrics: Optional list of generation metrics to compute.
-                Defaults to all supported generation metrics if llm_config is provided.
-            chunk_ids: Optional list of retrieved chunk identifiers.
-            expected_chunks: Optional list of expected chunk identifiers.
-            equivalence_groups: Optional dict mapping group keys to lists of
-                equivalent file paths for dedup normalization.
-            expect_retrieval: Whether the question expects retrieval results.
-                Defaults to True. Set to False for irrelevant questions.
-            expect_no_answer: Whether the answer is not expected to be found
-                in the documents. Defaults to False. Set to True for missing
-                knowledge questions. When True, faithfulness is skipped.
-            retrieved_sources: Optional list of retrieved source file paths.
-                Used for retrieval metrics (hit_rate, mrr, ndcg, dedup, FPR).
-                When not provided, falls back to contexts for backward
-                compatibility.
-            question_type: Optional question type string (e.g., 'factual',
-                'irrelevant'). Used for logging and result metadata.
+            sample: EvaluationSample containing all data needed for evaluation.
 
         Returns:
             EvaluationResult containing the evaluation scores.
         """
+        question_id = sample.question_id
+        question = sample.question
+        answer = sample.answer
+        contexts = sample.contexts
+        expected_sources = sample.expected_sources
+        expected_answer = sample.expected_answer
+        llm_config = sample.llm_config
+        retrieval_metrics = sample.retrieval_metrics
+        generation_metrics = sample.generation_metrics
+        chunk_ids = sample.chunk_ids
+        expected_chunks = sample.expected_chunks
+        equivalence_groups = sample.equivalence_groups
+        expect_retrieval = sample.expect_retrieval
+        expect_no_answer = sample.expect_no_answer
+        retrieved_sources = sample.retrieved_sources
         if retrieval_metrics is None:
             retrieval_metrics = self._retrieval_metrics
 
@@ -346,7 +314,7 @@ class BuiltinEvaluator(BaseEvaluator):
 
     def evaluate_batch(
         self,
-        samples: list[dict[str, Any]],
+        samples: list[EvaluationSample],
         llm_config: dict[str, str] | None = None,
         retrieval_metrics: list[str] | None = None,
         generation_metrics: list[str] | None = None,
@@ -359,7 +327,7 @@ class BuiltinEvaluator(BaseEvaluator):
         evaluator which supports batch processing.
 
         Args:
-            samples: List of sample dictionaries.
+            samples: List of EvaluationSample objects.
             llm_config: Optional LLM configuration for generation metrics.
             retrieval_metrics: Optional list of retrieval metrics to compute.
             generation_metrics: Optional list of generation metrics to compute.
@@ -370,25 +338,26 @@ class BuiltinEvaluator(BaseEvaluator):
         results = []
         for i, sample in enumerate(samples):
             logger.info(
-                f"Evaluating sample {i + 1}/{len(samples)}: {sample.get('question_id', 'unknown')}"
+                f"Evaluating sample {i + 1}/{len(samples)}: {sample.question_id}"
             )
-            result = self.evaluate_single(
-                question_id=sample.get("question_id", ""),
-                question=sample.get("question", ""),
-                answer=sample.get("answer", ""),
-                contexts=sample.get("contexts", []),
-                expected_sources=sample.get("expected_sources"),
-                expected_answer=sample.get("expected_answer"),
-                llm_config=llm_config,
-                retrieval_metrics=retrieval_metrics,
-                generation_metrics=generation_metrics,
-                chunk_ids=sample.get("chunk_ids"),
-                expected_chunks=sample.get("expected_chunks"),
-                equivalence_groups=sample.get("equivalence_groups"),
-                expect_retrieval=sample.get("expect_retrieval", True),
-                expect_no_answer=sample.get("expect_no_answer", False),
-                retrieved_sources=sample.get("retrieved_sources"),
-                question_type=sample.get("question_type"),
+            merged = EvaluationSample(
+                question_id=sample.question_id,
+                question=sample.question,
+                answer=sample.answer,
+                contexts=sample.contexts,
+                expected_sources=sample.expected_sources,
+                expected_answer=sample.expected_answer,
+                llm_config=llm_config or sample.llm_config,
+                retrieval_metrics=retrieval_metrics or sample.retrieval_metrics,
+                generation_metrics=generation_metrics or sample.generation_metrics,
+                chunk_ids=sample.chunk_ids,
+                expected_chunks=sample.expected_chunks,
+                equivalence_groups=sample.equivalence_groups,
+                expect_retrieval=sample.expect_retrieval,
+                expect_no_answer=sample.expect_no_answer,
+                retrieved_sources=sample.retrieved_sources,
+                question_type=sample.question_type,
             )
+            result = self.evaluate_single(merged)
             results.append(result)
         return results

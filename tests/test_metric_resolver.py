@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from eval.evaluators.base import BaseEvaluator
+from eval.evaluators.base import BaseEvaluator, EvaluationSample
 from eval.metrics.metric_resolver import METRIC_PRESETS, MetricResolver
 
 
@@ -34,7 +34,7 @@ class MockEvaluator(BaseEvaluator):
     def supported_generation_metrics(self) -> list[str]:
         return self._generation_metrics
 
-    def evaluate_single(self, **kwargs):
+    def evaluate_single(self, sample: EvaluationSample):
         raise NotImplementedError
 
 

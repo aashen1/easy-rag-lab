@@ -1221,13 +1221,16 @@ class TestEvaluateWithBuiltinContextsSourcesSeparation:
             )
 
             mock_eval.assert_called_once()
-            call_kwargs = mock_eval.call_args.kwargs
-            assert call_kwargs["contexts"] == [
+            call_args = mock_eval.call_args
+            sample = (
+                call_args.args[0] if call_args.args else call_args.kwargs.get("sample")
+            )
+            assert sample.contexts == [
                 "Revenue was $1M in 2023.",
                 "Profit was $500K.",
             ]
-            assert call_kwargs["retrieved_sources"] == ["doc1.pdf", "doc2.pdf"]
-            assert call_kwargs["contexts"] != call_kwargs["retrieved_sources"]
+            assert sample.retrieved_sources == ["doc1.pdf", "doc2.pdf"]
+            assert sample.contexts != sample.retrieved_sources
 
     def test_evaluate_with_builtin_passes_chunk_ids_and_question_type(self):
         """Test that _evaluate_with_builtin passes chunk_ids and question_type."""
@@ -1268,9 +1271,12 @@ class TestEvaluateWithBuiltinContextsSourcesSeparation:
                 retrieval_metrics=["hit_rate"],
             )
 
-            call_kwargs = mock_eval.call_args.kwargs
-            assert call_kwargs["chunk_ids"] == ["doc1::chunk::001", "doc2::chunk::003"]
-            assert call_kwargs["question_type"] == "single_fact"
+            call_args = mock_eval.call_args
+            sample = (
+                call_args.args[0] if call_args.args else call_args.kwargs.get("sample")
+            )
+            assert sample.chunk_ids == ["doc1::chunk::001", "doc2::chunk::003"]
+            assert sample.question_type == "single_fact"
 
     def test_evaluate_with_builtin_handles_error_samples(self):
         """Test that _evaluate_with_builtin handles error samples correctly."""

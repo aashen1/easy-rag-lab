@@ -5,7 +5,7 @@ from typing import Any
 
 from loguru import logger
 
-from eval.evaluators.base import BaseEvaluator
+from eval.evaluators.base import BaseEvaluator, EvaluationSample
 from eval.evaluators.builtin_evaluator import BuiltinEvaluator
 from eval.evaluators.ragas_evaluator import RagasEvaluator
 from eval.metrics.metric_resolver import MetricResolver
@@ -190,22 +190,24 @@ def _evaluate_with_builtin(
             expected_answer = sample.get("expected_answer")
 
         eval_result = evaluator.evaluate_single(
-            question_id=question_id,
-            question=sample["question"],
-            answer=sample["answer"],
-            contexts=sample.get("contexts", []),
-            expected_sources=sample.get("expected_sources"),
-            expected_answer=expected_answer,
-            llm_config=llm_config,
-            retrieval_metrics=retrieval_metrics,
-            generation_metrics=generation_metrics,
-            chunk_ids=sample.get("chunk_ids"),
-            expected_chunks=sample.get("expected_chunks"),
-            equivalence_groups=sample.get("equivalence_groups"),
-            expect_retrieval=sample.get("expect_retrieval", True),
-            expect_no_answer=sample.get("expect_no_answer", False),
-            retrieved_sources=sample.get("retrieved_sources", []),
-            question_type=sample.get("question_type"),
+            EvaluationSample(
+                question_id=question_id,
+                question=sample["question"],
+                answer=sample["answer"],
+                contexts=sample.get("contexts", []),
+                expected_sources=sample.get("expected_sources"),
+                expected_answer=expected_answer,
+                llm_config=llm_config,
+                retrieval_metrics=retrieval_metrics,
+                generation_metrics=generation_metrics,
+                chunk_ids=sample.get("chunk_ids"),
+                expected_chunks=sample.get("expected_chunks"),
+                equivalence_groups=sample.get("equivalence_groups"),
+                expect_retrieval=sample.get("expect_retrieval", True),
+                expect_no_answer=sample.get("expect_no_answer", False),
+                retrieved_sources=sample.get("retrieved_sources", []),
+                question_type=sample.get("question_type"),
+            )
         )
 
         raw_retrieval = eval_result.retrieval_metrics
@@ -307,9 +309,23 @@ def _evaluate_with_ragas(
 
     logger.info(f"Running RAGAS evaluation on {len(valid_samples)} samples...")
 
+    ragas_samples = [
+        EvaluationSample(
+            question_id=s.get("question_id", ""),
+            question=s.get("question", ""),
+            answer=s.get("answer", ""),
+            contexts=s.get("contexts", []),
+            expected_sources=s.get("expected_sources"),
+            expected_answer=s.get("expected_answer"),
+            expect_retrieval=s.get("expect_retrieval", True),
+        )
+        for s in valid_samples
+    ]
+
     ragas_results = evaluator.evaluate_batch(
-        samples=valid_samples,
+        samples=ragas_samples,
         llm_config=llm_config,
+        retrieval_metrics=retrieval_metrics,
         generation_metrics=all_ragas_metrics,
     )
 
