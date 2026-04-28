@@ -1,8 +1,8 @@
 [workspace]
-authors = ["Ash <aashen1@foxmail.com>"]
+authors = ["Ash (GitHub@aashen1)"]
 channels = ["conda-forge"]
 name = "easy-rag-lab"
-platforms = ["win-64"]
+platforms = ["win-64"]  # not tested for other platforms yet
 version = "0.1.13"
 
 [tasks]
@@ -158,8 +158,11 @@ index-url = "https://pypi.mirrors.ustc.edu.cn/simple"
 extra-index-urls = ["https://pypi.org/simple"]
 index-strategy = "unsafe-best-match"
 find-links = [
+# Settings of using local torch-cuda-whl cache.
+# Modify or delete this before running pixi
+# Note: similar to --find-links option in pip.
     { path = 'B:/useradmin/torch_cache' },
-] # Use local torch cuda whl cache, modify or delete this
+]
 
 # --- torch whl download ---
 # torch official site: "https://download.pytorch.org/whl/cu126"
