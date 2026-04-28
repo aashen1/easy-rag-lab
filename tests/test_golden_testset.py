@@ -6,6 +6,19 @@ import pytest
 
 from scripts.review_golden_testset import audit_testset
 from src.exceptions import TestSetError
+from src.test_generation.llm_caller import generate_missing_question
+from src.test_generation.validators import (
+    build_primary_pool,
+    detect_content_overlaps,
+    filter_adversarial_issues,
+    supplement_evidence_for_uncovered_numbers,
+    truncate_answer,
+    validate_answer_consistency,
+    validate_answer_evidence_consistency,
+    validate_evidence,
+    validate_numerical_accuracy,
+    verify_excerpt_in_document,
+)
 from src.test_generator import MISSING_INDEPENDENT_PROMPT, TestSetGenerator
 from src.test_set_manager import TestSetManager
 
@@ -43,7 +56,7 @@ class TestDetectContentOverlaps:
             {"doc_id": "annual_report", "content": base_text},
             {"doc_id": "summary", "content": summary_text},
         ]
-        overlaps = self.generator._detect_content_overlaps(docs)
+        overlaps = detect_content_overlaps(docs)
         assert len(overlaps) == 1
         assert overlaps[0][0] == "summary"
         assert overlaps[0][1] == "annual_report"
@@ -53,7 +66,7 @@ class TestDetectContentOverlaps:
             {"doc_id": "doc_a", "content": "Alpha beta gamma delta " * 200},
             {"doc_id": "doc_b", "content": "One two three four five " * 200},
         ]
-        overlaps = self.generator._detect_content_overlaps(docs)
+        overlaps = detect_content_overlaps(docs)
         assert len(overlaps) == 0
 
     def test_short_document_skipped(self):
@@ -61,7 +74,7 @@ class TestDetectContentOverlaps:
             {"doc_id": "doc_a", "content": "Short text"},
             {"doc_id": "doc_b", "content": "Long text " * 200},
         ]
-        overlaps = self.generator._detect_content_overlaps(docs)
+        overlaps = detect_content_overlaps(docs)
         assert len(overlaps) == 0
 
 
@@ -76,7 +89,7 @@ class TestBuildPrimaryPool:
             {"doc_id": "summary", "content": "A" * 2000},
         ]
         overlaps = [("summary", "annual_report", 1.0)]
-        pool = self.generator._build_primary_pool(docs, overlaps)
+        pool = build_primary_pool(docs, overlaps)
         assert len(pool) == 1
         assert pool[0]["doc_id"] == "annual_report"
 
@@ -85,7 +98,7 @@ class TestBuildPrimaryPool:
             {"doc_id": "doc_a", "content": "A" * 1000},
             {"doc_id": "doc_b", "content": "B" * 1000},
         ]
-        pool = self.generator._build_primary_pool(docs, [])
+        pool = build_primary_pool(docs, [])
         assert len(pool) == 2
 
 
@@ -99,7 +112,7 @@ class TestValidateAnswerNumericalAccuracy:
             "answer": "净利润从2268.9亿元降至1216.3亿元",
             "ground_truth_excerpt": "净利润|12,162,684,368.86|22,617,778,516.45",
         }
-        is_valid, correction = self.generator._validate_numerical_accuracy(q)
+        is_valid, correction = validate_numerical_accuracy(q)
         assert not is_valid
         assert correction is not None
         assert any(e["type"] == "10x_error" for e in correction["errors"])
@@ -109,7 +122,7 @@ class TestValidateAnswerNumericalAccuracy:
             "answer": "净利润为121.63亿元",
             "ground_truth_excerpt": "净利润12,162,684,368.86元",
         }
-        is_valid, correction = self.generator._validate_numerical_accuracy(q)
+        is_valid, correction = validate_numerical_accuracy(q)
         assert is_valid
         assert correction is None
 
@@ -118,7 +131,7 @@ class TestValidateAnswerNumericalAccuracy:
             "answer": "公司主营光模块业务",
             "ground_truth_excerpt": "公司主营业务为光模块研发",
         }
-        is_valid, correction = self.generator._validate_numerical_accuracy(q)
+        is_valid, correction = validate_numerical_accuracy(q)
         assert is_valid
 
     def test_no_yi_unit_pass(self):
@@ -126,17 +139,17 @@ class TestValidateAnswerNumericalAccuracy:
             "answer": "净利润为12162684368.86元",
             "ground_truth_excerpt": "净利润12,162,684,368.86元",
         }
-        is_valid, correction = self.generator._validate_numerical_accuracy(q)
+        is_valid, correction = validate_numerical_accuracy(q)
         assert is_valid
 
     def test_empty_answer_pass(self):
         q = {"answer": "", "ground_truth_excerpt": "some text"}
-        is_valid, correction = self.generator._validate_numerical_accuracy(q)
+        is_valid, correction = validate_numerical_accuracy(q)
         assert is_valid
 
     def test_empty_excerpt_pass(self):
         q = {"answer": "净利润100亿", "ground_truth_excerpt": ""}
-        is_valid, correction = self.generator._validate_numerical_accuracy(q)
+        is_valid, correction = validate_numerical_accuracy(q)
         assert is_valid
 
 
@@ -148,25 +161,25 @@ class TestVerifyExcerptInDocument:
     def test_exact_match(self):
         doc = "公司2024年营收达到100亿元，同比增长15%。"
         excerpt = "营收达到100亿元"
-        assert self.generator._verify_excerpt_in_document(excerpt, doc) is True
+        assert verify_excerpt_in_document(excerpt, doc) is True
 
     def test_no_match(self):
         doc = "公司2024年利润达到50亿元。"
         excerpt = "营收达到100亿元，同比增长15%"
-        assert self.generator._verify_excerpt_in_document(excerpt, doc) is False
+        assert verify_excerpt_in_document(excerpt, doc) is False
 
     def test_whitespace_ignored(self):
         doc = "公司 2024年 营收 达到 100亿元"
         excerpt = "公司2024年营收达到100亿元"
-        assert self.generator._verify_excerpt_in_document(excerpt, doc) is True
+        assert verify_excerpt_in_document(excerpt, doc) is True
 
     def test_partial_overlap(self):
         doc = "公司2024年营收达到100亿元，同比增长15%。"
         excerpt = "营收达到100亿元，同比增长15%，利润也有所提升"
-        assert self.generator._verify_excerpt_in_document(excerpt, doc) is True
+        assert verify_excerpt_in_document(excerpt, doc) is True
 
     def test_empty_excerpt(self):
-        assert self.generator._verify_excerpt_in_document("", "some doc") is False
+        assert verify_excerpt_in_document("", "some doc") is False
 
 
 class TestTestSetManagerGolden:
@@ -449,7 +462,7 @@ class TestProperNounSuffixStripping:
 
     def test_suffix_stripped_match_when_core_in_evidence(self):
         evidence_list = [{"quote": "电子领域发展迅速，相关企业增长显著"}]
-        is_valid, issues = self.generator._validate_answer_evidence_consistency(
+        is_valid, issues = validate_answer_evidence_consistency(
             "电子行业前景广阔", evidence_list
         )
         assert is_valid
@@ -457,7 +470,7 @@ class TestProperNounSuffixStripping:
 
     def test_no_match_when_core_not_in_evidence(self):
         evidence_list = [{"quote": "传统制造业面临转型压力"}]
-        is_valid, issues = self.generator._validate_answer_evidence_consistency(
+        is_valid, issues = validate_answer_evidence_consistency(
             "量子计算行业前景广阔", evidence_list
         )
         assert not is_valid
@@ -465,7 +478,7 @@ class TestProperNounSuffixStripping:
 
     def test_exact_match_still_works(self):
         evidence_list = [{"quote": "华为技术在5G领域处于领先地位"}]
-        is_valid, issues = self.generator._validate_answer_evidence_consistency(
+        is_valid, issues = validate_answer_evidence_consistency(
             "华为技术在5G领域处于领先地位", evidence_list
         )
         assert is_valid
@@ -483,7 +496,7 @@ class TestFilterAdversarialIssues:
             "数值 '2268.9亿元' 未在证据中找到",
         ]
         question = "公司2024年营收2268.9亿元，实际增长如何？"
-        result = self.generator._filter_adversarial_issues(issues, question)
+        result = filter_adversarial_issues(issues, question)
         assert len(result) == 1
         assert result[0].startswith("数值")
 
@@ -492,7 +505,7 @@ class TestFilterAdversarialIssues:
             "数值 '2268.9亿元' 未在证据中找到",
         ]
         question = "公司2024年营收2268.9亿元，实际增长如何？"
-        result = self.generator._filter_adversarial_issues(issues, question)
+        result = filter_adversarial_issues(issues, question)
         assert len(result) == 1
         assert "2268.9" in result[0]
 
@@ -501,7 +514,7 @@ class TestFilterAdversarialIssues:
             "数值 '15.5个百分点' 未在证据中找到",
         ]
         question = "公司2024年营收2268.9亿元，实际增长如何？"
-        result = self.generator._filter_adversarial_issues(issues, question)
+        result = filter_adversarial_issues(issues, question)
         assert len(result) == 0
 
     def test_small_number_below_threshold_kept(self):
@@ -509,7 +522,7 @@ class TestFilterAdversarialIssues:
             "数值 '5.3%' 未在证据中找到",
         ]
         question = "公司2024年营收2268.9亿元，实际增长如何？"
-        result = self.generator._filter_adversarial_issues(issues, question)
+        result = filter_adversarial_issues(issues, question)
         assert len(result) == 1
 
     def test_integer_in_question_kept(self):
@@ -517,7 +530,7 @@ class TestFilterAdversarialIssues:
             "数值 '100亿元' 未在证据中找到",
         ]
         question = "营收达到100亿的公司有哪些？"
-        result = self.generator._filter_adversarial_issues(issues, question)
+        result = filter_adversarial_issues(issues, question)
         assert len(result) == 1
 
     def test_computed_integer_not_in_question_filtered(self):
@@ -525,7 +538,7 @@ class TestFilterAdversarialIssues:
             "数值 '200亿元' 未在证据中找到",
         ]
         question = "营收达到100亿的公司有哪些？"
-        result = self.generator._filter_adversarial_issues(issues, question)
+        result = filter_adversarial_issues(issues, question)
         assert len(result) == 0
 
     def test_mixed_issues_filtered_correctly(self):
@@ -536,12 +549,12 @@ class TestFilterAdversarialIssues:
             "专有名词 '量子计算集团' 未在证据中找到",
         ]
         question = "公司2024年营收2268.9亿元，实际增长如何？"
-        result = self.generator._filter_adversarial_issues(issues, question)
+        result = filter_adversarial_issues(issues, question)
         assert len(result) == 1
         assert "2268.9" in result[0]
 
     def test_empty_issues_returns_empty(self):
-        result = self.generator._filter_adversarial_issues([], "some question")
+        result = filter_adversarial_issues([], "some question")
         assert result == []
 
     def test_number_with_comma_in_question_kept(self):
@@ -549,7 +562,7 @@ class TestFilterAdversarialIssues:
             "数值 '1,216.3亿元' 未在证据中找到",
         ]
         question = "净利润为1216.3亿，同比下降多少？"
-        result = self.generator._filter_adversarial_issues(issues, question)
+        result = filter_adversarial_issues(issues, question)
         assert len(result) == 1
 
     def test_non_number_non_proper_noun_issue_kept(self):
@@ -557,7 +570,7 @@ class TestFilterAdversarialIssues:
             "其他类型的问题描述",
         ]
         question = "公司2024年营收如何？"
-        result = self.generator._filter_adversarial_issues(issues, question)
+        result = filter_adversarial_issues(issues, question)
         assert len(result) == 1
 
 
@@ -571,7 +584,7 @@ class TestValidateAnswerConsistency:
             "answer": "经营性现金流短期债务比为778.37倍，这个数值为负值",
             "ground_truth_excerpt": "均为负值，其中酒鬼酒778.37倍",
         }
-        is_consistent, warning = self.generator._validate_answer_consistency(q)
+        is_consistent, warning = validate_answer_consistency(q)
         assert not is_consistent
         assert "negative" in warning.lower() or "负" in warning
 
@@ -580,7 +593,7 @@ class TestValidateAnswerConsistency:
             "answer": "经营性现金流短期债务比为-778.37倍，为负值",
             "ground_truth_excerpt": "均为负值，其中酒鬼酒-778.37倍",
         }
-        is_consistent, warning = self.generator._validate_answer_consistency(q)
+        is_consistent, warning = validate_answer_consistency(q)
         assert is_consistent
 
     def test_no_negative_description_passes(self):
@@ -588,12 +601,12 @@ class TestValidateAnswerConsistency:
             "answer": "营收增长15.3%，达到100亿元",
             "ground_truth_excerpt": "营收同比增长15.3%，达到100亿元",
         }
-        is_consistent, warning = self.generator._validate_answer_consistency(q)
+        is_consistent, warning = validate_answer_consistency(q)
         assert is_consistent
 
     def test_empty_answer_passes(self):
         q = {"answer": "", "ground_truth_excerpt": "some text"}
-        is_consistent, warning = self.generator._validate_answer_consistency(q)
+        is_consistent, warning = validate_answer_consistency(q)
         assert is_consistent
 
 
@@ -607,7 +620,7 @@ class TestValidateEvidenceMinQuoteLength:
             {"text": "即时型消费成为增量引擎，推动行业增长", "segment_index": 0}
         ]
         evidence = [{"segment_index": 0, "quote": "即时型消费", "relevance": "test"}]
-        result = self.generator._validate_evidence(evidence, segments)
+        result = validate_evidence(evidence, segments)
         assert result["verified_evidence"][0]["verified"] is False
         assert "too short" in result["invalid_quotes"][0]["reason"].lower()
 
@@ -625,7 +638,7 @@ class TestValidateEvidenceMinQuoteLength:
                 "relevance": "test",
             }
         ]
-        result = self.generator._validate_evidence(evidence, segments)
+        result = validate_evidence(evidence, segments)
         assert result["verified_evidence"][0]["verified"] is True
 
 
@@ -639,7 +652,7 @@ class TestValidateEvidenceAdaptiveQuoteLength:
         assert len(cjk_15) == 15
         segments = [{"text": cjk_15, "segment_index": 0}]
         evidence = [{"segment_index": 0, "quote": cjk_15, "relevance": "test"}]
-        result = self.generator._validate_evidence(evidence, segments)
+        result = validate_evidence(evidence, segments)
         assert result["verified_evidence"][0]["verified"] is True
 
     def test_cjk_quote_above_cjk_threshold_passes(self):
@@ -647,14 +660,14 @@ class TestValidateEvidenceAdaptiveQuoteLength:
         assert len(cjk_20) == 20
         segments = [{"text": cjk_20, "segment_index": 0}]
         evidence = [{"segment_index": 0, "quote": cjk_20, "relevance": "test"}]
-        result = self.generator._validate_evidence(evidence, segments)
+        result = validate_evidence(evidence, segments)
         assert result["verified_evidence"][0]["verified"] is True
 
     def test_english_quote_below_default_threshold_fails(self):
         eng_25 = "a" * 25
         segments = [{"text": eng_25, "segment_index": 0}]
         evidence = [{"segment_index": 0, "quote": eng_25, "relevance": "test"}]
-        result = self.generator._validate_evidence(evidence, segments)
+        result = validate_evidence(evidence, segments)
         assert result["verified_evidence"][0]["verified"] is False
         assert "too short" in result["invalid_quotes"][0]["reason"].lower()
 
@@ -662,7 +675,7 @@ class TestValidateEvidenceAdaptiveQuoteLength:
         eng_30 = "a" * 30
         segments = [{"text": eng_30, "segment_index": 0}]
         evidence = [{"segment_index": 0, "quote": eng_30, "relevance": "test"}]
-        result = self.generator._validate_evidence(evidence, segments)
+        result = validate_evidence(evidence, segments)
         assert result["verified_evidence"][0]["verified"] is True
 
 
@@ -681,9 +694,7 @@ class TestValidateEvidenceDocumentFallback:
                 "relevance": "test",
             }
         ]
-        result = self.generator._validate_evidence(
-            evidence, segments, "unknown", doc_content
-        )
+        result = validate_evidence(evidence, segments, "unknown", doc_content)
         assert result["verified_evidence"][0]["verified"] is True
         assert result["verified_evidence"][0]["match_type"] == "document_fuzzy"
 
@@ -697,9 +708,7 @@ class TestValidateEvidenceDocumentFallback:
                 "relevance": "test",
             }
         ]
-        result = self.generator._validate_evidence(
-            evidence, segments, "unknown", doc_content
-        )
+        result = validate_evidence(evidence, segments, "unknown", doc_content)
         assert result["verified_evidence"][0]["verified"] is False
 
     def test_quote_not_in_segment_but_in_doc(self):
@@ -712,9 +721,7 @@ class TestValidateEvidenceDocumentFallback:
                 "relevance": "test",
             }
         ]
-        result = self.generator._validate_evidence(
-            evidence, segments, "unknown", doc_content
-        )
+        result = validate_evidence(evidence, segments, "unknown", doc_content)
         assert result["verified_evidence"][0]["verified"] is True
         assert result["verified_evidence"][0]["match_type"] == "document_fuzzy"
 
@@ -877,7 +884,7 @@ class TestGenerateMissingQuestion:
         )
 
         segments = [{"text": "光模块市场2024年增长12.5%", "segment_index": 0}]
-        result = self.generator._generate_missing_question(segments, mock_generator)
+        result = generate_missing_question(segments, mock_generator)
 
         assert result is not None
         assert result["question_type"] == "缺失知识点"
@@ -915,7 +922,7 @@ class TestGenerateMissingQuestion:
         ]
 
         segments = [{"text": "光模块市场2024年增长12.5%", "segment_index": 0}]
-        result = self.generator._generate_missing_question(segments, mock_generator)
+        result = generate_missing_question(segments, mock_generator)
 
         assert result is not None
         assert result["evidence"] == []
@@ -926,7 +933,7 @@ class TestGenerateMissingQuestion:
         mock_generator.generate.side_effect = Exception("LLM error")
 
         segments = [{"text": "光模块市场2024年增长12.5%", "segment_index": 0}]
-        result = self.generator._generate_missing_question(segments, mock_generator)
+        result = generate_missing_question(segments, mock_generator)
 
         assert result is None
 
@@ -935,7 +942,7 @@ class TestGenerateMissingQuestion:
         mock_generator.generate.return_value = "not valid json"
 
         segments = [{"text": "光模块市场2024年增长12.5%", "segment_index": 0}]
-        result = self.generator._generate_missing_question(segments, mock_generator)
+        result = generate_missing_question(segments, mock_generator)
 
         assert result is None
 
@@ -953,7 +960,7 @@ class TestGenerateMissingQuestion:
         )
 
         segments = [{"text": "光模块市场2024年增长12.5%", "segment_index": 0}]
-        self.generator._generate_missing_question(segments, mock_generator)
+        generate_missing_question(segments, mock_generator)
 
         call_args = mock_generator.generate.call_args
         prompt_used = call_args.kwargs.get("query", call_args[1].get("query", ""))
@@ -979,31 +986,30 @@ class TestAnswerLengthLimits:
 
     def test_truncate_at_period(self):
         qa = {"id": "test_001", "answer": "这是一。这是二。这是三。"}
-        self.generator._truncate_answer(qa, qa["answer"], 5)
+        truncate_answer(qa, qa["answer"], 5)
         assert qa["answer"] == "这是一。"
         assert qa["metadata"]["answer_truncated"] is True
 
     def test_no_truncation_within_limit(self):
         qa = {"id": "test_002", "answer": "短答案。"}
-        self.generator._truncate_answer(qa, qa["answer"], 200)
+        truncate_answer(qa, qa["answer"], 200)
         assert qa["answer"] == "短答案。"
         assert "answer_truncated" not in qa.get("metadata", {})
 
     def test_hard_truncation_no_period(self):
         qa = {"id": "test_003", "answer": "abcdefghij"}
-        self.generator._truncate_answer(qa, qa["answer"], 5)
+        truncate_answer(qa, qa["answer"], 5)
         assert qa["answer"] == "abcde"
         assert qa["metadata"]["answer_truncated"] is True
 
 
 class TestSupplementEvidenceForUncoveredNumbers:
     def test_supplement_when_number_found_in_doc(self):
-        generator = TestSetGenerator({})
         answer = "营收达到500亿元"
         evidence = [{"quote": "公司业绩良好", "segment_index": 0}]
         issues = ["数值 '500亿' 未在证据中找到"]
         doc = "根据财报，公司营收达到500亿元，同比增长20%。"
-        updated_ev, remaining = generator._supplement_evidence_for_uncovered_numbers(
+        updated_ev, remaining = supplement_evidence_for_uncovered_numbers(
             answer, evidence, issues, doc
         )
         assert len(updated_ev) == 2
@@ -1012,35 +1018,32 @@ class TestSupplementEvidenceForUncoveredNumbers:
         assert len(remaining) == 0
 
     def test_no_supplement_when_number_not_in_doc(self):
-        generator = TestSetGenerator({})
         answer = "营收达到999亿元"
         evidence = [{"quote": "公司业绩良好", "segment_index": 0}]
         issues = ["数值 '999亿' 未在证据中找到"]
         doc = "根据财报，公司营收达到500亿元。"
-        updated_ev, remaining = generator._supplement_evidence_for_uncovered_numbers(
+        updated_ev, remaining = supplement_evidence_for_uncovered_numbers(
             answer, evidence, issues, doc
         )
         assert len(updated_ev) == 1
         assert len(remaining) == 1
 
     def test_no_supplement_when_no_number_issues(self):
-        generator = TestSetGenerator({})
         answer = "公司表现优秀"
         evidence = [{"quote": "公司业绩良好", "segment_index": 0}]
         issues = ["专有名词 '量子计算行业' 未在证据中找到"]
         doc = "公司业绩良好。"
-        updated_ev, remaining = generator._supplement_evidence_for_uncovered_numbers(
+        updated_ev, remaining = supplement_evidence_for_uncovered_numbers(
             answer, evidence, issues, doc
         )
         assert len(updated_ev) == 1
         assert len(remaining) == 1
 
     def test_no_supplement_when_empty_doc(self):
-        generator = TestSetGenerator({})
         answer = "营收达到500亿元"
         evidence = [{"quote": "公司业绩良好", "segment_index": 0}]
         issues = ["数值 '500亿' 未在证据中找到"]
-        updated_ev, remaining = generator._supplement_evidence_for_uncovered_numbers(
+        updated_ev, remaining = supplement_evidence_for_uncovered_numbers(
             answer, evidence, issues, ""
         )
         assert len(updated_ev) == 1

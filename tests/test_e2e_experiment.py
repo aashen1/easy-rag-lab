@@ -4,6 +4,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
+from src.test_generation.validators import (
+    calculate_quality_metrics,
+    validate_question_quality,
+)
 from src.test_generator import TestSetGenerator
 
 
@@ -951,24 +955,19 @@ class TestBackwardCompatibility:
 class TestDocumentLevelQuestionGenerationIntegration:
     @pytest.mark.unit
     def test_question_generation_with_quality_validation(self):
-        config = {
-            "test_generation": {"max_retries": 3},
-        }
-        generator = TestSetGenerator(config)
-
         valid_question = {
             "question": "2024年光模块市场规模多少？",
             "answer": "约100亿美元",
             "question_type": "single_fact",
         }
-        assert generator._validate_question_quality(valid_question) is True
+        assert validate_question_quality(valid_question) is True
 
         invalid_question = {
             "question": "根据文档，市场规模是多少？",
             "answer": "约100亿美元",
             "question_type": "single_fact",
         }
-        assert generator._validate_question_quality(invalid_question) is False
+        assert validate_question_quality(invalid_question) is False
 
     @pytest.mark.unit
     def test_question_type_distribution_integration(self):
@@ -997,11 +996,6 @@ class TestDocumentLevelQuestionGenerationIntegration:
 
     @pytest.mark.unit
     def test_quality_metrics_calculation_integration(self):
-        config = {
-            "test_generation": {"max_retries": 3},
-        }
-        generator = TestSetGenerator(config)
-
         questions = [
             {
                 "question": "市场规模多少？",
@@ -1020,7 +1014,7 @@ class TestDocumentLevelQuestionGenerationIntegration:
             },
         ]
 
-        result = generator._calculate_quality_metrics(questions)
+        result = calculate_quality_metrics(questions)
 
         assert result["format_correct_rate"] == 1.0
         assert result["authenticity_pass_rate"] == 2 / 3
