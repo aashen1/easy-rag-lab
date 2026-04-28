@@ -39,17 +39,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from scripts.ai_reviewer import AIReviewer
 from scripts.pdf_viewer import PDFViewer
-from src.test_generator import TestSetGenerator as _TSG
+from src.test_generation.validators import validate_numerical_accuracy
 from src.utils import load_config
-
-_validator = _TSG({"test_generation": {}})
 
 
 def validate_answer_numerical_accuracy(
     question_data: dict[str, Any],
 ) -> tuple[bool, dict[str, Any] | None]:
-    """Validate numerical accuracy, delegating to TestSetGenerator."""
-    return _validator._validate_numerical_accuracy(question_data)
+    """Validate numerical accuracy, delegating to standalone validator."""
+    return validate_numerical_accuracy(question_data)
 
 
 REVIEW_STATUS_APPROVED = "approved"

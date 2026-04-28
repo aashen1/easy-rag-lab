@@ -56,15 +56,15 @@ def compare_experiments(
         print("No valid experiments to compare.")
         return {"error": "No valid experiments", "not_found": not_found}
 
-    comparison_data = _build_comparison_data(results)
+    comparison_data = build_comparison_data(results)
 
     if output_format == "table":
-        _print_comparison_table(comparison_data, not_found)
+        print_comparison_table(comparison_data, not_found)
     else:
         print(json.dumps(comparison_data, indent=2, ensure_ascii=False))
 
     if save_report:
-        report_content = _generate_comparison_report(comparison_data, not_found)
+        report_content = generate_comparison_report(comparison_data, not_found)
         if report_path:
             report_file = Path(report_path)
         else:
@@ -86,7 +86,7 @@ def compare_experiments(
     }
 
 
-def _build_comparison_data(results: list[dict[str, Any]]) -> dict[str, Any]:
+def build_comparison_data(results: list[dict[str, Any]]) -> dict[str, Any]:
     """
     Build structured comparison data from experiment results.
 
@@ -173,7 +173,7 @@ def _build_comparison_data(results: list[dict[str, Any]]) -> dict[str, Any]:
                             "top_k": merged.get("retrieval", {}).get("top_k", "N/A"),
                         }
 
-                category_metrics = _extract_category_metrics(vr)
+                category_metrics = extract_category_metrics(vr)
                 if category_metrics:
                     variant_data["category_metrics"] = category_metrics
 
@@ -211,7 +211,7 @@ def _build_comparison_data(results: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def _extract_category_metrics(
+def extract_category_metrics(
     variant_result: dict[str, Any],
 ) -> dict[str, dict[str, float]]:
     """
@@ -256,7 +256,7 @@ def _extract_category_metrics(
     return averaged_metrics
 
 
-def _print_comparison_table(
+def print_comparison_table(
     comparison_data: dict[str, Any],
     not_found: list[str],
 ) -> None:
@@ -343,7 +343,7 @@ def _print_comparison_table(
     print("\n" + "=" * 120 + "\n")
 
 
-def _generate_comparison_report(
+def generate_comparison_report(
     comparison_data: dict[str, Any],
     not_found: list[str],
 ) -> str:

@@ -7,6 +7,11 @@ from typing import Any
 
 from loguru import logger
 
+from src.test_generation.models import (
+    DOMAIN_KEYWORDS,
+    PROPER_NOUN_PATTERN,
+)
+
 
 def verify_quote_in_segment(
     quote: str,
@@ -120,93 +125,6 @@ def fuzzy_match_quote(
         }
 
     return {"found": False, "position": None, "similarity": best_similarity}
-
-
-def texts_overlap(text_a: str, text_b: str, min_overlap_chars: int = 30) -> bool:
-    """Check if two texts have significant overlapping content.
-
-    .. deprecated::
-        No longer used by the primary mapping path.  Kept for
-        backward compatibility only.
-
-    Uses a sliding-window approach: extracts substrings from text_a and
-    checks if they appear in text_b. Handles OCR-induced whitespace
-    differences by normalizing both texts before comparison.
-
-    Args:
-        text_a: First text (typically segment text).
-        text_b: Second text (typically chunk text).
-        min_overlap_chars: Minimum number of consecutive characters that
-            must match to consider the texts overlapping.
-
-    Returns:
-        True if the texts share significant overlapping content.
-    """
-    if not text_a or not text_b:
-        return False
-
-    def _normalize(t: str) -> str:
-        return " ".join(t.split())
-
-    norm_a = _normalize(text_a)
-    norm_b = _normalize(text_b)
-
-    window = min_overlap_chars
-    step = max(1, window // 3)
-
-    for start in range(0, len(norm_a) - window + 1, step):
-        substr = norm_a[start : start + window]
-        if substr in norm_b:
-            return True
-
-    return False
-
-
-def map_segments_to_chunks(
-    segments: list[dict[str, Any]],
-    doc_chunks: list[dict[str, Any]],
-) -> dict[int, list[str]]:
-    """Map document segments to chunk IDs based on text content overlap.
-
-    .. deprecated::
-        Use locate_source_chunks with page_numbers from page-based
-        segments instead.  This method relies on fragile text matching.
-
-    Determines which chunks belong to each segment by checking if the
-    chunk's text content overlaps with the segment's text content.
-
-    Args:
-        segments: List of segment dictionaries with 'text' and
-            'segment_index' keys.
-        doc_chunks: List of chunk dictionaries from JSONL files, each
-            containing 'chunk_id' and 'text' keys.
-
-    Returns:
-        Dictionary mapping segment_index to list of chunk_ids.
-    """
-    mapping: dict[int, list[str]] = {}
-
-    chunk_texts: list[tuple[str, str]] = []
-    for chunk in doc_chunks:
-        chunk_id = chunk.get("chunk_id", "")
-        text = chunk.get("text", "")
-        if chunk_id and text:
-            chunk_texts.append((chunk_id, text))
-
-    for segment in segments:
-        seg_text = segment.get("text", "")
-        seg_index = segment.get("segment_index", 0)
-
-        overlapping_chunks: list[str] = []
-
-        if seg_text:
-            for chunk_id, chunk_text in chunk_texts:
-                if texts_overlap(seg_text, chunk_text):
-                    overlapping_chunks.append(chunk_id)
-
-        mapping[seg_index] = overlapping_chunks
-
-    return mapping
 
 
 def locate_source_chunks(
@@ -361,61 +279,6 @@ def locate_chunks_by_quote(
     return matching_chunk_ids
 
 
-def locate_multi_hop_chunks(
-    evidence_list: list[dict[str, Any]],
-    segments: list[dict[str, Any]],
-    segment_chunk_map: dict[int, list[str]],
-    doc_chunks: list[dict[str, Any]],
-    fuzzy_match_threshold: float = 0.85,
-) -> list[str]:
-    """Locate chunk IDs for multi-hop questions from multiple evidence entries.
-
-    .. deprecated::
-        Use locate_source_chunks with page_numbers from page-based
-        segments instead.
-
-    For each evidence entry with a verified quote, calls
-    locate_chunks_by_quote to find the containing chunks, then
-    returns the union of all unique chunk_ids.
-
-    Args:
-        evidence_list: List of evidence dictionaries.
-        segments: List of segment dictionaries.
-        segment_chunk_map: Dictionary mapping segment_index to chunk_ids.
-        doc_chunks: List of all chunk dictionaries.
-        fuzzy_match_threshold: Threshold for fuzzy quote matching.
-
-    Returns:
-        List of unique chunk_id strings.
-    """
-    if not evidence_list:
-        return []
-
-    all_chunk_ids: set[str] = set()
-
-    for evidence in evidence_list:
-        quote = evidence.get("quote", "")
-        if not quote:
-            continue
-
-        chunk_ids = locate_chunks_by_quote(
-            quote, segments, segment_chunk_map, doc_chunks, fuzzy_match_threshold
-        )
-        all_chunk_ids.update(chunk_ids)
-
-    result = sorted(list(all_chunk_ids))
-
-    if result:
-        logger.debug(
-            f"Located {len(result)} unique chunks from "
-            f"{len(evidence_list)} evidence entries"
-        )
-    else:
-        logger.warning(f"No chunks found for {len(evidence_list)} evidence entries")
-
-    return result
-
-
 def extract_key_sentences(answer: str) -> list[str]:
     """Extract key sentences from an answer text.
 
@@ -484,41 +347,12 @@ def extract_key_terms(answer: str) -> list[str]:
     terms.extend(number_patterns)
 
     proper_nouns = re.findall(
-        r"[\u4e00-\u9fff]{2,8}(?:股份|集团|公司|行业|市场|技术|产品|业务|报告|年度)",
+        PROPER_NOUN_PATTERN,
         answer,
     )
     terms.extend(proper_nouns)
 
-    domain_keywords = [
-        "增长",
-        "下降",
-        "上升",
-        "减少",
-        "增加",
-        "收入",
-        "利润",
-        "营收",
-        "市值",
-        "占比",
-        "规模",
-        "产量",
-        "销量",
-        "价格",
-        "成本",
-        "投资",
-        "融资",
-        "估值",
-        "盈利",
-        "亏损",
-        "负债",
-        "资产",
-        "现金流",
-        "毛利率",
-        "净利率",
-        "ROE",
-        "ROA",
-    ]
-    for kw in domain_keywords:
+    for kw in DOMAIN_KEYWORDS:
         if kw in answer:
             terms.append(kw)
 

@@ -17,7 +17,7 @@ from typing import Any
 
 from loguru import logger
 
-from eval.evaluators.base import BaseEvaluator, EvaluationResult
+from eval.evaluators.base import BaseEvaluator, EvaluationResult, EvaluationSample
 from src.exceptions import EvaluationError
 
 REFERENCE_REQUIRED_METRICS = {
@@ -210,17 +210,12 @@ class RagasEvaluator(BaseEvaluator):
             logger.debug("RunConfig not available in this ragas version, skipping")
             return None
 
-    def _build_ragas_dataset(self, samples: list[dict[str, Any]]) -> Any:
+    def _build_ragas_dataset(self, samples: list[EvaluationSample]) -> Any:
         """
-        Build RAGAS EvaluationDataset from sample dictionaries.
+        Build RAGAS EvaluationDataset from EvaluationSample objects.
 
         Args:
-            samples: List of sample dictionaries containing:
-                - question_id: Unique identifier
-                - question: Question text
-                - answer: Generated answer
-                - contexts: Retrieved contexts
-                - expected_answer: Optional reference answer
+            samples: List of EvaluationSample objects.
 
         Returns:
             RAGAS EvaluationDataset instance.
@@ -230,13 +225,11 @@ class RagasEvaluator(BaseEvaluator):
 
             ragas_samples = []
             for sample in samples:
-                reference = sample.get("ground_truth_excerpt")
-                if not reference and sample.get("expect_retrieval", True):
-                    reference = sample.get("expected_answer")
+                reference = sample.expected_answer
                 ragas_sample = SingleTurnSample(
-                    user_input=sample.get("question", ""),
-                    response=sample.get("answer", ""),
-                    retrieved_contexts=sample.get("contexts", []),
+                    user_input=sample.question,
+                    response=sample.answer,
+                    retrieved_contexts=sample.contexts,
                     reference=reference if reference else None,
                 )
                 ragas_samples.append(ragas_sample)
@@ -377,17 +370,7 @@ class RagasEvaluator(BaseEvaluator):
         """
         return self._generation_metrics
 
-    def evaluate_single(
-        self,
-        question_id: str,
-        question: str,
-        answer: str,
-        contexts: list[str],
-        expected_sources: list[str] | None = None,
-        expected_answer: str | None = None,
-        llm_config: dict[str, str] | None = None,
-        generation_metrics: list[str] | None = None,
-    ) -> EvaluationResult:
+    def evaluate_single(self, sample: EvaluationSample) -> EvaluationResult:
         """
         Evaluate a single sample using RAGAS metrics.
 
@@ -395,18 +378,18 @@ class RagasEvaluator(BaseEvaluator):
         consider using batch evaluation for better performance.
 
         Args:
-            question_id: Unique identifier for the question.
-            question: The question text.
-            answer: The generated answer.
-            contexts: List of retrieved context strings.
-            expected_sources: Optional list of expected source documents (not used by RAGAS).
-            expected_answer: Optional expected answer for reference.
-            llm_config: Optional LLM configuration.
-            generation_metrics: Optional list of generation metrics to compute.
+            sample: EvaluationSample containing all data needed for evaluation.
 
         Returns:
             EvaluationResult containing the evaluation scores.
         """
+        question_id = sample.question_id
+        question = sample.question
+        answer = sample.answer
+        contexts = sample.contexts
+        expected_answer = sample.expected_answer
+        llm_config = sample.llm_config
+        generation_metrics = sample.generation_metrics
         if generation_metrics is None:
             generation_metrics = self._generation_metrics
 
@@ -449,14 +432,6 @@ class RagasEvaluator(BaseEvaluator):
             metrics = self._create_metrics(
                 generation_metrics, self._llm, self._embeddings
             )
-
-            sample = {
-                "question_id": question_id,
-                "question": question,
-                "answer": answer,
-                "contexts": contexts,
-                "expected_answer": expected_answer,
-            }
 
             dataset = self._build_ragas_dataset([sample])
 
@@ -502,25 +477,24 @@ class RagasEvaluator(BaseEvaluator):
             error=error,
         )
 
-    def _has_reference(self, sample: dict[str, Any]) -> bool:
+    def _has_reference(self, sample: EvaluationSample) -> bool:
         """
         Check if a sample has a valid reference for metrics that require it.
 
         Args:
-            sample: Sample dictionary.
+            sample: EvaluationSample object.
 
         Returns:
             True if sample has a valid reference, False otherwise.
         """
-        reference = sample.get("ground_truth_excerpt")
-        if not reference and sample.get("expect_retrieval", True):
-            reference = sample.get("expected_answer")
+        reference = sample.expected_answer
         return bool(reference)
 
     def evaluate_batch(
         self,
-        samples: list[dict[str, Any]],
+        samples: list[EvaluationSample],
         llm_config: dict[str, str] | None = None,
+        retrieval_metrics: list[str] | None = None,
         generation_metrics: list[str] | None = None,
     ) -> list[EvaluationResult]:
         """
@@ -529,8 +503,9 @@ class RagasEvaluator(BaseEvaluator):
         This is the recommended way to use RAGAS for better performance.
 
         Args:
-            samples: List of sample dictionaries.
+            samples: List of EvaluationSample objects.
             llm_config: Optional LLM configuration.
+            retrieval_metrics: Optional list of retrieval metrics to compute.
             generation_metrics: Optional list of generation metrics to compute.
 
         Returns:
@@ -615,12 +590,10 @@ class RagasEvaluator(BaseEvaluator):
                                         )
 
                         results[ref_indices[j]] = EvaluationResult(
-                            question_id=ref_samples[j].get(
-                                "question_id", f"sample_{j}"
-                            ),
-                            question=ref_samples[j].get("question", ""),
-                            answer=ref_samples[j].get("answer", ""),
-                            contexts=ref_samples[j].get("contexts", []),
+                            question_id=ref_samples[j].question_id,
+                            question=ref_samples[j].question,
+                            answer=ref_samples[j].answer,
+                            contexts=ref_samples[j].contexts,
                             retrieval_metrics={},
                             generation_metrics=generation_results,
                         )
@@ -667,12 +640,10 @@ class RagasEvaluator(BaseEvaluator):
                                         )
 
                         results[non_ref_indices[j]] = EvaluationResult(
-                            question_id=non_ref_samples[j].get(
-                                "question_id", f"sample_{j}"
-                            ),
-                            question=non_ref_samples[j].get("question", ""),
-                            answer=non_ref_samples[j].get("answer", ""),
-                            contexts=non_ref_samples[j].get("contexts", []),
+                            question_id=non_ref_samples[j].question_id,
+                            question=non_ref_samples[j].question,
+                            answer=non_ref_samples[j].answer,
+                            contexts=non_ref_samples[j].contexts,
                             retrieval_metrics={},
                             generation_metrics=generation_results,
                         )
@@ -680,10 +651,10 @@ class RagasEvaluator(BaseEvaluator):
             for i, result in enumerate(results):
                 if result is None:
                     results[i] = EvaluationResult(
-                        question_id=samples[i].get("question_id", f"sample_{i}"),
-                        question=samples[i].get("question", ""),
-                        answer=samples[i].get("answer", ""),
-                        contexts=samples[i].get("contexts", []),
+                        question_id=samples[i].question_id,
+                        question=samples[i].question,
+                        answer=samples[i].answer,
+                        contexts=samples[i].contexts,
                         retrieval_metrics={},
                         generation_metrics={},
                         error="Failed to evaluate sample",
@@ -695,10 +666,10 @@ class RagasEvaluator(BaseEvaluator):
             for i, sample in enumerate(samples):
                 if results[i] is None:
                     results[i] = EvaluationResult(
-                        question_id=sample.get("question_id", f"sample_{i}"),
-                        question=sample.get("question", ""),
-                        answer=sample.get("answer", ""),
-                        contexts=sample.get("contexts", []),
+                        question_id=sample.question_id,
+                        question=sample.question,
+                        answer=sample.answer,
+                        contexts=sample.contexts,
                         retrieval_metrics={},
                         generation_metrics={},
                         error=error_msg,

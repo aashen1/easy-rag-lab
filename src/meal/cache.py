@@ -256,7 +256,7 @@ class ArtifactCache:
         ensure_dir(str(chunks_dir))
         return parsed_dir, chunks_dir
 
-    def save_manifest(self, data_id: str, manifest: dict[str, Any]) -> None:
+    def save_manifest(self, data_id: str, manifest: dict[str, Any]) -> bool:
         """Save an artifact manifest JSON file for a given data ID.
 
         Args:

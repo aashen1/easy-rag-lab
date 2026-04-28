@@ -4,31 +4,19 @@ from typing import Any
 
 from loguru import logger
 
-from eval.metrics.utils import _create_llm_client
+from eval.metrics.utils import (
+    DEFAULT_EVAL_BASE_CONFIG,
+    create_llm_client,
+    get_eval_config,
+)
 
 DEFAULT_EVAL_CONFIG = {
-    "model_name": "LongCat-Flash-Lite",
-    "base_url": "https://api.longcat.chat/anthropic",
+    **DEFAULT_EVAL_BASE_CONFIG,
     "context_precision": {"temperature": 0.0, "max_tokens": 256},
     "context_recall": {"temperature": 0.0, "max_tokens": 256},
     "context_relevance": {"temperature": 0.0, "max_tokens": 256},
     "infer_check": {"temperature": 0.0, "max_tokens": 64},
 }
-
-
-def _get_eval_config(config: dict[str, Any] = None) -> dict[str, Any]:
-    """Get LLM evaluator config, merging with defaults.
-
-    Args:
-        config: Optional config dict with 'llm_evaluator' section.
-
-    Returns:
-        Merged config dict.
-    """
-    merged = dict(DEFAULT_EVAL_CONFIG)
-    if config and "llm_evaluator" in config:
-        merged.update(config["llm_evaluator"])
-    return merged
 
 
 CONTEXT_PRECISION_PROMPT = """你是一个专业的信息检索评估专家。请判断以下检索到的上下文是否与问题相关。
@@ -66,7 +54,7 @@ CONTEXT_RECALL_SENTENCE_PROMPT = """请判断以下陈述是否可以从给定�
 {{"verdict": "是"或"否"}}"""
 
 
-def _judge_context_relevance(
+def judge_context_relevance(
     question: str,
     expected_output: str,
     context: str,
@@ -90,7 +78,7 @@ def _judge_context_relevance(
     Raises:
         Exception: If LLM call fails.
     """
-    client = _create_llm_client(api_key=api_key, base_url=base_url)
+    client = create_llm_client(api_key=api_key, base_url=base_url)
 
     prompt = CONTEXT_PRECISION_PROMPT.format(
         question=question,
@@ -173,15 +161,17 @@ def calculate_context_precision(
         logger.warning("Empty retrieval context for context precision calculation")
         return 0.0
 
-    eval_cfg = _get_eval_config(config)
-    base_url = base_url or eval_cfg.get("base_url", DEFAULT_EVAL_CONFIG["base_url"])
+    eval_cfg = get_eval_config(config, DEFAULT_EVAL_CONFIG)
+    base_url = base_url or eval_cfg.get(
+        "base_url", DEFAULT_EVAL_BASE_CONFIG["base_url"]
+    )
     model_name = model_name or eval_cfg.get(
-        "model_name", DEFAULT_EVAL_CONFIG["model_name"]
+        "model_name", DEFAULT_EVAL_BASE_CONFIG["model_name"]
     )
 
     relevance_verdicts = []
     for ctx in retrieval_context:
-        verdict = _judge_context_relevance(
+        verdict = judge_context_relevance(
             question, expected_output, ctx, api_key, base_url, model_name
         )
         relevance_verdicts.append(verdict)
@@ -209,7 +199,7 @@ def calculate_context_precision(
     return score
 
 
-def _split_into_sentences(text: str) -> list[str]:
+def split_into_sentences(text: str) -> list[str]:
     """Split text into sentences, handling Markdown tables.
 
     For Markdown tables (detected by | and ---), splits by newlines
@@ -236,7 +226,7 @@ def _split_into_sentences(text: str) -> list[str]:
     return sentences
 
 
-def _can_infer_from_context(
+def can_infer_from_context(
     sentence: str,
     context: str,
     api_key: str,
@@ -258,7 +248,7 @@ def _can_infer_from_context(
     Raises:
         Exception: If LLM call fails.
     """
-    client = _create_llm_client(api_key=api_key, base_url=base_url)
+    client = create_llm_client(api_key=api_key, base_url=base_url)
 
     prompt = CONTEXT_RECALL_SENTENCE_PROMPT.format(
         context=context,
@@ -340,13 +330,15 @@ def calculate_context_recall(
         logger.warning("Empty retrieval context for context recall calculation")
         return 0.0
 
-    eval_cfg = _get_eval_config(config)
-    base_url = base_url or eval_cfg.get("base_url", DEFAULT_EVAL_CONFIG["base_url"])
+    eval_cfg = get_eval_config(config, DEFAULT_EVAL_CONFIG)
+    base_url = base_url or eval_cfg.get(
+        "base_url", DEFAULT_EVAL_BASE_CONFIG["base_url"]
+    )
     model_name = model_name or eval_cfg.get(
-        "model_name", DEFAULT_EVAL_CONFIG["model_name"]
+        "model_name", DEFAULT_EVAL_BASE_CONFIG["model_name"]
     )
 
-    sentences = _split_into_sentences(ground_truth)
+    sentences = split_into_sentences(ground_truth)
     if not sentences:
         logger.warning("No sentences extracted from ground truth")
         return 0.0
@@ -356,7 +348,7 @@ def calculate_context_recall(
     sentence_verdicts = []
 
     for sentence in sentences:
-        can_infer = _can_infer_from_context(
+        can_infer = can_infer_from_context(
             sentence, context_text, api_key, base_url, model_name
         )
         if can_infer:

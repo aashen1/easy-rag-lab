@@ -1,6 +1,6 @@
 import math
 
-from eval.metrics.utils import _parse_chunk_id
+from eval.metrics.utils import parse_chunk_id
 
 
 def calculate_chunk_hit_rate(
@@ -36,13 +36,13 @@ def calculate_chunk_hit_rate(
     if not expected_chunk_ids:
         return 0.0
 
-    expected_parsed = [_parse_chunk_id(cid) for cid in expected_chunk_ids]
+    expected_parsed = [parse_chunk_id(cid) for cid in expected_chunk_ids]
     expected_exact_set = set(expected_chunk_ids)
 
     for chunk_id in retrieved_chunk_ids[:k]:
         if chunk_id in expected_exact_set:
             return 1.0
-        ret_stem, ret_index = _parse_chunk_id(chunk_id)
+        ret_stem, ret_index = parse_chunk_id(chunk_id)
         if ret_index == -1:
             continue
         for exp_stem, exp_index in expected_parsed:
@@ -84,13 +84,13 @@ def calculate_chunk_mrr(
     if not expected_chunk_ids:
         return 0.0
 
-    expected_parsed = [_parse_chunk_id(cid) for cid in expected_chunk_ids]
+    expected_parsed = [parse_chunk_id(cid) for cid in expected_chunk_ids]
     expected_exact_set = set(expected_chunk_ids)
 
     for i, chunk_id in enumerate(retrieved_chunk_ids):
         if chunk_id in expected_exact_set:
             return 1.0 / (i + 1)
-        ret_stem, ret_index = _parse_chunk_id(chunk_id)
+        ret_stem, ret_index = parse_chunk_id(chunk_id)
         if ret_index == -1:
             continue
         for exp_stem, exp_index in expected_parsed:
@@ -139,7 +139,7 @@ def calculate_chunk_ndcg(
         return 0.0
 
     expected_exact_set = set(expected_chunk_ids)
-    expected_parsed = [_parse_chunk_id(cid) for cid in expected_chunk_ids]
+    expected_parsed = [parse_chunk_id(cid) for cid in expected_chunk_ids]
 
     seen: set = set()
     unique_retrieved: list[str] = []
@@ -151,7 +151,7 @@ def calculate_chunk_ndcg(
     def _get_relevance(chunk_id: str) -> int:
         if chunk_id in expected_exact_set:
             return 2
-        ret_stem, ret_index = _parse_chunk_id(chunk_id)
+        ret_stem, ret_index = parse_chunk_id(chunk_id)
         if ret_index == -1:
             return 0
         for exp_stem, exp_index in expected_parsed:

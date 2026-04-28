@@ -5,7 +5,7 @@ import pytest
 from eval.experiment_reporter import (
     LLM_REPORT_PROMPT_TEMPLATE,
     ExperimentReporter,
-    ExperimentResult,
+    ReportExperimentResult,
     TestCaseResult,
     VariantResult,
 )
@@ -44,7 +44,7 @@ class TestTestCaseResult:
         assert result.error == "Something went wrong"
 
 
-class TestExperimentResult:
+class TestReportExperimentResult:
     def _make_sample_dict(self):
         return {
             "timestamp": "2026-04-16T10:00:00",
@@ -100,7 +100,7 @@ class TestExperimentResult:
     @pytest.mark.unit
     def test_from_dict(self):
         data = self._make_sample_dict()
-        result = ExperimentResult.from_dict(data)
+        result = ReportExperimentResult.from_dict(data)
 
         assert result.timestamp == "2026-04-16T10:00:00"
         assert result.total_test_cases == 3
@@ -114,7 +114,7 @@ class TestExperimentResult:
     @pytest.mark.unit
     def test_from_dict_results_conversion(self):
         data = self._make_sample_dict()
-        result = ExperimentResult.from_dict(data)
+        result = ReportExperimentResult.from_dict(data)
 
         assert isinstance(result.results[0], TestCaseResult)
         assert result.results[0].id == "q001"
@@ -131,7 +131,7 @@ class TestExperimentResult:
             "retrieval_metrics": {},
             "results": [],
         }
-        result = ExperimentResult.from_dict(data)
+        result = ReportExperimentResult.from_dict(data)
 
         assert result.timestamp == "2026-04-16T10:00:00"
         assert result.total_test_cases == 1
@@ -212,7 +212,7 @@ class TestExperimentReporter:
             ],
             "stats": {"total_pdfs": 2, "total_pages": 100, "total_chunks": 500},
         }
-        return ExperimentResult.from_dict(data)
+        return ReportExperimentResult.from_dict(data)
 
     @pytest.mark.unit
     def test_init(self):
@@ -315,7 +315,7 @@ class TestExperimentReporter:
         assert "## 1. Experiment Overview" in report
 
     @pytest.mark.unit
-    @patch("eval.experiment_reporter.ExperimentReporter._call_llm")
+    @patch("eval.reporter.llm_reporter.LLMReporter._call_llm")
     def test_llm_report_success(self, mock_call_llm, sample_result, tmp_path):
         mock_call_llm.return_value = "This is an LLM-generated analysis."
 
@@ -696,7 +696,7 @@ class TestGenerationMetrics:
             "meal_data_id": "abc123def456789",
             "meal_name": "test_meal",
         }
-        return ExperimentResult.from_dict(data)
+        return ReportExperimentResult.from_dict(data)
 
     @pytest.mark.unit
     def test_result_with_generation_metrics(self, sample_result_with_generation):
@@ -885,7 +885,7 @@ class TestGenerationMetrics:
                 },
             ],
         }
-        result = ExperimentResult.from_dict(data)
+        result = ReportExperimentResult.from_dict(data)
 
         assert result.generation_metrics is None
         assert result.results[0].generation is None

@@ -1,5 +1,5 @@
 from eval.metrics.retrieval import calculate_hit_rate, calculate_mrr, calculate_ndcg
-from eval.metrics.utils import _parse_chunk_id, normalize_source
+from eval.metrics.utils import normalize_source, parse_chunk_id
 
 
 def deduplicate_by_document(
@@ -33,7 +33,7 @@ def deduplicate_by_document(
 
     for i, source in enumerate(retrieved_sources):
         if retrieved_chunk_ids is not None and i < len(retrieved_chunk_ids):
-            doc_stem, _ = _parse_chunk_id(retrieved_chunk_ids[i])
+            doc_stem, _ = parse_chunk_id(retrieved_chunk_ids[i])
             if doc_stem != retrieved_chunk_ids[i]:
                 key = doc_stem
             else:

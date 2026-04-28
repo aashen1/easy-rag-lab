@@ -5,32 +5,20 @@ from typing import Any
 from anthropic import Anthropic
 from loguru import logger
 
-from eval.metrics.utils import _create_llm_client
+from eval.metrics.utils import (
+    DEFAULT_EVAL_BASE_CONFIG,
+    create_llm_client,
+    get_eval_config,
+)
 from src.exceptions import EvaluationError
 
 DEFAULT_EVAL_CONFIG = {
-    "model_name": "LongCat-Flash-Lite",
-    "base_url": "https://api.longcat.chat/anthropic",
+    **DEFAULT_EVAL_BASE_CONFIG,
     "extract_statements": {"temperature": 0.0, "max_tokens": 1024},
     "verify_statements": {"temperature": 0.0, "max_tokens": 1024},
     "faithfulness": {"temperature": 0.0, "max_tokens": 512},
     "answer_relevancy": {"temperature": 0.0, "max_tokens": 512},
 }
-
-
-def _get_eval_config(config: dict[str, Any] = None) -> dict[str, Any]:
-    """Get LLM evaluator config, merging with defaults.
-
-    Args:
-        config: Optional config dict with 'llm_evaluator' section.
-
-    Returns:
-        Merged config dict.
-    """
-    merged = dict(DEFAULT_EVAL_CONFIG)
-    if config and "llm_evaluator" in config:
-        merged.update(config["llm_evaluator"])
-    return merged
 
 
 FAITHFULNESS_STATEMENT_PROMPT = """请分析以下回答，提取其中的所有事实陈述（statements）。
@@ -114,7 +102,7 @@ ANSWER_RELEVANCY_PROMPT = """你是一个专业的问答系统评估专家。请
 - 只返回JSON，不要有其他内容"""
 
 
-def _extract_statements(
+def extract_statements(
     client: Anthropic,
     answer: str,
     model_name: str = "LongCat-Flash-Lite",
@@ -191,7 +179,7 @@ def calculate_hallucination_rate(
     return hallucinated / len(valid_scores)
 
 
-def _verify_statements(
+def verify_statements(
     client: Anthropic,
     statements: list[str],
     contexts: list[str],
@@ -313,10 +301,12 @@ def calculate_faithfulness(
         logger.warning("Answer is empty after stripping whitespace")
         return 0.0
 
-    eval_cfg = _get_eval_config(config)
-    base_url = base_url or eval_cfg.get("base_url", DEFAULT_EVAL_CONFIG["base_url"])
+    eval_cfg = get_eval_config(config, DEFAULT_EVAL_CONFIG)
+    base_url = base_url or eval_cfg.get(
+        "base_url", DEFAULT_EVAL_BASE_CONFIG["base_url"]
+    )
     model_name = model_name or eval_cfg.get(
-        "model_name", DEFAULT_EVAL_CONFIG["model_name"]
+        "model_name", DEFAULT_EVAL_BASE_CONFIG["model_name"]
     )
 
     extract_cfg = eval_cfg.get(
@@ -327,10 +317,10 @@ def calculate_faithfulness(
     )
 
     try:
-        client = _create_llm_client(api_key=api_key, base_url=base_url)
+        client = create_llm_client(api_key=api_key, base_url=base_url)
 
         logger.info("Extracting statements from answer")
-        statements = _extract_statements(
+        statements = extract_statements(
             client,
             answer,
             model_name,
@@ -345,7 +335,7 @@ def calculate_faithfulness(
         logger.info(
             f"Extracted {len(statements)} statements, verifying against contexts"
         )
-        verdicts = _verify_statements(
+        verdicts = verify_statements(
             client,
             statements,
             contexts,
@@ -378,7 +368,7 @@ def calculate_faithfulness(
         raise EvaluationError(error_msg) from e
 
 
-def _parse_relevancy_response(response_text: str) -> dict[str, Any]:
+def parse_relevancy_response(response_text: str) -> dict[str, Any]:
     """Parse LLM response for answer relevancy evaluation.
 
     Args:
@@ -458,10 +448,12 @@ def calculate_answer_relevancy(
     if not answer or not isinstance(answer, str):
         raise EvaluationError("Answer must be a non-empty string")
 
-    eval_cfg = _get_eval_config(config)
-    base_url = base_url or eval_cfg.get("base_url", DEFAULT_EVAL_CONFIG["base_url"])
+    eval_cfg = get_eval_config(config, DEFAULT_EVAL_CONFIG)
+    base_url = base_url or eval_cfg.get(
+        "base_url", DEFAULT_EVAL_BASE_CONFIG["base_url"]
+    )
     model_name = model_name or eval_cfg.get(
-        "model_name", DEFAULT_EVAL_CONFIG["model_name"]
+        "model_name", DEFAULT_EVAL_BASE_CONFIG["model_name"]
     )
     relevancy_cfg = eval_cfg.get(
         "answer_relevancy", DEFAULT_EVAL_CONFIG["answer_relevancy"]
@@ -476,7 +468,7 @@ def calculate_answer_relevancy(
     )
 
     try:
-        client = _create_llm_client(api_key=api_key, base_url=base_url)
+        client = create_llm_client(api_key=api_key, base_url=base_url)
 
         prompt = ANSWER_RELEVANCY_PROMPT.format(question=question, answer=answer)
 
@@ -497,7 +489,7 @@ def calculate_answer_relevancy(
         response_text = message.content[0].text
         logger.debug(f"LLM response: {response_text}")
 
-        result = _parse_relevancy_response(response_text)
+        result = parse_relevancy_response(response_text)
 
         overall_score = result.get("overall_score")
         if overall_score is None:

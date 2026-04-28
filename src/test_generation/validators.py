@@ -8,6 +8,8 @@ from src.test_generation.models import (
     MIN_QUOTE_LENGTH,
     MIN_QUOTE_LENGTH_CJK,
     MIN_QUOTE_LENGTH_DEFAULT,
+    PROPER_NOUN_PATTERN,
+    PROPER_NOUN_SUFFIXES,
 )
 
 
@@ -272,15 +274,14 @@ def validate_answer_evidence_consistency(
             issues.append(f"数值 '{ans_orig}' 未在证据中找到")
 
     proper_nouns = re.findall(
-        r"[\u4e00-\u9fff]{2,8}(?:股份|集团|公司|行业|市场|技术|产品|业务)",
+        PROPER_NOUN_PATTERN,
         answer,
     )
-    suffixes = ["股份", "集团", "公司", "行业", "市场", "技术", "产品", "业务"]
     for noun in proper_nouns:
         if noun in evidence_text:
             continue
         core_found = False
-        for suffix in suffixes:
+        for suffix in PROPER_NOUN_SUFFIXES:
             if noun.endswith(suffix):
                 core = noun[: -len(suffix)]
                 if len(core) >= 2 and core in evidence_text:

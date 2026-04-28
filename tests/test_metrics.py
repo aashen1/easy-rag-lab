@@ -4,11 +4,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from eval.metrics import (
-    _create_llm_client,
-    _extract_statements,
-    _parse_chunk_id,
-    _parse_relevancy_response,
-    _verify_statements,
     calculate_answer_relevancy,
     calculate_chunk_hit_rate,
     calculate_chunk_mrr,
@@ -23,9 +18,14 @@ from eval.metrics import (
     calculate_mrr,
     calculate_ndcg,
     calculate_retrieval_diversity,
+    create_llm_client,
     deduplicate_by_document,
+    extract_statements,
     normalize_source,
     normalize_source_with_equivalence,
+    parse_chunk_id,
+    parse_relevancy_response,
+    verify_statements,
 )
 from src.exceptions import EvaluationError
 
@@ -554,11 +554,11 @@ class TestCalculateNDCGMultilevel:
 
 @pytest.mark.unit
 class TestParseRelevancyResponse:
-    """Tests for _parse_relevancy_response function."""
+    """Tests for parse_relevancy_response function."""
 
     def test_parse_valid_json(self):
         response_text = '{"direct_relevance": 5, "information_sufficiency": 4, "conciseness": 4, "overall_score": 0.85}'
-        result = _parse_relevancy_response(response_text)
+        result = parse_relevancy_response(response_text)
         assert result["direct_relevance"] == 5
         assert result["information_sufficiency"] == 4
         assert result["conciseness"] == 4
@@ -568,7 +568,7 @@ class TestParseRelevancyResponse:
         response_text = (
             '这是一些额外的文本 {"direct_relevance": 3, "overall_score": 0.5} 更多文本'
         )
-        result = _parse_relevancy_response(response_text)
+        result = parse_relevancy_response(response_text)
         assert result["direct_relevance"] == 3
         assert result["overall_score"] == 0.5
 
@@ -579,7 +579,7 @@ class TestParseRelevancyResponse:
             "conciseness": 3,
             "overall_score": 0.7
         }"""
-        result = _parse_relevancy_response(response_text)
+        result = parse_relevancy_response(response_text)
         assert result["direct_relevance"] == 4
         assert result["overall_score"] == 0.7
 
@@ -588,14 +588,14 @@ class TestParseRelevancyResponse:
         with pytest.raises(
             EvaluationError, match="Failed to parse LLM response as JSON"
         ):
-            _parse_relevancy_response(response_text)
+            parse_relevancy_response(response_text)
 
     def test_parse_partial_json(self):
         response_text = '{"direct_relevance": 5, "information_sufficiency": 5'
         with pytest.raises(
             EvaluationError, match="Failed to parse LLM response as JSON"
         ):
-            _parse_relevancy_response(response_text)
+            parse_relevancy_response(response_text)
 
 
 @pytest.mark.unit
@@ -630,7 +630,7 @@ class TestCalculateAnswerRelevancy:
                 question="这是一个问题", answer=None, api_key="test-key"
             )
 
-    @patch("eval.metrics.generation._create_llm_client")
+    @patch("eval.metrics.generation.create_llm_client")
     def test_successful_relevancy_calculation(self, mock_create_client):
         mock_client = MagicMock()
         mock_create_client.return_value = mock_client
@@ -651,7 +651,7 @@ class TestCalculateAnswerRelevancy:
         assert score == 1.0
         mock_client.messages.create.assert_called_once()
 
-    @patch("eval.metrics.generation._create_llm_client")
+    @patch("eval.metrics.generation.create_llm_client")
     def test_low_relevancy_calculation(self, mock_create_client):
         mock_client = MagicMock()
         mock_create_client.return_value = mock_client
@@ -671,7 +671,7 @@ class TestCalculateAnswerRelevancy:
 
         assert score == 0.1
 
-    @patch("eval.metrics.generation._create_llm_client")
+    @patch("eval.metrics.generation.create_llm_client")
     def test_missing_overall_score_calculates_from_dimensions(self, mock_create_client):
         mock_client = MagicMock()
         mock_create_client.return_value = mock_client
@@ -694,7 +694,7 @@ class TestCalculateAnswerRelevancy:
         expected_score = (4 + 4 + 3) / 15.0
         assert score == pytest.approx(expected_score)
 
-    @patch("eval.metrics.generation._create_llm_client")
+    @patch("eval.metrics.generation.create_llm_client")
     def test_score_clamped_to_range(self, mock_create_client):
         mock_client = MagicMock()
         mock_create_client.return_value = mock_client
@@ -712,7 +712,7 @@ class TestCalculateAnswerRelevancy:
 
         assert score == 1.0
 
-    @patch("eval.metrics.generation._create_llm_client")
+    @patch("eval.metrics.generation.create_llm_client")
     def test_negative_score_clamped_to_zero(self, mock_create_client):
         mock_client = MagicMock()
         mock_create_client.return_value = mock_client
@@ -730,7 +730,7 @@ class TestCalculateAnswerRelevancy:
 
         assert score == 0.0
 
-    @patch("eval.metrics.generation._create_llm_client")
+    @patch("eval.metrics.generation.create_llm_client")
     def test_llm_api_error_raises_exception(self, mock_create_client):
         mock_client = MagicMock()
         mock_create_client.return_value = mock_client
@@ -743,7 +743,7 @@ class TestCalculateAnswerRelevancy:
                 question="问题", answer="回答", api_key="test-api-key"
             )
 
-    @patch("eval.metrics.generation._create_llm_client")
+    @patch("eval.metrics.generation.create_llm_client")
     def test_custom_model_parameters(self, mock_create_client):
         mock_client = MagicMock()
         mock_create_client.return_value = mock_client
@@ -773,44 +773,44 @@ class TestCalculateAnswerRelevancy:
 
 @pytest.mark.unit
 class TestCreateLLMClient:
-    """Tests for _create_llm_client function."""
+    """Tests for create_llm_client function."""
 
     @patch("src.utils.create_llm_client")
-    def test_create_client_success(self, mock_create_llm_client):
+    def test_create_client_success(self, mockcreate_llm_client):
         mock_client = MagicMock()
-        mock_create_llm_client.return_value = mock_client
+        mockcreate_llm_client.return_value = mock_client
 
-        client = _create_llm_client(
+        client = create_llm_client(
             api_key="test-api-key", base_url="https://api.test.com/anthropic"
         )
 
         assert client == mock_client
-        mock_create_llm_client.assert_called_once()
+        mockcreate_llm_client.assert_called_once()
 
     @patch("src.utils.create_llm_client")
-    def test_create_client_with_custom_url(self, mock_create_llm_client):
+    def test_create_client_with_custom_url(self, mockcreate_llm_client):
         mock_client = MagicMock()
-        mock_create_llm_client.return_value = mock_client
+        mockcreate_llm_client.return_value = mock_client
 
-        _create_llm_client(api_key="test-key", base_url="https://custom.url/api")
+        create_llm_client(api_key="test-key", base_url="https://custom.url/api")
 
-        mock_create_llm_client.assert_called_once()
-        call_kwargs = mock_create_llm_client.call_args[1]
+        mockcreate_llm_client.assert_called_once()
+        call_kwargs = mockcreate_llm_client.call_args[1]
         assert call_kwargs["llm_config"]["base_url"] == "https://custom.url/api"
 
 
 @pytest.mark.unit
 class TestExtractStatements:
-    """Tests for _extract_statements function."""
+    """Tests for extract_statements function."""
 
-    def test_extract_statements_success(self):
+    def testextract_statements_success(self):
         mock_client = MagicMock()
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
         mock_message.content[0].text = '{"statements": ["陈述1", "陈述2", "陈述3"]}'
         mock_client.messages.create.return_value = mock_message
 
-        statements = _extract_statements(
+        statements = extract_statements(
             client=mock_client, answer="这是一个测试回答", model_name="test-model"
         )
 
@@ -819,61 +819,61 @@ class TestExtractStatements:
         assert statements[1] == "陈述2"
         assert statements[2] == "陈述3"
 
-    def test_extract_statements_empty_response(self):
+    def testextract_statements_empty_response(self):
         mock_client = MagicMock()
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
         mock_message.content[0].text = '{"statements": []}'
         mock_client.messages.create.return_value = mock_message
 
-        statements = _extract_statements(
+        statements = extract_statements(
             client=mock_client, answer="这是一个测试回答", model_name="test-model"
         )
 
         assert len(statements) == 0
 
-    def test_extract_statements_json_with_surrounding_text(self):
+    def testextract_statements_json_with_surrounding_text(self):
         mock_client = MagicMock()
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
         mock_message.content[0].text = '一些额外文本 {"statements": ["陈述A"]} 更多文本'
         mock_client.messages.create.return_value = mock_message
 
-        statements = _extract_statements(
+        statements = extract_statements(
             client=mock_client, answer="测试回答", model_name="test-model"
         )
 
         assert len(statements) == 1
         assert statements[0] == "陈述A"
 
-    def test_extract_statements_invalid_json_returns_empty(self):
+    def testextract_statements_invalid_json_returns_empty(self):
         mock_client = MagicMock()
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
         mock_message.content[0].text = "这不是有效的JSON"
         mock_client.messages.create.return_value = mock_message
 
-        statements = _extract_statements(
+        statements = extract_statements(
             client=mock_client, answer="测试回答", model_name="test-model"
         )
 
         assert statements == []
 
-    def test_extract_statements_llm_error_raises_exception(self):
+    def testextract_statements_llm_error_raises_exception(self):
         mock_client = MagicMock()
         mock_client.messages.create.side_effect = Exception("API Error")
 
         with pytest.raises(EvaluationError, match="Failed to extract statements"):
-            _extract_statements(
+            extract_statements(
                 client=mock_client, answer="测试回答", model_name="test-model"
             )
 
 
 @pytest.mark.unit
 class TestVerifyStatements:
-    """Tests for _verify_statements function."""
+    """Tests for verify_statements function."""
 
-    def test_verify_statements_all_supported(self):
+    def testverify_statements_all_supported(self):
         mock_client = MagicMock()
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
@@ -885,7 +885,7 @@ class TestVerifyStatements:
         }"""
         mock_client.messages.create.return_value = mock_message
 
-        verdicts = _verify_statements(
+        verdicts = verify_statements(
             client=mock_client,
             statements=["陈述1", "陈述2"],
             contexts=["上下文1", "上下文2"],
@@ -896,7 +896,7 @@ class TestVerifyStatements:
         assert verdicts[0]["verdict"] == 1
         assert verdicts[1]["verdict"] == 1
 
-    def test_verify_statements_partial_support(self):
+    def testverify_statements_partial_support(self):
         mock_client = MagicMock()
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
@@ -908,7 +908,7 @@ class TestVerifyStatements:
         }"""
         mock_client.messages.create.return_value = mock_message
 
-        verdicts = _verify_statements(
+        verdicts = verify_statements(
             client=mock_client,
             statements=["陈述1", "陈述2"],
             contexts=["上下文1"],
@@ -919,7 +919,7 @@ class TestVerifyStatements:
         assert verdicts[0]["verdict"] == 1
         assert verdicts[1]["verdict"] == 0
 
-    def test_verify_statements_none_supported(self):
+    def testverify_statements_none_supported(self):
         mock_client = MagicMock()
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
@@ -931,7 +931,7 @@ class TestVerifyStatements:
         }"""
         mock_client.messages.create.return_value = mock_message
 
-        verdicts = _verify_statements(
+        verdicts = verify_statements(
             client=mock_client,
             statements=["陈述1", "陈述2"],
             contexts=["无关上下文"],
@@ -941,14 +941,14 @@ class TestVerifyStatements:
         assert len(verdicts) == 2
         assert all(v["verdict"] == 0 for v in verdicts)
 
-    def test_verify_statements_invalid_json_returns_empty(self):
+    def testverify_statements_invalid_json_returns_empty(self):
         mock_client = MagicMock()
         mock_message = MagicMock()
         mock_message.content = [MagicMock()]
         mock_message.content[0].text = "无效的JSON响应"
         mock_client.messages.create.return_value = mock_message
 
-        verdicts = _verify_statements(
+        verdicts = verify_statements(
             client=mock_client,
             statements=["陈述1"],
             contexts=["上下文1"],
@@ -957,12 +957,12 @@ class TestVerifyStatements:
 
         assert verdicts == []
 
-    def test_verify_statements_llm_error_raises_exception(self):
+    def testverify_statements_llm_error_raises_exception(self):
         mock_client = MagicMock()
         mock_client.messages.create.side_effect = Exception("API Error")
 
         with pytest.raises(EvaluationError, match="Failed to verify statements"):
-            _verify_statements(
+            verify_statements(
                 client=mock_client,
                 statements=["陈述1"],
                 contexts=["上下文1"],
@@ -983,22 +983,22 @@ class TestCalculateFaithfulness:
             calculate_faithfulness(answer=None, contexts=["上下文"], api_key="test-key")
 
     def test_empty_contexts_returns_zero(self):
-        with patch("eval.metrics.generation._create_llm_client"):
+        with patch("eval.metrics.generation.create_llm_client"):
             score = calculate_faithfulness(
                 answer="这是一个回答", contexts=[], api_key="test-key"
             )
             assert score == 0.0
 
     def test_whitespace_only_answer_returns_zero(self):
-        with patch("eval.metrics.generation._create_llm_client"):
+        with patch("eval.metrics.generation.create_llm_client"):
             score = calculate_faithfulness(
                 answer="   \n\t  ", contexts=["上下文"], api_key="test-key"
             )
             assert score == 0.0
 
-    @patch("eval.metrics.generation._create_llm_client")
-    @patch("eval.metrics.generation._extract_statements")
-    @patch("eval.metrics.generation._verify_statements")
+    @patch("eval.metrics.generation.create_llm_client")
+    @patch("eval.metrics.generation.extract_statements")
+    @patch("eval.metrics.generation.verify_statements")
     def test_full_faithfulness_score(
         self, mock_verify, mock_extract, mock_create_client
     ):
@@ -1020,9 +1020,9 @@ class TestCalculateFaithfulness:
 
         assert score == 1.0
 
-    @patch("eval.metrics.generation._create_llm_client")
-    @patch("eval.metrics.generation._extract_statements")
-    @patch("eval.metrics.generation._verify_statements")
+    @patch("eval.metrics.generation.create_llm_client")
+    @patch("eval.metrics.generation.extract_statements")
+    @patch("eval.metrics.generation.verify_statements")
     def test_partial_faithfulness_score(
         self, mock_verify, mock_extract, mock_create_client
     ):
@@ -1042,9 +1042,9 @@ class TestCalculateFaithfulness:
 
         assert score == pytest.approx(2 / 3)
 
-    @patch("eval.metrics.generation._create_llm_client")
-    @patch("eval.metrics.generation._extract_statements")
-    @patch("eval.metrics.generation._verify_statements")
+    @patch("eval.metrics.generation.create_llm_client")
+    @patch("eval.metrics.generation.extract_statements")
+    @patch("eval.metrics.generation.verify_statements")
     def test_zero_faithfulness_score(
         self, mock_verify, mock_extract, mock_create_client
     ):
@@ -1063,8 +1063,8 @@ class TestCalculateFaithfulness:
 
         assert score == 0.0
 
-    @patch("eval.metrics.generation._create_llm_client")
-    @patch("eval.metrics.generation._extract_statements")
+    @patch("eval.metrics.generation.create_llm_client")
+    @patch("eval.metrics.generation.extract_statements")
     def test_no_statements_extracted_returns_zero(
         self, mock_extract, mock_create_client
     ):
@@ -1077,9 +1077,9 @@ class TestCalculateFaithfulness:
 
         assert score == 0.0
 
-    @patch("eval.metrics.generation._create_llm_client")
-    @patch("eval.metrics.generation._extract_statements")
-    @patch("eval.metrics.generation._verify_statements")
+    @patch("eval.metrics.generation.create_llm_client")
+    @patch("eval.metrics.generation.extract_statements")
+    @patch("eval.metrics.generation.verify_statements")
     def test_no_verdicts_returns_zero(
         self, mock_verify, mock_extract, mock_create_client
     ):
@@ -1093,7 +1093,7 @@ class TestCalculateFaithfulness:
 
         assert score == 0.0
 
-    @patch("eval.metrics.generation._create_llm_client")
+    @patch("eval.metrics.generation.create_llm_client")
     def test_llm_client_error_raises_exception(self, mock_create_client):
         mock_create_client.side_effect = Exception("Client creation failed")
 
@@ -1102,9 +1102,9 @@ class TestCalculateFaithfulness:
                 answer="回答", contexts=["上下文"], api_key="test-api-key"
             )
 
-    @patch("eval.metrics.generation._create_llm_client")
-    @patch("eval.metrics.generation._extract_statements")
-    @patch("eval.metrics.generation._verify_statements")
+    @patch("eval.metrics.generation.create_llm_client")
+    @patch("eval.metrics.generation.extract_statements")
+    @patch("eval.metrics.generation.verify_statements")
     def test_custom_parameters_passed_correctly(
         self, mock_verify, mock_extract, mock_create_client
     ):
@@ -1132,9 +1132,9 @@ class TestCalculateFaithfulness:
             temperature=0.0,
         )
 
-    @patch("eval.metrics.generation._create_llm_client")
-    @patch("eval.metrics.generation._extract_statements")
-    @patch("eval.metrics.generation._verify_statements")
+    @patch("eval.metrics.generation.create_llm_client")
+    @patch("eval.metrics.generation.extract_statements")
+    @patch("eval.metrics.generation.verify_statements")
     def test_half_faithfulness_score(
         self, mock_verify, mock_extract, mock_create_client
     ):
@@ -1154,84 +1154,84 @@ class TestCalculateFaithfulness:
 
 @pytest.mark.unit
 class TestSplitIntoSentences:
-    """Tests for _split_into_sentences function."""
+    """Tests for split_into_sentences function."""
 
     def test_chinese_sentences(self):
-        from eval.metrics import _split_into_sentences
+        from eval.metrics import split_into_sentences
 
         text = "这是第一句。这是第二句！这是第三句？"
-        sentences = _split_into_sentences(text)
+        sentences = split_into_sentences(text)
         assert len(sentences) == 3
         assert sentences[0] == "这是第一句"
         assert sentences[1] == "这是第二句"
         assert sentences[2] == "这是第三句"
 
     def test_english_sentences(self):
-        from eval.metrics import _split_into_sentences
+        from eval.metrics import split_into_sentences
 
         text = "First sentence. Second sentence! Third sentence?"
-        sentences = _split_into_sentences(text)
+        sentences = split_into_sentences(text)
         assert len(sentences) == 3
 
     def test_mixed_sentences(self):
-        from eval.metrics import _split_into_sentences
+        from eval.metrics import split_into_sentences
 
         text = "中文句子。English sentence. 混合内容！"
-        sentences = _split_into_sentences(text)
+        sentences = split_into_sentences(text)
         assert len(sentences) == 3
 
     def test_empty_text(self):
-        from eval.metrics import _split_into_sentences
+        from eval.metrics import split_into_sentences
 
-        sentences = _split_into_sentences("")
+        sentences = split_into_sentences("")
         assert sentences == []
 
     def test_no_punctuation(self):
-        from eval.metrics import _split_into_sentences
+        from eval.metrics import split_into_sentences
 
         text = "没有标点的文本"
-        sentences = _split_into_sentences(text)
+        sentences = split_into_sentences(text)
         assert len(sentences) == 1
         assert sentences[0] == "没有标点的文本"
 
     def test_markdown_table(self):
-        from eval.metrics import _split_into_sentences
+        from eval.metrics import split_into_sentences
 
         text = """|工序环节|传统分立光模块|硅光集成光模块|
 |---|---|---|
 |贴片|独立工序|核心工序|
 |耦合|精密对准|波导耦合|"""
-        sentences = _split_into_sentences(text)
+        sentences = split_into_sentences(text)
         assert len(sentences) == 3
         assert sentences[0] == "|工序环节|传统分立光模块|硅光集成光模块|"
         assert sentences[1] == "|贴片|独立工序|核心工序|"
         assert sentences[2] == "|耦合|精密对准|波导耦合|"
 
     def test_markdown_table_with_empty_lines(self):
-        from eval.metrics import _split_into_sentences
+        from eval.metrics import split_into_sentences
 
         text = """|列1|列2|
 
 |---|---|
 |值1|值2|"""
-        sentences = _split_into_sentences(text)
+        sentences = split_into_sentences(text)
         assert len(sentences) == 2
         assert sentences[0] == "|列1|列2|"
         assert sentences[1] == "|值1|值2|"
 
     def test_regular_text_with_pipe(self):
-        from eval.metrics import _split_into_sentences
+        from eval.metrics import split_into_sentences
 
         text = "这是普通文本|带管道符。第二句。"
-        sentences = _split_into_sentences(text)
+        sentences = split_into_sentences(text)
         assert len(sentences) == 2
 
 
 @pytest.mark.unit
 class TestJudgeContextRelevance:
-    """Tests for _judge_context_relevance function."""
+    """Tests for judge_context_relevance function."""
 
-    @patch("eval.metrics.llm_retrieval._create_llm_client")
+    @patch("eval.metrics.llm_retrieval.create_llm_client")
     def test_relevant_context_returns_true(self, mock_create_client):
         mock_client = MagicMock()
         mock_create_client.return_value = mock_client
@@ -1241,9 +1241,9 @@ class TestJudgeContextRelevance:
         mock_message.content[0].text = '{"verdict": "是", "reason": "上下文包含答案"}'
         mock_client.messages.create.return_value = mock_message
 
-        from eval.metrics import _judge_context_relevance
+        from eval.metrics import judge_context_relevance
 
-        result = _judge_context_relevance(
+        result = judge_context_relevance(
             question="营收是多少？",
             expected_output="营收是100万元",
             context="公司2023年营收为100万元",
@@ -1254,7 +1254,7 @@ class TestJudgeContextRelevance:
 
         assert result is True
 
-    @patch("eval.metrics.llm_retrieval._create_llm_client")
+    @patch("eval.metrics.llm_retrieval.create_llm_client")
     def test_irrelevant_context_returns_false(self, mock_create_client):
         mock_client = MagicMock()
         mock_create_client.return_value = mock_client
@@ -1264,9 +1264,9 @@ class TestJudgeContextRelevance:
         mock_message.content[0].text = '{"verdict": "否", "reason": "上下文无关"}'
         mock_client.messages.create.return_value = mock_message
 
-        from eval.metrics import _judge_context_relevance
+        from eval.metrics import judge_context_relevance
 
-        result = _judge_context_relevance(
+        result = judge_context_relevance(
             question="营收是多少？",
             expected_output="营收是100万元",
             context="今天天气很好",
@@ -1277,15 +1277,15 @@ class TestJudgeContextRelevance:
 
         assert result is False
 
-    @patch("eval.metrics.llm_retrieval._create_llm_client")
+    @patch("eval.metrics.llm_retrieval.create_llm_client")
     def test_llm_error_returns_false(self, mock_create_client):
         mock_client = MagicMock()
         mock_create_client.return_value = mock_client
         mock_client.messages.create.side_effect = Exception("API Error")
 
-        from eval.metrics import _judge_context_relevance
+        from eval.metrics import judge_context_relevance
 
-        result = _judge_context_relevance(
+        result = judge_context_relevance(
             question="问题",
             expected_output="答案",
             context="上下文",
@@ -1312,7 +1312,7 @@ class TestCalculateContextPrecision:
         )
         assert score == 0.0
 
-    @patch("eval.metrics.llm_retrieval._judge_context_relevance")
+    @patch("eval.metrics.llm_retrieval.judge_context_relevance")
     def test_all_relevant_contexts(self, mock_judge):
         mock_judge.return_value = True
 
@@ -1328,7 +1328,7 @@ class TestCalculateContextPrecision:
         assert score == 1.0
         assert mock_judge.call_count == 3
 
-    @patch("eval.metrics.llm_retrieval._judge_context_relevance")
+    @patch("eval.metrics.llm_retrieval.judge_context_relevance")
     def test_no_relevant_contexts(self, mock_judge):
         mock_judge.return_value = False
 
@@ -1343,7 +1343,7 @@ class TestCalculateContextPrecision:
 
         assert score == 0.0
 
-    @patch("eval.metrics.llm_retrieval._judge_context_relevance")
+    @patch("eval.metrics.llm_retrieval.judge_context_relevance")
     def test_partial_relevant_contexts(self, mock_judge):
         mock_judge.side_effect = [True, False, True]
 
@@ -1358,7 +1358,7 @@ class TestCalculateContextPrecision:
 
         assert 0.0 < score < 1.0
 
-    @patch("eval.metrics.llm_retrieval._judge_context_relevance")
+    @patch("eval.metrics.llm_retrieval.judge_context_relevance")
     def test_weighted_precision_calculation(self, mock_judge):
         mock_judge.side_effect = [True, False, True]
 
@@ -1378,9 +1378,9 @@ class TestCalculateContextPrecision:
 
 @pytest.mark.unit
 class TestCanInferFromContext:
-    """Tests for _can_infer_from_context function."""
+    """Tests for can_infer_from_context function."""
 
-    @patch("eval.metrics.llm_retrieval._create_llm_client")
+    @patch("eval.metrics.llm_retrieval.create_llm_client")
     def test_inferable_sentence_returns_true(self, mock_create_client):
         mock_client = MagicMock()
         mock_create_client.return_value = mock_client
@@ -1390,9 +1390,9 @@ class TestCanInferFromContext:
         mock_message.content[0].text = '{"verdict": "是"}'
         mock_client.messages.create.return_value = mock_message
 
-        from eval.metrics import _can_infer_from_context
+        from eval.metrics import can_infer_from_context
 
-        result = _can_infer_from_context(
+        result = can_infer_from_context(
             sentence="营收是100万元",
             context="公司2023年营收为100万元",
             api_key="test-key",
@@ -1402,7 +1402,7 @@ class TestCanInferFromContext:
 
         assert result is True
 
-    @patch("eval.metrics.llm_retrieval._create_llm_client")
+    @patch("eval.metrics.llm_retrieval.create_llm_client")
     def test_non_inferable_sentence_returns_false(self, mock_create_client):
         mock_client = MagicMock()
         mock_create_client.return_value = mock_client
@@ -1412,9 +1412,9 @@ class TestCanInferFromContext:
         mock_message.content[0].text = '{"verdict": "否"}'
         mock_client.messages.create.return_value = mock_message
 
-        from eval.metrics import _can_infer_from_context
+        from eval.metrics import can_infer_from_context
 
-        result = _can_infer_from_context(
+        result = can_infer_from_context(
             sentence="利润是50万元",
             context="营收是100万元",
             api_key="test-key",
@@ -1451,8 +1451,8 @@ class TestCalculateContextRecall:
         )
         assert score == 0.0
 
-    @patch("eval.metrics.llm_retrieval._can_infer_from_context")
-    @patch("eval.metrics.llm_retrieval._split_into_sentences")
+    @patch("eval.metrics.llm_retrieval.can_infer_from_context")
+    @patch("eval.metrics.llm_retrieval.split_into_sentences")
     def test_all_sentences_inferable(self, mock_split, mock_infer):
         mock_split.return_value = ["句子1", "句子2", "句子3"]
         mock_infer.return_value = True
@@ -1469,8 +1469,8 @@ class TestCalculateContextRecall:
         assert score == 1.0
         assert mock_infer.call_count == 3
 
-    @patch("eval.metrics.llm_retrieval._can_infer_from_context")
-    @patch("eval.metrics.llm_retrieval._split_into_sentences")
+    @patch("eval.metrics.llm_retrieval.can_infer_from_context")
+    @patch("eval.metrics.llm_retrieval.split_into_sentences")
     def test_no_sentences_inferable(self, mock_split, mock_infer):
         mock_split.return_value = ["句子1", "句子2"]
         mock_infer.return_value = False
@@ -1486,8 +1486,8 @@ class TestCalculateContextRecall:
 
         assert score == 0.0
 
-    @patch("eval.metrics.llm_retrieval._can_infer_from_context")
-    @patch("eval.metrics.llm_retrieval._split_into_sentences")
+    @patch("eval.metrics.llm_retrieval.can_infer_from_context")
+    @patch("eval.metrics.llm_retrieval.split_into_sentences")
     def test_partial_sentences_inferable(self, mock_split, mock_infer):
         mock_split.return_value = ["句子1", "句子2", "句子3"]
         mock_infer.side_effect = [True, False, True]
@@ -2037,25 +2037,25 @@ class TestHallucinationRate:
 @pytest.mark.unit
 class TestParseChunkId:
     def test_new_format_parsing(self):
-        assert _parse_chunk_id("doc1::chunk::003") == ("doc1", 3)
+        assert parse_chunk_id("doc1::chunk::003") == ("doc1", 3)
 
     def test_new_format_with_underscores_in_name(self):
-        assert _parse_chunk_id("贵州茅台_英文版_::chunk::005") == (
+        assert parse_chunk_id("贵州茅台_英文版_::chunk::005") == (
             "贵州茅台_英文版_",
             5,
         )
 
     def test_old_format_backward_compat(self):
-        assert _parse_chunk_id("doc1_003") == ("doc1", 3)
+        assert parse_chunk_id("doc1_003") == ("doc1", 3)
 
     def test_old_format_with_underscores(self):
-        assert _parse_chunk_id("贵州茅台_英文版__003") == ("贵州茅台_英文版_", 3)
+        assert parse_chunk_id("贵州茅台_英文版__003") == ("贵州茅台_英文版_", 3)
 
     def test_no_separator(self):
-        assert _parse_chunk_id("nodata") == ("nodata", -1)
+        assert parse_chunk_id("nodata") == ("nodata", -1)
 
     def test_non_numeric_suffix(self):
-        assert _parse_chunk_id("doc1_abc") == ("doc1_abc", -1)
+        assert parse_chunk_id("doc1_abc") == ("doc1_abc", -1)
 
 
 @pytest.mark.unit

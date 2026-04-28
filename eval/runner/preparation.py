@@ -166,7 +166,7 @@ def prepare_meal(
         raise
 
 
-def _prepare_legacy_test_set(
+def prepare_legacy_test_set(
     system_config: dict[str, Any],
     meal_name: str,
     test_set_config: dict[str, Any],
@@ -402,7 +402,7 @@ def prepare_test_sets(
                 DeprecationWarning,
                 stacklevel=2,
             )
-            test_set_data = _prepare_legacy_test_set(
+            test_set_data = prepare_legacy_test_set(
                 system_config=system_config,
                 meal_name=meal_name,
                 test_set_config=test_set_config,

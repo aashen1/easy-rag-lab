@@ -6,7 +6,7 @@ from eval.evaluators.base import BaseEvaluator
 from eval.metrics.metric_resolver import MetricResolver
 
 
-def _build_legacy_resolver(
+def build_legacy_resolver(
     evaluators: dict[str, BaseEvaluator],
     retrieval_metrics: list[str] | None,
     generation_metrics: list[str] | None,
@@ -40,7 +40,7 @@ def _build_legacy_resolver(
     )
 
 
-def _namespace_result(result: dict[str, Any], backend_name: str) -> dict[str, Any]:
+def namespace_result(result: dict[str, Any], backend_name: str) -> dict[str, Any]:
     """Add backend name prefix to metric keys for comparison mode.
 
     Args:
@@ -61,7 +61,7 @@ def _namespace_result(result: dict[str, Any], backend_name: str) -> dict[str, An
     return result
 
 
-def _merge_result(target: dict[str, Any], source: dict[str, Any]) -> None:
+def merge_result(target: dict[str, Any], source: dict[str, Any]) -> None:
     """Merge source result into target, combining metric dicts.
 
     Args:

@@ -4,6 +4,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
+from src.test_generation.validators import (
+    calculate_quality_metrics,
+    validate_question_quality,
+)
 from src.test_generator import TestSetGenerator
 
 
@@ -261,8 +265,8 @@ class TestEndToEndExperiment:
         test_experiment_config,
     ):
         from eval.run_experiment import (
-            _build_comparison_data,
-            _generate_comparison_report,
+            build_comparison_data,
+            generate_comparison_report,
         )
         from src.experiment import ExperimentConfig, ExperimentManager
 
@@ -306,7 +310,7 @@ class TestEndToEndExperiment:
         result1 = manager.load_experiment_result(exp_dir1)
         result2 = manager.load_experiment_result(exp_dir2)
 
-        comparison_data = _build_comparison_data(
+        comparison_data = build_comparison_data(
             [
                 result1.to_dict(),
                 result2.to_dict(),
@@ -317,7 +321,7 @@ class TestEndToEndExperiment:
         assert comparison_data["summary"]["total_experiments"] == 2
         assert len(comparison_data["best_variants"]) == 2
 
-        report = _generate_comparison_report(comparison_data, [])
+        report = generate_comparison_report(comparison_data, [])
 
         assert "# Experiment Comparison Report" in report
         assert "test_e2e_experiment" in report
@@ -425,13 +429,13 @@ class TestExperimentComparisonExtended:
         test_system_config,
     ):
         from eval.run_experiment import (
-            _build_comparison_data,
-            _generate_comparison_report,
+            build_comparison_data,
+            generate_comparison_report,
         )
 
-        comparison_data = _build_comparison_data([])
+        comparison_data = build_comparison_data([])
 
-        report = _generate_comparison_report(
+        report = generate_comparison_report(
             comparison_data, ["exp_missing_1", "exp_missing_2"]
         )
 
@@ -445,7 +449,7 @@ class TestExperimentComparisonExtended:
         temp_project_dir,
         test_system_config,
     ):
-        from eval.run_experiment import _build_comparison_data
+        from eval.run_experiment import build_comparison_data
 
         results = [
             {
@@ -493,7 +497,7 @@ class TestExperimentComparisonExtended:
             },
         ]
 
-        comparison_data = _build_comparison_data(results)
+        comparison_data = build_comparison_data(results)
 
         assert len(comparison_data["experiments"]) == 2
         assert len(comparison_data["experiments"][0]["test_sets"]) == 2
@@ -894,7 +898,7 @@ class TestBackwardCompatibility:
 
     @pytest.mark.unit
     def test_experiment_result_backward_compatibility(self):
-        from eval.experiment_reporter import ExperimentResult
+        from eval.experiment_reporter import ReportExperimentResult
 
         legacy_data = {
             "timestamp": "2026-04-16T10:00:00",
@@ -918,7 +922,7 @@ class TestBackwardCompatibility:
             ],
         }
 
-        result = ExperimentResult.from_dict(legacy_data)
+        result = ReportExperimentResult.from_dict(legacy_data)
 
         assert result.timestamp == "2026-04-16T10:00:00"
         assert result.total_test_cases == 2
@@ -951,24 +955,19 @@ class TestBackwardCompatibility:
 class TestDocumentLevelQuestionGenerationIntegration:
     @pytest.mark.unit
     def test_question_generation_with_quality_validation(self):
-        config = {
-            "test_generation": {"max_retries": 3},
-        }
-        generator = TestSetGenerator(config)
-
         valid_question = {
             "question": "2024年光模块市场规模多少？",
             "answer": "约100亿美元",
             "question_type": "single_fact",
         }
-        assert generator._validate_question_quality(valid_question) is True
+        assert validate_question_quality(valid_question) is True
 
         invalid_question = {
             "question": "根据文档，市场规模是多少？",
             "answer": "约100亿美元",
             "question_type": "single_fact",
         }
-        assert generator._validate_question_quality(invalid_question) is False
+        assert validate_question_quality(invalid_question) is False
 
     @pytest.mark.unit
     def test_question_type_distribution_integration(self):
@@ -997,11 +996,6 @@ class TestDocumentLevelQuestionGenerationIntegration:
 
     @pytest.mark.unit
     def test_quality_metrics_calculation_integration(self):
-        config = {
-            "test_generation": {"max_retries": 3},
-        }
-        generator = TestSetGenerator(config)
-
         questions = [
             {
                 "question": "市场规模多少？",
@@ -1020,7 +1014,7 @@ class TestDocumentLevelQuestionGenerationIntegration:
             },
         ]
 
-        result = generator._calculate_quality_metrics(questions)
+        result = calculate_quality_metrics(questions)
 
         assert result["format_correct_rate"] == 1.0
         assert result["authenticity_pass_rate"] == 2 / 3

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 import json
 import random
 import shutil
@@ -98,6 +97,179 @@ class MealManager:
 
         return config_snapshot, config_hashes
 
+    def _build_pipeline(
+        self,
+        *,
+        meal_files: list[MealFile],
+        config_snapshot: dict,
+        config_hashes: dict,
+        data_id: str,
+        collection_name: str,
+        pdfs_to_parse: list[Path],
+        parsed_dir: Path,
+        chunks_dir: Path,
+        reuse_parsed: bool = False,
+        source_parsed_dir: Path | None = None,
+        source_chunks_dir: Path | None = None,
+        composition: dict | None = None,
+        sampling_config: dict | None = None,
+        stats_extras: dict | None = None,
+        meal_name: str,
+        meal_dir: Path | None = None,
+        force_chunk: bool = False,
+    ) -> MealConfig:
+        """Execute the shared parse-chunk-index-stats-manifest-config-save pipeline.
+
+        Encapsulates the common flow shared by create_meal, merge_meals,
+        extend_meal, and repair_meal: extract configs, copy source artifacts
+        (for extend), parse PDFs, build chunks, build vector index, count
+        stats, save artifact manifest, infer equivalence groups, build
+        MealConfig, create meal directory, and save manifest.json.
+
+        Args:
+            meal_files: List of MealFile objects for this meal.
+            config_snapshot: Configuration snapshot dictionary.
+            config_hashes: Configuration hashes dictionary.
+            data_id: Data identifier for this meal's file set.
+            collection_name: Qdrant collection name for the vector index.
+            pdfs_to_parse: List of PDF file paths that need parsing.
+            parsed_dir: Directory for parsed artifacts.
+            chunks_dir: Directory for chunked artifacts.
+            reuse_parsed: If True, skip parsing (parsed results already available).
+            source_parsed_dir: If provided, copy parsed files from this directory
+                first (used by extend_meal).
+            source_chunks_dir: If provided, copy chunk files from this directory
+                first (used by extend_meal).
+            composition: Composition metadata for the MealConfig.
+            sampling_config: Sampling configuration for the MealConfig.
+            stats_extras: Additional stats to merge into MealConfig.stats.
+            meal_name: Name of the meal (for directory creation and logging).
+            meal_dir: If provided, use this directory instead of creating a new
+                one (used by repair_meal in-place mode).
+            force_chunk: If True, force re-chunking even if chunks exist.
+
+        Returns:
+            MealConfig object for the created/rebuilt meal.
+
+        Raises:
+            OSError: If the manifest file cannot be written.
+        """
+        parser_config = self.config.get("parser", {})
+        chunker_config = self.config.get("chunker", {})
+        embedding_config = self.config.get("embedding", {})
+
+        if source_parsed_dir is not None and source_parsed_dir.exists():
+            for parsed_file in source_parsed_dir.rglob("*"):
+                if parsed_file.is_file():
+                    rel_parsed = parsed_file.relative_to(source_parsed_dir)
+                    target_file = parsed_dir / rel_parsed
+                    target_file.parent.mkdir(parents=True, exist_ok=True)
+                    try:
+                        shutil.copy2(parsed_file, target_file)
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to copy parsed file {parsed_file}: {str(e)}"
+                        )
+
+        if source_chunks_dir is not None and source_chunks_dir.exists():
+            for chunk_file in source_chunks_dir.rglob("*"):
+                if chunk_file.is_file():
+                    rel_chunk = chunk_file.relative_to(source_chunks_dir)
+                    target_file = chunks_dir / rel_chunk
+                    target_file.parent.mkdir(parents=True, exist_ok=True)
+                    try:
+                        shutil.copy2(chunk_file, target_file)
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to copy chunk file {chunk_file}: {str(e)}"
+                        )
+
+        if not reuse_parsed and pdfs_to_parse:
+            self._parse_pdfs_with_registry(parser_config, pdfs_to_parse, parsed_dir)
+
+        build_chunks_if_needed(
+            parsed_dir,
+            chunks_dir,
+            chunker_config,
+            model_name=embedding_config.get("model_name"),
+            force=force_chunk,
+        )
+
+        build_index_from_chunks(
+            chunks_dir=chunks_dir,
+            embedding_config=embedding_config,
+            vector_store_config=self.config.get("vector_store", {}),
+            collection_name=collection_name,
+        )
+
+        total_chunks = 0
+        if chunks_dir.exists():
+            for jsonl_file in chunks_dir.rglob("*.jsonl"):
+                try:
+                    with open(jsonl_file, encoding="utf-8") as f:
+                        total_chunks += sum(1 for _ in f)
+                except Exception:
+                    pass
+
+        total_pages = 0
+        for meal_file in meal_files:
+            pdf_path = self.raw_dir / meal_file.path
+            try:
+                if pdf_path.exists():
+                    total_pages += count_pdf_pages(pdf_path)
+            except Exception:
+                pass
+
+        artifact_manifest = {
+            "data_id": data_id,
+            "pdf_count": len(meal_files),
+            "page_count": total_pages,
+            "chunk_count": total_chunks,
+            "created_at": datetime.now().isoformat(),
+            "config_hashes": config_hashes,
+            "pdf_inventory": {f.path: f.sha256 for f in meal_files},
+        }
+        self.cache.save_manifest(data_id, artifact_manifest)
+
+        equivalence_groups = _infer_equivalence_groups([f.path for f in meal_files])
+
+        stats: dict[str, Any] = {
+            "total_pdfs": len(meal_files),
+            "total_pages": total_pages,
+            "total_chunks": total_chunks,
+        }
+        if stats_extras:
+            stats.update(stats_extras)
+
+        meal_config = MealConfig(
+            data_id=data_id,
+            name=meal_name,
+            created_at=datetime.now().isoformat(),
+            sampling_config=sampling_config,
+            collection_name=collection_name,
+            pdf_files=meal_files,
+            config_snapshot=config_snapshot,
+            config_hashes=config_hashes,
+            stats=stats,
+            equivalence_groups=equivalence_groups,
+            composition=composition if composition is not None else {},
+        )
+
+        if meal_dir is None:
+            meal_dir = self.get_meal_dir(meal_name)
+            ensure_dir(str(meal_dir))
+            ensure_dir(str(meal_dir / "test_sets"))
+
+        manifest_path = meal_dir / "manifest.json"
+        try:
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(meal_config.to_dict(), f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f"Failed to write manifest for meal '{meal_name}': {str(e)}")
+            raise
+
+        return meal_config
+
     def create_meal(
         self,
         name: str | None,
@@ -147,15 +319,12 @@ class MealManager:
 
         sampled_pdfs = determine_sample(all_pdfs, sampling_config)
 
-        meal_files = []
-        total_pages = 0
+        meal_files: list[MealFile] = []
         for pdf_path in sampled_pdfs:
             try:
                 rel_path = pdf_path.relative_to(input_path).as_posix()
                 sha256 = compute_file_sha256(pdf_path)
                 size_bytes = pdf_path.stat().st_size
-                pages = count_pdf_pages(pdf_path)
-                total_pages += pages
                 meal_files.append(
                     MealFile(
                         path=rel_path,
@@ -177,10 +346,11 @@ class MealManager:
         chunker_hash = config_hashes["chunker"]
         parser_hash = config_hashes["parser"]
 
-        parser_config = self.config.get("parser", {})
-        chunker_config = self.config.get("chunker", {})
-        embedding_config = self.config.get("embedding", {})
+        parsed_dir, chunks_dir = self.cache.ensure_dirs(
+            data_id, chunker_hash, parser_hash
+        )
 
+        parser_config = self.config.get("parser", {})
         algorithm = parser_config.get("algorithm", "pymupdf4llm")
         parser_options = parser_config.get(algorithm, {})
         use_page_chunks = bool(parser_options.get("page_chunks", False))
@@ -194,12 +364,10 @@ class MealManager:
                 Path(f.path).with_suffix(".md").name for f in meal_files
             ]
 
-        parsed_dir, chunks_dir = self.cache.ensure_dirs(
-            data_id, chunker_hash, parser_hash
-        )
-
         cache_hit_parse = False
         cache_hit_chunk = False
+        reuse_parsed = False
+        pdfs_to_parse: list[Path] = list(sampled_pdfs)
 
         full_parsed_dir = None
         if not force_parse:
@@ -217,19 +385,18 @@ class MealManager:
                 meal_files, full_parsed_dir, parsed_dir, use_page_chunks
             )
             cache_hit_parse = True
+            reuse_parsed = True
+            pdfs_to_parse = []
         elif not force_parse and self.cache.parsed_exists(
             data_id, expected_md_names, parser_hash
         ):
             logger.info(f"Cache HIT: Parsed artifacts exist for data_id={data_id[:12]}")
             cache_hit_parse = True
+            reuse_parsed = True
+            pdfs_to_parse = []
         else:
             logger.info(
                 f"Step 1: Parsing {len(sampled_pdfs)} PDFs for meal '{name}'..."
-            )
-            self._parse_pdfs_with_registry(
-                parser_config,
-                sampled_pdfs,
-                parsed_dir,
             )
 
         expected_jsonl_names = []
@@ -247,92 +414,31 @@ class MealManager:
                 f"Cache HIT: Chunked artifacts exist for chunker_hash={chunker_hash}"
             )
             cache_hit_chunk = True
-        else:
-            if force_chunk:
-                logger.info(f"Force overwrite: re-chunking for meal '{name}'...")
-            else:
-                logger.info(f"Step 2: Chunking files for meal '{name}'...")
-            build_chunks_if_needed(
-                parsed_dir,
-                chunks_dir,
-                chunker_config,
-                model_name=embedding_config.get("model_name"),
-                force=force_chunk,
-            )
 
-        logger.info(
-            f"Step 3: Building vector index for meal '{name}' (collection: {collection_name})..."
-        )
-
-        build_index_from_chunks(
-            chunks_dir=chunks_dir,
-            embedding_config=embedding_config,
-            vector_store_config=self.config.get("vector_store", {}),
-            collection_name=collection_name,
-        )
-
-        source_filter_jsonl = set()
-        if chunks_dir.exists():
-            for jsonl_file in chunks_dir.rglob("*.jsonl"):
-                rel = jsonl_file.relative_to(chunks_dir).as_posix()
-                source_filter_jsonl.add(rel)
-
-        total_chunks = 0
-        for jsonl_rel in source_filter_jsonl:
-            jsonl_path = chunks_dir / jsonl_rel
-            try:
-                with open(jsonl_path, encoding="utf-8") as f:
-                    total_chunks += sum(1 for _ in f)
-            except Exception:
-                pass
-
-        artifact_manifest = {
-            "data_id": data_id,
-            "pdf_count": len(meal_files),
-            "page_count": total_pages,
-            "chunk_count": total_chunks,
-            "created_at": datetime.now().isoformat(),
-            "config_hashes": config_hashes,
-            "pdf_inventory": {f.path: f.sha256 for f in meal_files},
+        stats_extras = {
+            "cache_hit_parse": cache_hit_parse,
+            "cache_hit_chunk": cache_hit_chunk,
         }
-        self.cache.save_manifest(data_id, artifact_manifest)
 
-        equivalence_groups = _infer_equivalence_groups([f.path for f in meal_files])
-
-        meal_config = MealConfig(
+        meal_config = self._build_pipeline(
+            meal_files=meal_files,
+            config_snapshot=config_snapshot,
+            config_hashes=config_hashes,
             data_id=data_id,
-            name=name,
-            created_at=datetime.now().isoformat(),
+            collection_name=collection_name,
+            pdfs_to_parse=pdfs_to_parse,
+            parsed_dir=parsed_dir,
+            chunks_dir=chunks_dir,
+            reuse_parsed=reuse_parsed,
             sampling_config={
                 "mode": sampling_config.mode,
                 "value": sampling_config.value,
                 "seed": seed,
             },
-            collection_name=collection_name,
-            pdf_files=meal_files,
-            config_snapshot=config_snapshot,
-            config_hashes=config_hashes,
-            stats={
-                "total_pdfs": len(meal_files),
-                "total_pages": total_pages,
-                "total_chunks": total_chunks,
-                "cache_hit_parse": cache_hit_parse,
-                "cache_hit_chunk": cache_hit_chunk,
-            },
-            equivalence_groups=equivalence_groups,
+            stats_extras=stats_extras,
+            meal_name=name,
+            force_chunk=force_chunk,
         )
-
-        meal_dir = self.get_meal_dir(name)
-        ensure_dir(str(meal_dir))
-        ensure_dir(str(meal_dir / "test_sets"))
-
-        manifest_path = meal_dir / "manifest.json"
-        try:
-            with open(manifest_path, "w", encoding="utf-8") as f:
-                json.dump(meal_config.to_dict(), f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logger.error(f"Failed to write manifest for meal '{name}': {str(e)}")
-            raise
 
         cache_status = []
         if cache_hit_parse:
@@ -343,7 +449,7 @@ class MealManager:
 
         logger.success(
             f"Meal '{name}' created successfully "
-            f"[{data_id[:12]}] ({len(meal_files)} PDFs, {total_pages} pages, {total_chunks} chunks, cache: {cache_str})"
+            f"[{data_id[:12]}] ({len(meal_files)} PDFs, {meal_config.stats['total_pages']} pages, {meal_config.stats['total_chunks']} chunks, cache: {cache_str})"
         )
         return meal_config
 
@@ -659,17 +765,14 @@ class MealManager:
         chunker_hash = config_hashes["chunker"]
         parser_hash = config_hashes["parser"]
 
-        parser_config = self.config.get("parser", {})
-        chunker_config = self.config.get("chunker", {})
-        embedding_config = self.config.get("embedding", {})
-
-        algorithm = parser_config.get("algorithm", "pymupdf4llm")
-        parser_options = parser_config.get(algorithm, {})
-        use_page_chunks = bool(parser_options.get("page_chunks", False))
-
         parsed_dir, chunks_dir = self.cache.ensure_dirs(
             new_data_id, chunker_hash, parser_hash
         )
+
+        parser_config = self.config.get("parser", {})
+        algorithm = parser_config.get("algorithm", "pymupdf4llm")
+        parser_options = parser_config.get(algorithm, {})
+        use_page_chunks = bool(parser_options.get("page_chunks", False))
 
         pdfs_to_parse: list[Path] = []
         for meal_file in merged_pdf_files:
@@ -688,80 +791,8 @@ class MealManager:
 
         if pdfs_to_parse:
             logger.info(f"Parsing {len(pdfs_to_parse)} new PDFs for merged meal...")
-            self._parse_pdfs_with_registry(parser_config, pdfs_to_parse, parsed_dir)
         else:
             logger.info("All PDFs already parsed, reusing cached artifacts")
-
-        all_chunks_exist = True
-        for meal_file in merged_pdf_files:
-            if use_page_chunks:
-                jsonl_name = Path(meal_file.path).with_suffix(".jsonl").name
-            else:
-                jsonl_name = Path(meal_file.path).with_suffix(".jsonl").name
-
-            if not (chunks_dir / jsonl_name).exists():
-                all_chunks_exist = False
-                break
-
-        if not all_chunks_exist:
-            logger.info("Building chunks for merged meal...")
-            build_chunks_if_needed(
-                parsed_dir,
-                chunks_dir,
-                chunker_config,
-                model_name=embedding_config.get("model_name"),
-            )
-        else:
-            logger.info("All chunks already exist, reusing cached artifacts")
-
-        logger.info(f"Building vector index for merged meal '{name}'...")
-        build_index_from_chunks(
-            chunks_dir=chunks_dir,
-            embedding_config=embedding_config,
-            vector_store_config=self.config.get("vector_store", {}),
-            collection_name=collection_name,
-        )
-
-        source_filter_jsonl = set()
-        if chunks_dir.exists():
-            for jsonl_file in chunks_dir.rglob("*.jsonl"):
-                rel = jsonl_file.relative_to(chunks_dir).as_posix()
-                source_filter_jsonl.add(rel)
-
-        total_chunks = 0
-        for jsonl_rel in source_filter_jsonl:
-            jsonl_path = chunks_dir / jsonl_rel
-            try:
-                with open(jsonl_path, encoding="utf-8") as f:
-                    total_chunks += sum(1 for _ in f)
-            except Exception:
-                pass
-
-        from src.sampler import count_pdf_pages
-
-        total_pages = 0
-        for meal_file in merged_pdf_files:
-            pdf_path = self.raw_dir / meal_file.path
-            try:
-                if pdf_path.exists():
-                    total_pages += count_pdf_pages(pdf_path)
-            except Exception:
-                pass
-
-        artifact_manifest = {
-            "data_id": new_data_id,
-            "pdf_count": len(merged_pdf_files),
-            "page_count": total_pages,
-            "chunk_count": total_chunks,
-            "created_at": datetime.now().isoformat(),
-            "config_hashes": config_hashes,
-            "pdf_inventory": {f.path: f.sha256 for f in merged_pdf_files},
-        }
-        self.cache.save_manifest(new_data_id, artifact_manifest)
-
-        equivalence_groups = _infer_equivalence_groups(
-            [f.path for f in merged_pdf_files]
-        )
 
         composition = {
             "type": "merged",
@@ -774,39 +805,22 @@ class MealManager:
             "created_at": datetime.now().isoformat(),
         }
 
-        meal_config = MealConfig(
-            data_id=new_data_id,
-            name=name,
-            created_at=datetime.now().isoformat(),
-            sampling_config=None,
-            collection_name=collection_name,
-            pdf_files=merged_pdf_files,
+        meal_config = self._build_pipeline(
+            meal_files=merged_pdf_files,
             config_snapshot=config_snapshot,
             config_hashes=config_hashes,
-            stats={
-                "total_pdfs": len(merged_pdf_files),
-                "total_pages": total_pages,
-                "total_chunks": total_chunks,
-            },
-            equivalence_groups=equivalence_groups,
+            data_id=new_data_id,
+            collection_name=collection_name,
+            pdfs_to_parse=pdfs_to_parse,
+            parsed_dir=parsed_dir,
+            chunks_dir=chunks_dir,
             composition=composition,
+            meal_name=name,
         )
-
-        meal_dir = self.get_meal_dir(name)
-        ensure_dir(str(meal_dir))
-        ensure_dir(str(meal_dir / "test_sets"))
-
-        manifest_path = meal_dir / "manifest.json"
-        try:
-            with open(manifest_path, "w", encoding="utf-8") as f:
-                json.dump(meal_config.to_dict(), f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logger.error(f"Failed to write manifest for merged meal '{name}': {str(e)}")
-            raise
 
         logger.success(
             f"Meal '{name}' created successfully by merging {len(meal_names)} meals "
-            f"[{new_data_id[:12]}] ({len(merged_pdf_files)} unique PDFs, {total_pages} pages, {total_chunks} chunks)"
+            f"[{new_data_id[:12]}] ({len(merged_pdf_files)} unique PDFs, {meal_config.stats['total_pages']} pages, {meal_config.stats['total_chunks']} chunks)"
         )
         return meal_config
 
@@ -930,102 +944,13 @@ class MealManager:
             target_name = new_name or f"{name}_repaired"
             if self.meal_exists(target_name):
                 raise MealError(f"Meal '{target_name}' already exists")
+            target_meal_dir: Path | None = None
         else:
             target_name = name
             logger.warning(
                 f"In-place repair will change the data_id of meal '{name}' "
                 f"from {meal_config.data_id[:12]} to {new_data_id[:12]}"
             )
-
-        parser_config = self.config.get("parser", {})
-        chunker_config = self.config.get("chunker", {})
-        embedding_config = self.config.get("embedding", {})
-
-        chunker_hash = config_hashes["chunker"]
-        parser_hash = config_hashes["parser"]
-        parsed_dir, chunks_dir = self.cache.ensure_dirs(
-            new_data_id, chunker_hash, parser_hash
-        )
-
-        sampled_pdfs = [self.raw_dir / f.path for f in new_pdf_files]
-
-        logger.info(f"Rebuilding index for repaired meal '{target_name}'...")
-        self._parse_pdfs_with_registry(
-            parser_config,
-            sampled_pdfs,
-            parsed_dir,
-        )
-
-        build_chunks_if_needed(
-            parsed_dir,
-            chunks_dir,
-            chunker_config,
-            model_name=embedding_config.get("model_name"),
-        )
-
-        build_index_from_chunks(
-            chunks_dir=chunks_dir,
-            embedding_config=embedding_config,
-            vector_store_config=self.config.get("vector_store", {}),
-            collection_name=new_collection_name,
-        )
-
-        source_filter_jsonl = set()
-        if chunks_dir.exists():
-            for jsonl_file in chunks_dir.rglob("*.jsonl"):
-                rel = jsonl_file.relative_to(chunks_dir).as_posix()
-                source_filter_jsonl.add(rel)
-
-        total_pages = 0
-        total_chunks = 0
-        for mf in new_pdf_files:
-            with contextlib.suppress(Exception):
-                total_pages += count_pdf_pages(self.raw_dir / mf.path)
-        for jsonl_rel in source_filter_jsonl:
-            jsonl_path = chunks_dir / jsonl_rel
-            try:
-                with open(jsonl_path, encoding="utf-8") as f:
-                    total_chunks += sum(1 for _ in f)
-            except Exception:
-                pass
-
-        artifact_manifest = {
-            "data_id": new_data_id,
-            "pdf_count": len(new_pdf_files),
-            "page_count": total_pages,
-            "chunk_count": total_chunks,
-            "created_at": datetime.now().isoformat(),
-            "config_hashes": config_hashes,
-            "pdf_inventory": {f.path: f.sha256 for f in new_pdf_files},
-        }
-        self.cache.save_manifest(new_data_id, artifact_manifest)
-
-        new_equivalence_groups = _infer_equivalence_groups(
-            [f.path for f in new_pdf_files]
-        )
-
-        new_config = MealConfig(
-            data_id=new_data_id,
-            name=target_name,
-            created_at=datetime.now().isoformat(),
-            sampling_config=meal_config.sampling_config,
-            collection_name=new_collection_name,
-            pdf_files=new_pdf_files,
-            config_snapshot=config_snapshot,
-            config_hashes=config_hashes,
-            stats={
-                "total_pdfs": len(new_pdf_files),
-                "total_pages": total_pages,
-                "total_chunks": total_chunks,
-            },
-            equivalence_groups=new_equivalence_groups,
-        )
-
-        if create_new:
-            meal_dir = self.get_meal_dir(target_name)
-            ensure_dir(str(meal_dir))
-            ensure_dir(str(meal_dir / "test_sets"))
-        else:
             try:
                 from src.indexer import VectorIndexer
 
@@ -1045,21 +970,35 @@ class MealManager:
                     old_indexer.delete_collection()
             except Exception as e:
                 logger.warning(f"Failed to delete old collection: {str(e)}")
-            meal_dir = self.get_meal_dir(target_name)
+            target_meal_dir = self.get_meal_dir(target_name)
 
-        manifest_path = meal_dir / "manifest.json"
-        try:
-            with open(manifest_path, "w", encoding="utf-8") as f:
-                json.dump(new_config.to_dict(), f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logger.error(
-                f"Failed to write manifest for repaired meal '{target_name}': {str(e)}"
-            )
-            raise
+        chunker_hash = config_hashes["chunker"]
+        parser_hash = config_hashes["parser"]
+        parsed_dir, chunks_dir = self.cache.ensure_dirs(
+            new_data_id, chunker_hash, parser_hash
+        )
+
+        sampled_pdfs = [self.raw_dir / f.path for f in new_pdf_files]
+
+        logger.info(f"Rebuilding index for repaired meal '{target_name}'...")
+
+        new_config = self._build_pipeline(
+            meal_files=new_pdf_files,
+            config_snapshot=config_snapshot,
+            config_hashes=config_hashes,
+            data_id=new_data_id,
+            collection_name=new_collection_name,
+            pdfs_to_parse=sampled_pdfs,
+            parsed_dir=parsed_dir,
+            chunks_dir=chunks_dir,
+            sampling_config=meal_config.sampling_config,
+            meal_name=target_name,
+            meal_dir=target_meal_dir,
+        )
 
         logger.success(
             f"Meal '{target_name}' repaired successfully "
-            f"[{new_data_id[:12]}] ({len(new_pdf_files)} PDFs, {total_pages} pages, {total_chunks} chunks)"
+            f"[{new_data_id[:12]}] ({len(new_pdf_files)} PDFs, {new_config.stats['total_pages']} pages, {new_config.stats['total_chunks']} chunks)"
         )
         return new_config
 
@@ -1192,10 +1131,6 @@ class MealManager:
         chunker_hash = config_hashes["chunker"]
         parser_hash = config_hashes["parser"]
 
-        parser_config = self.config.get("parser", {})
-        chunker_config = self.config.get("chunker", {})
-        embedding_config = self.config.get("embedding", {})
-
         source_parsed_dir = self.cache.get_parsed_dir(
             source_config.data_id, parser_hash
         )
@@ -1211,88 +1146,9 @@ class MealManager:
             f"Extending meal '{source_meal}' with {len(valid_new_pdfs)} new PDFs..."
         )
 
-        if source_parsed_dir.exists():
-            for parsed_file in source_parsed_dir.rglob("*"):
-                if parsed_file.is_file():
-                    rel_parsed = parsed_file.relative_to(source_parsed_dir)
-                    target_file = new_parsed_dir / rel_parsed
-                    target_file.parent.mkdir(parents=True, exist_ok=True)
-                    try:
-                        shutil.copy2(parsed_file, target_file)
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to copy parsed file {parsed_file}: {str(e)}"
-                        )
-
-        if source_chunks_dir.exists():
-            for chunk_file in source_chunks_dir.rglob("*"):
-                if chunk_file.is_file():
-                    rel_chunk = chunk_file.relative_to(source_chunks_dir)
-                    target_file = new_chunks_dir / rel_chunk
-                    target_file.parent.mkdir(parents=True, exist_ok=True)
-                    try:
-                        shutil.copy2(chunk_file, target_file)
-                    except Exception as e:
-                        logger.warning(
-                            f"Failed to copy chunk file {chunk_file}: {str(e)}"
-                        )
-
-        logger.info(
-            f"Step 1: Parsing {len(valid_new_pdfs)} new PDFs for extended meal '{name}'..."
-        )
         new_pdf_paths = [pdf_path for pdf_path, _, _ in valid_new_pdfs]
-        self._parse_pdfs_with_registry(parser_config, new_pdf_paths, new_parsed_dir)
 
-        logger.info(f"Step 2: Chunking new files for extended meal '{name}'...")
-        build_chunks_if_needed(
-            new_parsed_dir,
-            new_chunks_dir,
-            chunker_config,
-            model_name=embedding_config.get("model_name"),
-        )
-
-        logger.info(
-            f"Step 3: Building vector index for extended meal '{name}' "
-            f"(collection: {collection_name})..."
-        )
-        build_index_from_chunks(
-            chunks_dir=new_chunks_dir,
-            embedding_config=embedding_config,
-            vector_store_config=self.config.get("vector_store", {}),
-            collection_name=collection_name,
-        )
-
-        total_pages = 0
-        total_chunks = 0
-
-        for meal_file in all_meal_files:
-            try:
-                pdf_path = self.raw_dir / meal_file.path
-                total_pages += count_pdf_pages(pdf_path)
-            except Exception:
-                pass
-
-        for jsonl_file in new_chunks_dir.rglob("*.jsonl"):
-            try:
-                with open(jsonl_file, encoding="utf-8") as f:
-                    total_chunks += sum(1 for _ in f)
-            except Exception:
-                pass
-
-        artifact_manifest = {
-            "data_id": new_data_id,
-            "pdf_count": len(all_meal_files),
-            "page_count": total_pages,
-            "chunk_count": total_chunks,
-            "created_at": datetime.now().isoformat(),
-            "config_hashes": config_hashes,
-            "pdf_inventory": {f.path: f.sha256 for f in all_meal_files},
-        }
-        self.cache.save_manifest(new_data_id, artifact_manifest)
-
-        equivalence_groups = _infer_equivalence_groups([f.path for f in all_meal_files])
-
-        composition = {
+        composition: dict[str, Any] = {
             "type": "extended",
             "base_meal": source_meal,
             "added_files": added_files,
@@ -1301,41 +1157,25 @@ class MealManager:
         if skipped_files:
             composition["skipped_files"] = skipped_files
 
-        meal_config = MealConfig(
-            data_id=new_data_id,
-            name=name,
-            created_at=datetime.now().isoformat(),
-            sampling_config=source_config.sampling_config,
-            collection_name=collection_name,
-            pdf_files=all_meal_files,
+        meal_config = self._build_pipeline(
+            meal_files=all_meal_files,
             config_snapshot=config_snapshot,
             config_hashes=config_hashes,
-            stats={
-                "total_pdfs": len(all_meal_files),
-                "total_pages": total_pages,
-                "total_chunks": total_chunks,
-            },
-            equivalence_groups=equivalence_groups,
+            data_id=new_data_id,
+            collection_name=collection_name,
+            pdfs_to_parse=new_pdf_paths,
+            parsed_dir=new_parsed_dir,
+            chunks_dir=new_chunks_dir,
+            source_parsed_dir=source_parsed_dir,
+            source_chunks_dir=source_chunks_dir,
             composition=composition,
+            sampling_config=source_config.sampling_config,
+            meal_name=name,
         )
-
-        meal_dir = self.get_meal_dir(name)
-        ensure_dir(str(meal_dir))
-        ensure_dir(str(meal_dir / "test_sets"))
-
-        manifest_path = meal_dir / "manifest.json"
-        try:
-            with open(manifest_path, "w", encoding="utf-8") as f:
-                json.dump(meal_config.to_dict(), f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            logger.error(
-                f"Failed to write manifest for extended meal '{name}': {str(e)}"
-            )
-            raise
 
         logger.success(
             f"Meal '{name}' created successfully by extending '{source_meal}' "
-            f"[{new_data_id[:12]}] ({len(all_meal_files)} PDFs, {total_pages} pages, {total_chunks} chunks, "
+            f"[{new_data_id[:12]}] ({len(all_meal_files)} PDFs, {meal_config.stats['total_pages']} pages, {meal_config.stats['total_chunks']} chunks, "
             f"added: {len(added_files)}, skipped: {len(skipped_files)})"
         )
         return meal_config
@@ -1377,8 +1217,6 @@ class MealManager:
                 output_file.parent.mkdir(parents=True, exist_ok=True)
 
                 if use_page_chunks:
-                    import json
-
                     pages_data = [
                         {
                             "page_number": page.page_number,
