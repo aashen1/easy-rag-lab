@@ -11,7 +11,7 @@ scene: file_operations
 Instead, **move** files/directories to the project's trashbin folder:
 
 ```
-b:\project\ash-easy-rag\.trashbin\
+<current-folder>\.trashbin\
 ```
 
 ## When to Apply
@@ -37,7 +37,7 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 
-trashbin = Path("b:/project/ash-easy-rag/.trashbin")
+trashbin = Path("<current-folder>/.trashbin")
 trashbin.mkdir(parents=True, exist_ok=True)
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 dest = trashbin / f"{target.name}_{timestamp}"
@@ -51,8 +51,7 @@ mkdir -p .trashbin && mv target_file .trashbin/target_file_$(date +%Y%m%d_%H%M%S
 
 ## Exceptions
 
-- **Temp files** created by the AI itself during the current session (e.g., scratch files) may be deleted directly if they were never committed or meaningful.
-- **`__pycache__`** directories may be deleted directly — they are always auto-regenerated.
+- There is no exceptions. ALWAYS move to `.trashbin` when you need to delete something.
 
 ## Rationale
 

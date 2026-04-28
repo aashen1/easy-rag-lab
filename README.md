@@ -1,12 +1,16 @@
-# Easy RAG Lab - 金融研报问答系统
+# Easy RAG Lab - “金融文档问答”评测实验室
 
-![Version](https://img.shields.io/badge/version-v0.1.8-blue)![Status](https://img.shields.io/badge/status-active-green)![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
+![Version](https://img.shields.io/badge/version-v0.1.13-blue)![Status](https://img.shields.io/badge/status-active-green)![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
 
 ## 项目简介
 
-RAG（检索增强生成）作为让大模型从海量文档中提取目标信息的一种手段，基本已经成为目前大模型工具的标配。但从PDF到答案的整个处理链路中存在大量的可选“零部件”，例如PDF解析策略、分块策略、召回策略等，各步都有多种可选的超参数配置与技术选择。
+RAG（检索增强生成）作为让大模型从海量文档中提取目标信息的一种手段，基本已经成为目前大模型工具的标配。
 
-本项目旨在构建一个“RAG 实验室”，以金融领域的企业年报/行业研报为例，开展对 RAG 系统各“零件”对最终问答效果影响的对比研究。
+但从PDF到AI回答的整个处理链路中存在大量的“零部件”，例如PDF解析策略、分块策略、召回策略等，各步都有多种可选的超参数配置与技术选择。
+
+本项目旨在构建一个“RAG 实验室”，以金融领域的企业年报/行业研报为目标数据源，开展对 RAG 系统各“零部件”对最终问答效果影响的对比研究。
+
+> 本项目几乎全部代码由 AI 生成与维护。关于开发手记与演进状态，请参考`docs/`目录下的相关归档；关于作者对于截止v0.1.13的整个开发历程的一些感想，请参考[这篇随笔](docs\dev-story.md)。
 
 ### 核心功能
 
@@ -16,9 +20,9 @@ RAG链路：
 
 - **PDF 解析**：支持 `pymupdf4llm` 和 `fitz+pdfplumber` 两条解析链路
 - **文本分块**：固定长度 / 语义分块，指定 `chunk_size` 和 `overlap`
-- **向量检索**：BAAI/bge-large-zh-v1.5 Embedding + Qdrant 向量存储
+- **向量检索**：BAAI/bge-large-zh-v1.5 Embedding（使用`Transformers`库调用） + Qdrant 向量存储（local模式）
 - **混合检索**：BM25 + 向量检索 + Reranker 重排 + 查询改写
-- **智能问答**：基于检索结果生成准确回答
+- **智能问答**：基于检索结果生成准确回答，大模型调用在线API（目前支持 Anthropic SDK）
 
 测试系统：
 
@@ -27,17 +31,22 @@ RAG链路：
 - **Meal**：（名称取自“套餐”）数据集快照管理，测试集版本追踪
 - **Artifact**：中间产物缓存与 Pointer 指针机制，避免重复计算
 - **Exp**：自定义实验脚本，一键运行多种变体对比实验
-- **TestSet**：使用大模型生成指定数量的问题集，随后搭配交互式审核脚本，修改或剔除那些质量不理想的问题，方便地打造高质量测试集
+- **TestSet**：使用大模型生成指定数量的问题集，随后搭配交互式审核脚本，修改或剔除质量不理想的问题，方便地打造高质量测试集
 
-### 技术栈
+### 本项目使用的软件
 
-- **PDF 解析**：pymupdf4llm / fitz_pdfplumber
-- **Embedding**：BAAI/bge-large-zh-v1.5（本地）
-- **向量存储**：Qdrant（本地持久化）
-- **LLM**：兼容 OpenAI API 格式的 LLM 服务（支持 Anthropic Claude 等）
-- **RAG 框架**：llama-index
-- **评测**：RAGAS + 自研 Builtin 指标
-- **环境管理**：pixi
+- [PyMuPDF4LLM](https://github.com/pymupdf/PyMuPDF4LLM) - PDF 解析
+- [pdfplumber](https://github.com/jsvine/pdfplumber) - PDF 表格提取
+- [transformers](https://huggingface.co/docs/transformers/) - Embedding 模型
+- [Qdrant](https://qdrant.tech/) - 向量数据库
+- [RAGAS](https://docs.ragas.io/) - RAG 评测框架
+- [pixi](https://pixi.prefix.dev/) - Python 环境管理
+
+
+
+- [字节 TRAE CN](https://www.trae.cn/) - 主力开发工具（常用模型：GLM-5.1、GLM-5、Qwen-3.6Plus、Kimi-K2.6等，排名按开发者个人使用偏好递减，不代表模型能力）
+- [美团 LongCat AI](https://longcat.chat/) - API 调用（LongCat-Flash-Lite 模型）
+
 
 ---
 
@@ -47,7 +56,7 @@ RAG链路：
 
 项目使用 pixi 管理 Python 环境。参考 [官方文档](https://pixi.prefix.dev/latest/installation/)。
 
-> **GPU 说明**：本地 Embedding 模型（BAAI/bge-large-zh-v1.5）需要 CUDA 支持，具体版本无硬性要求。
+> **GPU 说明**：本地 Embedding 模型（BAAI/bge-large-zh-v1.5）需要 CUDA 支持以获得更加理想的速度
 
 ```bash
 # 安装 pixi 后
@@ -71,7 +80,7 @@ pixi run python main.py --query "中芯国际2024年的营业收入是多少？"
 # 交互式问答
 pixi run interactive
 
-# Web 可视化界面
+# Streamlit Web 可视化界面 (beta)
 pixi run web
 
 # 构建向量索引
@@ -99,7 +108,7 @@ pixi run lint
 - [配置参考](docs/config-reference.md)
 - [使用指南](docs/guides/)
 - [项目方法论](docs/methodology.md)
-- [待办事项](docs/backlog.md)
+- [待办事项](.issues/)
 - [版本历史](docs/version-history.md)
 
 ---
@@ -152,16 +161,3 @@ easy-rag-lab/
 AGPL-3.0 License (see: https://www.gnu.org/licenses/agpl-3.0.txt)
 
 说明：本项目使用了 `pymupdf` 与 `pymupdf4llm` 作为 PDF 解析链路，因此选择开源为 AGPL-3.0 许可证。
-
----
-
-## 技术栈
-
-- [PyMuPDF4LLM](https://github.com/pymupdf/PyMuPDF4LLM) - PDF 解析
-- [pdfplumber](https://github.com/jsvine/pdfplumber) - PDF 表格提取
-- [transformers](https://huggingface.co/docs/transformers/) - Embedding 模型
-- [Qdrant](https://qdrant.tech/) - 向量数据库
-- [llama-index](https://www.llamaindex.ai/) - RAG 框架
-- [RAGAS](https://docs.ragas.io/) - RAG 评测框架
-- [Anthropic](https://www.anthropic.com/) - Claude API
-- [pixi](https://pixi.prefix.dev/) - Python 环境管理

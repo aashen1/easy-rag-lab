@@ -1,9 +1,9 @@
 [workspace]
 authors = ["Ash <aashen1@foxmail.com>"]
 channels = ["conda-forge"]
-name = "ash-easy-rag"
+name = "easy-rag-lab"
 platforms = ["win-64"]
-version = "0.1.0"
+version = "0.1.13"
 
 [tasks]
 

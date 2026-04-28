@@ -2,7 +2,7 @@
 
 > 最后更新: 2026-04-27
 
-本文档说明 `config.yaml` 中所有配置项的含义和默认值。
+本文档说明 `config.yaml` 中所有配置项的含义和默认值。具体配置可参看`exp_configs/templates/_complete.yaml`
 
 ---
 
