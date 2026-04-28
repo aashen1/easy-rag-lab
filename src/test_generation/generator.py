@@ -1,4 +1,3 @@
-import hashlib
 import json
 import random
 import warnings
@@ -61,6 +60,30 @@ from src.test_generation.document_loader import (
 from src.test_generation.document_loader import (
     resolve_parsed_dir as _resolve_parsed_dir_standalone,
 )
+from src.test_generation.llm_caller import (
+    generate_irrelevant_question as _generate_irrelevant_question_standalone,
+)
+from src.test_generation.llm_caller import (
+    generate_missing_question as _generate_missing_question_standalone,
+)
+from src.test_generation.llm_caller import (
+    generate_question_with_evidence as _generate_question_with_evidence_standalone,
+)
+from src.test_generation.llm_caller import (
+    generate_question_with_llm as _generate_question_with_llm_standalone,
+)
+from src.test_generation.llm_caller import (
+    generate_single_document_question as _generate_single_document_question_standalone,
+)
+from src.test_generation.llm_caller import (
+    parse_document_question_response as _parse_document_question_response_standalone,
+)
+from src.test_generation.llm_caller import (
+    parse_evidence_question_response as _parse_evidence_question_response_standalone,
+)
+from src.test_generation.llm_caller import (
+    parse_llm_response as _parse_llm_response_standalone,
+)
 from src.test_generation.models import (
     ANSWER_LENGTH_LIMITS,
     DOCUMENT_TRUNCATE_MAX,
@@ -70,17 +93,6 @@ from src.test_generation.models import (
     MIN_QUOTE_LENGTH,
     QUESTION_TYPES,
     TYPE_DISTRIBUTION,
-)
-from src.test_generation.prompts import (
-    BOUNDARY_PROMPT,
-    DOCUMENT_LEVEL_PROMPT,
-    EVIDENCE_AWARE_PROMPT,
-    EVIDENCE_QUESTION_TYPE_SUPPLEMENTS,
-    FACTUAL_PROMPT,
-    IRRELEVANT_QUESTION_PROMPT,
-    MISSING_INDEPENDENT_PROMPT,
-    MULTI_HOP_PROMPT,
-    QUESTION_TYPE_SUPPLEMENTS,
 )
 from src.test_generation.segment_builder import (
     build_segments_from_pages as _build_segments_from_pages_standalone,
@@ -583,90 +595,12 @@ class TestSetGenerator:
         strategy: str,
         generator,
     ) -> dict[str, Any] | None:
-        """Generate a single Q&A pair from chunks using an LLM.
-
-        Args:
-            chunks: List of chunk dictionaries.
-            strategy: Question generation strategy.
-            generator: Generator instance used to call the LLM.
-
-        Returns:
-            Dictionary with 'question', 'answer', and 'difficulty' keys, or
-            None if all retry attempts fail.
-        """
-        normalized_strategy = strategy.replace("-", "_")
-        if normalized_strategy == "factual":
-            prompt = FACTUAL_PROMPT.format(chunk_text=chunks[0].get("text", ""))
-        elif normalized_strategy == "boundary":
-            prompt = BOUNDARY_PROMPT.format(
-                chunk1_text=chunks[0].get("text", ""),
-                chunk2_text=chunks[1].get("text", "") if len(chunks) > 1 else "",
-            )
-        elif normalized_strategy == "multi_hop":
-            chunk_texts = "\n\n---\n\n".join(
-                f"片段{i + 1}:\n{c.get('text', '')}" for i, c in enumerate(chunks)
-            )
-            prompt = MULTI_HOP_PROMPT.format(chunk_texts=chunk_texts)
-        else:
-            raise TestSetError(f"Unknown strategy: {strategy}")
-
-        for attempt in range(self.max_retries):
-            try:
-                response = generator.generate(
-                    query=prompt,
-                    contexts=[],
-                    system_prompt="你是一个测试数据生成器。请严格按照要求的JSON格式输出，不要输出任何其他内容。",
-                    category="test_generation",
-                    allow_no_contexts=True,
-                )
-
-                qa = self._parse_llm_response(response)
-                if qa is not None:
-                    return qa
-
-                logger.debug(f"Attempt {attempt + 1}: failed to parse LLM response")
-            except Exception as e:
-                logger.warning(f"Attempt {attempt + 1} failed: {str(e)}")
-
-        return None
+        return _generate_question_with_llm_standalone(
+            chunks, strategy, generator, self.max_retries
+        )
 
     def _parse_llm_response(self, response: str) -> dict[str, Any] | None:
-        """Parse an LLM response string into a Q&A dictionary.
-
-        Args:
-            response: Raw LLM response string.
-
-        Returns:
-            Dictionary with 'question', 'answer', and 'difficulty' keys, or
-            None if the response cannot be parsed.
-        """
-        try:
-            response = response.strip()
-            if response.startswith("```"):
-                lines = response.split("\n")
-                lines = [line for line in lines if not line.startswith("```")]
-                response = "\n".join(lines)
-
-            start = response.find("{")
-            end = response.rfind("}") + 1
-            if start == -1 or end == 0:
-                return None
-
-            json_str = response[start:end]
-            qa = json.loads(json_str)
-
-            if "question" not in qa or "answer" not in qa:
-                return None
-
-            if not qa["question"] or not qa["answer"]:
-                return None
-
-            qa.setdefault("difficulty", "medium")
-            return qa
-
-        except (json.JSONDecodeError, KeyError) as e:
-            logger.debug(f"Failed to parse LLM response as JSON: {str(e)}")
-            return None
+        return _parse_llm_response_standalone(response)
 
     def _save_test_set(
         self, meal_name: str, test_set: dict[str, Any], name: str
@@ -1723,103 +1657,18 @@ class TestSetGenerator:
         selected_segments: list[dict[str, Any]],
         generator: Generator,
     ) -> dict[str, Any] | None:
-        """Generate a missing-type question using MISSING_INDEPENDENT_PROMPT.
-
-        Uses a dedicated prompt that first analyzes what the document covers,
-        then asks about a dimension clearly NOT covered. This avoids the
-        contradiction of using evidence-aware prompts for questions that
-        should have no evidence.
-
-        Args:
-            selected_segments: List of selected segment dictionaries.
-            generator: Generator instance for LLM calls.
-
-        Returns:
-            Dictionary with question data, or None if generation fails.
-        """
-        segments_text = ""
-        for i, seg in enumerate(selected_segments):
-            segments_text += f"片段{i}:\n{seg.get('text', '')}\n\n"
-
-        prompt = MISSING_INDEPENDENT_PROMPT.format(segments_text=segments_text.strip())
-
-        for _attempt in range(self.max_retries):
-            try:
-                response = generator.generate(
-                    query=prompt,
-                    contexts=[],
-                    system_prompt="你是一位金融行业从业者。请严格按照要求的JSON格式输出，不要输出任何其他内容。",
-                    category="test_generation",
-                    allow_no_contexts=True,
-                )
-
-                qa = self._parse_evidence_question_response(response)
-                if qa is None:
-                    continue
-
-                qa["question_type"] = self.QUESTION_TYPES.get("missing", "缺失知识点")
-
-                evidence_list = qa.get("evidence", [])
-                if evidence_list:
-                    logger.debug("Missing question has evidence, retrying...")
-                    continue
-
-                qa["ground_truth_excerpt"] = ""
-                return qa
-
-            except Exception as e:
-                logger.warning(f"Failed to generate missing question: {str(e)}")
-                continue
-
-        return None
+        return _generate_missing_question_standalone(
+            selected_segments, generator, self.max_retries
+        )
 
     def _generate_irrelevant_question(
         self,
         doc_name: str,
         generator: Generator,
     ) -> dict[str, Any] | None:
-        """Generate an irrelevant question unrelated to the document.
-
-        Args:
-            doc_name: Name of the document (used to derive topic).
-            generator: Generator instance for LLM calls.
-
-        Returns:
-            Dictionary with question data, or None if generation fails.
-        """
-        doc_topic = doc_name.split("：")[0] if "：" in doc_name else doc_name
-
-        prompt = IRRELEVANT_QUESTION_PROMPT.format(doc_topic=doc_topic)
-
-        for _attempt in range(self.max_retries):
-            try:
-                response = generator.generate(
-                    query=prompt,
-                    contexts=[],
-                    system_prompt="你是一位金融行业从业者。请严格按照要求的JSON格式输出，不要输出任何其他内容。",
-                    category="test_generation",
-                    allow_no_contexts=True,
-                )
-
-                qa = self._parse_evidence_question_response(response)
-                if qa is None:
-                    continue
-
-                qa["question_type"] = self.QUESTION_TYPES.get("irrelevant", "无关问题")
-                qa["ground_truth_excerpt"] = ""
-
-                evidence_list = qa.get("evidence", [])
-                if evidence_list:
-                    logger.debug("Irrelevant question has evidence, retrying...")
-                    continue
-
-                return qa
-
-            except Exception as e:
-                logger.warning(f"Failed to generate irrelevant question: {str(e)}")
-                continue
-
-        return None
+        return _generate_irrelevant_question_standalone(
+            doc_name, generator, self.max_retries
+        )
 
     def _validate_numerical_accuracy(
         self, question_data: dict[str, Any]
@@ -1974,90 +1823,12 @@ class TestSetGenerator:
         question_type: str,
         generator: Generator,
     ) -> dict[str, Any] | None:
-        """Generate a question with evidence using EVIDENCE_AWARE_PROMPT.
-
-        Args:
-            selected_segments: List of selected segment dictionaries.
-            question_type: Type of question to generate.
-            generator: Generator instance for LLM calls.
-
-        Returns:
-            Dictionary with question data, or None if generation fails.
-        """
-        q_type_cn = self.QUESTION_TYPES.get(question_type, question_type)
-
-        segments_text = ""
-        for i, seg in enumerate(selected_segments):
-            segments_text += f"片段{i}:\n{seg.get('text', '')}\n\n"
-
-        prompt = EVIDENCE_AWARE_PROMPT.format(
-            num_segments=len(selected_segments),
-            segments_text=segments_text.strip(),
-            question_type=q_type_cn,
+        return _generate_question_with_evidence_standalone(
+            selected_segments, question_type, generator
         )
 
-        supplement = EVIDENCE_QUESTION_TYPE_SUPPLEMENTS.get(question_type, "")
-        if supplement:
-            prompt += "\n" + supplement
-
-        try:
-            response = generator.generate(
-                query=prompt,
-                contexts=[],
-                system_prompt="你是一位金融行业从业者。请严格按照要求的JSON格式输出，不要输出任何其他内容。",
-                category="test_generation",
-                allow_no_contexts=True,
-            )
-
-            qa = self._parse_evidence_question_response(response)
-            if qa is not None and self._validate_question_quality(qa):
-                return qa
-
-            logger.debug("Failed to parse or validate evidence question response")
-        except Exception as e:
-            logger.warning(f"Failed to generate evidence question: {str(e)}")
-
-        return None
-
     def _parse_evidence_question_response(self, response: str) -> dict[str, Any] | None:
-        """Parse an LLM response for evidence-aware question generation.
-
-        Args:
-            response: Raw LLM response string.
-
-        Returns:
-            Dictionary with question data including evidence list, or None.
-        """
-        try:
-            response = response.strip()
-            if response.startswith("```"):
-                lines = response.split("\n")
-                lines = [line for line in lines if not line.startswith("```")]
-                response = "\n".join(lines)
-
-            start = response.find("{")
-            end = response.rfind("}") + 1
-            if start == -1 or end == 0:
-                return None
-
-            json_str = response[start:end]
-            qa = json.loads(json_str)
-
-            required_fields = ["question", "answer", "question_type"]
-            for field in required_fields:
-                if field not in qa or not qa[field]:
-                    logger.debug(f"Missing or empty required field: {field}")
-                    return None
-
-            qa.setdefault("difficulty", "medium")
-            qa.setdefault("evidence", [])
-            qa.setdefault("selected_segments", [])
-
-            return qa
-
-        except (json.JSONDecodeError, KeyError) as e:
-            logger.debug(f"Failed to parse LLM response as JSON: {str(e)}")
-            return None
+        return _parse_evidence_question_response_standalone(response)
 
     def _calculate_hybrid_quality_metrics(
         self, questions: list[dict]
@@ -2598,97 +2369,16 @@ class TestSetGenerator:
         question_type: str,
         generator,
     ) -> dict[str, Any] | None:
-        """Generate a single question from a document using an LLM.
-
-        Args:
-            document_content: Full text content of the document.
-            question_type: Type of question to generate.
-            generator: Generator instance used to call the LLM.
-
-        Returns:
-            Dictionary with question data, or None if generation fails.
-        """
-        q_type_cn = self.QUESTION_TYPES.get(question_type, question_type)
-
-        supplement = QUESTION_TYPE_SUPPLEMENTS.get(question_type, "")
-
-        doc_key = hashlib.sha256(document_content[:1000].encode()).hexdigest()[:16]
-        if doc_key in self._doc_truncate_cache:
-            truncated_doc = self._doc_truncate_cache[doc_key]
-        else:
-            truncated_doc = document_content[: self.DOCUMENT_TRUNCATE_MAX]
-            self._doc_truncate_cache[doc_key] = truncated_doc
-
-        prompt = DOCUMENT_LEVEL_PROMPT.format(
-            document_content=truncated_doc, question_type=q_type_cn
+        return _generate_single_document_question_standalone(
+            document_content,
+            question_type,
+            generator,
+            self.max_retries,
+            self._doc_truncate_cache,
         )
 
-        if supplement:
-            prompt += supplement
-
-        for attempt in range(self.max_retries):
-            try:
-                response = generator.generate(
-                    query=prompt,
-                    contexts=[],
-                    system_prompt="你是一位金融行业从业者。请严格按照要求的JSON格式输出，不要输出任何其他内容。",
-                    category="test_generation",
-                    allow_no_contexts=True,
-                )
-
-                qa = self._parse_document_question_response(response)
-                if qa is not None and self._validate_question_quality(qa):
-                    return qa
-
-                logger.debug(
-                    f"Attempt {attempt + 1}: failed to parse or validate "
-                    f"question response"
-                )
-            except Exception as e:
-                logger.warning(f"Attempt {attempt + 1} failed: {str(e)}")
-
-        return None
-
     def _parse_document_question_response(self, response: str) -> dict[str, Any] | None:
-        """Parse an LLM response for document-based question generation.
-
-        Args:
-            response: Raw LLM response string.
-
-        Returns:
-            Dictionary with question data, or None if parsing fails.
-        """
-        try:
-            response = response.strip()
-            if response.startswith("```"):
-                lines = response.split("\n")
-                lines = [line for line in lines if not line.startswith("```")]
-                response = "\n".join(lines)
-
-            start = response.find("{")
-            end = response.rfind("}") + 1
-            if start == -1 or end == 0:
-                return None
-
-            json_str = response[start:end]
-            qa = json.loads(json_str)
-
-            required_fields = ["question", "answer", "question_type"]
-            for field in required_fields:
-                if field not in qa or not qa[field]:
-                    logger.debug(f"Missing or empty required field: {field}")
-                    return None
-
-            qa.setdefault("difficulty", "medium")
-            qa.setdefault("reasoning", "")
-            qa.setdefault("key_entities", [])
-            qa.setdefault("answer_sources", [])
-
-            return qa
-
-        except (json.JSONDecodeError, KeyError) as e:
-            logger.debug(f"Failed to parse LLM response as JSON: {str(e)}")
-            return None
+        return _parse_document_question_response_standalone(response)
 
     def _validate_question_quality(self, question_data: dict) -> bool:
         """Validate the quality of a generated question.
