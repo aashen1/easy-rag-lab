@@ -178,6 +178,7 @@ class Generator:
         category: str = "rag_qa",
         sources: list[str] | None = None,
         allow_no_contexts: bool = False,
+        max_tokens: int | None = None,
         **metadata: Any,
     ) -> str:
         """Generate an answer using the LLM.
@@ -194,6 +195,11 @@ class Generator:
                 its source name (filename stem) so the LLM can cite
                 sources. When None or empty, the old format without
                 source names is used for backward compatibility.
+            allow_no_contexts: Whether to allow generation without
+                contexts (default False).
+            max_tokens: Optional per-call override for the maximum
+                number of tokens in the response. When None, falls
+                back to self.max_tokens.
             **metadata: Additional metadata for token tracking.
 
         Returns:
@@ -242,9 +248,13 @@ class Generator:
 
             logger.info(f"Generating answer for query: {query[:50]}...")
 
+            effective_max_tokens = (
+                max_tokens if max_tokens is not None else self.max_tokens
+            )
+
             message = self.client.messages.create(
                 model=self.model_name,
-                max_tokens=self.max_tokens,
+                max_tokens=effective_max_tokens,
                 temperature=self.temperature,
                 system=system_prompt,
                 messages=[
