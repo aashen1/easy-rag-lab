@@ -2,7 +2,7 @@
 id: RF-20260428-065-wt1
 title: replace-experiment-config-validate-with-pydantic
 type: RF
-status: todo
+status: done
 priority: medium
 labels:
 - refactor

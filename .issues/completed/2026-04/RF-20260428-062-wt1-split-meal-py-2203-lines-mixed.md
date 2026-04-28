@@ -2,7 +2,7 @@
 id: RF-20260428-062-wt1
 title: split-meal-py-2203-lines-mixed-responsibilities
 type: RF
-status: todo
+status: done
 priority: high
 labels:
 - refactor

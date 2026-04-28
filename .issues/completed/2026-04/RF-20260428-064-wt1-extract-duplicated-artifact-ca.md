@@ -2,7 +2,7 @@
 id: RF-20260428-064-wt1
 title: extract-duplicated-artifact-cache-construction-code
 type: RF
-status: todo
+status: done
 priority: medium
 labels:
 - refactor

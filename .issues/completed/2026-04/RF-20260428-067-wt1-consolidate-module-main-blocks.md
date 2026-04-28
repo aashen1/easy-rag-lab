@@ -2,7 +2,7 @@
 id: RF-20260428-067-wt1
 title: consolidate-module-main-blocks-into-unified-cli
 type: RF
-status: todo
+status: done
 priority: low
 labels:
 - refactor
