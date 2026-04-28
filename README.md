@@ -14,7 +14,7 @@ RAG（检索增强生成）作为让大模型从海量文档中提取目标信�
 
 ### 核心功能
 
-本项目的构成可以分为RAG链路本身和测试系统两部分来看。
+本项目的构成可以分为 RAG 链路本身和测试系统两部分来看。
 
 RAG链路：
 
@@ -43,7 +43,7 @@ RAG链路：
 - [pixi](https://pixi.prefix.dev/) - Python 环境管理
 
 
-
+### 本项目使用的开发工具与测试用API
 - [字节 TRAE CN](https://www.trae.cn/) - 主力开发工具（常用模型：GLM-5.1、GLM-5、Qwen-3.6Plus、Kimi-K2.6等，排名按开发者个人使用偏好递减，不代表模型能力）
 - [美团 LongCat AI](https://longcat.chat/) - API 调用（LongCat-Flash-Lite 模型）
 
@@ -56,10 +56,16 @@ RAG链路：
 
 项目使用 pixi 管理 Python 环境。参考 [官方文档](https://pixi.prefix.dev/latest/installation/)。
 
+**重要说明**：目前项目的`pixi.toml`是按照开发者个人的机器进行配置，推荐首先修改其中几处：
+
+1.  torch 版本（可自行调整更宽松的版本）
+2. `find-links`设置（建议删除、修改为您的本地缓存路径，或者指定为在线URL），以避免可能出现的配置问题。
+3. 镜像源配置：目前使用中科大`pypi`镜像，请按照您的网络环境相应调整
+
 > **GPU 说明**：本地 Embedding 模型（BAAI/bge-large-zh-v1.5）需要 CUDA 支持以获得更加理想的速度
 
 ```bash
-# 安装 pixi 后
+# 安装 pixi 并调整 pixi.toml 后
 pixi install
 ```
 
@@ -158,6 +164,6 @@ easy-rag-lab/
 
 ## License
 
-AGPL-3.0 License (see: https://www.gnu.org/licenses/agpl-3.0.txt)
+`AGPL-3.0` License (see: https://www.gnu.org/licenses/agpl-3.0.txt)
 
-说明：本项目使用了 `pymupdf` 与 `pymupdf4llm` 作为 PDF 解析链路，因此选择开源为 AGPL-3.0 许可证。
+说明：本项目使用了 `pymupdf` 与 `pymupdf4llm` 作为 PDF 解析工具，因此选择开源为 `AGPL-3.0` 许可证。
