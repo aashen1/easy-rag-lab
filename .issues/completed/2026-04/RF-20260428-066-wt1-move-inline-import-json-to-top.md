@@ -2,7 +2,7 @@
 id: RF-20260428-066-wt1
 title: move-inline-import-json-to-top-level-in-experiment-py
 type: RF
-status: todo
+status: done
 priority: low
 labels:
 - refactor

@@ -260,35 +260,3 @@ class Embedder:
             The hidden size (embedding dimension) as an integer.
         """
         return self.embedding_dim
-
-
-if __name__ == "__main__":
-    from src.utils import load_config, setup_logger
-
-    config = load_config()
-    setup_logger(config)
-
-    embedding_config = config["embedding"]
-
-    embedder = Embedder(
-        model_name=embedding_config["model_name"],
-        device=embedding_config["device"],
-        query_instruction=embedding_config.get("query_instruction"),
-    )
-
-    test_texts = [
-        "这是一个测试句子。",
-        "这是另一个测试句子。",
-        "贵州茅台2023年营业收入为1500亿元。",
-    ]
-
-    embeddings = embedder.embed_texts(
-        test_texts, batch_size=embedding_config["batch_size"]
-    )
-
-    logger.info(f"Embeddings shape: {embeddings.shape}")
-    logger.info(f"Embedding dimension: {embedder.get_embedding_dimension()}")
-
-    query = "茅台的营业收入是多少？"
-    query_embedding = embedder.embed_query(query)
-    logger.info(f"Query embedding shape: {query_embedding.shape}")

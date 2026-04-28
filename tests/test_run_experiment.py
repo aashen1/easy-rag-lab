@@ -744,11 +744,11 @@ class TestMetricNamespacePrefix:
             },
         )
 
-    @patch("eval.run_experiment._evaluate_with_builtin")
-    @patch("eval.run_experiment._evaluate_with_ragas")
-    @patch("eval.run_experiment._collect_rag_samples")
-    @patch("eval.run_experiment._create_evaluators")
-    @patch("eval.run_experiment.get_llm_config")
+    @patch("eval.runner.evaluation._evaluate_with_builtin")
+    @patch("eval.runner.evaluation._evaluate_with_ragas")
+    @patch("eval.runner.evaluation._collect_rag_samples")
+    @patch("eval.runner.evaluation._create_evaluators")
+    @patch("eval.runner.evaluation.get_llm_config")
     def test_single_backend_no_prefix(
         self,
         mock_llm_config,
@@ -799,11 +799,11 @@ class TestMetricNamespacePrefix:
         assert "answer_relevancy" in results[0]["generation"]
         assert "builtin_faithfulness" not in results[0]["generation"]
 
-    @patch("eval.run_experiment._evaluate_with_builtin")
-    @patch("eval.run_experiment._evaluate_with_ragas")
-    @patch("eval.run_experiment._collect_rag_samples")
-    @patch("eval.run_experiment._create_evaluators")
-    @patch("eval.run_experiment.get_llm_config")
+    @patch("eval.runner.evaluation._evaluate_with_builtin")
+    @patch("eval.runner.evaluation._evaluate_with_ragas")
+    @patch("eval.runner.evaluation._collect_rag_samples")
+    @patch("eval.runner.evaluation._create_evaluators")
+    @patch("eval.runner.evaluation.get_llm_config")
     def test_dual_backends_have_prefix(
         self,
         mock_llm_config,
@@ -882,11 +882,11 @@ class TestMetricNamespacePrefix:
         assert gen["builtin_faithfulness"] == 0.9
         assert gen["ragas_faithfulness"] == 0.85
 
-    @patch("eval.run_experiment._evaluate_with_builtin")
-    @patch("eval.run_experiment._evaluate_with_ragas")
-    @patch("eval.run_experiment._collect_rag_samples")
-    @patch("eval.run_experiment._create_evaluators")
-    @patch("eval.run_experiment.get_llm_config")
+    @patch("eval.runner.evaluation._evaluate_with_builtin")
+    @patch("eval.runner.evaluation._evaluate_with_ragas")
+    @patch("eval.runner.evaluation._collect_rag_samples")
+    @patch("eval.runner.evaluation._create_evaluators")
+    @patch("eval.runner.evaluation.get_llm_config")
     def test_dual_backends_builtin_computes_all_supported(
         self,
         mock_llm_config,
@@ -1073,10 +1073,10 @@ class TestMetricNamespacePrefix:
         assert metrics["avg_context_precision"] == pytest.approx(0.75)
         assert metrics["avg_context_recall"] == pytest.approx(0.65)
 
-    @patch("eval.run_experiment._evaluate_with_builtin")
-    @patch("eval.run_experiment._collect_rag_samples")
-    @patch("eval.run_experiment._create_evaluators")
-    @patch("eval.run_experiment.get_llm_config")
+    @patch("eval.runner.evaluation._evaluate_with_builtin")
+    @patch("eval.runner.evaluation._collect_rag_samples")
+    @patch("eval.runner.evaluation._create_evaluators")
+    @patch("eval.runner.evaluation.get_llm_config")
     def test_single_ragas_backend_no_prefix(
         self,
         mock_llm_config,
@@ -1102,7 +1102,7 @@ class TestMetricNamespacePrefix:
             },
         ]
 
-        with patch("eval.run_experiment._evaluate_with_ragas") as mock_ragas:
+        with patch("eval.runner.evaluation._evaluate_with_ragas") as mock_ragas:
             mock_ragas.return_value = [
                 {
                     "id": "q1",
@@ -1641,8 +1641,8 @@ class TestRunExperimentExceptionPaths:
                 exp_config=self._make_exp_config(),
             )
 
-    @patch("eval.run_experiment._create_evaluators")
-    @patch("eval.run_experiment.get_llm_config")
+    @patch("eval.runner.evaluation._create_evaluators")
+    @patch("eval.runner.evaluation.get_llm_config")
     def test_evaluate_test_set_evaluator_creation_fails(
         self, mock_llm_config, mock_create
     ):
@@ -1658,8 +1658,8 @@ class TestRunExperimentExceptionPaths:
                 system_config={},
             )
 
-    @patch("eval.run_experiment._create_evaluators")
-    @patch("eval.run_experiment.get_llm_config")
+    @patch("eval.runner.evaluation._create_evaluators")
+    @patch("eval.runner.evaluation.get_llm_config")
     def test_evaluate_test_set_empty_questions(
         self, mock_llm_config, mock_create_evaluators
     ):

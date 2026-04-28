@@ -1173,10 +1173,15 @@ class TestDocumentBasedQuestionsSourceFiles:
             patch.object(
                 self.generator, "_resolve_chunks_dir", return_value=chunks_dir
             ),
-            patch("src.test_generator.MealManager", return_value=mock_meal_manager),
-            patch("src.test_generator.Generator", return_value=mock_generator),
             patch(
-                "src.test_generator.get_llm_config",
+                "src.test_generation.generator.MealManager",
+                return_value=mock_meal_manager,
+            ),
+            patch(
+                "src.test_generation.generator.Generator", return_value=mock_generator
+            ),
+            patch(
+                "src.test_generation.generator.get_llm_config",
                 return_value={
                     "model_name": "test",
                     "api_key": "test",
@@ -1274,10 +1279,16 @@ class TestGenerateDocumentBasedQuestionsSupplemental:
             patch.object(
                 self.generator, "_resolve_parsed_dir", return_value=parsed_dir
             ),
-            patch("src.test_generator.MealManager", return_value=mock_meal_manager),
-            patch("src.test_generator.Generator", return_value=mock_llm_generator),
             patch(
-                "src.test_generator.get_llm_config",
+                "src.test_generation.generator.MealManager",
+                return_value=mock_meal_manager,
+            ),
+            patch(
+                "src.test_generation.generator.Generator",
+                return_value=mock_llm_generator,
+            ),
+            patch(
+                "src.test_generation.generator.get_llm_config",
                 return_value={
                     "model_name": "test",
                     "api_key": "test",
@@ -1308,10 +1319,16 @@ class TestGenerateDocumentBasedQuestionsSupplemental:
             patch.object(
                 self.generator, "_resolve_parsed_dir", return_value=parsed_dir
             ),
-            patch("src.test_generator.MealManager", return_value=mock_meal_manager),
-            patch("src.test_generator.Generator", return_value=mock_llm_generator),
             patch(
-                "src.test_generator.get_llm_config",
+                "src.test_generation.generator.MealManager",
+                return_value=mock_meal_manager,
+            ),
+            patch(
+                "src.test_generation.generator.Generator",
+                return_value=mock_llm_generator,
+            ),
+            patch(
+                "src.test_generation.generator.get_llm_config",
                 return_value={
                     "model_name": "test",
                     "api_key": "test",
@@ -1504,10 +1521,16 @@ class TestSupplementDocumentBasedQuestions:
             patch.object(
                 self.generator, "_resolve_parsed_dir", return_value=parsed_dir
             ),
-            patch("src.test_generator.MealManager", return_value=mock_meal_manager),
-            patch("src.test_generator.Generator", return_value=mock_llm_generator),
             patch(
-                "src.test_generator.get_llm_config",
+                "src.test_generation.generator.MealManager",
+                return_value=mock_meal_manager,
+            ),
+            patch(
+                "src.test_generation.generator.Generator",
+                return_value=mock_llm_generator,
+            ),
+            patch(
+                "src.test_generation.generator.get_llm_config",
                 return_value={
                     "model_name": "test",
                     "api_key": "test",
@@ -1572,10 +1595,16 @@ class TestSupplementDocumentBasedQuestions:
             patch.object(
                 self.generator, "_resolve_parsed_dir", return_value=parsed_dir
             ),
-            patch("src.test_generator.MealManager", return_value=mock_meal_manager),
-            patch("src.test_generator.Generator", return_value=mock_llm_generator),
             patch(
-                "src.test_generator.get_llm_config",
+                "src.test_generation.generator.MealManager",
+                return_value=mock_meal_manager,
+            ),
+            patch(
+                "src.test_generation.generator.Generator",
+                return_value=mock_llm_generator,
+            ),
+            patch(
+                "src.test_generation.generator.get_llm_config",
                 return_value={
                     "model_name": "test",
                     "api_key": "test",
@@ -2521,10 +2550,16 @@ class TestQuestionDeduplication:
             patch.object(
                 self.generator, "_resolve_parsed_dir", return_value=parsed_dir
             ),
-            patch("src.test_generator.MealManager", return_value=mock_meal_manager),
-            patch("src.test_generator.Generator", return_value=mock_llm_generator),
             patch(
-                "src.test_generator.get_llm_config",
+                "src.test_generation.generator.MealManager",
+                return_value=mock_meal_manager,
+            ),
+            patch(
+                "src.test_generation.generator.Generator",
+                return_value=mock_llm_generator,
+            ),
+            patch(
+                "src.test_generation.generator.get_llm_config",
                 return_value={
                     "model_name": "test",
                     "api_key": "test",
@@ -2609,10 +2644,16 @@ class TestQuestionDeduplication:
             patch.object(
                 self.generator, "_resolve_parsed_dir", return_value=parsed_dir
             ),
-            patch("src.test_generator.MealManager", return_value=mock_meal_manager),
-            patch("src.test_generator.Generator", return_value=mock_llm_generator),
             patch(
-                "src.test_generator.get_llm_config",
+                "src.test_generation.generator.MealManager",
+                return_value=mock_meal_manager,
+            ),
+            patch(
+                "src.test_generation.generator.Generator",
+                return_value=mock_llm_generator,
+            ),
+            patch(
+                "src.test_generation.generator.get_llm_config",
                 return_value={
                     "model_name": "test",
                     "api_key": "test",

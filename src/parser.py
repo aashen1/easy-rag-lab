@@ -262,27 +262,3 @@ def parse_all_pdfs_unified(
     )
 
     return results
-
-
-if __name__ == "__main__":
-    from src.utils import load_config, setup_logger
-
-    config = load_config()
-    setup_logger(config)
-
-    parser_config = config["parser"]
-    algorithm = parser_config.get("algorithm", "pymupdf4llm")
-    parser_options = parser_config.get(algorithm, {})
-
-    artifacts_config = config.get("artifacts", {})
-    artifacts_dir = artifacts_config.get("dir", "data/artifacts")
-
-    results = parse_all_pdfs_unified(
-        input_dir=parser_config["input_dir"],
-        artifacts_dir=artifacts_dir,
-        algorithm=algorithm,
-        parser_options=parser_options,
-    )
-
-    for result in results:
-        logger.info(f"Result: {result}")

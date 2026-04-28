@@ -388,7 +388,7 @@ class TestRAGPipeline:
         with (
             patch("src.pipeline.parse_all_pdfs_unified") as mock_parse,
             patch("src.chunker.process_parsed_files_page_aware") as mock_page_aware,
-            patch("src.meal.ArtifactCache") as mock_cache_cls,
+            patch("src.meal.create_artifact_cache") as mock_cache_cls,
             patch("src.meal.compute_data_id", return_value="fake_data_id"),
             patch(
                 "src.meal.compute_parser_config_hash",
@@ -402,6 +402,8 @@ class TestRAGPipeline:
         ):
             mock_cache = MagicMock()
             mock_cache_cls.return_value = mock_cache
+            mock_cache.artifacts_dir = Path("data/artifacts")
+            mock_cache.raw_dir = Path("data/raw")
             mock_cache.get_parsed_dir.return_value = Path("/tmp/parsed")
             mock_cache.get_chunks_dir.return_value = Path("/tmp/chunks")
             mock_parse.return_value = []
@@ -410,7 +412,7 @@ class TestRAGPipeline:
 
         mock_parse.assert_called_once_with(
             input_dir="/tmp/parser_in",
-            artifacts_dir="data/artifacts",
+            artifacts_dir=str(Path("data/artifacts")),
             force=False,
             parser_options={"page_chunks": True, "table_strategy": "text"},
         )
@@ -463,7 +465,7 @@ class TestRAGPipeline:
         with (
             patch("src.pipeline.parse_all_pdfs_unified") as mock_parse,
             patch("src.pipeline.process_parsed_files") as mock_chunk,
-            patch("src.meal.ArtifactCache") as mock_cache_cls,
+            patch("src.meal.create_artifact_cache") as mock_cache_cls,
             patch("src.meal.compute_data_id", return_value="fake_data_id"),
             patch(
                 "src.meal.compute_parser_config_hash",
@@ -477,6 +479,8 @@ class TestRAGPipeline:
         ):
             mock_cache = MagicMock()
             mock_cache_cls.return_value = mock_cache
+            mock_cache.artifacts_dir = Path("data/artifacts")
+            mock_cache.raw_dir = Path("data/raw")
             mock_cache.get_parsed_dir.return_value = Path("/tmp/parsed")
             mock_cache.get_chunks_dir.return_value = Path("/tmp/chunks")
             mock_parse.return_value = []
@@ -485,7 +489,7 @@ class TestRAGPipeline:
 
         mock_parse.assert_called_once_with(
             input_dir="/tmp/parser_in",
-            artifacts_dir="data/artifacts",
+            artifacts_dir=str(Path("data/artifacts")),
             force=False,
             parser_options=None,
         )
@@ -535,7 +539,7 @@ class TestRAGPipeline:
             patch("src.pipeline.parse_all_pdfs_unified") as mock_parse,
             patch("src.chunker.process_parsed_files_page_aware") as mock_page_aware,
             patch("src.pipeline.process_parsed_files") as mock_chunk,
-            patch("src.meal.ArtifactCache") as mock_cache_cls,
+            patch("src.meal.create_artifact_cache") as mock_cache_cls,
             patch("src.meal.compute_data_id", return_value="fake_data_id"),
             patch(
                 "src.meal.compute_parser_config_hash",
@@ -549,6 +553,8 @@ class TestRAGPipeline:
         ):
             mock_cache = MagicMock()
             mock_cache_cls.return_value = mock_cache
+            mock_cache.artifacts_dir = Path("data/artifacts")
+            mock_cache.raw_dir = Path("data/raw")
             mock_cache.get_parsed_dir.return_value = Path("/tmp/parsed")
             mock_cache.get_chunks_dir.return_value = Path("/tmp/chunks")
             mock_parse.return_value = parse_results
@@ -609,7 +615,7 @@ class TestRAGPipeline:
         with (
             patch("src.pipeline.parse_all_pdfs_unified") as mock_parse,
             patch("src.pipeline.process_parsed_files") as mock_chunk,
-            patch("src.meal.ArtifactCache") as mock_cache_cls,
+            patch("src.meal.create_artifact_cache") as mock_cache_cls,
             patch("src.meal.compute_data_id", return_value="fake_data_id"),
             patch(
                 "src.meal.compute_parser_config_hash",
@@ -623,6 +629,8 @@ class TestRAGPipeline:
         ):
             mock_cache = MagicMock()
             mock_cache_cls.return_value = mock_cache
+            mock_cache.artifacts_dir = Path("data/artifacts")
+            mock_cache.raw_dir = Path("data/raw")
             mock_cache.get_parsed_dir.return_value = Path("/tmp/parsed")
             mock_cache.get_chunks_dir.return_value = Path("/tmp/chunks")
             mock_parse.return_value = []

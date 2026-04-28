@@ -1,4 +1,5 @@
 import copy
+import json
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -195,233 +196,24 @@ class ExperimentConfig:
         Returns:
             List of validation error messages. Empty list if valid.
         """
-        errors = []
+        from src.experiment_schemas import ExperimentConfigSchema
 
-        if not self.name or not self.name.strip():
-            errors.append("Experiment name cannot be empty")
+        ctx: dict[str, Any] = {"errors": [], "has_old_format": False}
+        ExperimentConfigSchema.model_validate(self.to_dict(), context=ctx)
+        errors = ctx.get("errors", [])
 
-        if not self.description or not self.description.strip():
-            errors.append("Experiment description cannot be empty")
-
-        if "meal" not in self.data:
-            errors.append("Data configuration must include 'meal' field")
-
-        if not self.test_sets:
-            errors.append("At least one test set must be defined")
-        else:
-            has_old_format = False
-            for i, test_set in enumerate(self.test_sets):
-                if is_new_format(test_set):
-                    name = test_set.get("name")
-                    if name is not None and not isinstance(name, str):
-                        errors.append(
-                            f"Test set {i} 'name' must be a string if provided"
-                        )
-                    if "generation" in test_set:
-                        generation = test_set["generation"]
-                        if not isinstance(generation, dict):
-                            errors.append(
-                                f"Test set {i} 'generation' must be a dictionary"
-                            )
-                        else:
-                            if "strategy" not in generation:
-                                errors.append(
-                                    f"Test set {i} 'generation' missing 'strategy' field"
-                                )
-                            if "num_questions" not in generation:
-                                errors.append(
-                                    f"Test set {i} 'generation' missing 'num_questions' field"
-                                )
-                    if "on_missing" in test_set:
-                        on_missing = test_set["on_missing"]
-                        if on_missing not in VALID_ON_MISSING_VALUES:
-                            errors.append(
-                                f"Test set {i} invalid 'on_missing' value: '{on_missing}'. "
-                                f"Valid options: {sorted(VALID_ON_MISSING_VALUES)}"
-                            )
-                else:
-                    has_old_format = True
-                    if "strategy" not in test_set:
-                        errors.append(f"Test set {i} missing 'strategy' field")
-                    if "num_questions" not in test_set:
-                        errors.append(f"Test set {i} missing 'num_questions' field")
-            if has_old_format:
-                warnings.warn(
-                    "test_sets uses deprecated configuration format. The experiment will run normally, but please consider migrating to the new format:\n"
-                    "  test_sets:\n"
-                    '    - name: "<custom_name>"\n'
-                    '      on_missing: "auto"\n'
-                    "      generation:\n"
-                    '        strategy: "document"\n'
-                    "        num_questions: 10",
-                    DeprecationWarning,
-                    stacklevel=2,
-                )
-
-        if not self.variants:
-            errors.append("At least one variant must be defined")
-        else:
-            for i, variant in enumerate(self.variants):
-                if "name" not in variant:
-                    errors.append(f"Variant {i} missing 'name' field")
-
-        VALID_METRICS_PRESETS = {"core", "extended", "full", "custom"}
-        has_metrics = "metrics" in self.evaluation
-        has_preset = "metrics_preset" in self.evaluation
-
-        if not has_metrics and not has_preset:
-            errors.append(
-                "Evaluation configuration must include 'metrics' or 'metrics_preset' field"
+        if ctx.get("has_old_format"):
+            warnings.warn(
+                "test_sets uses deprecated configuration format. The experiment will run normally, but please consider migrating to the new format:\n"
+                "  test_sets:\n"
+                '    - name: "<custom_name>"\n'
+                '      on_missing: "auto"\n'
+                "      generation:\n"
+                '        strategy: "document"\n'
+                "        num_questions: 10",
+                DeprecationWarning,
+                stacklevel=2,
             )
-        elif has_preset:
-            metrics_preset = self.evaluation["metrics_preset"]
-            if metrics_preset not in VALID_METRICS_PRESETS:
-                errors.append(
-                    f"Invalid metrics_preset: '{metrics_preset}'. "
-                    f"Valid options: {sorted(VALID_METRICS_PRESETS)}"
-                )
-            if metrics_preset == "custom":
-                custom_metrics = self.evaluation.get("custom_metrics")
-                if custom_metrics is None:
-                    errors.append(
-                        "custom_metrics must be provided when metrics_preset='custom'"
-                    )
-                elif not isinstance(custom_metrics, dict):
-                    errors.append("custom_metrics must be a dictionary")
-                else:
-                    if "retrieval" not in custom_metrics:
-                        errors.append("custom_metrics must include 'retrieval' field")
-                    else:
-                        invalid_retrieval = [
-                            m
-                            for m in custom_metrics["retrieval"]
-                            if m not in VALID_RETRIEVAL_METRICS
-                        ]
-                        if invalid_retrieval:
-                            errors.append(
-                                f"Invalid retrieval metrics in custom_metrics: {invalid_retrieval}. "
-                                f"Valid options: {sorted(VALID_RETRIEVAL_METRICS)}"
-                            )
-                    if "generation" in custom_metrics:
-                        all_valid_generation = (
-                            VALID_GENERATION_METRICS | VALID_RAGAS_METRICS
-                        )
-                        invalid_generation = [
-                            m
-                            for m in custom_metrics["generation"]
-                            if m not in all_valid_generation
-                        ]
-                        if invalid_generation:
-                            errors.append(
-                                f"Invalid generation metrics in custom_metrics: {invalid_generation}. "
-                                f"Valid options: {sorted(all_valid_generation)}"
-                            )
-        if has_metrics:
-            metrics = self.evaluation["metrics"]
-            if not isinstance(metrics, dict):
-                errors.append("Evaluation 'metrics' must be a dictionary")
-            else:
-                backends = self.evaluation.get("backends", ["builtin"])
-                if not isinstance(backends, list):
-                    errors.append("Evaluation 'backends' must be a list")
-                else:
-                    invalid_backends = [
-                        b for b in backends if b not in VALID_EVALUATION_BACKENDS
-                    ]
-                    if invalid_backends:
-                        errors.append(
-                            f"Invalid evaluation backends: {invalid_backends}. "
-                            f"Valid options: {sorted(VALID_EVALUATION_BACKENDS)}"
-                        )
-
-                if "retrieval" not in metrics:
-                    errors.append("Evaluation metrics must include 'retrieval' field")
-                else:
-                    retrieval_metrics = metrics["retrieval"]
-                    if not isinstance(retrieval_metrics, list):
-                        errors.append("Retrieval metrics must be a list")
-                    else:
-                        invalid_retrieval = [
-                            m
-                            for m in retrieval_metrics
-                            if m not in VALID_RETRIEVAL_METRICS
-                        ]
-                        if invalid_retrieval:
-                            errors.append(
-                                f"Invalid retrieval metrics: {invalid_retrieval}. "
-                                f"Valid options: {sorted(VALID_RETRIEVAL_METRICS)}"
-                            )
-
-                        llm_retrieval_in_retrieval = [
-                            m
-                            for m in retrieval_metrics
-                            if m in {"context_precision", "context_recall"}
-                        ]
-                        if (
-                            llm_retrieval_in_retrieval
-                            and "ragas" not in backends
-                            and "builtin" not in backends
-                        ):
-                            errors.append(
-                                f"LLM-based retrieval metrics {llm_retrieval_in_retrieval} require "
-                                f"'builtin' or 'ragas' in evaluation.backends"
-                            )
-
-                if "generation" in metrics:
-                    generation_metrics = metrics["generation"]
-                    if not isinstance(generation_metrics, list):
-                        errors.append("Generation metrics must be a list")
-                    else:
-                        all_valid_generation = (
-                            VALID_GENERATION_METRICS | VALID_RAGAS_METRICS
-                        )
-                        invalid_generation = [
-                            m
-                            for m in generation_metrics
-                            if m not in all_valid_generation
-                        ]
-                        if invalid_generation:
-                            errors.append(
-                                f"Invalid generation metrics: {invalid_generation}. "
-                                f"Valid options: {sorted(all_valid_generation)}"
-                            )
-
-                        non_builtin_generation = [
-                            m
-                            for m in generation_metrics
-                            if m not in VALID_GENERATION_METRICS
-                        ]
-                        if non_builtin_generation and "ragas" not in backends:
-                            errors.append(
-                                f"Metrics {non_builtin_generation} in generation require "
-                                f"'ragas' in evaluation.backends (not supported by builtin backend)"
-                            )
-
-        if "retrieval_granularity" in self.evaluation:
-            valid_granularities = {"chunk", "document", "both"}
-            granularity = self.evaluation["retrieval_granularity"]
-            if granularity not in valid_granularities:
-                errors.append(
-                    f"Invalid retrieval_granularity: '{granularity}'. "
-                    f"Valid options: {sorted(valid_granularities)}"
-                )
-
-        if self.force_overwrite and self.force_overwrite != "all":
-            if not isinstance(self.force_overwrite, list):
-                errors.append(
-                    "force_overwrite must be a list of stage names or the string 'all'"
-                )
-            else:
-                invalid_stages = [
-                    s
-                    for s in self.force_overwrite
-                    if s not in VALID_FORCE_OVERWRITE_STAGES
-                ]
-                if invalid_stages:
-                    errors.append(
-                        f"Invalid force_overwrite stages: {invalid_stages}. "
-                        f"Valid options: {sorted(VALID_FORCE_OVERWRITE_STAGES)}"
-                    )
 
         return errors
 
@@ -824,8 +616,6 @@ class ExperimentManager:
 
             meal_snapshot_path = exp_dir / "meal_snapshot.json"
             with open(meal_snapshot_path, "w", encoding="utf-8") as f:
-                import json
-
                 json.dump(meal_snapshot, f, ensure_ascii=False, indent=2)
             logger.info(f"Saved meal snapshot to {meal_snapshot_path}")
 
@@ -834,16 +624,12 @@ class ExperimentManager:
                 strategy = snapshot.get("strategy", f"test_set_{i}")
                 snapshot_path = test_sets_dir / f"{strategy}.json"
                 with open(snapshot_path, "w", encoding="utf-8") as f:
-                    import json
-
                     json.dump(snapshot, f, ensure_ascii=False, indent=2)
                 logger.info(f"Saved test set snapshot to {snapshot_path}")
 
             manifest = self._create_manifest(exp_dir, config, test_set_snapshots)
             manifest_path = exp_dir / "manifest.json"
             with open(manifest_path, "w", encoding="utf-8") as f:
-                import json
-
                 json.dump(manifest, f, ensure_ascii=False, indent=2)
             logger.info(f"Saved manifest to {manifest_path}")
 
@@ -902,8 +688,6 @@ class ExperimentManager:
             FileNotFoundError: If required files are missing.
             ValueError: If manifest or result files are invalid.
         """
-        import json
-
         manifest_path = exp_dir / "manifest.json"
         if not manifest_path.exists():
             raise ConfigurationError(f"Manifest file not found: {manifest_path}")
@@ -990,8 +774,6 @@ class ExperimentManager:
         Returns:
             List of dictionaries containing experiment info.
         """
-        import json
-
         experiments = []
 
         if not self._exp_dir.exists():
@@ -1074,8 +856,6 @@ class ExperimentManager:
         Raises:
             OSError: If file writing fails.
         """
-        import json
-
         manifest_path = exp_dir / "manifest.json"
         if not manifest_path.exists():
             logger.warning(
@@ -1114,8 +894,6 @@ class ExperimentManager:
         Raises:
             OSError: If file writing fails.
         """
-        import json
-
         results_dir = exp_dir / "results"
         results_dir.mkdir(exist_ok=True)
 

@@ -13,7 +13,19 @@ from src.generator import Generator
 from src.hybrid_retriever import HybridRetriever
 from src.indexer import VectorIndexer
 from src.parser import parse_all_pdfs_unified
+from src.query_rewrite_strategies import (
+    HyDERewriteStrategy,
+    MultiQueryRewriteStrategy,
+    NoRewriteStrategy,
+    QueryRewriteStrategy,
+)
 from src.query_rewriter import QueryRewriter
+from src.retrieval_strategies import (
+    BM25RetrievalStrategy,
+    HybridRetrievalStrategy,
+    RetrievalStrategy,
+    VectorRetrievalStrategy,
+)
 
 if TYPE_CHECKING:
     from eval.pipeline_profiler import PipelineProfiler
@@ -197,20 +209,17 @@ class RAGPipeline:
                 f"Sampled {len(sampled_pdf_files)} PDFs from {len(all_pdfs)} total"
             )
 
-        artifacts_config = self.config.get("artifacts", {})
-        artifacts_dir = artifacts_config.get("dir", "data/artifacts")
-        raw_dir = Path(parser_config["input_dir"])
-
         from src.meal import (
-            ArtifactCache,
             MealFile,
             compute_chunker_config_hash,
             compute_data_id,
             compute_file_sha256,
             compute_parser_config_hash,
+            create_artifact_cache,
         )
 
-        cache = ArtifactCache(Path(artifacts_dir), raw_dir)
+        cache = create_artifact_cache(self.config)
+        raw_dir = cache.raw_dir
         all_pdf_files = sorted(raw_dir.rglob("*.pdf"))
         meal_files = []
         for pdf_path in all_pdf_files:
@@ -235,7 +244,7 @@ class RAGPipeline:
         logger.info("Step 1: Parsing PDFs...")
         parse_results = parse_all_pdfs_unified(
             input_dir=parser_config["input_dir"],
-            artifacts_dir=artifacts_dir,
+            artifacts_dir=str(cache.artifacts_dir),
             force=force_parse,
             parser_options=parser_config.get("pymupdf4llm"),
         )
@@ -419,12 +428,9 @@ class RAGPipeline:
             self.retrieval_method in ("bm25", "hybrid")
             and self.bm25_retriever is not None
         ):
-            from src.meal import ArtifactCache
+            from src.meal import create_artifact_cache
 
-            artifacts_config = self.config.get("artifacts", {})
-            artifacts_dir = Path(artifacts_config.get("dir", "data/artifacts"))
-            raw_dir = Path(self.config.get("parser", {}).get("input_dir", "data/raw"))
-            cache = ArtifactCache(artifacts_dir, raw_dir)
+            cache = create_artifact_cache(self.config)
             chunker_hash = self.meal_config.config_hashes.get("chunker", "")
             chunks_dir = cache.get_chunks_dir(self.meal_config.data_id, chunker_hash)
             if chunks_dir.exists():
@@ -479,124 +485,61 @@ class RAGPipeline:
         try:
             logger.info(f"Processing query: {question[:50]}...")
 
-            retrieval_query = question
-            if self.query_rewriter is not None:
-                logger.debug("Rewriting query...")
-                rewrite_result = self.query_rewriter.rewrite(question)
+            rewrite_strategy = self._get_rewrite_strategy()
+            rewritten = rewrite_strategy.rewrite(question)
+            retrieval_strategy = self._get_retrieval_strategy()
+            top_k = self.config["retrieval"]["top_k"]
+            is_multi = rewritten.is_multi
 
-                if rewrite_result["strategy"] == "hyde":
-                    retrieval_query = rewrite_result["rewritten"]
-                    logger.info("HyDE: using hypothetical answer for retrieval")
-                elif rewrite_result["strategy"] == "multi_query":
-                    all_results = []
-                    seen_ids = set()
-                    for sub_query in rewrite_result["rewritten"]:
-                        if (
-                            self.retrieval_method == "hybrid"
-                            and self.hybrid_retriever is not None
-                        ):
-                            sub_results = self.hybrid_retriever.retrieve(sub_query)
-                        elif (
-                            self.retrieval_method == "bm25"
-                            and self.bm25_retriever is not None
-                        ):
-                            sub_results = self.bm25_retriever.retrieve(
-                                sub_query, top_k=self.config["retrieval"]["top_k"]
-                            )
-                        else:
-                            sub_results = self.retriever.retrieve(sub_query)
-                        for r in sub_results:
-                            if r["chunk_id"] not in seen_ids:
-                                seen_ids.add(r["chunk_id"])
-                                all_results.append(r)
-
-                    all_results.sort(key=lambda x: x.get("score", 0), reverse=True)
-                    results = all_results[: self.config["retrieval"]["top_k"]]
-
-                    if self.reranker is not None and results:
-                        logger.debug("Reranking multi-query results...")
-                        results = self.reranker.rerank(
-                            question, results, top_n=self.reranker_top_n
-                        )
-
-                    contexts = [r["text"] for r in results]
-                    scores = [
-                        r.get("rerank_score", r["score"])
-                        if "rerank_score" in r
-                        else r["score"]
-                        for r in results
-                    ]
-                    sources = [r["metadata"].get("source", "Unknown") for r in results]
-                    chunk_ids = [r.get("chunk_id", "") for r in results]
-
-                    logger.debug("Generating answer...")
-                    answer = self.generator.generate(
-                        question, contexts, sources=sources
-                    )
-
-                    response = {"question": question, "answer": answer}
-                    if return_contexts:
-                        response["contexts"] = contexts
-                        response["scores"] = scores
-                        response["sources"] = sources
-                        response["chunk_ids"] = chunk_ids
-                    if self.generator.last_token_usage is not None:
-                        response["token_usage"] = (
-                            self.generator.last_token_usage.to_dict()
-                        )
-
-                    logger.success("Query processed successfully (multi-query)")
-                    return response
-
-            logger.debug("Retrieving relevant contexts...")
-            if self.profiler:
+            if not is_multi:
+                logger.debug("Retrieving relevant contexts...")
+            if not is_multi and self.profiler:
                 self.profiler.begin_stage("S6")
-            if self.retrieval_method == "hybrid" and self.hybrid_retriever is not None:
-                results = self.hybrid_retriever.retrieve(retrieval_query)
-            elif self.retrieval_method == "bm25" and self.bm25_retriever is not None:
-                results = self.bm25_retriever.retrieve(
-                    retrieval_query, top_k=self.config["retrieval"]["top_k"]
+
+            if is_multi:
+                results = self._retrieve_multi(
+                    retrieval_strategy, rewritten.queries, top_k
                 )
             else:
-                results = self.retriever.retrieve(retrieval_query)
+                results = retrieval_strategy.retrieve(
+                    rewritten.queries[0], top_k
+                ).chunks
 
             if self.reranker is not None and results:
-                logger.debug("Reranking results...")
+                logger.debug(
+                    f"Reranking {'multi-query ' if is_multi else ''}results..."
+                )
                 results = self.reranker.rerank(
                     question, results, top_n=self.reranker_top_n
                 )
-            if self.profiler:
+
+            if not is_multi and self.profiler:
                 self.profiler.end_stage()
 
-            contexts = [result["text"] for result in results]
-            scores = [result["score"] for result in results]
-            sources = [
-                result["metadata"].get("source", "Unknown") for result in results
-            ]
-            chunk_ids = [result.get("chunk_id", "") for result in results]
+            scores = self._compute_scores(results, is_multi)
+            contexts = [r["text"] for r in results]
+            sources = [r["metadata"].get("source", "Unknown") for r in results]
+            chunk_ids = [r.get("chunk_id", "") for r in results]
 
             logger.debug("Generating answer...")
-            if self.profiler:
+            if not is_multi and self.profiler:
                 self.profiler.begin_stage("S7")
             answer = self.generator.generate(question, contexts, sources=sources)
-            if self.profiler:
+            if not is_multi and self.profiler:
                 self.profiler.end_stage()
 
-            response = {
-                "question": question,
-                "answer": answer,
-            }
-
+            response = {"question": question, "answer": answer}
             if return_contexts:
                 response["contexts"] = contexts
                 response["scores"] = scores
                 response["sources"] = sources
                 response["chunk_ids"] = chunk_ids
-
             if self.generator.last_token_usage is not None:
                 response["token_usage"] = self.generator.last_token_usage.to_dict()
 
-            logger.success("Query processed successfully")
+            logger.success(
+                f"Query processed successfully{' (multi-query)' if is_multi else ''}"
+            )
             return response
 
         except Exception as e:
@@ -604,72 +547,45 @@ class RAGPipeline:
             logger.error(error_msg)
             raise RetrievalError(error_msg) from e
 
+    def _get_retrieval_strategy(self) -> RetrievalStrategy:
+        if self.retrieval_method == "bm25" and self.bm25_retriever is not None:
+            return BM25RetrievalStrategy(self.bm25_retriever)
+        if self.retrieval_method == "hybrid" and self.hybrid_retriever is not None:
+            return HybridRetrievalStrategy(self.hybrid_retriever)
+        return VectorRetrievalStrategy(self.retriever)
 
-if __name__ == "__main__":
-    import argparse
-    import sys
+    def _get_rewrite_strategy(self) -> QueryRewriteStrategy:
+        if self.query_rewriter is None:
+            return NoRewriteStrategy()
+        if self.query_rewriter.strategy == "hyde":
+            return HyDERewriteStrategy(self.query_rewriter)
+        if self.query_rewriter.strategy == "multi_query":
+            return MultiQueryRewriteStrategy(self.query_rewriter)
+        return NoRewriteStrategy()
 
-    parser = argparse.ArgumentParser(description="RAG Pipeline CLI")
-    parser.add_argument("--query", type=str, help="Query question")
-    parser.add_argument("--build-index", action="store_true", help="Build vector index")
-    parser.add_argument(
-        "--rebuild", action="store_true", help="Rebuild index from scratch"
-    )
-    parser.add_argument(
-        "--force-parse",
-        action="store_true",
-        help="Force re-parse PDFs even if output exists",
-    )
-    parser.add_argument("--sample-count", type=int, help="Sample N PDFs for testing")
-    parser.add_argument(
-        "--sample-pages", type=int, help="Sample PDFs until total pages reach N"
-    )
-    parser.add_argument(
-        "--sample-ratio", type=float, help="Sample ratio of total PDFs (0.0-1.0)"
-    )
-    parser.add_argument(
-        "--config", type=str, default="config.yaml", help="Config file path"
-    )
-    parser.add_argument(
-        "--llm-preset", type=str, help="LLM preset name (default, opus, sonnet, haiku)"
-    )
+    def _retrieve_multi(
+        self,
+        strategy: RetrievalStrategy,
+        queries: list[str],
+        top_k: int,
+    ) -> list[dict[str, Any]]:
+        all_results: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        for q in queries:
+            result = strategy.retrieve(q, top_k)
+            for r in result.chunks:
+                if r["chunk_id"] not in seen_ids:
+                    seen_ids.add(r["chunk_id"])
+                    all_results.append(r)
+        all_results.sort(key=lambda x: x.get("score", 0), reverse=True)
+        return all_results[:top_k]
 
-    args = parser.parse_args()
-
-    pipeline = RAGPipeline(config_path=args.config, llm_preset=args.llm_preset)
-
-    if args.build_index or args.rebuild:
-        sampling_config = None
-        sample_modes = [
-            ("count", args.sample_count),
-            ("pages", args.sample_pages),
-            ("ratio", args.sample_ratio),
-        ]
-        active_modes = [(m, v) for m, v in sample_modes if v is not None]
-        if len(active_modes) > 1:
-            logger.error(
-                "Only one sampling mode can be specified at a time "
-                f"(got: {', '.join(m for m, _ in active_modes)})"
-            )
-            sys.exit(1)
-        if active_modes:
-            mode, value = active_modes[0]
-            sampling_config = SamplingConfig(mode=mode, value=value)
-
-        pipeline.build_index(
-            rebuild=args.rebuild,
-            force_parse=args.force_parse,
-            sampling_config=sampling_config,
-        )
-        logger.info("Index built successfully")
-
-    if args.query:
-        result = pipeline.query(args.query)
-        logger.info(f"Question: {result['question']}")
-        logger.info(f"Answer: {result['answer']}")
-        if "contexts" in result:
-            logger.info("Sources:")
-            for i, (source, score) in enumerate(
-                zip(result["sources"], result["scores"], strict=False), 1
-            ):
-                logger.info(f"{i}. {source} (score: {score:.4f})")
+    def _compute_scores(
+        self, results: list[dict[str, Any]], is_multi: bool
+    ) -> list[float]:
+        if is_multi:
+            return [
+                r.get("rerank_score", r["score"]) if "rerank_score" in r else r["score"]
+                for r in results
+            ]
+        return [r["score"] for r in results]

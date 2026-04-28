@@ -3,9 +3,7 @@ from typing import Any
 from loguru import logger
 
 from src.bm25_retriever import BM25Retriever
-from src.embedder import Embedder
 from src.exceptions import RetrievalError
-from src.indexer import VectorIndexer
 from src.retriever import Retriever
 
 
@@ -256,50 +254,3 @@ class HybridRetriever:
             return {k: 1.0 for k in scores}
 
         return {k: (v - min_score) / score_range for k, v in scores.items()}
-
-
-if __name__ == "__main__":
-    from src.utils import load_config, setup_logger
-
-    config = load_config()
-    setup_logger(config)
-
-    embedding_config = config["embedding"]
-    vector_store_config = config["vector_store"]
-    retrieval_config = config["retrieval"]
-
-    embedder = Embedder(
-        model_name=embedding_config["model_name"],
-        device=embedding_config["device"],
-    )
-
-    indexer = VectorIndexer(
-        persist_dir=vector_store_config["persist_dir"],
-        collection_name=vector_store_config["collection_name"],
-        distance=vector_store_config["distance"],
-    )
-
-    vector_retriever = Retriever(
-        indexer=indexer,
-        embedder=embedder,
-        top_k=retrieval_config["top_k"],
-    )
-
-    bm25_retriever = BM25Retriever()
-    bm25_retriever.build_index_from_chunks(config["chunker"]["output_dir"])
-
-    hybrid = HybridRetriever(
-        vector_retriever=vector_retriever,
-        bm25_retriever=bm25_retriever,
-        fusion_method="rrf",
-        top_k=retrieval_config["top_k"],
-    )
-
-    query = "贵州茅台2023年的营业收入是多少？"
-    results = hybrid.retrieve(query)
-
-    for i, result in enumerate(results, 1):
-        logger.info(f"\nResult {i}:")
-        logger.info(f"Score: {result['score']:.6f}")
-        logger.info(f"Text: {result['text'][:100]}...")
-        logger.info(f"Source: {result['metadata'].get('source', 'Unknown')}")

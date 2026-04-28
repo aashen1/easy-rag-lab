@@ -2,7 +2,7 @@
 id: RF-20260428-063-wt1
 title: refactor-pipeline-query-with-strategy-pattern
 type: RF
-status: todo
+status: done
 priority: medium
 labels:
 - refactor

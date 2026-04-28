@@ -313,22 +313,3 @@ class BM25Retriever:
             True if the index is ready for queries, False otherwise.
         """
         return self._is_indexed
-
-
-if __name__ == "__main__":
-    from src.utils import load_config, setup_logger
-
-    config = load_config()
-    setup_logger(config)
-
-    retriever = BM25Retriever()
-    retriever.build_index_from_chunks(config["chunker"]["output_dir"])
-
-    query = "贵州茅台2023年的营业收入是多少？"
-    results = retriever.retrieve(query, top_k=5)
-
-    for i, result in enumerate(results, 1):
-        logger.info(f"\nResult {i}:")
-        logger.info(f"Score: {result['score']:.4f}")
-        logger.info(f"Text: {result['text'][:100]}...")
-        logger.info(f"Source: {result['metadata'].get('source', 'Unknown')}")
