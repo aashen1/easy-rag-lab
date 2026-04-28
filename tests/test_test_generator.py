@@ -6,6 +6,37 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.exceptions import TestSetError
+from src.test_generation.chunk_locator import (
+    locate_answer_chunks,
+    locate_chunks_by_quote,
+    locate_source_chunks,
+    verify_quote_in_segment,
+)
+from src.test_generation.document_loader import (
+    load_full_documents,
+    load_meal_chunks,
+    resolve_chunks_dir,
+)
+from src.test_generation.llm_caller import (
+    parse_document_question_response,
+    parse_llm_response,
+)
+from src.test_generation.segment_builder import (
+    build_segments_from_pages,
+    segment_document,
+    select_candidate_segments,
+    select_segments_for_question_type,
+)
+from src.test_generation.validators import (
+    build_primary_pool,
+    calculate_quality_metrics,
+    check_authenticity_rules,
+    detect_content_overlaps,
+    validate_evidence,
+    validate_numerical_accuracy,
+    validate_question_quality,
+    verify_excerpt_in_document,
+)
 from src.test_generator import TestSetGenerator
 
 
@@ -184,46 +215,46 @@ class TestParseLlmResponse:
 
     def test_parse_valid_json(self):
         response = '{"question": "营收多少？", "answer": "100亿", "difficulty": "easy"}'
-        result = self.generator._parse_llm_response(response)
+        result = parse_llm_response(response)
         assert result is not None
         assert result["question"] == "营收多少？"
         assert result["answer"] == "100亿"
 
     def test_parse_json_with_surrounding_text(self):
         response = '好的，这是生成的问题：\n{"question": "营收多少？", "answer": "100亿"}\n希望对你有帮助。'
-        result = self.generator._parse_llm_response(response)
+        result = parse_llm_response(response)
         assert result is not None
         assert result["question"] == "营收多少？"
 
     def test_parse_json_in_code_block(self):
         response = '```json\n{"question": "营收多少？", "answer": "100亿"}\n```'
-        result = self.generator._parse_llm_response(response)
+        result = parse_llm_response(response)
         assert result is not None
         assert result["question"] == "营收多少？"
 
     def test_parse_missing_question(self):
         response = '{"answer": "100亿"}'
-        result = self.generator._parse_llm_response(response)
+        result = parse_llm_response(response)
         assert result is None
 
     def test_parse_missing_answer(self):
         response = '{"question": "营收多少？"}'
-        result = self.generator._parse_llm_response(response)
+        result = parse_llm_response(response)
         assert result is None
 
     def test_parse_invalid_json(self):
         response = "this is not json"
-        result = self.generator._parse_llm_response(response)
+        result = parse_llm_response(response)
         assert result is None
 
     def test_parse_empty_question(self):
         response = '{"question": "", "answer": "100亿"}'
-        result = self.generator._parse_llm_response(response)
+        result = parse_llm_response(response)
         assert result is None
 
     def test_parse_default_difficulty(self):
         response = '{"question": "营收多少？", "answer": "100亿"}'
-        result = self.generator._parse_llm_response(response)
+        result = parse_llm_response(response)
         assert result is not None
         assert result["difficulty"] == "medium"
 
@@ -293,35 +324,13 @@ class TestLoadMealChunks:
             "parser": {"input_dir": str(tmp_path / "raw")},
             "test_generation": {"max_retries": 3},
         }
-        generator = TestSetGenerator(config)
-        chunks = generator._load_meal_chunks(meal_config)
+        chunks = load_meal_chunks(config, meal_config)
 
         assert len(chunks) == 2
         assert all(c["metadata"]["source"] == "reports/report_0.md" for c in chunks)
 
 
 class TestLocateAnswerChunks:
-    def setup_method(self):
-        self.config = {
-            "chunker": {},
-            "test_generation": {"max_retries": 3},
-        }
-        self.generator = TestSetGenerator(self.config)
-
-    def _create_chunks_dir(self, tmp_path, chunks_data):
-        chunks_dir = tmp_path / "chunks"
-        chunks_dir.mkdir()
-        for source_path, chunks in chunks_data.items():
-            source_dir = chunks_dir / Path(source_path).parent
-            source_dir.mkdir(parents=True, exist_ok=True)
-            jsonl_name = Path(source_path).stem + ".jsonl"
-            jsonl_file = chunks_dir / source_path.replace(source_path, jsonl_name)
-            jsonl_file = source_dir / jsonl_name
-            with open(jsonl_file, "w", encoding="utf-8") as f:
-                for chunk in chunks:
-                    f.write(json.dumps(chunk, ensure_ascii=False) + "\n")
-        return chunks_dir
-
     def test_locate_with_meal_config_uses_artifact_cache(self, tmp_path):
         from src.meal import MealConfig, MealFile
 
@@ -365,15 +374,15 @@ class TestLocateAnswerChunks:
             "chunker": {},
             "test_generation": {"max_retries": 3},
         }
-        generator = TestSetGenerator(config)
 
+        resolved_dir = resolve_chunks_dir(config, meal_config)
         with pytest.warns(
             DeprecationWarning, match="_locate_answer_chunks is deprecated"
         ):
-            result = generator._locate_answer_chunks(
+            result = locate_answer_chunks(
                 answer="2024年营收增长9.53%",
                 source_path="reports/report_0.pages.json",
-                meal_config=meal_config,
+                chunks_dir=resolved_dir,
             )
 
         assert len(result) > 0
@@ -397,15 +406,10 @@ class TestLocateAnswerChunks:
             for chunk in chunk_data:
                 f.write(json.dumps(chunk, ensure_ascii=False) + "\n")
 
-        config = {
-            "test_generation": {"max_retries": 3},
-        }
-        generator = TestSetGenerator(config)
-
         with pytest.warns(
             DeprecationWarning, match="_locate_answer_chunks is deprecated"
         ):
-            result = generator._locate_answer_chunks(
+            result = locate_answer_chunks(
                 answer="净利润12.75%",
                 source_path="reports/doc.pages.json",
                 chunks_dir=chunks_dir,
@@ -414,17 +418,13 @@ class TestLocateAnswerChunks:
         assert len(result) > 0
 
     def test_locate_returns_empty_when_no_chunks_dir(self):
-        config = {
-            "test_generation": {"max_retries": 3},
-        }
-        generator = TestSetGenerator(config)
-
         with pytest.warns(
             DeprecationWarning, match="_locate_answer_chunks is deprecated"
         ):
-            result = generator._locate_answer_chunks(
+            result = locate_answer_chunks(
                 answer="some answer",
                 source_path="reports/doc.md",
+                chunks_dir=Path(),
             )
 
         assert result == []
@@ -462,15 +462,10 @@ class TestLocateAnswerChunks:
             for chunk in chunk_data:
                 f.write(json.dumps(chunk, ensure_ascii=False) + "\n")
 
-        config = {
-            "test_generation": {"max_retries": 3},
-        }
-        generator = TestSetGenerator(config)
-
         with pytest.warns(
             DeprecationWarning, match="_locate_answer_chunks is deprecated"
         ):
-            result_no_expand = generator._locate_answer_chunks(
+            result_no_expand = locate_answer_chunks(
                 answer="营收增长9.53%",
                 source_path="reports/doc.md",
                 chunks_dir=chunks_dir,
@@ -480,7 +475,7 @@ class TestLocateAnswerChunks:
         with pytest.warns(
             DeprecationWarning, match="_locate_answer_chunks is deprecated"
         ):
-            result_expand = generator._locate_answer_chunks(
+            result_expand = locate_answer_chunks(
                 answer="营收增长9.53%",
                 source_path="reports/doc.md",
                 chunks_dir=chunks_dir,
@@ -636,7 +631,7 @@ class TestParseDocumentQuestionResponse:
             "key_entities": ["光模块", "市场规模"],
             "answer_sources": ["第3段"]
         }"""
-        result = self.generator._parse_document_question_response(response)
+        result = parse_document_question_response(response)
         assert result is not None
         assert result["question"] == "2024年光模块市场规模多少？"
         assert result["question_type"] == "single_fact"
@@ -650,7 +645,7 @@ class TestParseDocumentQuestionResponse:
             "question_type": "single_fact"
         }
         ```"""
-        result = self.generator._parse_document_question_response(response)
+        result = parse_document_question_response(response)
         assert result is not None
         assert result["question"] == "CPO的全称是什么？"
 
@@ -658,25 +653,25 @@ class TestParseDocumentQuestionResponse:
         response = """好的，这是生成的问题：
         {"question": "营收增长原因？", "answer": "主要因为新产品销售增长。", "question_type": "reasoning"}
         希望对你有帮助。"""
-        result = self.generator._parse_document_question_response(response)
+        result = parse_document_question_response(response)
         assert result is not None
         assert result["question"] == "营收增长原因？"
 
     def test_parse_missing_required_field(self):
         response = '{"question": "问题？", "answer": "答案"}'
-        result = self.generator._parse_document_question_response(response)
+        result = parse_document_question_response(response)
         assert result is None
 
     def test_parse_empty_question_type(self):
         response = '{"question": "问题？", "answer": "答案", "question_type": ""}'
-        result = self.generator._parse_document_question_response(response)
+        result = parse_document_question_response(response)
         assert result is None
 
     def test_parse_default_values(self):
         response = (
             '{"question": "问题？", "answer": "答案", "question_type": "single_fact"}'
         )
-        result = self.generator._parse_document_question_response(response)
+        result = parse_document_question_response(response)
         assert result is not None
         assert result["difficulty"] == "medium"
         assert result["reasoning"] == ""
@@ -685,7 +680,7 @@ class TestParseDocumentQuestionResponse:
 
     def test_parse_invalid_json(self):
         response = "this is not valid json"
-        result = self.generator._parse_document_question_response(response)
+        result = parse_document_question_response(response)
         assert result is None
 
 
@@ -702,7 +697,7 @@ class TestValidateQuestionQuality:
             "answer": "100亿美元",
             "question_type": "single_fact",
         }
-        assert self.generator._validate_question_quality(question_data) is True
+        assert validate_question_quality(question_data) is True
 
     def test_question_too_short(self):
         question_data = {
@@ -710,7 +705,7 @@ class TestValidateQuestionQuality:
             "answer": "答案",
             "question_type": "single_fact",
         }
-        assert self.generator._validate_question_quality(question_data) is False
+        assert validate_question_quality(question_data) is False
 
     def test_question_too_long(self):
         question_data = {
@@ -718,7 +713,7 @@ class TestValidateQuestionQuality:
             "answer": "答案",
             "question_type": "single_fact",
         }
-        assert self.generator._validate_question_quality(question_data) is False
+        assert validate_question_quality(question_data) is False
 
     def test_question_with_academic_pattern(self):
         question_data = {
@@ -726,7 +721,7 @@ class TestValidateQuestionQuality:
             "answer": "100亿美元",
             "question_type": "single_fact",
         }
-        assert self.generator._validate_question_quality(question_data) is False
+        assert validate_question_quality(question_data) is False
 
     def test_question_with_template_start(self):
         question_data = {
@@ -734,7 +729,7 @@ class TestValidateQuestionQuality:
             "answer": "发展趋势是...",
             "question_type": "reasoning",
         }
-        assert self.generator._validate_question_quality(question_data) is False
+        assert validate_question_quality(question_data) is False
 
     def test_question_exactly_min_length(self):
         question_data = {
@@ -742,7 +737,7 @@ class TestValidateQuestionQuality:
             "answer": "100亿",
             "question_type": "single_fact",
         }
-        assert self.generator._validate_question_quality(question_data) is True
+        assert validate_question_quality(question_data) is True
 
     def test_question_exactly_max_length(self):
         question_data = {
@@ -750,7 +745,7 @@ class TestValidateQuestionQuality:
             "answer": "答案",
             "question_type": "single_fact",
         }
-        assert self.generator._validate_question_quality(question_data) is True
+        assert validate_question_quality(question_data) is True
 
 
 class TestCheckAuthenticityRules:
@@ -762,39 +757,39 @@ class TestCheckAuthenticityRules:
 
     def test_authentic_question(self):
         question = "2024年光模块市场规模多少？"
-        result = self.generator._check_authenticity_rules(question)
+        result = check_authenticity_rules(question)
         assert result["is_authentic"] is True
         assert result["has_issues"] is False
         assert result["issues"] == []
 
     def test_question_with_academic_pattern_根据文档(self):
         question = "根据文档，光模块市场规模是多少？"
-        result = self.generator._check_authenticity_rules(question)
+        result = check_authenticity_rules(question)
         assert result["is_authentic"] is False
         assert result["has_issues"] is True
         assert any("根据文档" in issue for issue in result["issues"])
 
     def test_question_with_academic_pattern_请分析(self):
         question = "请分析光模块市场的发展趋势"
-        result = self.generator._check_authenticity_rules(question)
+        result = check_authenticity_rules(question)
         assert result["is_authentic"] is False
         assert any("请分析" in issue for issue in result["issues"])
 
     def test_question_with_template_start_请问(self):
         question = "请问光模块市场规模是多少？"
-        result = self.generator._check_authenticity_rules(question)
+        result = check_authenticity_rules(question)
         assert result["is_authentic"] is False
         assert any("请问" in issue for issue in result["issues"])
 
     def test_question_too_long(self):
         question = "这是一个非常长的问题，" * 20
-        result = self.generator._check_authenticity_rules(question)
+        result = check_authenticity_rules(question)
         assert result["is_authentic"] is False
         assert any("过长" in issue for issue in result["issues"])
 
     def test_multiple_issues(self):
         question = "根据文档，请分析光模块市场的发展趋势，这是一个很长的问题" * 5
-        result = self.generator._check_authenticity_rules(question)
+        result = check_authenticity_rules(question)
         assert result["is_authentic"] is False
         assert len(result["issues"]) >= 2
 
@@ -810,7 +805,7 @@ class TestCheckAuthenticityRules:
             "片段中提到的核心观点是什么？",
         ]
         for question in patterns:
-            result = self.generator._check_authenticity_rules(question)
+            result = check_authenticity_rules(question)
             assert result["is_authentic"] is False, (
                 f"Pattern should be detected: {question}"
             )
@@ -822,7 +817,7 @@ class TestCheckAuthenticityRules:
             "请描述产品特点",
         ]
         for question in starts:
-            result = self.generator._check_authenticity_rules(question)
+            result = check_authenticity_rules(question)
             assert result["is_authentic"] is False, (
                 f"Template start should be detected: {question}"
             )
@@ -836,7 +831,7 @@ class TestCalculateQualityMetrics:
         self.generator = TestSetGenerator(self.config)
 
     def test_empty_questions(self):
-        result = self.generator._calculate_quality_metrics([])
+        result = calculate_quality_metrics([])
         assert result["format_correct_rate"] == 0.0
         assert result["authenticity_pass_rate"] == 0.0
         assert result["type_distribution"] == {}
@@ -849,7 +844,7 @@ class TestCalculateQualityMetrics:
                 "question_type": "single_fact",
             }
         ]
-        result = self.generator._calculate_quality_metrics(questions)
+        result = calculate_quality_metrics(questions)
         assert result["format_correct_rate"] == 1.0
         assert result["authenticity_pass_rate"] == 1.0
         assert result["type_distribution"]["single_fact"] == 1
@@ -867,7 +862,7 @@ class TestCalculateQualityMetrics:
                 "question_type": "single_fact",
             },
         ]
-        result = self.generator._calculate_quality_metrics(questions)
+        result = calculate_quality_metrics(questions)
         assert result["type_distribution"]["single_fact"] == 2
 
     def test_multiple_questions_different_types(self):
@@ -888,7 +883,7 @@ class TestCalculateQualityMetrics:
                 "question_type": "comparative",
             },
         ]
-        result = self.generator._calculate_quality_metrics(questions)
+        result = calculate_quality_metrics(questions)
         assert result["type_distribution"]["single_fact"] == 1
         assert result["type_distribution"]["reasoning"] == 1
         assert result["type_distribution"]["comparative"] == 1
@@ -906,7 +901,7 @@ class TestCalculateQualityMetrics:
                 "question_type": "single_fact",
             },
         ]
-        result = self.generator._calculate_quality_metrics(questions)
+        result = calculate_quality_metrics(questions)
         assert result["authenticity_pass_rate"] == 0.5
 
     def test_authenticity_pass_rate_all_pass(self):
@@ -922,7 +917,7 @@ class TestCalculateQualityMetrics:
                 "question_type": "single_fact",
             },
         ]
-        result = self.generator._calculate_quality_metrics(questions)
+        result = calculate_quality_metrics(questions)
         assert result["authenticity_pass_rate"] == 1.0
 
     def test_authenticity_pass_rate_none_pass(self):
@@ -938,7 +933,7 @@ class TestCalculateQualityMetrics:
                 "question_type": "reasoning",
             },
         ]
-        result = self.generator._calculate_quality_metrics(questions)
+        result = calculate_quality_metrics(questions)
         assert result["authenticity_pass_rate"] == 0.0
 
 
@@ -1089,7 +1084,7 @@ class TestLoadFullDocuments:
             "src.test_generation.document_loader.resolve_parsed_dir",
             return_value=parsed_dir,
         ):
-            result = self.generator._load_full_documents(meal_config)
+            result = load_full_documents(self.generator.config, meal_config)
 
         assert "2026年光伏行业分析" in result
         doc_data = result["2026年光伏行业分析"]
@@ -1106,7 +1101,7 @@ class TestLoadFullDocuments:
         with patch(
             "src.test_generation.document_loader.resolve_parsed_dir", return_value=None
         ):
-            result = self.generator._load_full_documents(meal_config)
+            result = load_full_documents(self.generator.config, meal_config)
 
         assert result == {}
 
@@ -1650,7 +1645,7 @@ class TestSegmentDocument:
 
     def test_short_document_returns_single_segment(self):
         doc = "这是一个短文档。只有几百个字符。"
-        segments = self.generator._segment_document(doc, segment_size=1000)
+        segments = segment_document(doc, segment_size=1000)
         assert len(segments) == 1
         assert segments[0]["text"] == doc
         assert segments[0]["start_char"] == 0
@@ -1661,7 +1656,7 @@ class TestSegmentDocument:
         sentence = "这是一句话。"
         doc = sentence * 100
         segment_size = 50
-        segments = self.generator._segment_document(doc, segment_size=segment_size)
+        segments = segment_document(doc, segment_size=segment_size)
         assert len(segments) > 1
         total_chars = sum(seg["end_char"] - seg["start_char"] for seg in segments)
         assert total_chars <= len(doc)
@@ -1670,7 +1665,7 @@ class TestSegmentDocument:
         sentences = ["第一句话内容很长。", "第二句话也很长。", "第三句话继续。"]
         doc = "".join(sentences)
         segment_size = 15
-        segments = self.generator._segment_document(doc, segment_size=segment_size)
+        segments = segment_document(doc, segment_size=segment_size)
         for seg in segments:
             text = seg["text"]
             if text and text[-1] not in [
@@ -1689,26 +1684,26 @@ class TestSegmentDocument:
                 )
 
     def test_empty_document_returns_empty_list(self):
-        segments = self.generator._segment_document("", segment_size=1000)
+        segments = segment_document("", segment_size=1000)
         assert segments == []
 
     def test_document_exactly_segment_size(self):
         doc = "a" * 1000
-        segments = self.generator._segment_document(doc, segment_size=1000)
+        segments = segment_document(doc, segment_size=1000)
         assert len(segments) == 1
         assert segments[0]["text"] == doc
 
     def test_segment_indices_are_sequential(self):
         sentence = "这是一句话。"
         doc = sentence * 50
-        segments = self.generator._segment_document(doc, segment_size=50)
+        segments = segment_document(doc, segment_size=50)
         for i, seg in enumerate(segments):
             assert seg["segment_index"] == i
 
     def test_segments_cover_entire_document(self):
         sentence = "这是一句话。"
         doc = sentence * 100
-        segments = self.generator._segment_document(doc, segment_size=100)
+        segments = segment_document(doc, segment_size=100)
         covered_chars = set()
         for seg in segments:
             for i in range(seg["start_char"], seg["end_char"]):
@@ -1728,12 +1723,12 @@ class TestBuildSegmentsFromPages:
         self.generator = TestSetGenerator(self.config)
 
     def test_empty_pages_returns_empty(self):
-        segments = self.generator._build_segments_from_pages([])
+        segments = build_segments_from_pages([])
         assert segments == []
 
     def test_single_short_page_returns_single_segment(self):
         pages = [{"page_number": 1, "text": "短文档内容"}]
-        segments = self.generator._build_segments_from_pages(pages, target_chars=8000)
+        segments = build_segments_from_pages(pages, target_chars=8000)
         assert len(segments) == 1
         assert segments[0]["page_numbers"] == [1]
         assert segments[0]["source_type"] == "pages_json"
@@ -1744,7 +1739,7 @@ class TestBuildSegmentsFromPages:
             {"page_number": 1, "text": "第一页内容"},
             {"page_number": 2, "text": "第二页内容"},
         ]
-        segments = self.generator._build_segments_from_pages(pages, target_chars=8000)
+        segments = build_segments_from_pages(pages, target_chars=8000)
         assert len(segments) == 1
         assert segments[0]["page_numbers"] == [1, 2]
         assert "第一页内容" in segments[0]["text"]
@@ -1755,7 +1750,7 @@ class TestBuildSegmentsFromPages:
             {"page_number": 1, "text": "A" * 9000},
             {"page_number": 2, "text": "B" * 9000},
         ]
-        segments = self.generator._build_segments_from_pages(pages, target_chars=8000)
+        segments = build_segments_from_pages(pages, target_chars=8000)
         assert len(segments) == 2
         assert segments[0]["page_numbers"] == [1]
         assert segments[1]["page_numbers"] == [2]
@@ -1768,7 +1763,7 @@ class TestBuildSegmentsFromPages:
             {"page_number": 1, "text": "第一页"},
             {"page_number": 2, "text": "第二页"},
         ]
-        segments = self.generator._build_segments_from_pages(pages, target_chars=8000)
+        segments = build_segments_from_pages(pages, target_chars=8000)
         assert len(segments) == 1
         assert segments[0]["page_numbers"] == [1, 2, 3]
         text = segments[0]["text"]
@@ -1782,7 +1777,7 @@ class TestBuildSegmentsFromPages:
             {"page_number": 3, "text": "   "},
             {"page_number": 4, "text": "也有内容"},
         ]
-        segments = self.generator._build_segments_from_pages(pages, target_chars=8000)
+        segments = build_segments_from_pages(pages, target_chars=8000)
         assert len(segments) == 1
         assert segments[0]["page_numbers"] == [1, 4]
 
@@ -1791,7 +1786,7 @@ class TestBuildSegmentsFromPages:
             {"page_number": 1, "text": "AAA"},
             {"page_number": 2, "text": "BBB"},
         ]
-        segments = self.generator._build_segments_from_pages(pages, target_chars=8000)
+        segments = build_segments_from_pages(pages, target_chars=8000)
         assert len(segments) == 1
         assert segments[0]["start_char"] == 0
         assert segments[0]["end_char"] == len(segments[0]["text"])
@@ -1799,13 +1794,6 @@ class TestBuildSegmentsFromPages:
 
 class TestLocateSourceChunks:
     def setup_method(self):
-        self.config = {
-            "test_generation": {
-                "segment_size": 8000,
-                "default_num_questions": 10,
-            }
-        }
-        self.generator = TestSetGenerator(self.config)
         self.doc_chunks = [
             {
                 "chunk_id": "doc_p1_000",
@@ -1830,39 +1818,37 @@ class TestLocateSourceChunks:
         ]
 
     def test_exact_quote_match(self):
-        result = self.generator._locate_source_chunks(
+        result = locate_source_chunks(
             [1], "这是第一页的内容，包含重要信息。", self.doc_chunks
         )
         assert "doc_p1_000" in result
 
     def test_page_filter_narrows_candidates(self):
-        result = self.generator._locate_source_chunks([2], "行业趋势", self.doc_chunks)
+        result = locate_source_chunks([2], "行业趋势", self.doc_chunks)
         assert "doc_p2_000" in result
         assert "doc_p1_000" not in result
         assert "doc_p3_000" not in result
 
     def test_multiple_pages_returns_chunks_from_all(self):
-        result = self.generator._locate_source_chunks(
-            [1, 2], "行业趋势", self.doc_chunks
-        )
+        result = locate_source_chunks([1, 2], "行业趋势", self.doc_chunks)
         assert "doc_p2_000" in result
 
     def test_empty_page_numbers_returns_empty(self):
-        result = self.generator._locate_source_chunks([], "行业趋势", self.doc_chunks)
+        result = locate_source_chunks([], "行业趋势", self.doc_chunks)
         assert result == []
 
     def test_no_matching_page_returns_empty(self):
-        result = self.generator._locate_source_chunks([99], "行业趋势", self.doc_chunks)
+        result = locate_source_chunks([99], "行业趋势", self.doc_chunks)
         assert result == []
 
     def test_no_quote_returns_all_page_chunks(self):
-        result = self.generator._locate_source_chunks([1], "", self.doc_chunks)
+        result = locate_source_chunks([1], "", self.doc_chunks)
         assert len(result) == 2
         assert "doc_p1_000" in result
         assert "doc_p1_001" in result
 
     def test_quote_not_in_candidates_falls_back_to_page_level(self):
-        result = self.generator._locate_source_chunks(
+        result = locate_source_chunks(
             [1], "这段话绝对不存在于任何chunk中", self.doc_chunks
         )
         assert len(result) == 2
@@ -1881,7 +1867,7 @@ class TestLocateSourceChunks:
                 },
             },
         ]
-        result = self.generator._locate_source_chunks([2], "跨页内容", chunks)
+        result = locate_source_chunks([2], "跨页内容", chunks)
         assert "doc_cross" in result
 
 
@@ -1905,71 +1891,50 @@ class TestSelectSegmentsForQuestionType:
         ]
 
     def test_single_fact_returns_one_segment(self):
-        selected = self.generator._select_segments_for_question_type(
-            self.segments, "single_fact"
-        )
+        selected = select_segments_for_question_type(self.segments, "single_fact")
         assert len(selected) == 1
 
     def test_multi_fact_returns_two_to_three_segments(self):
         for _ in range(10):
-            selected = self.generator._select_segments_for_question_type(
-                self.segments, "multi_fact"
-            )
+            selected = select_segments_for_question_type(self.segments, "multi_fact")
             assert 2 <= len(selected) <= 3
 
     def test_reasoning_returns_two_to_three_segments(self):
         for _ in range(10):
-            selected = self.generator._select_segments_for_question_type(
-                self.segments, "reasoning"
-            )
+            selected = select_segments_for_question_type(self.segments, "reasoning")
             assert 2 <= len(selected) <= 3
 
     def test_comparative_returns_two_to_three_segments(self):
         for _ in range(10):
-            selected = self.generator._select_segments_for_question_type(
-                self.segments, "comparative"
-            )
+            selected = select_segments_for_question_type(self.segments, "comparative")
             assert 2 <= len(selected) <= 3
 
     def test_missing_returns_one_segment(self):
-        selected = self.generator._select_segments_for_question_type(
-            self.segments, "missing"
-        )
+        selected = select_segments_for_question_type(self.segments, "missing")
         assert len(selected) == 1
 
     def test_irrelevant_returns_empty_list(self):
-        selected = self.generator._select_segments_for_question_type(
-            self.segments, "irrelevant"
-        )
+        selected = select_segments_for_question_type(self.segments, "irrelevant")
         assert selected == []
 
     def test_empty_segments_returns_empty_list(self):
-        selected = self.generator._select_segments_for_question_type([], "single_fact")
+        selected = select_segments_for_question_type([], "single_fact")
         assert selected == []
 
     def test_fewer_segments_than_requested(self):
         few_segments = self.segments[:2]
-        selected = self.generator._select_segments_for_question_type(
-            few_segments, "multi_fact"
-        )
+        selected = select_segments_for_question_type(few_segments, "multi_fact")
         assert len(selected) == 2
 
     def test_unknown_type_uses_num_segments_parameter(self):
-        selected = self.generator._select_segments_for_question_type(
+        selected = select_segments_for_question_type(
             self.segments, "unknown_type", num_segments=3
         )
         assert len(selected) == 3
 
     def test_sequential_strategy(self):
-        config = {
-            "test_generation": {
-                "max_retries": 3,
-                "segment_sampling_strategy": "sequential",
-            },
-        }
-        generator = TestSetGenerator(config)
-        selected = generator._select_segments_for_question_type(
-            self.segments, "multi_fact"
+        selected = select_segments_for_question_type(
+            self.segments, "multi_fact", sampling_strategy="sequential"
         )
         assert 2 <= len(selected) <= 3
         indices = [s["segment_index"] for s in selected]
@@ -1978,19 +1943,10 @@ class TestSelectSegmentsForQuestionType:
 
 
 class TestVerifyQuoteInSegment:
-    def setup_method(self):
-        self.config = {
-            "test_generation": {
-                "max_retries": 3,
-                "quote_fuzzy_match_threshold": 0.85,
-            },
-        }
-        self.generator = TestSetGenerator(self.config)
-
     def test_exact_match(self):
         segment = "这是一段文本，其中包含引用的内容。"
         quote = "包含引用"
-        result = self.generator._verify_quote_in_segment(quote, segment)
+        result = verify_quote_in_segment(quote, segment)
         assert result["found"] is True
         assert result["match_type"] == "exact"
         assert result["position"] is not None
@@ -1998,7 +1954,7 @@ class TestVerifyQuoteInSegment:
     def test_no_match(self):
         segment = "这是一段文本。"
         quote = "不存在的引用"
-        result = self.generator._verify_quote_in_segment(quote, segment)
+        result = verify_quote_in_segment(quote, segment)
         assert result["found"] is False
         assert result["match_type"] is None
         assert result["position"] is None
@@ -2006,39 +1962,32 @@ class TestVerifyQuoteInSegment:
     def test_fuzzy_match_minor_difference(self):
         segment = "这是一段文本，其中包含引用的内容。"
         quote = "包含引用的内容。"
-        result = self.generator._verify_quote_in_segment(quote, segment)
+        result = verify_quote_in_segment(quote, segment)
         assert result["found"] is True
         assert result["match_type"] == "exact"
 
     def test_empty_quote_returns_not_found(self):
         segment = "这是一段文本。"
-        result = self.generator._verify_quote_in_segment("", segment)
+        result = verify_quote_in_segment("", segment)
         assert result["found"] is False
 
     def test_empty_segment_returns_not_found(self):
-        result = self.generator._verify_quote_in_segment("引用", "")
+        result = verify_quote_in_segment("引用", "")
         assert result["found"] is False
 
     def test_both_empty_returns_not_found(self):
-        result = self.generator._verify_quote_in_segment("", "")
+        result = verify_quote_in_segment("", "")
         assert result["found"] is False
 
     def test_quote_longer_than_segment(self):
         segment = "短文本"
         quote = "这是一个非常长的引用内容，比段落本身还要长"
-        result = self.generator._verify_quote_in_segment(quote, segment)
+        result = verify_quote_in_segment(quote, segment)
         assert result["found"] is False
 
 
 class TestValidateEvidence:
     def setup_method(self):
-        self.config = {
-            "test_generation": {
-                "max_retries": 3,
-                "quote_fuzzy_match_threshold": 0.85,
-            },
-        }
-        self.generator = TestSetGenerator(self.config)
         self.segments = [
             {
                 "text": "第一段内容，包含营收数据及相关分析，同比增长显著，公司业绩表现优异，市场前景广阔。",
@@ -2065,7 +2014,7 @@ class TestValidateEvidence:
                 "quote": "包含利润数据及趋势预测，环比有所改善，盈利能力持续增强，投资价值凸显",
             },
         ]
-        result = self.generator._validate_evidence(evidence_list, self.segments)
+        result = validate_evidence(evidence_list, self.segments)
         assert result["valid"] is True
         assert len(result["verified_evidence"]) == 2
         assert len(result["invalid_quotes"]) == 0
@@ -2083,7 +2032,7 @@ class TestValidateEvidence:
                 "quote": "这段完全不存在的数据内容无法匹配原文信息，虚构内容测试用例补充长度",
             },
         ]
-        result = self.generator._validate_evidence(evidence_list, self.segments)
+        result = validate_evidence(evidence_list, self.segments)
         assert result["valid"] is False
         assert len(result["invalid_quotes"]) == 1
         assert result["verified_evidence"][0]["verified"] is True
@@ -2096,7 +2045,7 @@ class TestValidateEvidence:
                 "quote": "包含营收数据及相关分析，同比增长显著，公司业绩表现优异，市场前景广阔",
             },
         ]
-        result = self.generator._validate_evidence(evidence_list, self.segments)
+        result = validate_evidence(evidence_list, self.segments)
         assert result["valid"] is False
         assert len(result["invalid_quotes"]) == 1
         assert "Invalid segment_index" in result["invalid_quotes"][0]["reason"]
@@ -2107,13 +2056,13 @@ class TestValidateEvidence:
                 "quote": "包含营收数据及相关分析，同比增长显著，公司业绩表现优异，市场前景广阔"
             },
         ]
-        result = self.generator._validate_evidence(evidence_list, self.segments)
+        result = validate_evidence(evidence_list, self.segments)
         assert result["valid"] is False
         assert len(result["invalid_quotes"]) == 1
         assert "Missing segment_index" in result["invalid_quotes"][0]["reason"]
 
     def test_empty_evidence_list_returns_valid(self):
-        result = self.generator._validate_evidence([], self.segments)
+        result = validate_evidence([], self.segments)
         assert result["valid"] is True
         assert result["verified_evidence"] == []
         assert result["invalid_quotes"] == []
@@ -2125,21 +2074,12 @@ class TestValidateEvidence:
                 "quote": "包含营收数据及相关分析，同比增长显著，公司业绩表现优异，市场前景广阔。",
             },
         ]
-        result = self.generator._validate_evidence(evidence_list, self.segments)
+        result = validate_evidence(evidence_list, self.segments)
         assert result["verified_evidence"][0]["verified"] is True
         assert result["verified_evidence"][0]["match_type"] == "exact"
 
 
 class TestLocateChunksByQuote:
-    def setup_method(self):
-        self.config = {
-            "test_generation": {
-                "max_retries": 3,
-                "quote_fuzzy_match_threshold": 0.85,
-            },
-        }
-        self.generator = TestSetGenerator(self.config)
-
     def test_quote_found_in_one_chunk(self):
         segments = [
             {
@@ -2154,7 +2094,7 @@ class TestLocateChunksByQuote:
             {"chunk_id": "chunk_001", "text": "营收增长9.53%，净利润增长12.75%。"},
             {"chunk_id": "chunk_002", "text": "其他内容。"},
         ]
-        result = self.generator._locate_chunks_by_quote(
+        result = locate_chunks_by_quote(
             "营收增长9.53%", segments, segment_chunk_map, doc_chunks
         )
         assert len(result) == 1
@@ -2174,7 +2114,7 @@ class TestLocateChunksByQuote:
             {"chunk_id": "chunk_001", "text": "营收增长9.53%"},
             {"chunk_id": "chunk_002", "text": "营收增长9.53%，净利润增长12.75%。"},
         ]
-        result = self.generator._locate_chunks_by_quote(
+        result = locate_chunks_by_quote(
             "营收增长9.53%", segments, segment_chunk_map, doc_chunks
         )
         assert len(result) == 2
@@ -2192,15 +2132,15 @@ class TestLocateChunksByQuote:
         doc_chunks = [
             {"chunk_id": "chunk_001", "text": "营收增长9.53%。"},
         ]
-        result = self.generator._locate_chunks_by_quote(
+        result = locate_chunks_by_quote(
             "不存在的引用", segments, segment_chunk_map, doc_chunks
         )
         assert result == []
 
     def test_empty_inputs(self):
-        assert self.generator._locate_chunks_by_quote("", [], {}, []) == []
-        assert self.generator._locate_chunks_by_quote("quote", [], {}, []) == []
-        assert self.generator._locate_chunks_by_quote("quote", [{}], {}, []) == []
+        assert locate_chunks_by_quote("", [], {}, []) == []
+        assert locate_chunks_by_quote("quote", [], {}, []) == []
+        assert locate_chunks_by_quote("quote", [{}], {}, []) == []
 
     def test_quote_not_in_mapped_chunks(self):
         segments = [
@@ -2215,7 +2155,7 @@ class TestLocateChunksByQuote:
         doc_chunks = [
             {"chunk_id": "chunk_001", "text": "其他不相关的内容。"},
         ]
-        result = self.generator._locate_chunks_by_quote(
+        result = locate_chunks_by_quote(
             "营收增长9.53%", segments, segment_chunk_map, doc_chunks
         )
         assert result == []
@@ -2241,7 +2181,7 @@ class TestSelectCandidateSegments:
         ]
 
     def test_multi_hop_returns_diverse_segments(self):
-        selected = self.generator._select_candidate_segments(
+        selected = select_candidate_segments(
             self.segments, "multi_fact", num_candidates=4
         )
         assert len(selected) == 4
@@ -2250,46 +2190,40 @@ class TestSelectCandidateSegments:
 
     def test_multi_hop_returns_correct_count(self):
         for count in [2, 3, 4]:
-            selected = self.generator._select_candidate_segments(
+            selected = select_candidate_segments(
                 self.segments, "reasoning", num_candidates=count
             )
             assert len(selected) == count
 
     def test_comparative_returns_correct_count(self):
-        selected = self.generator._select_candidate_segments(
+        selected = select_candidate_segments(
             self.segments, "comparative", num_candidates=3
         )
         assert len(selected) == 3
 
     def test_single_fact_delegates_to_select_segments(self):
-        selected = self.generator._select_candidate_segments(
+        selected = select_candidate_segments(
             self.segments, "single_fact", num_candidates=4
         )
         assert len(selected) == 1
 
     def test_empty_segments_returns_empty(self):
-        selected = self.generator._select_candidate_segments(
-            [], "multi_fact", num_candidates=4
-        )
+        selected = select_candidate_segments([], "multi_fact", num_candidates=4)
         assert selected == []
 
     def test_fewer_segments_than_candidates(self):
         few_segments = self.segments[:2]
-        selected = self.generator._select_candidate_segments(
+        selected = select_candidate_segments(
             few_segments, "multi_fact", num_candidates=4
         )
         assert len(selected) == 2
 
     def test_sequential_strategy(self):
-        config = {
-            "test_generation": {
-                "max_retries": 3,
-                "segment_sampling_strategy": "sequential",
-            },
-        }
-        generator = TestSetGenerator(config)
-        selected = generator._select_candidate_segments(
-            self.segments, "multi_fact", num_candidates=4
+        selected = select_candidate_segments(
+            self.segments,
+            "multi_fact",
+            num_candidates=4,
+            sampling_strategy="sequential",
         )
         assert len(selected) == 4
         indices = [s["segment_index"] for s in selected]
@@ -2299,13 +2233,6 @@ class TestSelectCandidateSegments:
 
 class TestHallucinationDetection:
     def setup_method(self):
-        self.config = {
-            "test_generation": {
-                "max_retries": 3,
-                "quote_fuzzy_match_threshold": 0.85,
-            },
-        }
-        self.generator = TestSetGenerator(self.config)
         self.segments = [
             {
                 "text": "第一段内容，包含营收数据及相关分析，同比增长显著，公司业绩表现优异，市场前景广阔。",
@@ -2324,7 +2251,7 @@ class TestHallucinationDetection:
                 "quote": "这段完全不存在的引用内容无法匹配原文信息，虚构内容测试用例补充长度",
             },
         ]
-        result = self.generator._validate_evidence(evidence_list, self.segments)
+        result = validate_evidence(evidence_list, self.segments)
 
         assert result["valid"] is False
         assert len(result["invalid_quotes"]) == 1
@@ -2337,7 +2264,7 @@ class TestHallucinationDetection:
                 "quote": "包含营收数据及相关分析，同比增长显著，公司业绩表现优异，市场前景广阔",
             },
         ]
-        result = self.generator._validate_evidence(evidence_list, self.segments)
+        result = validate_evidence(evidence_list, self.segments)
 
         assert result["valid"] is True
         assert len(result["invalid_quotes"]) == 0
@@ -2353,7 +2280,7 @@ class TestHallucinationDetection:
                 "quote": "这段完全不存在的引用内容二无法匹配原文，虚构内容测试用例补充长度二",
             },
         ]
-        result = self.generator._validate_evidence(evidence_list, self.segments)
+        result = validate_evidence(evidence_list, self.segments)
 
         assert result["valid"] is False
         assert len(result["invalid_quotes"]) == 2
@@ -2371,7 +2298,7 @@ class TestValidateNumericalAccuracy:
             "answer": "营收为121.63亿元",
             "ground_truth_excerpt": "营收12,162,684,368.86元",
         }
-        is_valid, correction = self.generator._validate_numerical_accuracy(qa)
+        is_valid, correction = validate_numerical_accuracy(qa)
         assert is_valid is True
         assert correction is None
 
@@ -2380,19 +2307,19 @@ class TestValidateNumericalAccuracy:
             "answer": "营收为1216.3亿元",
             "ground_truth_excerpt": "营收12,162,684,368.86元",
         }
-        is_valid, correction = self.generator._validate_numerical_accuracy(qa)
+        is_valid, correction = validate_numerical_accuracy(qa)
         assert is_valid is False
         assert correction is not None
         assert any(e["type"] == "10x_error" for e in correction["errors"])
 
     def test_empty_answer_returns_valid(self):
         qa = {"answer": "", "ground_truth_excerpt": "营收12,162,684,368.86元"}
-        is_valid, correction = self.generator._validate_numerical_accuracy(qa)
+        is_valid, correction = validate_numerical_accuracy(qa)
         assert is_valid is True
 
     def test_no_large_numbers_returns_valid(self):
         qa = {"answer": "增长了5%", "ground_truth_excerpt": "增长率为5%"}
-        is_valid, correction = self.generator._validate_numerical_accuracy(qa)
+        is_valid, correction = validate_numerical_accuracy(qa)
         assert is_valid is True
 
 
@@ -2404,21 +2331,21 @@ class TestVerifyExcerptInDocument:
     def test_exact_match(self):
         doc = "公司2024年营收121.63亿元，同比增长12.5%。"
         excerpt = "营收121.63亿元"
-        assert self.generator._verify_excerpt_in_document(excerpt, doc) is True
+        assert verify_excerpt_in_document(excerpt, doc) is True
 
     def test_no_match(self):
         doc = "公司2024年营收121.63亿元。"
         excerpt = "净利润500亿元"
-        assert self.generator._verify_excerpt_in_document(excerpt, doc) is False
+        assert verify_excerpt_in_document(excerpt, doc) is False
 
     def test_fuzzy_match_with_whitespace(self):
         doc = "公司 2024 年 营收 121.63 亿元"
         excerpt = "公司2024年营收121.63亿元"
-        assert self.generator._verify_excerpt_in_document(excerpt, doc) is True
+        assert verify_excerpt_in_document(excerpt, doc) is True
 
     def test_empty_excerpt_returns_false(self):
         doc = "公司2024年营收121.63亿元。"
-        assert self.generator._verify_excerpt_in_document("", doc) is False
+        assert verify_excerpt_in_document("", doc) is False
 
 
 class TestDetectContentOverlaps:
@@ -2431,7 +2358,7 @@ class TestDetectContentOverlaps:
             {"doc_id": "a", "content": "光模块市场分析报告" * 50},
             {"doc_id": "b", "content": "新能源汽车行业研究" * 50},
         ]
-        overlaps = self.generator._detect_content_overlaps(docs)
+        overlaps = detect_content_overlaps(docs)
         assert len(overlaps) == 0
 
     def test_full_overlap_detected(self):
@@ -2442,7 +2369,7 @@ class TestDetectContentOverlaps:
             {"doc_id": "full", "content": long_content},
             {"doc_id": "summary", "content": short_content},
         ]
-        overlaps = self.generator._detect_content_overlaps(docs)
+        overlaps = detect_content_overlaps(docs)
         assert len(overlaps) == 1
         assert overlaps[0][0] == "summary"
         assert overlaps[0][1] == "full"
@@ -2452,7 +2379,7 @@ class TestDetectContentOverlaps:
             {"doc_id": "a", "content": "短"},
             {"doc_id": "b", "content": "短"},
         ]
-        overlaps = self.generator._detect_content_overlaps(docs)
+        overlaps = detect_content_overlaps(docs)
         assert len(overlaps) == 0
 
 
@@ -2467,7 +2394,7 @@ class TestBuildPrimaryPool:
             {"doc_id": "summary", "content": "b" * 3000},
         ]
         overlaps = [("summary", "full", 0.9)]
-        result = self.generator._build_primary_pool(docs, overlaps)
+        result = build_primary_pool(docs, overlaps)
         assert len(result) == 1
         assert result[0]["doc_id"] == "full"
 
@@ -2476,7 +2403,7 @@ class TestBuildPrimaryPool:
             {"doc_id": "a", "content": "a" * 5000},
             {"doc_id": "b", "content": "b" * 5000},
         ]
-        result = self.generator._build_primary_pool(docs, [])
+        result = build_primary_pool(docs, [])
         assert len(result) == 2
 
 
