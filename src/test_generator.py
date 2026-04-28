@@ -493,6 +493,12 @@ class TestSetGenerator:
 
     DOCUMENT_TRUNCATE_MAX = 8000
 
+    EVIDENCE_MAX_TOKENS = {
+        "comparative": 2048,
+        "reasoning": 2048,
+        "multi_fact": 2048,
+    }
+
     GOLDEN_TYPE_DISTRIBUTION = {
         "single_fact": 0.15,
         "multi_fact": 0.18,
@@ -511,6 +517,16 @@ class TestSetGenerator:
         "missing": "拒答能力不足：文档中没有的信息未能正确识别，产生幻觉",
         "irrelevant": "幻觉控制失败：无关问题产生了看似相关的编造内容",
         "adversarial": "边界场景翻车：数字近似/跨文档混淆/时序陷阱等",
+    }
+
+    ANSWER_LENGTH_LIMITS = {
+        "single_fact": 200,
+        "missing": 200,
+        "irrelevant": 200,
+        "adversarial": 200,
+        "multi_fact": 300,
+        "comparative": 300,
+        "reasoning": 350,
     }
 
     def __init__(self, config: dict[str, Any]):
@@ -3020,6 +3036,39 @@ class TestSetGenerator:
 
         return True, ""
 
+    def _truncate_answer(
+        self,
+        qa: dict[str, Any],
+        answer_text: str,
+        answer_limit: int,
+    ) -> None:
+        """Truncate answer to the specified length limit.
+
+        Attempts to truncate at the last Chinese period (。) within the
+        limit if it is past the halfway point. Otherwise performs a hard
+        truncation at the limit. Sets metadata flag when truncation
+        occurs.
+
+        Args:
+            qa: Question-answer dictionary to modify in place.
+            answer_text: Original answer text.
+            answer_limit: Maximum character length for the answer.
+        """
+        if len(answer_text) <= answer_limit:
+            return
+
+        last_period = answer_text.rfind("。", 0, answer_limit)
+        if last_period > answer_limit // 2:
+            qa["answer"] = answer_text[: last_period + 1]
+        else:
+            qa["answer"] = answer_text[:answer_limit]
+        qa.setdefault("metadata", {})
+        qa["metadata"]["answer_truncated"] = True
+        logger.info(
+            f"Answer truncated for {qa.get('id', 'unknown')}: "
+            f"{len(answer_text)} -> {len(qa['answer'])} chars"
+        )
+
     def _validate_answer_evidence_consistency(
         self,
         answer: str,
@@ -3311,13 +3360,20 @@ class TestSetGenerator:
         if supplement:
             prompt += "\n" + supplement
 
+        answer_limit = self.ANSWER_LENGTH_LIMITS.get(question_type, 300)
+        prompt += f"\n\n## 答案长度要求\n答案不超过{answer_limit}字，简洁精准，只包含证据支撑的内容。"
+
         try:
+            effective_max_tokens = self.EVIDENCE_MAX_TOKENS.get(
+                question_type, self.test_gen_max_tokens
+            )
             response = generator.generate(
                 query=prompt,
                 contexts=[],
                 system_prompt="你是一位金融行业从业者。请严格按照要求的JSON格式输出，不要输出任何其他内容。",
                 category="test_generation",
                 allow_no_contexts=True,
+                max_tokens=effective_max_tokens,
             )
 
             qa = self._parse_evidence_question_response(response)
