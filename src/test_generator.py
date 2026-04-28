@@ -5284,7 +5284,8 @@ class TestSetGenerator:
 
         return {"found": False, "position": None, "similarity": best_similarity}
 
-    MIN_QUOTE_LENGTH = 30
+    MIN_QUOTE_LENGTH_DEFAULT = 30
+    MIN_QUOTE_LENGTH_CJK = 15
 
     def _validate_evidence(
         self,
@@ -5298,7 +5299,9 @@ class TestSetGenerator:
         For each evidence entry, verifies that the segment_index is valid
         and that the quote exists in the specified segment. When the
         segment_index is invalid, falls back to searching the full document.
-        Quotes shorter than MIN_QUOTE_LENGTH are rejected as too fragmented.
+        Quotes shorter than the adaptive minimum length are rejected as too fragmented.
+        The threshold is MIN_QUOTE_LENGTH_CJK (15) for CJK-dominant quotes (>50% CJK
+        characters) and MIN_QUOTE_LENGTH_DEFAULT (30) otherwise.
 
         Args:
             evidence_list: List of evidence dictionaries, each containing
@@ -5347,16 +5350,24 @@ class TestSetGenerator:
                 continue
 
             quote_clean = re.sub(r"\s+", "", quote)
-            if len(quote_clean) < self.MIN_QUOTE_LENGTH:
+            cjk_count = sum(1 for c in quote_clean if "\u4e00" <= c <= "\u9fff")
+            cjk_ratio = cjk_count / len(quote_clean) if quote_clean else 0
+            min_length = (
+                self.MIN_QUOTE_LENGTH_CJK
+                if cjk_ratio > 0.5
+                else self.MIN_QUOTE_LENGTH_DEFAULT
+            )
+            if len(quote_clean) < min_length:
                 verified_evidence.append({**evidence, "verified": False})
                 invalid_quotes.append(
                     {
                         "quote": quote[:50] + "..." if len(quote) > 50 else quote,
-                        "reason": f"Quote too short (< {self.MIN_QUOTE_LENGTH} chars)",
+                        "reason": f"Quote too short (< {min_length} chars)",
                     }
                 )
                 logger.debug(
-                    f"Quote too short ({len(quote_clean)} chars): "
+                    f"Quote too short ({len(quote_clean)} chars, "
+                    f"min={min_length}, CJK ratio={cjk_ratio:.0%}): "
                     f"'{quote[:30]}...' Question type: {question_type}"
                 )
                 continue
