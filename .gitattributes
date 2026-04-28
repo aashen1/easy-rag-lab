@@ -1,2 +1,8 @@
 # SCM syntax highlighting & preventing 3-way merges
 pixi.lock merge=binary linguist-language=YAML linguist-generated=true -diff
+
+# Exclude from git archive
+.trae/documents export-ignore
+.trae/specs export-ignore
+.issues export-ignore
+docs/.archive export-ignore
