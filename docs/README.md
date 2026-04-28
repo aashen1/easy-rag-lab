@@ -48,11 +48,13 @@
 
 ### 🏛️ 项目博物馆
 
-面向项目历史爱好者和面试官：
+> 本部分内容、未归档的trae文档以及issue系统均被列入 export-ignore，不会包含在正式发版中，需要通过`git clone`获取
+
+面向项目历史爱好者：
 
 1. [时间线导览](.archive/timeline.md) — 按版本浏览项目演进（推荐入口）
 2. [版本演进年轮](version-history.md) — 项目版本迭代历程
-3. [开发随笔](dev-story.md) — 开发者的人文叙事
+3. [开发随笔](dev-story.md) — 一些开发感想
 4. [抛接球年轮方法论](methodology.md) — AI 时代的版本演进管理方法论
 
 ---
