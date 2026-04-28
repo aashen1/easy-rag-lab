@@ -4,10 +4,7 @@ from src.test_generation.chunk_locator import (
     fuzzy_match_quote,
     locate_answer_chunks,
     locate_chunks_by_quote,
-    locate_multi_hop_chunks,
     locate_source_chunks,
-    map_segments_to_chunks,
-    texts_overlap,
     verify_quote_in_segment,
 )
 from src.test_generation.document_loader import (
@@ -129,9 +126,7 @@ __all__ = [
     "load_pages_json_documents",
     "locate_answer_chunks",
     "locate_chunks_by_quote",
-    "locate_multi_hop_chunks",
     "locate_source_chunks",
-    "map_segments_to_chunks",
     "parse_document_question_response",
     "parse_evidence_question_response",
     "parse_json_response",
@@ -144,7 +139,6 @@ __all__ = [
     "select_diverse_segments",
     "select_segments_for_question_type",
     "supplement_evidence_for_uncovered_numbers",
-    "texts_overlap",
     "truncate_answer",
     "validate_answer_consistency",
     "validate_answer_evidence_consistency",
