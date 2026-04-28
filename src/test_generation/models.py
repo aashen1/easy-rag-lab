@@ -1,0 +1,43 @@
+QUESTION_TYPES = {
+    "single_fact": "单知识点查询",
+    "multi_fact": "多知识点综合",
+    "reasoning": "推理型问题",
+    "comparative": "对比分析",
+    "missing": "缺失知识点",
+    "irrelevant": "无关问题",
+    "adversarial": "对抗性问题",
+}
+
+TYPE_DISTRIBUTION = {
+    "single_fact": 0.25,
+    "multi_fact": 0.20,
+    "reasoning": 0.15,
+    "comparative": 0.15,
+    "missing": 0.10,
+    "irrelevant": 0.05,
+    "adversarial": 0.10,
+}
+
+DOCUMENT_TRUNCATE_MAX = 8000
+
+GOLDEN_TYPE_DISTRIBUTION = {
+    "single_fact": 0.15,
+    "multi_fact": 0.18,
+    "reasoning": 0.15,
+    "comparative": 0.15,
+    "missing": 0.12,
+    "irrelevant": 0.05,
+    "adversarial": 0.20,
+}
+
+FAILURE_MODES = {
+    "single_fact": "基础检索失败：精确数据/事实无法被检索到",
+    "multi_fact": "多跳检索失败：需要整合多个信息点但系统只返回部分",
+    "reasoning": "推理能力不足：无法基于检索到的信息进行逻辑推断",
+    "comparative": "对比分析失败：无法跨段落/跨文档对比信息",
+    "missing": "拒答能力不足：文档中没有的信息未能正确识别，产生幻觉",
+    "irrelevant": "幻觉控制失败：无关问题产生了看似相关的编造内容",
+    "adversarial": "边界场景翻车：数字近似/跨文档混淆/时序陷阱等",
+}
+
+MIN_QUOTE_LENGTH = 30
