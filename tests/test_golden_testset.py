@@ -11,6 +11,7 @@ from src.test_generation.validators import (
     build_primary_pool,
     detect_content_overlaps,
     filter_adversarial_issues,
+    is_genuine_proper_noun,
     supplement_evidence_for_uncovered_numbers,
     truncate_answer,
     validate_answer_consistency,
@@ -453,6 +454,70 @@ class TestAuditTestset:
 
         report = audit_testset(golden_file)
         assert report["numerical_accuracy"]["issues_found"] >= 1
+
+
+class TestIsGenuineProperNoun:
+    def test_determiner_prefix_filtered(self):
+        assert not is_genuine_proper_noun("这些技术")
+        assert not is_genuine_proper_noun("那些市场")
+        assert not is_genuine_proper_noun("该产品")
+        assert not is_genuine_proper_noun("其业务")
+        assert not is_genuine_proper_noun("本公司")
+
+    def test_verb_prefix_filtered(self):
+        assert not is_genuine_proper_noun("导致全行业")
+        assert not is_genuine_proper_noun("推动市场")
+        assert not is_genuine_proper_noun("说明行业")
+        assert not is_genuine_proper_noun("仅靠技术")
+        assert not is_genuine_proper_noun("成为行业")
+        assert not is_genuine_proper_noun("面临市场")
+
+    def test_inferential_phrase_filtered(self):
+        assert not is_genuine_proper_noun("表明行业")
+        assert not is_genuine_proper_noun("意味着市场")
+        assert not is_genuine_proper_noun("标志着行业")
+        assert not is_genuine_proper_noun("反映出技术")
+
+    def test_conjunction_prefix_filtered(self):
+        assert not is_genuine_proper_noun("但洋河股份")
+        assert not is_genuine_proper_noun("而新发产品")
+        assert not is_genuine_proper_noun("且不断升级技术")
+
+    def test_time_suffix_filtered(self):
+        assert not is_genuine_proper_noun("年光伏行业")
+        assert not is_genuine_proper_noun("月银行理财市场")
+        assert not is_genuine_proper_noun("周传媒行业")
+
+    def test_quantifier_prefix_filtered(self):
+        assert not is_genuine_proper_noun("多项行业")
+        assert not is_genuine_proper_noun("各种技术")
+        assert not is_genuine_proper_noun("全部业务")
+
+    def test_structural_particle_filtered(self):
+        assert not is_genuine_proper_noun("的光伏行业")
+        assert not is_genuine_proper_noun("了新产品")
+        assert not is_genuine_proper_noun("着技术")
+
+    def test_contains_verb_filtered(self):
+        assert not is_genuine_proper_noun("即时零售成为酒饮行业")
+        assert not is_genuine_proper_noun("治理中采用多项行业")
+
+    def test_genuine_proper_nouns_pass(self):
+        assert is_genuine_proper_noun("洋河股份")
+        assert is_genuine_proper_noun("电子行业")
+        assert is_genuine_proper_noun("中国光伏行业")
+        assert is_genuine_proper_noun("银行理财市场")
+        assert is_genuine_proper_noun("封闭式理财产品")
+        assert is_genuine_proper_noun("量子计算行业")
+        assert is_genuine_proper_noun("通信行业")
+        assert is_genuine_proper_noun("华为技术")
+
+    def test_short_prefix_after_digit_strip_filtered(self):
+        assert not is_genuine_proper_noun("3月银行理财市场")
+
+    def test_negative_prefix_filtered(self):
+        assert not is_genuine_proper_noun("未提及技术")
+        assert not is_genuine_proper_noun("没有产品")
 
 
 class TestProperNounSuffixStripping:

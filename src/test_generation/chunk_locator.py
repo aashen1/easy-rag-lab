@@ -350,6 +350,9 @@ def extract_key_terms(answer: str) -> list[str]:
         PROPER_NOUN_PATTERN,
         answer,
     )
+    from src.test_generation.validators import is_genuine_proper_noun
+
+    proper_nouns = [n for n in proper_nouns if is_genuine_proper_noun(n)]
     terms.extend(proper_nouns)
 
     for kw in DOMAIN_KEYWORDS:

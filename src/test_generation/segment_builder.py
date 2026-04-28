@@ -5,6 +5,7 @@ from typing import Any
 from loguru import logger
 
 from src.test_generation.models import DOMAIN_KEYWORDS, PROPER_NOUN_PATTERN
+from src.test_generation.validators import is_genuine_proper_noun
 
 
 def segment_document(
@@ -429,6 +430,7 @@ def extract_segment_keywords(text: str) -> set[str]:
         PROPER_NOUN_PATTERN,
         text,
     )
+    proper_nouns = [n for n in proper_nouns if is_genuine_proper_noun(n)]
     keywords.update(proper_nouns)
 
     for kw in DOMAIN_KEYWORDS:

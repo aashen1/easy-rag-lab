@@ -1264,7 +1264,7 @@ class TestGenerateDocumentBasedQuestionsSupplemental:
                     "answer_sources": [],
                     "evidence": [
                         {
-                            "quote": "文档内容营收增长数据分析",
+                            "quote": f"文档内容营收增长数据分析{a_text}",
                             "segment_index": 0,
                             "match_type": "exact",
                         }

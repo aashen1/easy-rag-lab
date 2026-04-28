@@ -765,7 +765,7 @@ class TestSetGenerator:
         logger.info(f"Golden type distribution: {type_counts}")
 
         doc_question_plans = self._distribute_questions_across_docs(
-            type_counts, list(filtered_contents.keys())
+            type_counts, list(filtered_contents.keys()), seed=seed
         )
 
         llm_config = get_llm_config(self.config, llm_preset)
@@ -1091,7 +1091,20 @@ class TestSetGenerator:
                 max_retries=self.max_retries,
             )
 
-        compact_types = {"single_fact", "missing", "adversarial"}
+        if question_type == "missing":
+            selected_segments = self._select_segments_for_question_type(
+                segments, question_type
+            )
+            if selected_segments:
+                selected_segments = self._compact_segments(
+                    selected_segments, self.compact_segment_max_chars
+                )
+            return self._generate_missing_question(
+                selected_segments=selected_segments,
+                generator=generator,
+            )
+
+        compact_types = {"single_fact", "adversarial"}
         if question_type in compact_types and selected_segments:
             selected_segments = compact_segments(
                 selected_segments, self.compact_segment_max_chars
@@ -1382,6 +1395,17 @@ class TestSetGenerator:
                 qa.setdefault("metadata", {})
                 qa["metadata"]["answer_evidence_issues"] = issues
 
+                numerical_issues = [i for i in issues if i.startswith("数值")]
+                should_reject = len(issues) > 3 or len(numerical_issues) > 1
+                if should_reject:
+                    logger.info(
+                        f"Rejecting question {qa['id']} due to "
+                        f"evidence inconsistency: "
+                        f"{len(numerical_issues)} numerical issues, "
+                        f"{len(issues)} total issues"
+                    )
+                    return False
+
         if golden_metadata is not None:
             qa.setdefault("metadata", {})
             qa["metadata"]["author"] = "llm_assisted"
@@ -1449,24 +1473,31 @@ class TestSetGenerator:
         self,
         type_counts: dict[str, int],
         doc_names: list[str],
+        seed: int | None = None,
     ) -> dict[str, list[str]]:
         """Distribute question types across documents using round-robin.
 
         Args:
             type_counts: Dictionary mapping question type names to counts.
             doc_names: List of document names to distribute across.
+            seed: Random seed for shuffling doc_names. If None, no shuffle.
 
         Returns:
             Dictionary mapping document names to their assigned question types.
         """
+        shuffled_names = list(doc_names)
+        if seed is not None:
+            rng = random.Random(seed)
+            rng.shuffle(shuffled_names)
+
         question_plan = []
         for q_type, count in type_counts.items():
             question_plan.extend([q_type] * count)
 
-        num_docs = len(doc_names)
-        doc_question_plans: dict[str, list[str]] = {name: [] for name in doc_names}
+        num_docs = len(shuffled_names)
+        doc_question_plans: dict[str, list[str]] = {name: [] for name in shuffled_names}
         for i, q_type in enumerate(question_plan):
-            doc_name = doc_names[i % num_docs]
+            doc_name = shuffled_names[i % num_docs]
             doc_question_plans[doc_name].append(q_type)
 
         return doc_question_plans

@@ -12,6 +12,248 @@ from src.test_generation.models import (
     PROPER_NOUN_SUFFIXES,
 )
 
+_PROPER_NOUN_PREFIX_START_CHARS = frozenset(
+    "这那此其该本某而但且或并及没不未非无从到由为于以对向给比在被把将使是有年月周天"
+)
+
+_PROPER_NOUN_PREFIX_START_WORDS = frozenset(
+    [
+        "导致",
+        "推动",
+        "说明",
+        "表明",
+        "代表",
+        "仅靠",
+        "构成",
+        "意味",
+        "采用",
+        "面临",
+        "成为",
+        "反映",
+        "加剧",
+        "引发",
+        "退出",
+        "超越",
+        "支持",
+        "倾向",
+        "升级",
+        "检测",
+        "补充",
+        "提供",
+        "确保",
+        "加速",
+        "倒逼",
+        "促使",
+        "混淆",
+        "跑赢",
+        "标志",
+        "使得",
+        "属于",
+        "基于",
+        "源于",
+        "一是",
+        "二是",
+        "三是",
+        "首先",
+        "其次",
+        "再次",
+        "最后",
+        "多项",
+        "多种",
+        "多个",
+        "各类",
+        "各种",
+        "全部",
+        "所有",
+        "采纳",
+        "采取",
+        "运用",
+        "使用",
+        "利用",
+        "依靠",
+        "依赖",
+        "借助",
+        "通过",
+        "经历",
+        "承受",
+        "遭受",
+        "应对",
+        "解决",
+        "克服",
+        "突破",
+        "超过",
+        "追赶",
+        "缩小",
+        "扩大",
+        "提升",
+        "提高",
+        "增强",
+        "削弱",
+        "降低",
+        "减少",
+        "增加",
+        "改善",
+        "恶化",
+        "稳定",
+        "波动",
+        "延续",
+        "延续着",
+    ]
+)
+
+_PROPER_NOUN_PREFIX_CONTAINS_CHARS = frozenset("的了着过")
+
+_PROPER_NOUN_PREFIX_CONTAINS_WORDS = frozenset(
+    [
+        "导致",
+        "推动",
+        "说明",
+        "表明",
+        "代表",
+        "仅靠",
+        "构成",
+        "意味",
+        "采用",
+        "面临",
+        "成为",
+        "反映",
+        "加剧",
+        "引发",
+        "退出",
+        "超越",
+        "支持",
+        "倾向",
+        "升级",
+        "检测",
+        "补充",
+        "提供",
+        "确保",
+        "加速",
+        "倒逼",
+        "促使",
+        "混淆",
+        "跑赢",
+        "标志",
+        "使得",
+        "属于",
+        "基于",
+        "源于",
+        "但是",
+        "然而",
+        "不过",
+        "虽然",
+        "尽管",
+        "因为",
+        "所以",
+        "因此",
+        "因而",
+        "从而",
+        "进而",
+        "反而",
+        "相反",
+        "同样",
+        "同时",
+        "此外",
+        "另外",
+        "而且",
+        "并且",
+        "采纳",
+        "采取",
+        "运用",
+        "使用",
+        "利用",
+        "依靠",
+        "依赖",
+        "借助",
+        "通过",
+        "经历",
+        "承受",
+        "遭受",
+        "应对",
+        "解决",
+        "克服",
+        "突破",
+        "超过",
+        "追赶",
+        "缩小",
+        "扩大",
+        "提升",
+        "提高",
+        "增强",
+        "削弱",
+        "降低",
+        "减少",
+        "增加",
+        "改善",
+        "恶化",
+        "稳定",
+        "波动",
+        "延续",
+        "并未",
+        "不是",
+        "没有",
+        "标志着",
+        "意味着",
+    ]
+)
+
+_PROPER_NOUN_PREFIX_END_CHARS = frozenset("月年周天")
+
+
+def is_genuine_proper_noun(noun: str) -> bool:
+    """Check whether a regex-matched noun is a genuine proper noun.
+
+    Filters out false positives that are actually LLM inferential
+    transitional phrases, such as "这些技术" or "导致全行业".
+
+    The check applies four layers of filtering to the prefix (the
+    part of the noun before the suffix):
+
+    1. Prefix start char: determiners, conjunctions, negatives,
+       prepositions, copulas → not a proper noun.
+    2. Prefix start word: common verbs, ordinals, quantifier
+       phrases → not a proper noun.
+    3. Prefix contains: structural particles, common verbs,
+       connective words → not a proper noun.
+    4. Prefix end char: time words (月/年/周/天) → not a proper
+       noun.
+
+    Args:
+        noun: A string matched by the proper-noun regex, e.g.
+            "洋河股份" or "这些技术".
+
+    Returns:
+        True if the noun is likely a genuine proper noun, False if
+        it is a false positive (inferential/transitional phrase).
+    """
+    prefix = noun
+    for suffix in PROPER_NOUN_SUFFIXES:
+        if noun.endswith(suffix):
+            prefix = noun[: -len(suffix)]
+            break
+
+    prefix_clean = re.sub(r"^\d+", "", prefix)
+
+    if not prefix_clean or len(prefix_clean) < 2:
+        return False
+
+    if prefix_clean[0] in _PROPER_NOUN_PREFIX_START_CHARS:
+        return False
+
+    for word in _PROPER_NOUN_PREFIX_START_WORDS:
+        if prefix_clean.startswith(word):
+            return False
+
+    for ch in _PROPER_NOUN_PREFIX_CONTAINS_CHARS:
+        if ch in prefix_clean:
+            return False
+
+    for word in _PROPER_NOUN_PREFIX_CONTAINS_WORDS:
+        if word in prefix_clean:
+            return False
+
+    return prefix_clean[-1] not in _PROPER_NOUN_PREFIX_END_CHARS
+
 
 def validate_numerical_accuracy(
     question_data: dict[str, Any],
@@ -236,8 +478,13 @@ def validate_answer_evidence_consistency(
     answer_numbers = extract_numbers_with_units(answer)
     evidence_numbers = extract_numbers_with_units(evidence_text)
 
+    time_expr_pattern = re.compile(r"\d+[\d,]*\.?\d*\s*(?:月|年|季度|季度末|周|日|天)")
+
     for ans_val, ans_unit, ans_orig in answer_numbers:
         if ans_val < 10:
+            continue
+
+        if time_expr_pattern.search(ans_orig):
             continue
 
         ans_base = convert_to_base_unit(ans_val, ans_unit)
@@ -277,14 +524,22 @@ def validate_answer_evidence_consistency(
         PROPER_NOUN_PATTERN,
         answer,
     )
+    proper_nouns = [n for n in proper_nouns if is_genuine_proper_noun(n)]
     for noun in proper_nouns:
         if noun in evidence_text:
+            continue
+        stripped = re.sub(r"^\d+", "", noun)
+        if stripped and stripped in evidence_text:
             continue
         core_found = False
         for suffix in PROPER_NOUN_SUFFIXES:
             if noun.endswith(suffix):
                 core = noun[: -len(suffix)]
                 if len(core) >= 2 and core in evidence_text:
+                    core_found = True
+                    break
+                stripped_core = re.sub(r"^\d+", "", core)
+                if len(stripped_core) >= 2 and stripped_core in evidence_text:
                     core_found = True
                     break
         if not core_found:
