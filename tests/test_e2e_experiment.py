@@ -894,7 +894,7 @@ class TestBackwardCompatibility:
 
     @pytest.mark.unit
     def test_experiment_result_backward_compatibility(self):
-        from eval.experiment_reporter import ExperimentResult
+        from eval.experiment_reporter import ReportExperimentResult
 
         legacy_data = {
             "timestamp": "2026-04-16T10:00:00",
@@ -918,7 +918,7 @@ class TestBackwardCompatibility:
             ],
         }
 
-        result = ExperimentResult.from_dict(legacy_data)
+        result = ReportExperimentResult.from_dict(legacy_data)
 
         assert result.timestamp == "2026-04-16T10:00:00"
         assert result.total_test_cases == 2

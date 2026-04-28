@@ -58,7 +58,7 @@ class VariantResult:
 
 
 @dataclass
-class ExperimentResult:
+class ReportExperimentResult:
     timestamp: str
     total_test_cases: int
     total_time_seconds: float
@@ -76,7 +76,7 @@ class ExperimentResult:
     variant_results: list[VariantResult] | None = None
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ExperimentResult":
+    def from_dict(cls, data: dict[str, Any]) -> "ReportExperimentResult":
         results = []
         for r in data.get("results", []):
             results.append(
@@ -351,7 +351,7 @@ class ExperimentReporter:
     def generate_markdown_report(
         self,
         exp_dir: Path,
-        result: ExperimentResult,
+        result: ReportExperimentResult,
         use_llm: bool = False,
         output_filename: str = "experiment_report.md",
     ) -> str:
@@ -1118,7 +1118,7 @@ class ExperimentReporter:
 
         return "\n".join(lines)
 
-    def _generate_template_report(self, result: ExperimentResult) -> str:
+    def _generate_template_report(self, result: ReportExperimentResult) -> str:
         sections = [
             self._generate_header(result),
             self._generate_overview_section(result),
@@ -1132,7 +1132,7 @@ class ExperimentReporter:
         ]
         return "\n\n".join(s for s in sections if s)
 
-    def _generate_llm_report(self, result: ExperimentResult) -> str:
+    def _generate_llm_report(self, result: ReportExperimentResult) -> str:
         try:
             prompt = self._build_llm_prompt(result)
             llm_response = self._call_llm(prompt)
@@ -1143,13 +1143,13 @@ class ExperimentReporter:
             )
             return self._generate_template_report(result)
 
-    def _generate_header(self, result: ExperimentResult) -> str:
+    def _generate_header(self, result: ReportExperimentResult) -> str:
         title = "# RAG Experiment Report"
         if result.meal_name:
             title += f" - {result.meal_name}"
         return title
 
-    def _generate_overview_section(self, result: ExperimentResult) -> str:
+    def _generate_overview_section(self, result: ReportExperimentResult) -> str:
         lines = [
             "## 1. Experiment Overview",
             "",
@@ -1162,7 +1162,7 @@ class ExperimentReporter:
             lines.append(f"- **Data ID**: `{result.meal_data_id[:12]}...`")
         return "\n".join(lines)
 
-    def _generate_data_section(self, result: ExperimentResult) -> str:
+    def _generate_data_section(self, result: ReportExperimentResult) -> str:
         lines = ["## 2. Data Source", ""]
 
         if result.pdf_files:
@@ -1189,7 +1189,7 @@ class ExperimentReporter:
 
         return "\n".join(lines)
 
-    def _generate_config_section(self, result: ExperimentResult) -> str:
+    def _generate_config_section(self, result: ReportExperimentResult) -> str:
         lines = ["## 3. Technical Configuration", ""]
 
         if result.config_snapshot:
@@ -1216,7 +1216,7 @@ class ExperimentReporter:
 
         return "\n".join(lines)
 
-    def _generate_test_set_section(self, result: ExperimentResult) -> str:
+    def _generate_test_set_section(self, result: ReportExperimentResult) -> str:
         lines = ["## 4. Test Set Information", ""]
 
         categories = {}
@@ -1293,7 +1293,7 @@ class ExperimentReporter:
                     return f"{backend}: Generation quality metric"
         return descriptions.get(metric, "Generation quality metric")
 
-    def _generate_results_section(self, result: ExperimentResult) -> str:
+    def _generate_results_section(self, result: ReportExperimentResult) -> str:
         lines = ["## 5. Evaluation Results", ""]
 
         lines.append("### Overall Retrieval Metrics")
@@ -1368,7 +1368,7 @@ class ExperimentReporter:
 
         return "\n".join(lines)
 
-    def _generate_comparison_table(self, result: ExperimentResult) -> str:
+    def _generate_comparison_table(self, result: ReportExperimentResult) -> str:
         lines = ["## 6. Detailed Results Comparison", ""]
 
         has_generation = any(r.generation for r in result.results)
@@ -1431,7 +1431,7 @@ class ExperimentReporter:
         lines.append("")
         return "\n".join(lines)
 
-    def _generate_conclusion_section(self, result: ExperimentResult) -> str:
+    def _generate_conclusion_section(self, result: ReportExperimentResult) -> str:
         lines = ["## 7. Conclusions and Recommendations", ""]
 
         avg_hr = result.retrieval_metrics.get("avg_hit_rate", 0)
@@ -1595,7 +1595,7 @@ class ExperimentReporter:
 
         return "\n".join(lines)
 
-    def _generate_assets_section(self, result: ExperimentResult) -> str:
+    def _generate_assets_section(self, result: ReportExperimentResult) -> str:
         lines = ["## 8. Experiment Assets", ""]
         lines.append("The following artifacts are available for this experiment:")
         lines.append("")
@@ -1609,7 +1609,7 @@ class ExperimentReporter:
 
         return "\n".join(lines)
 
-    def _build_llm_prompt(self, result: ExperimentResult) -> str:
+    def _build_llm_prompt(self, result: ReportExperimentResult) -> str:
         data_section = self._generate_data_section(result)
         config_section = self._generate_config_section(result)
         results_section = self._generate_results_section(result)
@@ -1681,7 +1681,9 @@ class ExperimentReporter:
         except Exception as e:
             raise EvaluationError(f"Failed to initialize LLM client: {str(e)}") from e
 
-    def _format_llm_report(self, result: ExperimentResult, llm_response: str) -> str:
+    def _format_llm_report(
+        self, result: ReportExperimentResult, llm_response: str
+    ) -> str:
         header = self._generate_header(result)
         meta_info = [
             f"> Generated with LLM assistance at {datetime.now().isoformat()}",
