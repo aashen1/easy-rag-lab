@@ -6,13 +6,23 @@ from src.exceptions import GenerationError
 from src.generator import Generator, clean_source_name
 from src.token_tracker import TokenTracker
 
+_TEST_BASE_URL = "https://api.test.example.com"
+_TEST_MODEL_NAME = "test-model"
+
+
+def _make_generator(**kwargs):
+    kwargs.setdefault("api_key", "test-key")
+    kwargs.setdefault("base_url", _TEST_BASE_URL)
+    kwargs.setdefault("model_name", _TEST_MODEL_NAME)
+    return Generator(**kwargs)
+
 
 @pytest.mark.unit
 class TestGenerator:
     @patch("src.llm_client.Anthropic")
     def test_generate_success(self, mock_anthropic_cls, mock_anthropic_client):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key")
+        generator = _make_generator()
         answer = generator.generate(
             query="What is the revenue?",
             contexts=["Revenue was 100 billion."],
@@ -23,14 +33,14 @@ class TestGenerator:
     @patch("src.llm_client.Anthropic")
     def test_generate_empty_query(self, mock_anthropic_cls, mock_anthropic_client):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key")
+        generator = _make_generator()
         with pytest.raises(GenerationError, match="Query must be a non-empty string"):
             generator.generate(query="", contexts=["some context"])
 
     @patch("src.llm_client.Anthropic")
     def test_generate_non_string_query(self, mock_anthropic_cls, mock_anthropic_client):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key")
+        generator = _make_generator()
         with pytest.raises(GenerationError, match="Query must be a non-empty string"):
             generator.generate(query=123, contexts=["some context"])
 
@@ -39,7 +49,7 @@ class TestGenerator:
         self, mock_anthropic_cls, mock_anthropic_client
     ):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key")
+        generator = _make_generator()
         with patch("src.generator.logger") as mock_logger:
             answer = generator.generate(query="What is the revenue?", contexts=[])
             mock_logger.warning.assert_any_call("No contexts provided for generation")
@@ -49,7 +59,7 @@ class TestGenerator:
     def test_generate_api_error(self, mock_anthropic_cls, mock_anthropic_client):
         mock_anthropic_client.messages.create.side_effect = Exception("API timeout")
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key")
+        generator = _make_generator()
         with pytest.raises(GenerationError, match="Failed to generate answer"):
             generator.generate(query="What is the revenue?", contexts=["some context"])
 
@@ -58,7 +68,7 @@ class TestGenerator:
         self, mock_anthropic_cls, mock_anthropic_client
     ):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key")
+        generator = _make_generator()
         custom_prompt = "You are a helpful assistant."
         generator.generate(
             query="What is the revenue?",
@@ -74,7 +84,7 @@ class TestGenerator:
     ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         constructor_prompt = "You are a financial analyst."
-        generator = Generator(api_key="test-key", system_prompt=constructor_prompt)
+        generator = _make_generator(system_prompt=constructor_prompt)
         generator.generate(
             query="What is the revenue?",
             contexts=["Revenue was 100 billion."],
@@ -87,7 +97,7 @@ class TestGenerator:
         self, mock_anthropic_cls, mock_anthropic_client
     ):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key", system_prompt=None)
+        generator = _make_generator(system_prompt=None)
         generator.generate(
             query="What is the revenue?",
             contexts=["Revenue was 100 billion."],
@@ -100,7 +110,7 @@ class TestGenerator:
         self, mock_anthropic_cls, mock_anthropic_client
     ):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key")
+        generator = _make_generator()
         generator.generate(
             query="What is the revenue?",
             contexts=["Revenue was 100 billion."],
@@ -115,7 +125,7 @@ class TestGenerator:
         mock_anthropic_cls.return_value = mock_anthropic_client
         constructor_prompt = "You are a financial analyst."
         override_prompt = "You are a helpful assistant."
-        generator = Generator(api_key="test-key", system_prompt=constructor_prompt)
+        generator = _make_generator(system_prompt=constructor_prompt)
         generator.generate(
             query="What is the revenue?",
             contexts=["Revenue was 100 billion."],
@@ -130,7 +140,7 @@ class TestGenerator:
     ):
         mock_anthropic_cls.return_value = mock_anthropic_client
         tracker = TokenTracker()
-        generator = Generator(api_key="test-key", token_tracker=tracker)
+        generator = _make_generator(token_tracker=tracker)
         generator.generate(
             query="What is the revenue?",
             contexts=["Revenue was 100 billion."],
@@ -142,7 +152,7 @@ class TestGenerator:
         assert len(records) == 1
         record = records[0]
         assert record.category == "rag_qa"
-        assert record.model_name == "LongCat-Flash-Lite"
+        assert record.model_name == _TEST_MODEL_NAME
         assert record.usage.input_tokens == 100
         assert record.usage.output_tokens == 50
         assert record.metadata["question_id"] == "q1"
@@ -152,7 +162,7 @@ class TestGenerator:
         self, mock_anthropic_cls, mock_anthropic_client
     ):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key")
+        generator = _make_generator()
         generator.generate(
             query="What is the revenue?",
             contexts=["Revenue was 100 billion.", "Profit was 50 billion."],
@@ -171,7 +181,7 @@ class TestGenerator:
         self, mock_anthropic_cls, mock_anthropic_client
     ):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key")
+        generator = _make_generator()
         generator.generate(
             query="What is the revenue?",
             contexts=["Revenue was 100 billion.", "Profit was 50 billion."],
@@ -187,7 +197,7 @@ class TestGenerator:
         self, mock_anthropic_cls, mock_anthropic_client
     ):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key")
+        generator = _make_generator()
         generator.generate(
             query="What is the revenue?",
             contexts=["Revenue was 100 billion."],
@@ -203,7 +213,7 @@ class TestGenerator:
         self, mock_anthropic_cls, mock_anthropic_client
     ):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key")
+        generator = _make_generator()
         generator.generate(
             query="What is the revenue?",
             contexts=["Revenue was 100 billion.", "Profit was 50 billion."],
@@ -222,7 +232,7 @@ class TestTruncateContexts:
         self, mock_anthropic_cls, mock_anthropic_client
     ):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key", max_context_tokens=250, max_tokens=10)
+        generator = _make_generator(max_context_tokens=250, max_tokens=10)
         contexts = ["short", "word " * 200, "another " * 200]
         result = generator._truncate_contexts(contexts, "system", "query")
         assert len(result) < len(contexts)
@@ -233,7 +243,7 @@ class TestTruncateContexts:
         self, mock_anthropic_cls, mock_anthropic_client
     ):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key", max_context_tokens=None)
+        generator = _make_generator(max_context_tokens=None)
         contexts = ["a" * 10000, "b" * 10000, "c" * 10000]
         result = generator._truncate_contexts(contexts, "system", "query")
         assert result == contexts
@@ -243,9 +253,7 @@ class TestTruncateContexts:
         self, mock_anthropic_cls, mock_anthropic_client
     ):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(
-            api_key="test-key", max_context_tokens=100000, max_tokens=1024
-        )
+        generator = _make_generator(max_context_tokens=100000, max_tokens=1024)
         contexts = ["short context", "another short context"]
         result = generator._truncate_contexts(contexts, "system", "query")
         assert result == contexts
@@ -255,7 +263,7 @@ class TestTruncateContexts:
         self, mock_anthropic_cls, mock_anthropic_client
     ):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key", max_context_tokens=50, max_tokens=10)
+        generator = _make_generator(max_context_tokens=50, max_tokens=10)
         long_system = "x" * 500
         result = generator._truncate_contexts(["some context"], long_system, "query")
         assert result == []
@@ -265,7 +273,7 @@ class TestTruncateContexts:
         self, mock_anthropic_cls, mock_anthropic_client
     ):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key", max_context_tokens=250, max_tokens=10)
+        generator = _make_generator(max_context_tokens=250, max_tokens=10)
         with patch("src.generator.logger") as mock_logger:
             long_contexts = ["word " * 200, "another " * 200]
             generator._truncate_contexts(long_contexts, "system", "query")
@@ -277,9 +285,7 @@ class TestTruncateContexts:
         self, mock_anthropic_cls, mock_anthropic_client
     ):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(
-            api_key="test-key", max_context_tokens=200, max_tokens=1024
-        )
+        generator = _make_generator(max_context_tokens=200, max_tokens=1024)
         result = generator._truncate_contexts(["context"], "system", "query")
         assert result == []
 
@@ -288,7 +294,7 @@ class TestTruncateContexts:
         self, mock_anthropic_cls, mock_anthropic_client
     ):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key", max_context_tokens=100, max_tokens=10)
+        generator = _make_generator(max_context_tokens=100, max_tokens=10)
         with patch.object(
             generator, "_truncate_contexts", return_value=["truncated"]
         ) as mock_truncate:
@@ -351,7 +357,7 @@ class TestGeneratorBoundaryConditions:
         self, mock_anthropic_cls, mock_anthropic_client
     ):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key")
+        generator = _make_generator()
         with patch("src.generator.logger") as mock_logger:
             generator.generate(
                 query="What is the revenue?", contexts=[], allow_no_contexts=True
@@ -364,7 +370,7 @@ class TestGeneratorBoundaryConditions:
     @patch("src.llm_client.Anthropic")
     def test_none_contexts_raises(self, mock_anthropic_cls, mock_anthropic_client):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key")
+        generator = _make_generator()
         with pytest.raises(GenerationError, match="Failed to generate answer"):
             generator.generate(query="What is the revenue?", contexts=None)
 
@@ -373,7 +379,7 @@ class TestGeneratorBoundaryConditions:
         self, mock_anthropic_cls, mock_anthropic_client
     ):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key", max_context_tokens=20, max_tokens=10)
+        generator = _make_generator(max_context_tokens=20, max_tokens=10)
         result = generator._truncate_contexts(["some context"], "system", "query")
         assert result == []
 
@@ -382,7 +388,7 @@ class TestGeneratorBoundaryConditions:
         self, mock_anthropic_cls, mock_anthropic_client
     ):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key", max_context_tokens=250, max_tokens=10)
+        generator = _make_generator(max_context_tokens=250, max_tokens=10)
         long_context = ["word " * 500]
         result = generator._truncate_contexts(long_context, "system", "query")
         assert result == []
@@ -390,7 +396,7 @@ class TestGeneratorBoundaryConditions:
     @patch("src.llm_client.Anthropic")
     def test_all_contexts_exceed_limit(self, mock_anthropic_cls, mock_anthropic_client):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key", max_context_tokens=250, max_tokens=10)
+        generator = _make_generator(max_context_tokens=250, max_tokens=10)
         contexts = ["word " * 300, "another " * 300]
         result = generator._truncate_contexts(contexts, "system", "query")
         assert result == []
@@ -400,7 +406,7 @@ class TestGeneratorBoundaryConditions:
         self, mock_anthropic_cls, mock_anthropic_client
     ):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key")
+        generator = _make_generator()
         generator.generate(
             query="What is the revenue?",
             contexts=["Revenue was 100 billion."],
@@ -418,7 +424,7 @@ class TestGeneratorBoundaryConditions:
         self, mock_anthropic_cls, mock_anthropic_client
     ):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key")
+        generator = _make_generator()
         generator.generate(
             query="What is the revenue?",
             contexts=["Revenue was 100 billion.", "Profit was 50 billion."],
@@ -432,7 +438,7 @@ class TestGeneratorBoundaryConditions:
     @patch("src.llm_client.Anthropic")
     def test_no_token_tracker_no_error(self, mock_anthropic_cls, mock_anthropic_client):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key", token_tracker=None)
+        generator = _make_generator(token_tracker=None)
         answer = generator.generate(
             query="What is the revenue?", contexts=["Revenue was 100 billion."]
         )
@@ -442,7 +448,7 @@ class TestGeneratorBoundaryConditions:
     @patch("src.llm_client.Anthropic")
     def test_generate_returns_answer(self, mock_anthropic_cls, mock_anthropic_client):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key")
+        generator = _make_generator()
         answer = generator.generate(
             query="What is the revenue?",
             contexts=["Revenue was 100 billion."],
@@ -461,7 +467,7 @@ class TestGeneratorExceptionPaths:
             "Connection timed out"
         )
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key")
+        generator = _make_generator()
         with pytest.raises(GenerationError, match="Failed to generate answer"):
             generator.generate(query="What is the revenue?", contexts=["some context"])
 
@@ -473,7 +479,7 @@ class TestGeneratorExceptionPaths:
             "Authentication failed: invalid API key"
         )
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key")
+        generator = _make_generator()
         with pytest.raises(GenerationError, match="Failed to generate answer"):
             generator.generate(query="What is the revenue?", contexts=["some context"])
 
@@ -489,7 +495,7 @@ class TestGeneratorExceptionPaths:
         mock_message.usage.output_tokens = 0
         mock_anthropic_client.messages.create.return_value = mock_message
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key")
+        generator = _make_generator()
         answer = generator.generate(
             query="What is the revenue?", contexts=["some context"]
         )
@@ -500,7 +506,7 @@ class TestGeneratorExceptionPaths:
         self, mock_anthropic_cls, mock_anthropic_client
     ):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key")
+        generator = _make_generator()
         with pytest.raises(GenerationError, match="Query must be a non-empty string"):
             generator.generate(query=None, contexts=["some context"])
 
@@ -509,7 +515,7 @@ class TestGeneratorExceptionPaths:
         self, mock_anthropic_cls, mock_anthropic_client
     ):
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key")
+        generator = _make_generator()
         answer = generator.generate(query="   ", contexts=["some context"])
         assert answer == "This is a test answer from the LLM."
 
@@ -521,6 +527,6 @@ class TestGeneratorExceptionPaths:
             "Rate limit exceeded: 429 Too Many Requests"
         )
         mock_anthropic_cls.return_value = mock_anthropic_client
-        generator = Generator(api_key="test-key")
+        generator = _make_generator()
         with pytest.raises(GenerationError, match="Failed to generate answer"):
             generator.generate(query="What is the revenue?", contexts=["some context"])

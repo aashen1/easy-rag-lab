@@ -137,9 +137,9 @@ def calculate_context_precision(
         retrieval_context: List of retrieved context strings, ordered by relevance.
         api_key: API key for LLM.
         base_url: Base URL for LLM API.
-            Defaults to config value or "https://api.longcat.chat/anthropic".
+            Defaults to config value or LLM_BASE_URL env var.
         model_name: LLM model name.
-            Defaults to config value or "LongCat-Flash-Lite".
+            Defaults to config value or LLM_MODEL_ID env var.
         config: Optional config dict with 'llm_evaluator' section.
 
     Returns:
@@ -162,12 +162,8 @@ def calculate_context_precision(
         return 0.0
 
     eval_cfg = get_eval_config(config, DEFAULT_EVAL_CONFIG)
-    base_url = base_url or eval_cfg.get(
-        "base_url", DEFAULT_EVAL_BASE_CONFIG["base_url"]
-    )
-    model_name = model_name or eval_cfg.get(
-        "model_name", DEFAULT_EVAL_BASE_CONFIG["model_name"]
-    )
+    base_url = base_url or eval_cfg.get("base_url")
+    model_name = model_name or eval_cfg.get("model_name")
 
     relevance_verdicts = []
     for ctx in retrieval_context:
@@ -302,9 +298,9 @@ def calculate_context_recall(
         retrieval_context: List of retrieved context strings.
         api_key: API key for LLM.
         base_url: Base URL for LLM API.
-            Defaults to config value or "https://api.longcat.chat/anthropic".
+            Defaults to config value or LLM_BASE_URL env var.
         model_name: LLM model name.
-            Defaults to config value or "LongCat-Flash-Lite".
+            Defaults to config value or LLM_MODEL_ID env var.
         config: Optional config dict with 'llm_evaluator' section.
 
     Returns:
@@ -331,12 +327,8 @@ def calculate_context_recall(
         return 0.0
 
     eval_cfg = get_eval_config(config, DEFAULT_EVAL_CONFIG)
-    base_url = base_url or eval_cfg.get(
-        "base_url", DEFAULT_EVAL_BASE_CONFIG["base_url"]
-    )
-    model_name = model_name or eval_cfg.get(
-        "model_name", DEFAULT_EVAL_BASE_CONFIG["model_name"]
-    )
+    base_url = base_url or eval_cfg.get("base_url")
+    model_name = model_name or eval_cfg.get("model_name")
 
     sentences = split_into_sentences(ground_truth)
     if not sentences:

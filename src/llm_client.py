@@ -6,28 +6,35 @@ from src.exceptions import GenerationError
 
 def create_anthropic_client(
     api_key: str,
-    base_url: str = "https://api.longcat.chat/anthropic",
+    base_url: str = None,
 ) -> Anthropic:
     """Create an Anthropic client with the project's standard authentication pattern.
 
-    The LongCat API proxy expects the real API key in the Authorization: Bearer
+    The API proxy expects the real API key in the Authorization: Bearer
     header rather than the x-api-key header that the Anthropic SDK uses by
     default. This function encapsulates that pattern so it doesn't need to be
     repeated across the codebase.
 
     Args:
         api_key: API key for authentication (passed via Authorization header).
-        base_url: Base URL for the API endpoint.
+        base_url: Base URL for the API endpoint. Must be provided explicitly
+            or resolved from config/env before calling this function.
 
     Returns:
         Configured Anthropic client instance.
 
     Raises:
-        ValueError: If api_key is empty or None.
+        ValueError: If api_key is empty or None, or if base_url is not provided.
         Exception: If client creation fails.
     """
     if not api_key:
         raise GenerationError("API key is required for Anthropic client creation")
+
+    if not base_url:
+        raise GenerationError(
+            "base_url is required for Anthropic client creation; "
+            "set LLM_BASE_URL in .env"
+        )
 
     try:
         client = Anthropic(

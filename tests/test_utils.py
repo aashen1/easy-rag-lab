@@ -273,7 +273,7 @@ class TestCreateLlmClient:
     def _make_llm_config(self, **overrides):
         base = {
             "api_key": "test-api-key",
-            "base_url": "https://api.longcat.chat",
+            "base_url": "https://api.test.example.com",
             "model_name": "test-model",
         }
         base.update(overrides)
@@ -294,7 +294,7 @@ class TestCreateLlmClient:
 
         mock_anthropic_cls.assert_called_once_with(
             api_key="dummy",
-            base_url="https://api.longcat.chat/anthropic",
+            base_url="https://api.test.example.com/anthropic",
             default_headers={
                 "Authorization": "Bearer test-api-key",
                 "Content-Type": "application/json",
@@ -312,14 +312,14 @@ class TestCreateLlmClient:
         ):
             create_llm_client(
                 llm_config=self._make_llm_config(
-                    base_url="https://api.longcat.chat/anthropic"
+                    base_url="https://api.test.example.com/anthropic"
                 ),
                 mode="sdk",
             )
 
         mock_anthropic_cls.assert_called_once_with(
             api_key="dummy",
-            base_url="https://api.longcat.chat/anthropic",
+            base_url="https://api.test.example.com/anthropic",
             default_headers={
                 "Authorization": "Bearer test-api-key",
                 "Content-Type": "application/json",
@@ -335,13 +335,15 @@ class TestCreateLlmClient:
             "sys.modules", {"anthropic": MagicMock(Anthropic=mock_anthropic_cls)}
         ):
             create_llm_client(
-                llm_config=self._make_llm_config(base_url="https://api.longcat.chat/"),
+                llm_config=self._make_llm_config(
+                    base_url="https://api.test.example.com/"
+                ),
                 mode="sdk",
             )
 
         mock_anthropic_cls.assert_called_once_with(
             api_key="dummy",
-            base_url="https://api.longcat.chat/anthropic",
+            base_url="https://api.test.example.com/anthropic",
             default_headers={
                 "Authorization": "Bearer test-api-key",
                 "Content-Type": "application/json",
@@ -384,7 +386,7 @@ class TestCreateLlmClient:
         mock_chat_cls.assert_called_once_with(
             model="test-model",
             api_key="dummy",
-            base_url="https://api.longcat.chat/anthropic",
+            base_url="https://api.test.example.com/anthropic",
             default_headers={
                 "Authorization": "Bearer test-api-key",
                 "Content-Type": "application/json",
@@ -420,7 +422,7 @@ class TestCreateLlmClient:
         mock_chat_cls.assert_called_once_with(
             model="test-model",
             api_key="dummy",
-            base_url="https://api.longcat.chat/anthropic",
+            base_url="https://api.test.example.com/anthropic",
             default_headers={
                 "Authorization": "Bearer test-api-key",
                 "Content-Type": "application/json",

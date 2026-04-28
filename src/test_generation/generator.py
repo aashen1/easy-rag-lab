@@ -84,7 +84,7 @@ class TestSetGenerator:
         self.max_retries = tg_config.get("max_retries", 3)
         self.default_strategy = tg_config.get("default_strategy", "factual")
         self.default_num_questions = tg_config.get("default_num_questions", 20)
-        self.test_gen_model_name = tg_config.get("model_name", "LongCat-Flash-Lite")
+        self.test_gen_model_name = tg_config.get("model_name")
         self.test_gen_temperature = tg_config.get("temperature", 0.7)
         self.test_gen_max_tokens = tg_config.get("max_tokens", 1024)
         self.test_gen_initial_max_tokens = tg_config.get("initial_max_tokens", 512)

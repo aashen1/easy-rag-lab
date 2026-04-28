@@ -7,10 +7,9 @@ from eval.reporter.models import ReportExperimentResult
 from eval.reporter.template_single import TemplateSingleReporter
 from eval.reporter.template_variant import TemplateVariantReporter
 from src.exceptions import EvaluationError
+from src.utils import get_env_var
 
 DEFAULT_REPORT_CONFIG = {
-    "model_name": "LongCat-Flash-Lite",
-    "base_url": "https://api.longcat.chat/anthropic",
     "temperature": 0.3,
     "max_tokens": 4096,
 }
@@ -149,9 +148,10 @@ class LLMReporter:
             self._init_llm_client()
 
         report_cfg = DEFAULT_REPORT_CONFIG
+        resolved_model_name = self.llm_model_name or get_env_var("LLM_MODEL_ID")
         try:
             message = self._llm_client.messages.create(
-                model=self.llm_model_name or report_cfg["model_name"],
+                model=resolved_model_name,
                 max_tokens=report_cfg["max_tokens"],
                 temperature=report_cfg["temperature"],
                 messages=[{"role": "user", "content": prompt}],
@@ -170,7 +170,7 @@ class LLMReporter:
                 )
                 self.token_tracker.record(
                     category="report_generation",
-                    model_name=self.llm_model_name or report_cfg["model_name"],
+                    model_name=resolved_model_name,
                     usage=usage,
                 )
 
@@ -189,7 +189,7 @@ class LLMReporter:
             self._llm_client = create_llm_client(
                 llm_config={
                     "api_key": self.llm_api_key,
-                    "base_url": self.llm_base_url or DEFAULT_REPORT_CONFIG["base_url"],
+                    "base_url": self.llm_base_url or get_env_var("LLM_BASE_URL"),
                 },
                 mode="sdk",
             )

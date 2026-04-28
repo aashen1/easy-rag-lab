@@ -72,9 +72,9 @@ class Generator:
 
     def __init__(
         self,
-        model_name: str = "LongCat-Flash-Lite",
+        model_name: str = None,
         api_key: str = None,
-        base_url: str = "https://api.longcat.chat/anthropic",
+        base_url: str = None,
         temperature: float = 0.0,
         max_tokens: int = 1024,
         token_tracker: TokenTracker | None = None,

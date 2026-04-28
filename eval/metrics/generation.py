@@ -105,7 +105,7 @@ ANSWER_RELEVANCY_PROMPT = """你是一个专业的问答系统评估专家。请
 def extract_statements(
     client: Anthropic,
     answer: str,
-    model_name: str = "LongCat-Flash-Lite",
+    model_name: str = None,
     max_tokens: int = 1024,
     temperature: float = 0.0,
 ) -> list[str]:
@@ -183,7 +183,7 @@ def verify_statements(
     client: Anthropic,
     statements: list[str],
     contexts: list[str],
-    model_name: str = "LongCat-Flash-Lite",
+    model_name: str = None,
     max_tokens: int = 1024,
     temperature: float = 0.0,
 ) -> list[dict[str, Any]]:
@@ -265,9 +265,9 @@ def calculate_faithfulness(
         contexts: List of context strings retrieved for the query.
         api_key: API key for LLM authentication.
         base_url: Base URL for the LLM API endpoint.
-            Defaults to config value or "https://api.longcat.chat/anthropic".
+            Defaults to config value or LLM_BASE_URL env var.
         model_name: Name of the LLM model to use for evaluation.
-            Defaults to config value or "LongCat-Flash-Lite".
+            Defaults to config value or LLM_MODEL_ID env var.
         config: Optional config dict with 'llm_evaluator' section.
 
     Returns:
@@ -302,12 +302,8 @@ def calculate_faithfulness(
         return 0.0
 
     eval_cfg = get_eval_config(config, DEFAULT_EVAL_CONFIG)
-    base_url = base_url or eval_cfg.get(
-        "base_url", DEFAULT_EVAL_BASE_CONFIG["base_url"]
-    )
-    model_name = model_name or eval_cfg.get(
-        "model_name", DEFAULT_EVAL_BASE_CONFIG["model_name"]
-    )
+    base_url = base_url or eval_cfg.get("base_url")
+    model_name = model_name or eval_cfg.get("model_name")
 
     extract_cfg = eval_cfg.get(
         "extract_statements", DEFAULT_EVAL_CONFIG["extract_statements"]
@@ -416,9 +412,9 @@ def calculate_answer_relevancy(
         answer: The generated answer to evaluate.
         api_key: API key for LLM authentication.
         base_url: Base URL for the LLM API endpoint.
-            Defaults to config value or "https://api.longcat.chat/anthropic".
+            Defaults to config value or LLM_BASE_URL env var.
         model_name: Name of the LLM model to use.
-            Defaults to config value or "LongCat-Flash-Lite".
+            Defaults to config value or LLM_MODEL_ID env var.
         max_tokens: Maximum tokens in the LLM response.
             Defaults to config value or 512.
         temperature: Sampling temperature for LLM generation.
@@ -449,12 +445,8 @@ def calculate_answer_relevancy(
         raise EvaluationError("Answer must be a non-empty string")
 
     eval_cfg = get_eval_config(config, DEFAULT_EVAL_CONFIG)
-    base_url = base_url or eval_cfg.get(
-        "base_url", DEFAULT_EVAL_BASE_CONFIG["base_url"]
-    )
-    model_name = model_name or eval_cfg.get(
-        "model_name", DEFAULT_EVAL_BASE_CONFIG["model_name"]
-    )
+    base_url = base_url or eval_cfg.get("base_url")
+    model_name = model_name or eval_cfg.get("model_name")
     relevancy_cfg = eval_cfg.get(
         "answer_relevancy", DEFAULT_EVAL_CONFIG["answer_relevancy"]
     )

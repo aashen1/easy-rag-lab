@@ -136,7 +136,12 @@ def get_llm_config(config: dict[str, Any], preset_name: str = None) -> dict[str,
     if model_name_env:
         model_name = get_env_var(model_name_env)
     else:
-        model_name = get_env_var("LLM_MODEL_ID", "LongCat-Flash-Lite")
+        model_name = get_env_var("LLM_MODEL_ID")
+
+    if not model_name:
+        logger.warning(
+            "LLM_MODEL_ID not set and no model_name in preset; set LLM_MODEL_ID in .env"
+        )
 
     api_key_env = preset_config.get("api_key", "LLM_API_KEY")
     api_key = get_env_var(api_key_env)
@@ -146,7 +151,12 @@ def get_llm_config(config: dict[str, Any], preset_name: str = None) -> dict[str,
     base_url_env = preset_config.get("base_url", "LLM_BASE_URL")
     base_url = get_env_var(base_url_env)
     if not base_url:
-        base_url = get_env_var("LLM_BASE_URL", "https://api.longcat.chat/")
+        base_url = get_env_var("LLM_BASE_URL")
+
+    if not base_url:
+        logger.warning(
+            "LLM_BASE_URL not set and no base_url in preset; set LLM_BASE_URL in .env"
+        )
 
     return {
         "model_name": model_name,

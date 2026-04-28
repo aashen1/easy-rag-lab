@@ -343,13 +343,13 @@ class TestTokenTracker:
         tracker = TokenTracker()
         tracker.record(
             "rag_qa",
-            "LongCat-Flash-Lite",
+            "test-model",
             DetailedTokenUsage(input_tokens=10000, output_tokens=5000),
         )
 
         cost_config = {
             "models": {
-                "LongCat-Flash-Lite": {
+                "test-model": {
                     "input_price_per_1k": 0.001,
                     "output_price_per_1k": 0.002,
                     "conversion_factor": 1.0,
@@ -361,7 +361,7 @@ class TestTokenTracker:
         assert cost["input_cost"] == 0.01
         assert cost["output_cost"] == 0.01
         assert cost["total_cost"] == 0.02
-        assert cost["model"] == "LongCat-Flash-Lite"
+        assert cost["model"] == "test-model"
 
     def test_estimate_cost_empty_tracker(self):
         tracker = TokenTracker()
@@ -373,18 +373,18 @@ class TestTokenTracker:
         tracker = TokenTracker()
         tracker.record(
             "rag_qa",
-            "LongCat-Flash-Lite",
+            "test-model",
             DetailedTokenUsage(input_tokens=10000, output_tokens=5000),
         )
         tracker.record(
             "test_generation",
-            "LongCat-Flash-Lite",
+            "test-model",
             DetailedTokenUsage(input_tokens=5000, output_tokens=2000),
         )
 
         cost_config = {
             "models": {
-                "LongCat-Flash-Lite": {
+                "test-model": {
                     "input_price_per_1k": 0.001,
                     "output_price_per_1k": 0.002,
                 }

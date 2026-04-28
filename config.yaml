@@ -185,8 +185,8 @@ artifacts:
 
 # LLM 评测器配置（用于 metrics 计算）
 llm_evaluator:
-  model_name: "LongCat-Flash-Lite"
-  base_url: "https://api.longcat.chat/anthropic"
+  model_name: "LLM_MODEL_ID"
+  base_url: "LLM_BASE_URL"
   extract_statements:
     temperature: 0.0
     max_tokens: 1024
@@ -212,7 +212,7 @@ llm_evaluator:
     temperature: 0.0
     max_tokens: 64
   report_generation:
-    model_name: "LongCat-Flash-Lite"
+    model_name: "LLM_MODEL_ID"
     temperature: 0.3
     max_tokens: 4096
 
@@ -266,7 +266,7 @@ test_generation:
   default_strategy: "hybrid"
   default_num_questions: 20
   max_retries: 3
-  model_name: "LongCat-Flash-Lite"
+  model_name: "LLM_MODEL_ID"
   temperature: 0.7
   max_tokens: 1024
   supplement_max_tokens: 1024
@@ -296,7 +296,7 @@ test_generation:
       min_authenticity_score: 12
     max_retries: 3
 
-# Token 成本配置：各模型的定价和折算系数
+# Token 成本配置：各模型的定价和折算系数（非真实数据，由 AI 生成）
 token_cost:
   models:
     LongCat-Flash-Lite:
