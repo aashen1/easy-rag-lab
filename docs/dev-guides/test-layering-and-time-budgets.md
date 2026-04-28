@@ -231,4 +231,4 @@ post-merge 测试是**非阻塞**的——merge 已经完成了。它的作用�
 
 - [测试运行指南](testing.md) — 如何运行和管理项目测试
 - [Lint 与 pre-commit 入门](lint-and-precommit.md) — 钩子配置详解
-- [系统架构](../../architecture.md) — 项目整体架构
+- [系统架构](architecture.md) — 项目整体架构

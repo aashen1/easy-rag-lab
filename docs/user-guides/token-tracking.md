@@ -91,5 +91,5 @@ token_cost:
 
 ## 相关文档
 
-- [配置参考](../config-reference.md)
+- [配置参考](config-reference.md)
 - [实验系统](experiment-system.md)

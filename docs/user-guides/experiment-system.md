@@ -118,7 +118,7 @@ llm:
 | `variants[].config_overrides` | 配置覆盖 |
 | `evaluation.backends` | 评测后端列表，支持 `builtin`、`ragas` 或两者兼有 |
 | `evaluation.llm_preset` | LLM preset |
-| `evaluation.metrics_preset` | 指标预设（core/extended/full/custom），详见 [配置参考](../config-reference.md) |
+| `evaluation.metrics_preset` | 指标预设（core/extended/full/custom），详见 [配置参考](config-reference.md) |
 | `evaluation.resolution_strategy` | 解析策略（priority_fallback/comparison） |
 | `evaluation.backend_priority` | priority_fallback 模式的后端优先级 |
 
@@ -236,7 +236,7 @@ evaluation:
 | `full` | extended + fpr/diversity/answer_correctness/semantic_similarity | ~15+ 次 | 版本发布 |
 | `custom` | 用户自定义 | 取决于选择 | 精细化需求 |
 
-> 详细指标说明请参阅 [评测指标详解](evaluation-metrics.md)，预设和解析策略的完整说明请参阅 [配置参考](../config-reference.md)。
+> 详细指标说明请参阅 [评测指标详解](evaluation-metrics.md)，预设和解析策略的完整说明请参阅 [配置参考](config-reference.md)。
 
 **自定义指标**：如需精细控制，使用 `custom` 预设：
 
@@ -301,4 +301,4 @@ A: 使用 `--llm-report` 参数，系统会使用 LLM 生成深度分析报告�
 - [评测指标详解](evaluation-metrics.md)
 - [RAGAS 评测系统指南](ragas-evaluation.md)
 - [Meal 系统指南](meal-system.md)
-- [配置参考](../config-reference.md)
+- [配置参考](config-reference.md)

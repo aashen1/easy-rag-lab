@@ -327,8 +327,8 @@ test_sets:
 
 - [实验系统指南](experiment-system.md)
 - [评测指标详解](evaluation-metrics.md)
-- [配置参考](../config-reference.md)
-- [Golden Test Set 构建记录](../../reviews/sessions/golden-testset-150-session.md)
+- [配置参考](config-reference.md)
+- [Golden Test Set 构建记录](../.archive/v0.1.11-unification-era/testset-generation/golden-testset-150-session.md)
 
 ---
 

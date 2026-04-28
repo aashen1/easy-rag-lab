@@ -17,7 +17,7 @@
 | **生成质量指标** | Faithfulness, Answer Relevancy | 回答内容质量 | builtin, ragas | 是 |
 | **RAGAS 专属指标** | Answer Correctness, Semantic Similarity | 端到端质量 | ragas | 是/Embedding |
 
-> 关于指标预设（core/extended/full/custom）和解析策略（priority_fallback/comparison）的配置方法，请参阅 [配置参考](../config-reference.md) 的 Evaluation 章节。关于 RAGAS 后端的详细使用方法，请参阅 [RAGAS 评测系统指南](ragas-evaluation.md)。
+> 关于指标预设（core/extended/full/custom）和解析策略（priority_fallback/comparison）的配置方法，请参阅 [配置参考](config-reference.md) 的 Evaluation 章节。关于 RAGAS 后端的详细使用方法，请参阅 [RAGAS 评测系统指南](ragas-evaluation.md)。
 
 ---
 
@@ -596,6 +596,6 @@ evaluation:
 
 - [RAGAS 评测系统指南](ragas-evaluation.md)
 - [实验系统指南](experiment-system.md)
-- [配置参考](../config-reference.md)
-- [评测指标 Bug 修复报告](../troubleshooting/eval-metrics-bugfix.md)
-- [评测系统验收修复报告](../troubleshooting/eval-system-acceptance-fix.md)
+- [配置参考](config-reference.md)
+- [评测指标 Bug 修复报告](../.archive/v0.1.7-evaluation-era/evaluation-fixes/eval-metrics-bugfix.md)
+- [评测系统验收修复报告](../.archive/v0.1.7-evaluation-era/evaluation-fixes/eval-system-acceptance-fix.md)

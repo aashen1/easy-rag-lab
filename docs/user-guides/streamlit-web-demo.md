@@ -108,4 +108,4 @@ A: 在侧边栏的 Meal 下拉菜单中选择已有的 Meal 即可。Meal 列表
 
 - [Meal 数据管理系统](meal-system.md)
 - [实验评测系统](experiment-system.md)
-- [CLI 参考](../cli-reference.md)
+- [CLI 参考](cli-reference.md)

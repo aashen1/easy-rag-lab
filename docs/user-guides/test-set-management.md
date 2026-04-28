@@ -4,7 +4,6 @@
 
 > 完成日期：2026-04-20
 > 版本：v0.1.8
-> 相关 Spec: [.trae/specs/test-set-independent-management](../.trae/specs/test-set-independent-management/)
 
 ## 概述
 
@@ -272,8 +271,5 @@ pixi run python main.py --merge-test-sets A:TA B:TB --meal C --name TC
 
 ## 相关文档
 
-- [Spec 文档](../.trae/specs/test-set-independent-management/spec.md)
-- [Tasks 清单](../.trae/specs/test-set-independent-management/tasks.md)
-- [Checklist 验收](../.trae/specs/test-set-independent-management/checklist.md)
-- [Meal 系统指南](guides/meal-system.md)
-- [实验系统指南](guides/experiment-system.md)
+- [Meal 系统指南](meal-system.md)
+- [实验系统指南](experiment-system.md)

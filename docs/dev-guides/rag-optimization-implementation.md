@@ -329,7 +329,7 @@ query(question)
 
 ## 相关文档
 
-- [新增超参数使用指南](hyperparameter-guide.md) — 面向用户的参数配置指南
-- [配置参考](config-reference.md) — config.yaml 完整说明
-- [实验评测系统](experiment-system.md) — 实验运行方法
+- [新增超参数使用指南](../user-guides/hyperparameter-guide.md) — 面向用户的参数配置指南
+- [配置参考](../user-guides/config-reference.md) — config.yaml 完整说明
+- [实验评测系统](../user-guides/experiment-system.md) — 实验运行方法
 - [系统架构](architecture.md) — 整体架构说明

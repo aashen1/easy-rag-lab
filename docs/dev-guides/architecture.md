@@ -101,7 +101,7 @@ Meal 是数据集版本管理系统，核心概念：
 - **Data ID**：基于 PDF 文件 SHA256 计算的数据集唯一标识
 - **Collection**：Qdrant 向量集合，相同 Data ID + 配置共享 Collection
 
-详见 [Meal 系统指南](guides/meal-system.md)。
+详见 [Meal 系统指南](../user-guides/meal-system.md)。
 
 ---
 
@@ -114,7 +114,7 @@ Meal 是数据集版本管理系统，核心概念：
 - 实验复现
 - 报告生成
 
-详见 [实验系统指南](guides/experiment-system.md)。
+详见 [实验系统指南](../user-guides/experiment-system.md)。
 
 ---
 

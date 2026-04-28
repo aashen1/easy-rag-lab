@@ -232,7 +232,7 @@ llm:
 
 > 也可直接使用项目自带的模板：`exp_configs/ragas_evaluation/ragas_only.yaml`
 
-> **指标预设说明**：`metrics_preset: "full"` 包含 RAGAS 五大指标（faithfulness, answer_relevancy, context_precision, context_recall, answer_correctness）以及 semantic_similarity。如只需基础指标，可使用 `"core"` 预设。详见 [配置参考](../config-reference.md)。
+> **指标预设说明**：`metrics_preset: "full"` 包含 RAGAS 五大指标（faithfulness, answer_relevancy, context_precision, context_recall, answer_correctness）以及 semantic_similarity。如只需基础指标，可使用 `"core"` 预设。详见 [配置参考](config-reference.md)。
 
 ### 3.5 运行实验
 

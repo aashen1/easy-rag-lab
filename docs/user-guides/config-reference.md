@@ -131,7 +131,7 @@ parser:
 
 > ⚠️ `ignore_images` 参数在 Layout 模式下**不生效**，已从配置中移除。Layout 模式由模块自行分类处理图片，`write_images: false` 已足够控制不写出图片文件。
 >
-> 详细参数说明和最佳实践请参阅 [PDF 解析指南](guides/pdf-parsing.md)。
+> 详细参数说明和最佳实践请参阅 [PDF 解析指南](pdf-parsing.md)。
 
 ### fitz_pdfplumber 参数
 
@@ -197,7 +197,7 @@ chunker:
 | `semantic.breakpoint_percentile` | `null` | 取相似度分布的百分位作为阈值，设置后覆盖 similarity_threshold |
 | `semantic.min_chunk_size` | `100` | 低于此 token 数的 chunk 会与相邻 chunk 合并 |
 
-> 详细参数说明请参阅 [RAG 泛超参数使用指南](guides/hyperparameter-guide.md)。
+> 详细参数说明请参阅 [RAG 泛超参数使用指南](hyperparameter-guide.md)。
 
 ---
 
@@ -267,7 +267,7 @@ retrieval:
 | `query_rewrite.strategy` | `"hyde"` | 改写策略。`"hyde"` 假设性文档嵌入，`"multi_query"` 多查询改写 |
 | `query_rewrite.num_queries` | `3` | Multi-Query 策略生成的子查询数量 |
 
-> 详细参数说明和使用建议请参阅 [RAG 泛超参数使用指南](guides/hyperparameter-guide.md)。
+> 详细参数说明和使用建议请参阅 [RAG 泛超参数使用指南](hyperparameter-guide.md)。
 
 ---
 
@@ -409,7 +409,7 @@ evaluation:
 | `ragas.run_config.timeout` | `120` | 单次评测超时时间（秒） |
 | `ragas.run_config.max_retries` | `3` | 评测失败时的重试次数 |
 
-> 详细指标说明请参阅 [评测指标详解](guides/evaluation-metrics.md)，RAGAS 使用方法请参阅 [RAGAS 评测系统指南](guides/ragas-evaluation.md)。
+> 详细指标说明请参阅 [评测指标详解](evaluation-metrics.md)，RAGAS 使用方法请参阅 [RAGAS 评测系统指南](ragas-evaluation.md)。
 
 ---
 

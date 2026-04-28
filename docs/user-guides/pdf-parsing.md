@@ -772,7 +772,7 @@ Meal 系统会为两个配置生成不同的 hash，确保实验隔离。
 
 ## 相关文档
 
-- [配置文件参考手册](../config-reference.md) — 完整的 `parser` 配置项说明
-- [系统架构](../architecture.md) — 解析模块在整体架构中的位置
-- [基线链路深度勘察](../pipeline-deep-audit.md) — 解析环节的详细问题分析
+- [配置文件参考手册](config-reference.md) — 完整的 `parser` 配置项说明
+- [系统架构](../dev-guides/architecture.md) — 解析模块在整体架构中的位置
+- [基线链路深度勘察](../.archive/v0.1.9-dual-eval-era/evaluation-fixes/pipeline-deep-audit.md) — 解析环节的详细问题分析
 - [Meal 系统指南](meal-system.md) — ArtifactCache 与解析缓存机制

@@ -1,7 +1,7 @@
 # 本项目 Ruff 使用指南
 
 > 本文档是 w1-easy-rag 项目的 Ruff 实操手册，涵盖当前配置、日常交互方式、常见场景处理。
-> 概念入门请参阅 [Lint 与 pre-commit 入门指南](./lint-and-precommit.md)，经验沉淀请参阅 [Ruff 经验与最佳实践](../../reviews/investigations/ruff-experience-and-best-practices.md)。
+> 概念入门请参阅 [Lint 与 pre-commit 入门指南](./lint-and-precommit.md)，经验沉淀请参阅 [Ruff 经验与最佳实践](../.archive/v0.1.12-governance-era/project-governance/ruff-experience-and-best-practices.md)。
 
 ---
 
@@ -206,4 +206,4 @@ ruff-experience-and-best-practices.md  ← 经验沉淀（演进历史、新项�
 
 - 想了解概念 → 读 [lint-and-precommit.md](./lint-and-precommit.md)
 - 想知道本项目怎么用 Ruff → 读本文档
-- 想了解经验教训或开新项目 → 读 [ruff-experience-and-best-practices.md](../../reviews/investigations/ruff-experience-and-best-practices.md)
+- 想了解经验教训或开新项目 → 读 [ruff-experience-and-best-practices.md](../.archive/v0.1.12-governance-era/project-governance/ruff-experience-and-best-practices.md)

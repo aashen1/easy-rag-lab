@@ -515,6 +515,6 @@ variants:
 
 ## 相关文档
 
-- [RAG 优化实现详解](rag-optimization-implementation.md) — 面向开发者的技术文档
-- [配置参考](../config-reference.md) — config.yaml 完整说明
+- [RAG 优化实现详解](../dev-guides/rag-optimization-implementation.md) — 面向开发者的技术文档
+- [配置参考](config-reference.md) — config.yaml 完整说明
 - [实验评测系统](experiment-system.md) — 如何运行对比实验

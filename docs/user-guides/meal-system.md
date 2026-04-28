@@ -181,4 +181,4 @@ pixi run python main.py --generate-test-set <meal_name> [选项]
 ## 相关文档
 
 - [实验系统](experiment-system.md)
-- [CLI 参考](../cli-reference.md)
+- [CLI 参考](cli-reference.md)

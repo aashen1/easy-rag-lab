@@ -154,5 +154,5 @@ A: 使用 `pixi run pytest tests/test_file.py::TestClass::test_method -v`
 
 ## 相关文档
 
-- [系统架构](../architecture.md)
-- [CLI 参考](../cli-reference.md)
+- [系统架构](architecture.md)
+- [CLI 参考](../user-guides/cli-reference.md)
