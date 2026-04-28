@@ -11,19 +11,19 @@ from eval.metrics.dedup import (
 )
 from eval.metrics.fpr import calculate_false_positive_rate
 from eval.metrics.generation import (
-    _extract_statements,
-    _parse_relevancy_response,
-    _verify_statements,
     calculate_answer_relevancy,
     calculate_faithfulness,
     calculate_hallucination_rate,
+    extract_statements,
+    parse_relevancy_response,
+    verify_statements,
 )
 from eval.metrics.llm_retrieval import (
-    _can_infer_from_context,
-    _judge_context_relevance,
-    _split_into_sentences,
     calculate_context_precision,
     calculate_context_recall,
+    can_infer_from_context,
+    judge_context_relevance,
+    split_into_sentences,
 )
 from eval.metrics.retrieval import (
     calculate_hit_rate,
@@ -32,10 +32,10 @@ from eval.metrics.retrieval import (
     calculate_retrieval_diversity,
 )
 from eval.metrics.utils import (
-    _create_llm_client,
-    _parse_chunk_id,
+    create_llm_client,
     normalize_source,
     normalize_source_with_equivalence,
+    parse_chunk_id,
 )
 
 __all__ = [
@@ -58,4 +58,12 @@ __all__ = [
     "calculate_context_recall",
     "normalize_source",
     "normalize_source_with_equivalence",
+    "extract_statements",
+    "parse_relevancy_response",
+    "verify_statements",
+    "can_infer_from_context",
+    "judge_context_relevance",
+    "split_into_sentences",
+    "create_llm_client",
+    "parse_chunk_id",
 ]

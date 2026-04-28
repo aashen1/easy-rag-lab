@@ -265,8 +265,8 @@ class TestEndToEndExperiment:
         test_experiment_config,
     ):
         from eval.run_experiment import (
-            _build_comparison_data,
-            _generate_comparison_report,
+            build_comparison_data,
+            generate_comparison_report,
         )
         from src.experiment import ExperimentConfig, ExperimentManager
 
@@ -310,7 +310,7 @@ class TestEndToEndExperiment:
         result1 = manager.load_experiment_result(exp_dir1)
         result2 = manager.load_experiment_result(exp_dir2)
 
-        comparison_data = _build_comparison_data(
+        comparison_data = build_comparison_data(
             [
                 result1.to_dict(),
                 result2.to_dict(),
@@ -321,7 +321,7 @@ class TestEndToEndExperiment:
         assert comparison_data["summary"]["total_experiments"] == 2
         assert len(comparison_data["best_variants"]) == 2
 
-        report = _generate_comparison_report(comparison_data, [])
+        report = generate_comparison_report(comparison_data, [])
 
         assert "# Experiment Comparison Report" in report
         assert "test_e2e_experiment" in report
@@ -429,13 +429,13 @@ class TestExperimentComparisonExtended:
         test_system_config,
     ):
         from eval.run_experiment import (
-            _build_comparison_data,
-            _generate_comparison_report,
+            build_comparison_data,
+            generate_comparison_report,
         )
 
-        comparison_data = _build_comparison_data([])
+        comparison_data = build_comparison_data([])
 
-        report = _generate_comparison_report(
+        report = generate_comparison_report(
             comparison_data, ["exp_missing_1", "exp_missing_2"]
         )
 
@@ -449,7 +449,7 @@ class TestExperimentComparisonExtended:
         temp_project_dir,
         test_system_config,
     ):
-        from eval.run_experiment import _build_comparison_data
+        from eval.run_experiment import build_comparison_data
 
         results = [
             {
@@ -497,7 +497,7 @@ class TestExperimentComparisonExtended:
             },
         ]
 
-        comparison_data = _build_comparison_data(results)
+        comparison_data = build_comparison_data(results)
 
         assert len(comparison_data["experiments"]) == 2
         assert len(comparison_data["experiments"][0]["test_sets"]) == 2

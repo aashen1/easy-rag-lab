@@ -9,14 +9,14 @@ from eval.evaluators.base import BaseEvaluator, EvaluationSample
 from eval.evaluators.builtin_evaluator import BuiltinEvaluator
 from eval.evaluators.ragas_evaluator import RagasEvaluator
 from eval.metrics.metric_resolver import MetricResolver
-from eval.runner.metrics import _build_legacy_resolver, _merge_result, _namespace_result
+from eval.runner.metrics import build_legacy_resolver, merge_result, namespace_result
 from src.exceptions import ConfigurationError
 from src.experiment import ExperimentConfig
 from src.pipeline import RAGPipeline
 from src.utils import get_llm_config
 
 
-def _create_evaluators(
+def create_evaluators(
     exp_config: ExperimentConfig,
     system_config: dict[str, Any],
 ) -> dict[str, BaseEvaluator]:
@@ -47,7 +47,7 @@ def _create_evaluators(
     return evaluators
 
 
-def _collect_rag_samples(
+def collect_rag_samples(
     pipeline: RAGPipeline,
     test_set: dict[str, Any],
     equivalence_groups: dict[str, list[str]] | None = None,
@@ -147,7 +147,7 @@ def _collect_rag_samples(
     return samples
 
 
-def _evaluate_with_builtin(
+def evaluate_with_builtin(
     samples: list[dict[str, Any]],
     evaluator: BuiltinEvaluator,
     llm_config: dict[str, str] | None = None,
@@ -158,7 +158,7 @@ def _evaluate_with_builtin(
     Evaluate samples using the builtin evaluator.
 
     Args:
-        samples: List of sample dictionaries from _collect_rag_samples.
+        samples: List of sample dictionaries from collect_rag_samples.
         evaluator: BuiltinEvaluator instance.
         llm_config: Optional LLM configuration for generation metrics.
         retrieval_metrics: Optional list of retrieval metrics to compute.
@@ -267,7 +267,7 @@ def _evaluate_with_builtin(
     return results
 
 
-def _evaluate_with_ragas(
+def evaluate_with_ragas(
     samples: list[dict[str, Any]],
     evaluator: RagasEvaluator,
     llm_config: dict[str, str],
@@ -278,7 +278,7 @@ def _evaluate_with_ragas(
     Evaluate samples using the RAGAS evaluator.
 
     Args:
-        samples: List of sample dictionaries from _collect_rag_samples.
+        samples: List of sample dictionaries from collect_rag_samples.
         evaluator: RagasEvaluator instance.
         llm_config: LLM configuration for RAGAS.
         generation_metrics: Optional list of generation metrics to compute.
@@ -421,7 +421,7 @@ def evaluate_test_set(
             "Please use run_experiment.py with a valid experiment configuration."
         )
 
-    evaluators = _create_evaluators(exp_config, system_config)
+    evaluators = create_evaluators(exp_config, system_config)
     eval_config = exp_config.evaluation
 
     retrieval_metrics = eval_config.get("metrics", {}).get("retrieval")
@@ -444,7 +444,7 @@ def evaluate_test_set(
             custom_metrics=custom_metrics,
         )
     else:
-        resolver = _build_legacy_resolver(
+        resolver = build_legacy_resolver(
             evaluators, retrieval_metrics, generation_metrics
         )
 
@@ -457,7 +457,7 @@ def evaluate_test_set(
     allocation = resolver.resolve()
 
     equivalence_groups = meal_info.get("equivalence_groups") if meal_info else None
-    samples = _collect_rag_samples(
+    samples = collect_rag_samples(
         pipeline, test_set, equivalence_groups=equivalence_groups
     )
 
@@ -482,7 +482,7 @@ def evaluate_test_set(
         )
 
         if backend_name == "builtin":
-            results = _evaluate_with_builtin(
+            results = evaluate_with_builtin(
                 samples=samples,
                 evaluator=evaluator,
                 llm_config=llm_config if needs_llm else None,
@@ -490,7 +490,7 @@ def evaluate_test_set(
                 generation_metrics=gen_metrics or None,
             )
         elif backend_name == "ragas":
-            results = _evaluate_with_ragas(
+            results = evaluate_with_ragas(
                 samples=samples,
                 evaluator=evaluator,
                 llm_config=llm_config,
@@ -503,10 +503,10 @@ def evaluate_test_set(
 
         for r in results:
             if use_namespace:
-                r = _namespace_result(r, backend_name)
+                r = namespace_result(r, backend_name)
             qid = r["id"]
             if qid in all_results:
-                _merge_result(all_results[qid], r)
+                merge_result(all_results[qid], r)
             else:
                 all_results[qid] = r
 

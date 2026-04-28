@@ -109,7 +109,7 @@ def normalize_source_with_equivalence(
     return stem
 
 
-def _parse_chunk_id(chunk_id: str) -> tuple:
+def parse_chunk_id(chunk_id: str) -> tuple:
     """Parse chunk_id into (doc_stem, chunk_index).
 
     Supports two formats:
@@ -145,7 +145,7 @@ def _parse_chunk_id(chunk_id: str) -> tuple:
         return (chunk_id, -1)
 
 
-def _create_llm_client(
+def create_llm_client(
     api_key: str,
     base_url: str,
 ) -> Any:

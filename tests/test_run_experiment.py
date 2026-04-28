@@ -7,10 +7,10 @@ import pytest
 import yaml
 
 from eval.run_experiment import (
-    _collect_rag_samples,
-    _evaluate_with_builtin,
+    collect_rag_samples,
     compute_aggregate_metrics,
     evaluate_test_set,
+    evaluate_with_builtin,
     sanitize_config,
     verify_experiment_assets,
 )
@@ -243,17 +243,17 @@ class TestVerifyExperimentAssets:
 
 class TestBuildComparisonData:
     def test_build_comparison_data_empty(self):
-        from eval.run_experiment import _build_comparison_data
+        from eval.run_experiment import build_comparison_data
 
         results = []
-        data = _build_comparison_data(results)
+        data = build_comparison_data(results)
 
         assert data["experiments"] == []
         assert data["best_variants"] == []
         assert data["summary"]["total_experiments"] == 0
 
     def test_build_comparison_data_single_experiment(self):
-        from eval.run_experiment import _build_comparison_data
+        from eval.run_experiment import build_comparison_data
 
         results = [
             {
@@ -276,7 +276,7 @@ class TestBuildComparisonData:
             }
         ]
 
-        data = _build_comparison_data(results)
+        data = build_comparison_data(results)
 
         assert len(data["experiments"]) == 1
         assert data["experiments"][0]["name"] == "test_exp"
@@ -284,7 +284,7 @@ class TestBuildComparisonData:
         assert data["experiments"][0]["variants"][0]["metrics"]["hit_rate"] == 0.85
 
     def test_build_comparison_data_multiple_experiments(self):
-        from eval.run_experiment import _build_comparison_data
+        from eval.run_experiment import build_comparison_data
 
         results = [
             {
@@ -325,7 +325,7 @@ class TestBuildComparisonData:
             },
         ]
 
-        data = _build_comparison_data(results)
+        data = build_comparison_data(results)
 
         assert len(data["experiments"]) == 2
         assert len(data["best_variants"]) == 2
@@ -333,7 +333,7 @@ class TestBuildComparisonData:
         assert data["best_variants"][0]["metrics"]["hit_rate"] == 0.90
 
     def test_build_comparison_data_with_meal_info(self):
-        from eval.run_experiment import _build_comparison_data
+        from eval.run_experiment import build_comparison_data
 
         results = [
             {
@@ -355,13 +355,13 @@ class TestBuildComparisonData:
             }
         ]
 
-        data = _build_comparison_data(results)
+        data = build_comparison_data(results)
 
         assert data["experiments"][0]["meal_info"]["name"] == "meal_test"
         assert data["experiments"][0]["meal_info"]["pdf_count"] == 5
 
     def test_build_comparison_data_with_test_sets(self):
-        from eval.run_experiment import _build_comparison_data
+        from eval.run_experiment import build_comparison_data
 
         results = [
             {
@@ -378,7 +378,7 @@ class TestBuildComparisonData:
             }
         ]
 
-        data = _build_comparison_data(results)
+        data = build_comparison_data(results)
 
         assert len(data["experiments"][0]["test_sets"]) == 2
         assert data["experiments"][0]["test_sets"][0]["strategy"] == "factual"
@@ -386,15 +386,15 @@ class TestBuildComparisonData:
 
 class TestExtractCategoryMetrics:
     def test_extract_category_metrics_empty(self):
-        from eval.run_experiment import _extract_category_metrics
+        from eval.run_experiment import extract_category_metrics
 
         variant_result = {"results": []}
-        metrics = _extract_category_metrics(variant_result)
+        metrics = extract_category_metrics(variant_result)
 
         assert metrics == {}
 
     def test_extract_category_metrics_single_category(self):
-        from eval.run_experiment import _extract_category_metrics
+        from eval.run_experiment import extract_category_metrics
 
         variant_result = {
             "results": [
@@ -409,7 +409,7 @@ class TestExtractCategoryMetrics:
             ]
         }
 
-        metrics = _extract_category_metrics(variant_result)
+        metrics = extract_category_metrics(variant_result)
 
         assert "factual" in metrics
         assert metrics["factual"]["hit_rate"] == pytest.approx(0.85)
@@ -417,7 +417,7 @@ class TestExtractCategoryMetrics:
         assert metrics["factual"]["count"] == 2
 
     def test_extract_category_metrics_multiple_categories(self):
-        from eval.run_experiment import _extract_category_metrics
+        from eval.run_experiment import extract_category_metrics
 
         variant_result = {
             "results": [
@@ -432,7 +432,7 @@ class TestExtractCategoryMetrics:
             ]
         }
 
-        metrics = _extract_category_metrics(variant_result)
+        metrics = extract_category_metrics(variant_result)
 
         assert "factual" in metrics
         assert "boundary" in metrics
@@ -440,7 +440,7 @@ class TestExtractCategoryMetrics:
         assert metrics["boundary"]["hit_rate"] == 0.6
 
     def test_extract_category_metrics_missing_retrieval(self):
-        from eval.run_experiment import _extract_category_metrics
+        from eval.run_experiment import extract_category_metrics
 
         variant_result = {
             "results": [
@@ -452,14 +452,14 @@ class TestExtractCategoryMetrics:
             ]
         }
 
-        metrics = _extract_category_metrics(variant_result)
+        metrics = extract_category_metrics(variant_result)
 
         assert metrics["factual"]["count"] == 1
 
 
 class TestGenerateComparisonReport:
     def test_generate_comparison_report_basic(self):
-        from eval.run_experiment import _generate_comparison_report
+        from eval.run_experiment import generate_comparison_report
 
         comparison_data = {
             "experiments": [
@@ -489,7 +489,7 @@ class TestGenerateComparisonReport:
             "summary": {"total_experiments": 1, "total_variants": 1},
         }
 
-        report = _generate_comparison_report(comparison_data, [])
+        report = generate_comparison_report(comparison_data, [])
 
         assert "# Experiment Comparison Report" in report
         assert "test_exp" in report
@@ -497,7 +497,7 @@ class TestGenerateComparisonReport:
         assert "0.8500" in report
 
     def test_generate_comparison_report_with_not_found(self):
-        from eval.run_experiment import _generate_comparison_report
+        from eval.run_experiment import generate_comparison_report
 
         comparison_data = {
             "experiments": [],
@@ -505,13 +505,13 @@ class TestGenerateComparisonReport:
             "summary": {"total_experiments": 0, "total_variants": 0},
         }
 
-        report = _generate_comparison_report(comparison_data, ["exp_missing"])
+        report = generate_comparison_report(comparison_data, ["exp_missing"])
 
         assert "Warnings" in report
         assert "exp_missing" in report
 
     def test_generate_comparison_report_with_meal_info(self):
-        from eval.run_experiment import _generate_comparison_report
+        from eval.run_experiment import generate_comparison_report
 
         comparison_data = {
             "experiments": [
@@ -534,14 +534,14 @@ class TestGenerateComparisonReport:
             "summary": {"total_experiments": 1, "total_variants": 0},
         }
 
-        report = _generate_comparison_report(comparison_data, [])
+        report = generate_comparison_report(comparison_data, [])
 
         assert "Data Source" in report
         assert "meal_test" in report
         assert "5" in report
 
     def test_generate_comparison_report_with_category_metrics(self):
-        from eval.run_experiment import _generate_comparison_report
+        from eval.run_experiment import generate_comparison_report
 
         comparison_data = {
             "experiments": [
@@ -585,7 +585,7 @@ class TestGenerateComparisonReport:
             "summary": {"total_experiments": 1, "total_variants": 1},
         }
 
-        report = _generate_comparison_report(comparison_data, [])
+        report = generate_comparison_report(comparison_data, [])
 
         assert "By Category" in report
         assert "factual" in report
@@ -744,10 +744,10 @@ class TestMetricNamespacePrefix:
             },
         )
 
-    @patch("eval.runner.evaluation._evaluate_with_builtin")
-    @patch("eval.runner.evaluation._evaluate_with_ragas")
-    @patch("eval.runner.evaluation._collect_rag_samples")
-    @patch("eval.runner.evaluation._create_evaluators")
+    @patch("eval.runner.evaluation.evaluate_with_builtin")
+    @patch("eval.runner.evaluation.evaluate_with_ragas")
+    @patch("eval.runner.evaluation.collect_rag_samples")
+    @patch("eval.runner.evaluation.create_evaluators")
     @patch("eval.runner.evaluation.get_llm_config")
     def test_single_backend_no_prefix(
         self,
@@ -799,10 +799,10 @@ class TestMetricNamespacePrefix:
         assert "answer_relevancy" in results[0]["generation"]
         assert "builtin_faithfulness" not in results[0]["generation"]
 
-    @patch("eval.runner.evaluation._evaluate_with_builtin")
-    @patch("eval.runner.evaluation._evaluate_with_ragas")
-    @patch("eval.runner.evaluation._collect_rag_samples")
-    @patch("eval.runner.evaluation._create_evaluators")
+    @patch("eval.runner.evaluation.evaluate_with_builtin")
+    @patch("eval.runner.evaluation.evaluate_with_ragas")
+    @patch("eval.runner.evaluation.collect_rag_samples")
+    @patch("eval.runner.evaluation.create_evaluators")
     @patch("eval.runner.evaluation.get_llm_config")
     def test_dual_backends_have_prefix(
         self,
@@ -882,10 +882,10 @@ class TestMetricNamespacePrefix:
         assert gen["builtin_faithfulness"] == 0.9
         assert gen["ragas_faithfulness"] == 0.85
 
-    @patch("eval.runner.evaluation._evaluate_with_builtin")
-    @patch("eval.runner.evaluation._evaluate_with_ragas")
-    @patch("eval.runner.evaluation._collect_rag_samples")
-    @patch("eval.runner.evaluation._create_evaluators")
+    @patch("eval.runner.evaluation.evaluate_with_builtin")
+    @patch("eval.runner.evaluation.evaluate_with_ragas")
+    @patch("eval.runner.evaluation.collect_rag_samples")
+    @patch("eval.runner.evaluation.create_evaluators")
     @patch("eval.runner.evaluation.get_llm_config")
     def test_dual_backends_builtin_computes_all_supported(
         self,
@@ -1073,9 +1073,9 @@ class TestMetricNamespacePrefix:
         assert metrics["avg_context_precision"] == pytest.approx(0.75)
         assert metrics["avg_context_recall"] == pytest.approx(0.65)
 
-    @patch("eval.runner.evaluation._evaluate_with_builtin")
-    @patch("eval.runner.evaluation._collect_rag_samples")
-    @patch("eval.runner.evaluation._create_evaluators")
+    @patch("eval.runner.evaluation.evaluate_with_builtin")
+    @patch("eval.runner.evaluation.collect_rag_samples")
+    @patch("eval.runner.evaluation.create_evaluators")
     @patch("eval.runner.evaluation.get_llm_config")
     def test_single_ragas_backend_no_prefix(
         self,
@@ -1102,7 +1102,7 @@ class TestMetricNamespacePrefix:
             },
         ]
 
-        with patch("eval.runner.evaluation._evaluate_with_ragas") as mock_ragas:
+        with patch("eval.runner.evaluation.evaluate_with_ragas") as mock_ragas:
             mock_ragas.return_value = [
                 {
                     "id": "q1",
@@ -1179,10 +1179,10 @@ class TestDualBackendEvaluation:
 
 
 class TestEvaluateWithBuiltinContextsSourcesSeparation:
-    """Tests for P6-3 fix: contexts/sources separation in _evaluate_with_builtin."""
+    """Tests for P6-3 fix: contexts/sources separation in evaluate_with_builtin."""
 
-    def test_evaluate_with_builtin_passes_contexts_and_retrieved_sources(self):
-        """Test that _evaluate_with_builtin passes contexts and retrieved_sources separately."""
+    def testevaluate_with_builtin_passes_contexts_and_retrieved_sources(self):
+        """Test that evaluate_with_builtin passes contexts and retrieved_sources separately."""
         from eval.evaluators.builtin_evaluator import BuiltinEvaluator
 
         evaluator = BuiltinEvaluator()
@@ -1214,7 +1214,7 @@ class TestEvaluateWithBuiltinContextsSourcesSeparation:
                 error=None,
             ),
         ) as mock_eval:
-            _evaluate_with_builtin(
+            evaluate_with_builtin(
                 samples=samples,
                 evaluator=evaluator,
                 retrieval_metrics=["hit_rate", "mrr", "ndcg"],
@@ -1232,8 +1232,8 @@ class TestEvaluateWithBuiltinContextsSourcesSeparation:
             assert sample.retrieved_sources == ["doc1.pdf", "doc2.pdf"]
             assert sample.contexts != sample.retrieved_sources
 
-    def test_evaluate_with_builtin_passes_chunk_ids_and_question_type(self):
-        """Test that _evaluate_with_builtin passes chunk_ids and question_type."""
+    def testevaluate_with_builtin_passes_chunk_ids_and_question_type(self):
+        """Test that evaluate_with_builtin passes chunk_ids and question_type."""
         from eval.evaluators.builtin_evaluator import BuiltinEvaluator
 
         evaluator = BuiltinEvaluator()
@@ -1265,7 +1265,7 @@ class TestEvaluateWithBuiltinContextsSourcesSeparation:
                 error=None,
             ),
         ) as mock_eval:
-            _evaluate_with_builtin(
+            evaluate_with_builtin(
                 samples=samples,
                 evaluator=evaluator,
                 retrieval_metrics=["hit_rate"],
@@ -1278,8 +1278,8 @@ class TestEvaluateWithBuiltinContextsSourcesSeparation:
             assert sample.chunk_ids == ["doc1::chunk::001", "doc2::chunk::003"]
             assert sample.question_type == "single_fact"
 
-    def test_evaluate_with_builtin_handles_error_samples(self):
-        """Test that _evaluate_with_builtin handles error samples correctly."""
+    def testevaluate_with_builtin_handles_error_samples(self):
+        """Test that evaluate_with_builtin handles error samples correctly."""
         from eval.evaluators.builtin_evaluator import BuiltinEvaluator
 
         evaluator = BuiltinEvaluator()
@@ -1294,7 +1294,7 @@ class TestEvaluateWithBuiltinContextsSourcesSeparation:
             },
         ]
 
-        results = _evaluate_with_builtin(
+        results = evaluate_with_builtin(
             samples=samples,
             evaluator=evaluator,
             retrieval_metrics=["hit_rate"],
@@ -1647,7 +1647,7 @@ class TestRunExperimentExceptionPaths:
                 exp_config=self._make_exp_config(),
             )
 
-    @patch("eval.runner.evaluation._create_evaluators")
+    @patch("eval.runner.evaluation.create_evaluators")
     @patch("eval.runner.evaluation.get_llm_config")
     def test_evaluate_test_set_evaluator_creation_fails(
         self, mock_llm_config, mock_create
@@ -1664,7 +1664,7 @@ class TestRunExperimentExceptionPaths:
                 system_config={},
             )
 
-    @patch("eval.runner.evaluation._create_evaluators")
+    @patch("eval.runner.evaluation.create_evaluators")
     @patch("eval.runner.evaluation.get_llm_config")
     def test_evaluate_test_set_empty_questions(
         self, mock_llm_config, mock_create_evaluators
@@ -1686,7 +1686,7 @@ class TestRunExperimentExceptionPaths:
         assert results == []
 
     @pytest.mark.unit
-    def test_collect_rag_samples_skips_empty_question(self):
+    def testcollect_rag_samples_skips_empty_question(self):
         pipeline = MagicMock()
         test_set = {
             "name": "test_set_1",
@@ -1704,7 +1704,7 @@ class TestRunExperimentExceptionPaths:
             "token_usage": None,
         }
 
-        samples = _collect_rag_samples(pipeline, test_set, {})
+        samples = collect_rag_samples(pipeline, test_set, {})
 
         assert len(samples) == 1
         assert samples[0]["question_id"] == "q3"

@@ -6,7 +6,7 @@ from loguru import logger
 
 from eval.metrics.utils import (
     DEFAULT_EVAL_BASE_CONFIG,
-    _create_llm_client,
+    create_llm_client,
     get_eval_config,
 )
 
@@ -54,7 +54,7 @@ CONTEXT_RECALL_SENTENCE_PROMPT = """请判断以下陈述是否可以从给定�
 {{"verdict": "是"或"否"}}"""
 
 
-def _judge_context_relevance(
+def judge_context_relevance(
     question: str,
     expected_output: str,
     context: str,
@@ -78,7 +78,7 @@ def _judge_context_relevance(
     Raises:
         Exception: If LLM call fails.
     """
-    client = _create_llm_client(api_key=api_key, base_url=base_url)
+    client = create_llm_client(api_key=api_key, base_url=base_url)
 
     prompt = CONTEXT_PRECISION_PROMPT.format(
         question=question,
@@ -171,7 +171,7 @@ def calculate_context_precision(
 
     relevance_verdicts = []
     for ctx in retrieval_context:
-        verdict = _judge_context_relevance(
+        verdict = judge_context_relevance(
             question, expected_output, ctx, api_key, base_url, model_name
         )
         relevance_verdicts.append(verdict)
@@ -199,7 +199,7 @@ def calculate_context_precision(
     return score
 
 
-def _split_into_sentences(text: str) -> list[str]:
+def split_into_sentences(text: str) -> list[str]:
     """Split text into sentences, handling Markdown tables.
 
     For Markdown tables (detected by | and ---), splits by newlines
@@ -226,7 +226,7 @@ def _split_into_sentences(text: str) -> list[str]:
     return sentences
 
 
-def _can_infer_from_context(
+def can_infer_from_context(
     sentence: str,
     context: str,
     api_key: str,
@@ -248,7 +248,7 @@ def _can_infer_from_context(
     Raises:
         Exception: If LLM call fails.
     """
-    client = _create_llm_client(api_key=api_key, base_url=base_url)
+    client = create_llm_client(api_key=api_key, base_url=base_url)
 
     prompt = CONTEXT_RECALL_SENTENCE_PROMPT.format(
         context=context,
@@ -338,7 +338,7 @@ def calculate_context_recall(
         "model_name", DEFAULT_EVAL_BASE_CONFIG["model_name"]
     )
 
-    sentences = _split_into_sentences(ground_truth)
+    sentences = split_into_sentences(ground_truth)
     if not sentences:
         logger.warning("No sentences extracted from ground truth")
         return 0.0
@@ -348,7 +348,7 @@ def calculate_context_recall(
     sentence_verdicts = []
 
     for sentence in sentences:
-        can_infer = _can_infer_from_context(
+        can_infer = can_infer_from_context(
             sentence, context_text, api_key, base_url, model_name
         )
         if can_infer:

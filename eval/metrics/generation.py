@@ -7,7 +7,7 @@ from loguru import logger
 
 from eval.metrics.utils import (
     DEFAULT_EVAL_BASE_CONFIG,
-    _create_llm_client,
+    create_llm_client,
     get_eval_config,
 )
 from src.exceptions import EvaluationError
@@ -102,7 +102,7 @@ ANSWER_RELEVANCY_PROMPT = """你是一个专业的问答系统评估专家。请
 - 只返回JSON，不要有其他内容"""
 
 
-def _extract_statements(
+def extract_statements(
     client: Anthropic,
     answer: str,
     model_name: str = "LongCat-Flash-Lite",
@@ -179,7 +179,7 @@ def calculate_hallucination_rate(
     return hallucinated / len(valid_scores)
 
 
-def _verify_statements(
+def verify_statements(
     client: Anthropic,
     statements: list[str],
     contexts: list[str],
@@ -317,10 +317,10 @@ def calculate_faithfulness(
     )
 
     try:
-        client = _create_llm_client(api_key=api_key, base_url=base_url)
+        client = create_llm_client(api_key=api_key, base_url=base_url)
 
         logger.info("Extracting statements from answer")
-        statements = _extract_statements(
+        statements = extract_statements(
             client,
             answer,
             model_name,
@@ -335,7 +335,7 @@ def calculate_faithfulness(
         logger.info(
             f"Extracted {len(statements)} statements, verifying against contexts"
         )
-        verdicts = _verify_statements(
+        verdicts = verify_statements(
             client,
             statements,
             contexts,
@@ -368,7 +368,7 @@ def calculate_faithfulness(
         raise EvaluationError(error_msg) from e
 
 
-def _parse_relevancy_response(response_text: str) -> dict[str, Any]:
+def parse_relevancy_response(response_text: str) -> dict[str, Any]:
     """Parse LLM response for answer relevancy evaluation.
 
     Args:
@@ -468,7 +468,7 @@ def calculate_answer_relevancy(
     )
 
     try:
-        client = _create_llm_client(api_key=api_key, base_url=base_url)
+        client = create_llm_client(api_key=api_key, base_url=base_url)
 
         prompt = ANSWER_RELEVANCY_PROMPT.format(question=question, answer=answer)
 
@@ -489,7 +489,7 @@ def calculate_answer_relevancy(
         response_text = message.content[0].text
         logger.debug(f"LLM response: {response_text}")
 
-        result = _parse_relevancy_response(response_text)
+        result = parse_relevancy_response(response_text)
 
         overall_score = result.get("overall_score")
         if overall_score is None:
