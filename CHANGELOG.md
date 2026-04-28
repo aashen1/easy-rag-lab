@@ -9,6 +9,142 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes yet._
 
+## [0.1.13] - 2026-04-28
+
+RAG visualization — interactive web UI for RAG Q&A demo.
+
+### Added
+
+- Streamlit Web UI with interactive RAG Q&A demo and chat_input Enter-to-send UX
+- PDF preview via HTTP server + st.iframe with tab-based viewing and page jump
+- Mermaid architecture diagram with Diagram/Code toggle view
+- Meal file list display in web UI showing included documents
+- Company name tag display in meal file list when filename lacks it
+
+### Changed
+
+- Issue ID system: eliminated sequence files, now derives IDs from existing issue files
+- Optimized ID collision detection from full scan to on-demand check
+
+### Fixed
+
+- Question generation quality: largest remainder method for type distribution, dedicated prompt for irrelevant questions, LLM output type coverage validation
+- RAGAS evaluation: separate samples with/without reference, Markdown table handling in context_recall sentence splitting
+- Browser sandbox blocking for PDF preview via raw HTML iframe and singleton server
+- Async query execution with background thread + fragment polling
+
+## [0.1.12] - 2026-04-28
+
+Project governance — sustainable development infrastructure.
+
+### Added
+
+- Distributed Issue management system with CLI (create/list/show/start/done/context)
+- Issue worktree management commands
+- Custom exception hierarchy in src/exceptions.py (9 business exception classes)
+- project-memory skill for cross-session memory transfer
+- todo-archiver skill for TODO → backlog archiving
+- archive-conventions skill for consistent archiving
+- CONTRIBUTING.md
+- force_overwrite config for pipeline stage cache control
+- MetricResolver for multi-backend metric allocation
+- Adaptive segment compaction for token savings
+- Question deduplication in test set generation
+- Enhanced review tools: AI reviewer + PDF viewer + tiered review + progress bar
+
+### Changed
+
+- Migrated from backlog.md to .issues/ directory (47 active + 114 completed + 8 deferred issues)
+- License changed from MIT to AGPL-3.0 (due to PyMuPDF dependency)
+- Type annotations: Optional[X] → X | None (Python 3.10+)
+- TODO-backlog bidirectional sync mechanism
+
+### Fixed
+
+- Exception chaining (B904): added `from e` in 19 files
+- Issue ID collision detection and wt_id mapping
+
+## [0.1.11] - 2026-04-26
+
+Pipeline unification — consolidated test set generation logic.
+
+### Added
+
+- Adversarial question types (7 types, 0% default distribution)
+- Numeric precision validation with 10x conversion error auto-detection
+- Excerpt verification for ground_truth_excerpt authenticity
+- Document deduplication with content overlap detection
+- MealManager.find_full_dataset_meal() for full dataset meal lookup
+- Auto-generation of golden test set when missing in resolve_test_set
+- Golden 150-question test set with LLM-assisted + manual review
+- Evidence-aware prompt with quote-based tracking and verification
+- ground_truth_excerpt support for hybrid question generation
+
+### Changed
+
+- Unified test set generation: Golden logic merged into TestSetGenerator (script reduced from 1242 to 62 lines)
+- Golden script simplified to thin CLI shell for parameter parsing only
+- Artifact path migration: pipeline uses ArtifactCache for dynamic computation
+- Token statistics: get_summary_by_variant() distinguishes by variant
+
+### Fixed
+
+- Artifact path issues in pipeline.py using ArtifactCache (BUG-026)
+- Token statistics by variant (BUG-027)
+- Irrelevant metrics: context_precision/recall guards, RAGAS reference fallback, expected_answer conditional fallback (BUG-029/030/031)
+- LLM report generation skipped when all variants fail (FEAT-042)
+- Removed deprecated parser.output_dir / chunker.input_dir / chunker.output_dir from config.yaml
+
+## [0.1.10] - 2026-04-22
+
+Parser renaissance — multi-parser framework and page-aware chunking.
+
+### Added
+
+- Parser abstraction layer: BaseParser + ParseResult + ParsedPage + ParserRegistry
+- Three parsers: pymupdf4llm (page_chunks), fitz+pdfplumber (tables/headings/columns), pdfplumber (legacy)
+- Page-aware chunking with page markers, heading metadata, cross-page overlap, context length control
+- Artifact system: ArtifactCache + Pointer files + artifact CLI (list/pointer/info)
+- Pipeline profiling system with OCR comparison experiments
+- LazyDocumentLoader with mtime cache invalidation + LRU eviction
+- normalize_source with include_parent parameter for directory-aware matching
+
+### Changed
+
+- Path migration: data/parsed → artifacts, pipeline uses ArtifactCache
+- Unified tokenizer: BGETokenizerEncoder shared by chunker and embedder
+- Parser hash isolation: parser options included in config hash and snapshot
+
+### Fixed
+
+- Cache safety: fixed ArtifactCache and parser cache pollution risks
+
+## [0.1.9] - 2026-04-21
+
+Evaluation dual-engine — RAGAS integration and metric system enhancement.
+
+### Added
+
+- RAGAS integration with 5 metrics: answer_correctness, faithfulness, context_precision, context_recall, answer_relevancy
+- Evaluator abstraction layer with MetricResolver for multi-backend metric allocation
+- BuiltinEvaluator enhancements: chunk/dedup/FPR/Recall@k/hallucination_rate/diversity/anomaly detection
+- Dual-backend unified aggregation for context_precision / context_recall
+- create_llm_client factory for unified LLM client creation
+- Metric namespace prefixes for multi-backend evaluation
+- Score threshold filtering for retrieval
+- BGE query instruction prefix
+- Configurable system prompt for Generator
+- Source document names in Generator prompt
+
+### Changed
+
+- Extracted hardcoded LLM config values to config.yaml (RF-004)
+- Code quality: ruff linter/formatter + pre-commit hooks
+
+### Fixed
+
+- Baseline evaluation pipeline: expect_retrieval guard, reference fallback, source separation
+
 ## [0.1.8] - 2026-04-20
 
 Evaluation system reliability improvements and TestSetManager architecture.
