@@ -10,6 +10,44 @@
 
 ---
 
+## v0.1.14 (2026-04-29)
+
+### 版本主题
+
+代码健康治理
+
+### 叙事
+
+> 看得见的产品有了，看不见的骨架也得撑得住。
+
+v0.1.13 让 RAG 有了可展示的界面，但底层四个巨型文件已经成了"轻度屎山"的典型症状。这一版把上帝文件拆包为独立模块，补齐了 pipeline 策略模式和 Pydantic 配置校验，同时完成了文档目录的叙事化重组。
+
+### 关键决策
+
+- 将 4 个巨型文件（5000/3000/1800/1500 行）拆分为独立包，每个子模块职责单一
+- Pipeline.query() 应用策略模式，解耦查询改写和检索策略
+- ExperimentConfig 从手动 validate() 迁移到 Pydantic 模型校验
+- 文档目录从 docs/guides/ 拆分为 docs/user-guides/ 和 docs/dev-guides/
+
+### 交付成果
+
+- **test_generator.py 拆包**：~5000 行 → `src/test_generation/` 包（9 子模块：generator, llm_caller, document_loader, segment_builder, models, validators, supplement, prompts, chunk_locator）
+- **meal.py 拆包**：~1500 行 → `src/meal/` 包（6 子模块：manager, builders, cache, hashes, models, utils）
+- **run_experiment.py 拆包**：~3000 行 → `eval/runner/` 包（8 子模块：core, evaluation, metrics, preparation, comparison, reporting, reproduction, asset_verifier）
+- **experiment_reporter.py 拆包**：~1800 行 → `eval/reporter/` 包（5 子模块：models, formatters, llm_reporter, template_single, template_variant）
+- **Pipeline 策略模式**：query_rewrite_strategies.py + retrieval_strategies.py
+- **Pydantic 配置校验**：experiment_schemas.py 替代手动 validate()
+- **Golden testset 生成质量提升**：自适应 CJK 引文长度、对抗性过滤、证据自动补充、per-type max_tokens、missing-type 专用 prompt
+- **硬编码清除**：API URL 和模型名移入配置
+- **文档重组**：user-guides / dev-guides 分离 + 归档按版本叙事重构
+- **验收报告**：[acceptance-report.md](.archive/v0.1.14-code-health-era/release/v0.1.14/acceptance-report.md)
+
+### 版本验收
+
+- Git tag: `v0.1.14`
+
+---
+
 ## v0.1.13 (2026-04-28)
 
 ### 版本主题
@@ -352,7 +390,7 @@ MVP RAG 基础链路
 
 ## 版本规划
 
-### v0.1.14（计划中）
+### v0.1.15（计划中）
 
 - 透明版完整实验报告（FEAT-010）
 - "花头"效果验证与对比报告

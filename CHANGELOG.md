@@ -9,6 +9,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes yet._
 
+## [0.1.14] - 2026-04-29
+
+Code health governance — decompose god files into packages, add strategy pattern and Pydantic validation.
+
+### Added
+
+- Pipeline strategy pattern: `query_rewrite_strategies.py` and `retrieval_strategies.py` replacing inline implementations
+- ExperimentConfig Pydantic models in `experiment_schemas.py` replacing manual `validate()`
+- Adaptive CJK quote length validation in `_validate_evidence`
+- Adversarial issue filtering and proper noun suffix stripping in consistency check
+- Evidence auto-supplementation for uncovered numbers and answer truncation in pipeline
+- Per-type `max_tokens` and answer length limits with `_truncate_answer`
+- `MISSING_INDEPENDENT_PROMPT` and `_generate_missing_question` for dedicated missing-type generation
+- `max_tokens` per-call override to `Generator.generate()`
+- Company name tag display in meal file list when filename lacks it
+- `create_artifact_cache` factory function extracted from MealManager
+- `EvaluationSample` dataclass to fix LSP violation in evaluators
+- `dev-story.md` developer essay
+- `release-cadence.md` version rhythm guide
+
+### Changed
+
+- Document directory restructured: `docs/guides/` split into `docs/user-guides/` and `docs/dev-guides/`
+- Archive directory restructured by version and narrative theme
+- `ExperimentResult` renamed to `ReportExperimentResult` in eval module
+- `DEFAULT_EVAL_CONFIG` and `get_eval_config` unified into `metrics/utils.py`
+- README rewritten with fixed root-level document links
+- `version-history.md` restructured into 5-version storyline (v0.1.9–v0.1.13)
+- All broken links in user-guides and dev-guides fixed
+
+### Fixed
+
+- `is_genuine_proper_noun` filter added to reduce false positive rate
+- `save_manifest` return type annotation corrected from `None` to `bool`
+- Missing `list_snapshot` and `snapshot_file` fields added to `SummaryConfig`
+- Hardcoded API URL and model name removed from source code
+- Test references updated from extracted class methods to standalone functions
+- Mock evidence quote now includes answer values to pass validation
+
+### Refactored
+
+- `src/test_generator.py` (~5000 lines) → `src/test_generation/` package (9 sub-modules: generator, llm_caller, document_loader, segment_builder, models, validators, supplement, prompts, chunk_locator)
+- `src/meal.py` (~1500 lines) → `src/meal/` package (6 sub-modules: manager, builders, cache, hashes, models, utils)
+- `eval/run_experiment.py` (~3000 lines) → `eval/runner/` package (8 sub-modules: core, evaluation, metrics, preparation, comparison, reporting, reproduction, asset_verifier)
+- `eval/experiment_reporter.py` (~1800 lines) → `eval/reporter/` package (5 sub-modules: models, formatters, llm_reporter, template_single, template_variant)
+- Removed `__main__` blocks from business modules
+- Removed deprecated functions from `chunk_locator.py`
+- Removed redundant method-internal `import json` in `manager.py`
+- Extracted `_build_pipeline` template method in MealManager
+- Extracted `_post_process_question` to reduce validation duplication
+- Extracted supplement logic to reduce `generator.py` below 1500 lines
+- Normalized underscore prefix in `eval/runner` and `eval/metrics`
+- Extracted `TestSetCleaner` from `TestSetManager`
+- Ruff auto-formatting applied
+
 ## [0.1.13] - 2026-04-28
 
 RAG visualization — interactive web UI for RAG Q&A demo.

@@ -1,6 +1,6 @@
 # Easy RAG Lab - “金融文档问答”评测实验室
 
-![Version](https://img.shields.io/badge/version-v0.1.13-blue)![Status](https://img.shields.io/badge/status-active-green)![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
+![Version](https://img.shields.io/badge/version-v0.1.14-blue)![Status](https://img.shields.io/badge/status-active-green)![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
 
 ## 项目简介
 
@@ -138,13 +138,20 @@ easy-rag-lab/
 │   ├── hybrid_retriever.py  # 混合检索
 │   ├── reranker.py      # 重排序
 │   ├── query_rewriter.py    # 查询改写
+│   ├── query_rewrite_strategies.py  # 查询改写策略
+│   ├── retrieval_strategies.py      # 检索策略
 │   ├── generator.py     # 答案生成
 │   ├── pipeline.py      # RAG 管线
 │   ├── experiment.py    # 实验管理
-│   ├── meal.py          # Meal 数据集快照管理
+│   ├── experiment_schemas.py  # 实验配置 Pydantic 模型
+│   ├── meal/            # Meal 数据集快照管理（包）
+│   ├── test_generation/ # 测试集生成（包）
 │   ├── artifact_cli.py  # Artifact 命令行工具
 │   └── ...              # 其他模块
 ├── eval/                # 评测模块
+│   ├── runner/          # 实验运行器（包）
+│   ├── reporter/        # 实验报告器（包）
+│   └── ...              # 其他模块
 ├── tests/               # 单元测试
 ├── exp_configs/         # 实验配置
 ├── scripts/             # 辅助脚本

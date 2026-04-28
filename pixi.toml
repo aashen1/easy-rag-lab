@@ -3,7 +3,7 @@ authors = ["Ash (GitHub@aashen1)"]
 channels = ["conda-forge"]
 name = "easy-rag-lab"
 platforms = ["win-64"]  # not tested for other platforms yet
-version = "0.1.13"
+version = "0.1.14"
 
 [tasks]
 
