@@ -19,6 +19,7 @@ from src.test_generation.document_loader import (
 )
 from src.test_generation.llm_caller import (
     generate_irrelevant_question,
+    generate_missing_question,
     generate_question_with_evidence,
     generate_question_with_llm,
 )
@@ -1092,14 +1093,14 @@ class TestSetGenerator:
             )
 
         if question_type == "missing":
-            selected_segments = self._select_segments_for_question_type(
-                segments, question_type
+            selected_segments = select_segments_for_question_type(
+                segments, question_type, 1, self.segment_sampling_strategy
             )
             if selected_segments:
-                selected_segments = self._compact_segments(
+                selected_segments = compact_segments(
                     selected_segments, self.compact_segment_max_chars
                 )
-            return self._generate_missing_question(
+            return generate_missing_question(
                 selected_segments=selected_segments,
                 generator=generator,
             )
