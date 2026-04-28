@@ -1,0 +1,434 @@
+# 文档级问题生成指南
+
+<!-- status: needs-update -->
+
+> ⚠️ **文档状态**：本文档缺少 v0.1.8 新增功能的说明，包括：`source_chunks` 字段（document 级问题生成中标注问题来源 chunk）、增量生成机制（自动补充生成以达到目标数量）、问题有效性检查、以及 irrelevant/missing 类型问题的 `source_files` 正确设置（`[]` 和 `expect_no_answer=True`）。建议补充更新。
+
+> 最后更新: 2026-04-25（新增 Golden Test Set 章节）
+
+本文档介绍如何使用文档级问题生成功能，生成贴近真实用户场景的测试问题。
+
+---
+
+## 概述
+
+文档级问题生成是 v0.1.7 版本引入的新功能，与传统的 chunk-based 问题生成相比，具有以下优势：
+
+| 特性 | 传统策略 | 文档级策略 |
+|------|---------|-----------|
+| 输入来源 | 单个/多个 chunk | 完整 MD 文档 |
+| 与 chunk_size 关系 | 强耦合 | 完全解耦 |
+| 问题风格 | 学术化、考试题风格 | 口语化、真实用户场景 |
+| 问题类型 | 3 种 | 6 种 |
+| 质量控制 | 无 | 真实性检查 + 质量指标 |
+
+---
+
+## 快速开始
+
+### 通过 CLI 生成
+
+```bash
+# 生成文档级问题（推荐）
+pixi run python main.py --generate-test-set <meal_name> --strategy document --num-questions 20
+
+# 使用传统策略（已弃用，会显示警告）
+pixi run python main.py --generate-test-set <meal_name> --strategy factual --num-questions 20
+```
+
+### 通过实验配置生成
+
+```yaml
+test_sets:
+  - strategy: "document"
+    num_questions: 20
+    seed: 100
+```
+
+---
+
+## 问题类型
+
+文档级问题生成支持 6 种问题类型，覆盖不同的用户场景：
+
+### 1. 单知识点查询 (single_fact)
+
+**定义**：查询文档中某个具体事实或数据点的问题。
+
+**特征**：
+- 问题简短、直接
+- 答案明确、单一
+- 不需要推理或综合
+
+**示例**：
+
+| 场景 | 问题示例 |
+|------|----------|
+| 查数据 | "2024年光模块市场规模大概多少？" |
+| 查公司 | "科瑞技术是做什么的？" |
+| 查技术 | "CPO技术的主要优势是什么？" |
+| 查参数 | "1.6T光模块的功耗大概是多少？" |
+
+**默认占比**：30%
+
+---
+
+### 2. 多知识点综合 (multi_fact)
+
+**定义**：需要综合文档中多个相关信息才能回答的问题。
+
+**特征**：
+- 需要整合多个数据点或结论
+- 可能涉及对比、归纳、总结
+- 答案需要组织多个信息片段
+
+**示例**：
+
+| 场景 | 问题示例 |
+|------|----------|
+| 对比公司 | "科瑞技术和猎奇智能在光模块设备上有什么区别？" |
+| 总结趋势 | "光模块行业未来几年的增长趋势怎么样？" |
+| 综合分析 | "为什么说CPO技术是未来的发展方向？" |
+
+**默认占比**：25%
+
+---
+
+### 3. 推理型问题 (reasoning)
+
+**定义**：需要基于文档信息进行逻辑推理才能回答的问题。
+
+**特征**：
+- 文档中没有直接答案
+- 需要理解因果关系
+- 可能涉及预测或判断
+
+**示例**：
+
+| 场景 | 问题示例 |
+|------|----------|
+| 原因分析 | "为什么CPO能降低功耗？" |
+| 影响判断 | "如果800G需求翻倍，对设备商有什么影响？" |
+| 趋势预测 | "按现在的增速，2026年市场规模能达到多少？" |
+
+**默认占比**：15%
+
+---
+
+### 4. 对比分析 (comparative)
+
+**定义**：需要对比两个或多个实体/指标/方案的问题。
+
+**特征**：
+- 明确的对比对象
+- 需要多维度比较
+- 可能需要得出结论
+
+**示例**：
+
+| 场景 | 问题示例 |
+|------|----------|
+| 公司对比 | "中际旭创和新易盛这两家公司哪个更值得投资？" |
+| 技术对比 | "CPO和LPO两种技术路线各有什么优缺点？" |
+| 指标对比 | "2024年和2023年的市场规模增长了多少？" |
+
+**默认占比**：15%
+
+---
+
+### 5. 缺失知识点 (missing)
+
+**定义**：用户询问文档中不存在或不完整的信息。
+
+**特征**：
+- 文档无法完全回答
+- 测试系统的"不知道"能力
+- 可能部分可回答
+
+**示例**：
+
+| 场景 | 问题示例 |
+|------|----------|
+| 完全缺失 | "光模块行业的ESG评级情况怎么样？" |
+| 部分缺失 | "2025年的市场预测数据有吗？" |
+| 细节缺失 | "科瑞技术的具体客户名单有哪些？" |
+
+**默认占比**：10%
+
+**答案要求**：
+- 明确说明"文档未提及该信息"或"文档信息不完整"
+- 如果有部分相关信息，可以提供并说明局限性
+- 不要编造信息
+
+---
+
+### 6. 无关问题 (irrelevant)
+
+**定义**：与文档主题完全无关的问题。
+
+**特征**：
+- 测试系统的拒答能力
+- 问题本身合理，但与文档无关
+- 可能涉及其他领域
+
+**示例**：
+
+| 场景 | 问题示例 |
+|------|----------|
+| 其他行业 | "新能源汽车的电池技术发展怎么样？" |
+| 其他主题 | "最近美联储加息对股市有什么影响？" |
+| 完全无关 | "推荐几家好吃的餐厅？" |
+
+**默认占比**：5%
+
+**答案要求**：
+- 明确说明"该问题与文档内容无关"
+- 可以简要说明文档的主题范围
+
+---
+
+## 自定义类型分布
+
+可以通过配置自定义问题类型分布：
+
+```yaml
+test_sets:
+  - strategy: "document"
+    num_questions: 20
+    type_distribution:
+      single_fact: 0.40      # 增加单知识点问题
+      multi_fact: 0.30
+      reasoning: 0.15
+      comparative: 0.10
+      missing: 0.05
+      irrelevant: 0.00       # 不生成无关问题
+```
+
+**注意事项**：
+- 各类型比例之和应为 1.0
+- 比例为 0 的类型不会生成
+- 系统会自动调整以确保整数数量
+
+---
+
+## 真实性检查
+
+系统内置真实性检查机制，过滤不符合真实用户场景的问题：
+
+### 检测规则
+
+| 规则 | 说明 | 示例 |
+|------|------|------|
+| 学术化表述 | 包含"根据文档"、"请分析"等 | ❌ "根据文档说明2024年市场规模" |
+| 模板化开头 | 以"请问"、"请解释"开头 | ❌ "请解释CPO技术的原理" |
+| 问题过长 | 超过 100 字符 | ❌ 过于复杂的问题描述 |
+
+### 好的问题示例
+
+✅ "2024年光模块市场规模多少？"
+✅ "科瑞技术和猎奇智能有什么区别？" # ？啥雷霆问题
+✅ "CPO技术为什么能降低功耗？"
+
+### 不好的问题示例
+
+❌ "根据文档内容，请分析2024年光模块市场规模"
+❌ "请解释CPO技术的原理和优势"
+❌ "文档中提到的科瑞技术公司主要业务是什么？"
+
+---
+
+## 质量指标
+
+生成完成后，系统会输出质量指标：
+
+```json
+{
+  "quality_metrics": {
+    "format_correct_rate": 1.0,
+    "authenticity_pass_rate": 0.85,
+    "type_distribution": {
+      "单知识点查询": 6,
+      "多知识点综合": 5,
+      "推理型问题": 3,
+      "对比分析": 3,
+      "缺失知识点": 2,
+      "无关问题": 1
+    }
+  }
+}
+```
+
+| 指标 | 说明 | 目标值 |
+|------|------|--------|
+| format_correct_rate | JSON 格式正确率 | ≥ 95% |
+| authenticity_pass_rate | 真实性检查通过率 | ≥ 80% |
+
+---
+
+## 与传统策略对比
+
+### 传统策略（已弃用）
+
+| 策略 | 描述 | 问题 |
+|------|------|------|
+| `factual` | 基于单个 chunk 生成事实性问题 | 与 chunk_size 耦合 |
+| `boundary` | 基于相邻 chunk 生成边界问题 | 问题过于技术化 |
+| `multi_hop` | 基于非相邻 chunk 生成多跳问题 | 不够真实 |
+
+### 迁移建议
+
+如果您正在使用传统策略，建议迁移到 `document` 策略：
+
+```yaml
+# 旧配置
+test_sets:
+  - strategy: "factual"
+    num_questions: 20
+
+# 新配置（推荐）
+test_sets:
+  - strategy: "document"
+    num_questions: 20
+```
+
+传统策略仍可使用，但会显示 DeprecationWarning。
+
+---
+
+## 最佳实践
+
+### 1. 问题数量建议
+
+| 场景 | 建议数量 |
+|------|---------|
+| 快速验证 | 10-20 个 |
+| 正式评测 | 30-50 个 |
+| 深度分析 | 100+ 个 |
+
+### 2. 类型分布调整
+
+根据评测目标调整类型分布：
+
+| 评测目标 | 建议配置 |
+|---------|---------|
+| 检索能力评测 | 增加 single_fact 比例 |
+| 综合分析能力 | 增加 multi_fact、reasoning 比例 |
+| 边界处理能力 | 增加 missing、irrelevant 比例 |
+
+### 3. 质量验证
+
+生成后检查质量指标：
+- `authenticity_pass_rate` 低于 80%：考虑调整提示词或重新生成
+- 类型分布偏差大：检查 `type_distribution` 配置
+
+---
+
+## 相关文档
+
+- [实验系统指南](experiment-system.md)
+- [评测指标详解](evaluation-metrics.md)
+- [配置参考](config-reference.md)
+- [Golden Test Set 构建记录](../.archive/v0.1.11-unification-era/testset-generation/golden-testset-150-session.md)
+
+---
+
+## Golden Test Set（高质量人工校验问题集）
+
+### 概述
+
+Golden Test Set 是项目级的高质量测试问题集，与机器生成测试集相比具有以下区别：
+
+| 特性 | 机器生成集 | Golden Test Set |
+|------|-----------|----------------|
+| 答案精确度 | LLM 生成，可能模糊 | 人工校验，精确引用 |
+| ground truth | chunk ID（依赖分块策略） | `ground_truth_excerpt`（策略无关） |
+| 问题类型 | 6 种 | 7 种（含 adversarial） |
+| 审核状态 | 无审核 | 人工审核标记 |
+| 存储位置 | `data/meals/<meal>/test_sets/` | `data/golden_testset/` |
+| 生命周期 | 绑定 meal | 跨 meal 可用 |
+
+### 问题类型（7 种）
+
+在原有 6 种类型基础上，新增：
+
+#### 7. 对抗性问题 (adversarial)
+
+**定义**：故意设计容易让 RAG 系统出错的边界场景问题。
+
+**子类型**：
+
+| 子类型 | 说明 | 示例 |
+|--------|------|------|
+| 数字膨胀陷阱 | 夸大数值看系统是否纠正 | "万科经营性现金流超过100亿吗？"（实际39.1亿） |
+| 百分比膨胀 | 夸大百分比 | "宁德时代市占率超过40%了吗？"（实际36.8%） |
+| 比例反转 | 将高占比说成低占比 | "格力空调收入占比不到50%？"（实际73.7%） |
+| 否定陷阱 | 用否定措辞看系统是否忽略 | "美的没有进行股份回购对吗？"（实际有回购） |
+| 时序陷阱 | 问文档未覆盖的时间段 | "2025年的营收数据怎么样？"（文档只有2023年） |
+
+**默认占比**：10%
+
+### Schema
+
+每条问题包含以下字段：
+
+```json
+{
+    "id": "golden_001",
+    "question": "问题文本",
+    "answer": "精确答案",
+    "question_type": "single_fact|multi_fact|reasoning|comparative|missing|irrelevant|adversarial",
+    "difficulty": "easy|medium|hard",
+    "source_files": ["path/to/document.pages.json"],
+    "source_chunks": ["chunk_001"],
+    "ground_truth_excerpt": "答案所在原文片段（50-200字）",
+    "expect_retrieval": true,
+    "expect_no_answer": false,
+    "metadata": {
+        "author": "human|llm_assisted",
+        "reviewed": true,
+        "review_notes": "审核备注",
+        "target_failure_mode": "该题针对的RAG失败模式",
+        "excerpt_verified": true
+    }
+}
+```
+
+**关键字段说明**：
+- `ground_truth_excerpt`：答案所在原文片段，策略无关的精确定位，比 chunk ID 更可靠
+- `metadata.target_failure_mode`：标注该题针对的 RAG 失败模式
+- `metadata.author`：区分 LLM 辅助生成和人工编写
+
+### 使用方式
+
+#### 生成
+
+```bash
+pixi run python scripts/generate_golden_testset.py --num-questions 150
+```
+
+#### 审核
+
+```bash
+pixi run python scripts/review_golden_testset.py
+pixi run python scripts/review_golden_testset.py --start-from 50
+```
+
+#### 运行评测
+
+```bash
+pixi run python eval/run_experiment.py --config exp_configs/golden_tests/golden_150.yaml
+```
+
+实验配置中使用 `golden: true` 标记：
+
+```yaml
+test_sets:
+  - name: "golden_150"
+    golden: true
+```
+
+### 评测管线集成
+
+- `TestSetManager.resolve_test_set()` 支持 `golden: true` 路由，从固定路径加载
+- `ground_truth_excerpt` 优先于 `expected_answer` 用于 context_precision/context_recall 计算
+- RAGAS 评测器同样优先使用 `ground_truth_excerpt` 作为 reference

@@ -36,7 +36,6 @@
 ### 文件删除与回收站
 - **禁止永久删除文件**：不得使用 `DeleteFile`、`rm`、`del` 等操作直接删除文件
 - 所有需要删除的文件/目录必须移入 `.trashbin/` 目录，带时间戳子目录避免冲突
-- 例外：AI 当次会话自建的临时文件、`__pycache__` 目录可直接删除
 - 完整规范见 `.trae/rules/trashbin-rule.md`
 
 ### 项目记忆
@@ -64,9 +63,9 @@
 
 ## 文档维护规则
 
-- 创建新功能时，同步创建 `docs/guides/<feature>.md`
-- 修复疑难 bug 时，创建 `docs/troubleshooting/<bug-name>.md`
-- 版本发布后，创建 `docs/reviews/vX.X.X/` 目录下的验收报告
+- 创建新功能时，同步创建 `docs/user-guides/<feature>.md`（用户向）或 `docs/dev-guides/<feature>.md`（开发向）
+- 修复疑难 bug 时，在 `.archive/` 对应版本目录下记录
+- 版本发布后，在 `.archive/v0.1.X-xxx-era/release/` 目录下创建验收报告
 - 代码变更必须同步更新相关文档
 - 文档文件名统一使用英文
 - code-review 中"建议单开"的内容必须同时创建 issue（使用 `pixi run issue create`）

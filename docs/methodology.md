@@ -2,7 +2,13 @@
 
 <!-- status: active -->
 
-> 最后更新: 2026-04-18
+> 最后更新: 2026-04-28
+
+> 说明：本文档初建时，项目 issue 使用单 md 文件管理，按照类似于 GitHub Issues 的设计思路更新，兼有MD文件本地化和便于AI频繁交互的优势。
+>
+> 随着 issue 数量积累，于 v0.1.12 设计了一套由 CLI 自动管理的 issue 系统，将原有`docs/backlog.md` 中的每条 issue 拆分为一个单MD文件，因此本文中提到的所有`docs/backlog.md` 目前都已并入`.issues/`目录下。
+>
+> 同时，随着 issue 管理由 CLI 工具全面接手，项目中提到的 TODO ↔ Backlog 双向同步机制的必要性有待全面的评估。
 
 ---
 
@@ -247,7 +253,6 @@ docs/inbox-processed/ # 已处理的原始文件（定期清理）
 ## 相关文档
 
 - [版本演进年轮](version-history.md)
-- [版本节奏：如何避免发版阻塞与功能堆积](guides/development/release-cadence.md)
-- [待做事项总表](backlog.md)
-- [版本验收报告](reviews/v0.1.5/)
-- [项目记忆系统使用指南](../.trae/skills/project-memory/SKILL.md) — 跨 session 项目记忆读写方法论
+- [版本节奏：如何避免发版阻塞与功能堆积](dev-guides/release-cadence.md)
+- [待做事项](../.issues/) — 运行 `pixi run issue list` 查看（原 backlog.md 已迁移至 Issue 系统）
+- [版本验收报告](.archive/v0.1.0-v0.1.5-mvp-era/release/v0.1.5/)
