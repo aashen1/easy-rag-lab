@@ -406,3 +406,44 @@ EVIDENCE_QUESTION_TYPE_SUPPLEMENTS = {
     "irrelevant": EVIDENCE_IRRELEVANT_SUPPLEMENT,
     "adversarial": EVIDENCE_ADVERSARIAL_SUPPLEMENT,
 }
+
+MISSING_INDEPENDENT_PROMPT = """你是一位金融行业从业者，正在阅读一份研究报告的若干片段。
+
+你的任务是：生成一个**文档中明显没有答案**的问题，测试RAG系统的拒答能力。
+
+## 步骤
+
+第一步：分析文档已覆盖的主题
+仔细阅读以下片段，列出文档**已经覆盖**的主题和数据维度。
+
+第二步：选择未覆盖的维度
+从金融行业从业者可能关心的角度，选择一个文档**明显没有涉及**的维度。
+
+第三步：提出问题
+围绕这个未覆盖的维度，提出一个自然的问题。问题要口语化，像在问同事。
+
+## 输出格式
+
+严格按照以下JSON格式输出，不要输出任何其他内容：
+
+```json
+{{
+    "question": "你提出的问题",
+    "answer": "文档未提及该信息。",
+    "question_type": "缺失知识点",
+    "difficulty": "medium",
+    "evidence": [],
+    "selected_segments": []
+}}
+```
+
+## 关键要求
+
+- evidence 必须为空数组 []
+- 答案必须明确说明"文档未提及该信息"
+- 不要试图从文档中找到答案
+- 问题要像真实的金融从业者会问的，不要用"请说明""根据文档"等学术化措辞
+
+## 文档片段
+
+{segments_text}"""

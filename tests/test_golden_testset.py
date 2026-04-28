@@ -6,7 +6,7 @@ import pytest
 
 from scripts.review_golden_testset import audit_testset
 from src.exceptions import TestSetError
-from src.test_generator import TestSetGenerator
+from src.test_generator import MISSING_INDEPENDENT_PROMPT, TestSetGenerator
 from src.test_set_manager import TestSetManager
 
 
@@ -442,6 +442,125 @@ class TestAuditTestset:
         assert report["numerical_accuracy"]["issues_found"] >= 1
 
 
+class TestProperNounSuffixStripping:
+    def setup_method(self):
+        self.config = {"test_generation": {}}
+        self.generator = TestSetGenerator(self.config)
+
+    def test_suffix_stripped_match_when_core_in_evidence(self):
+        evidence_list = [{"quote": "电子领域发展迅速，相关企业增长显著"}]
+        is_valid, issues = self.generator._validate_answer_evidence_consistency(
+            "电子行业前景广阔", evidence_list
+        )
+        assert is_valid
+        assert len(issues) == 0
+
+    def test_no_match_when_core_not_in_evidence(self):
+        evidence_list = [{"quote": "传统制造业面临转型压力"}]
+        is_valid, issues = self.generator._validate_answer_evidence_consistency(
+            "量子计算行业前景广阔", evidence_list
+        )
+        assert not is_valid
+        assert any("量子计算行业" in i for i in issues)
+
+    def test_exact_match_still_works(self):
+        evidence_list = [{"quote": "华为技术在5G领域处于领先地位"}]
+        is_valid, issues = self.generator._validate_answer_evidence_consistency(
+            "华为技术在5G领域处于领先地位", evidence_list
+        )
+        assert is_valid
+        assert len(issues) == 0
+
+
+class TestFilterAdversarialIssues:
+    def setup_method(self):
+        self.config = {"test_generation": {}}
+        self.generator = TestSetGenerator(self.config)
+
+    def test_proper_noun_issues_filtered_out(self):
+        issues = [
+            "专有名词 '量子计算行业' 未在证据中找到",
+            "数值 '2268.9亿元' 未在证据中找到",
+        ]
+        question = "公司2024年营收2268.9亿元，实际增长如何？"
+        result = self.generator._filter_adversarial_issues(issues, question)
+        assert len(result) == 1
+        assert result[0].startswith("数值")
+
+    def test_number_in_question_kept(self):
+        issues = [
+            "数值 '2268.9亿元' 未在证据中找到",
+        ]
+        question = "公司2024年营收2268.9亿元，实际增长如何？"
+        result = self.generator._filter_adversarial_issues(issues, question)
+        assert len(result) == 1
+        assert "2268.9" in result[0]
+
+    def test_computed_number_not_in_question_filtered(self):
+        issues = [
+            "数值 '15.5个百分点' 未在证据中找到",
+        ]
+        question = "公司2024年营收2268.9亿元，实际增长如何？"
+        result = self.generator._filter_adversarial_issues(issues, question)
+        assert len(result) == 0
+
+    def test_small_number_below_threshold_kept(self):
+        issues = [
+            "数值 '5.3%' 未在证据中找到",
+        ]
+        question = "公司2024年营收2268.9亿元，实际增长如何？"
+        result = self.generator._filter_adversarial_issues(issues, question)
+        assert len(result) == 1
+
+    def test_integer_in_question_kept(self):
+        issues = [
+            "数值 '100亿元' 未在证据中找到",
+        ]
+        question = "营收达到100亿的公司有哪些？"
+        result = self.generator._filter_adversarial_issues(issues, question)
+        assert len(result) == 1
+
+    def test_computed_integer_not_in_question_filtered(self):
+        issues = [
+            "数值 '200亿元' 未在证据中找到",
+        ]
+        question = "营收达到100亿的公司有哪些？"
+        result = self.generator._filter_adversarial_issues(issues, question)
+        assert len(result) == 0
+
+    def test_mixed_issues_filtered_correctly(self):
+        issues = [
+            "专有名词 '新兴技术行业' 未在证据中找到",
+            "数值 '2268.9亿元' 未在证据中找到",
+            "数值 '15.5个百分点' 未在证据中找到",
+            "专有名词 '量子计算集团' 未在证据中找到",
+        ]
+        question = "公司2024年营收2268.9亿元，实际增长如何？"
+        result = self.generator._filter_adversarial_issues(issues, question)
+        assert len(result) == 1
+        assert "2268.9" in result[0]
+
+    def test_empty_issues_returns_empty(self):
+        result = self.generator._filter_adversarial_issues([], "some question")
+        assert result == []
+
+    def test_number_with_comma_in_question_kept(self):
+        issues = [
+            "数值 '1,216.3亿元' 未在证据中找到",
+        ]
+        question = "净利润为1216.3亿，同比下降多少？"
+        result = self.generator._filter_adversarial_issues(issues, question)
+        assert len(result) == 1
+
+    def test_non_number_non_proper_noun_issue_kept(self):
+        issues = [
+            "其他类型的问题描述",
+        ]
+        question = "公司2024年营收如何？"
+        result = self.generator._filter_adversarial_issues(issues, question)
+        assert len(result) == 1
+
+
 class TestValidateAnswerConsistency:
     def setup_method(self):
         self.config = {"test_generation": {}}
@@ -506,6 +625,43 @@ class TestValidateEvidenceMinQuoteLength:
                 "relevance": "test",
             }
         ]
+        result = self.generator._validate_evidence(evidence, segments)
+        assert result["verified_evidence"][0]["verified"] is True
+
+
+class TestValidateEvidenceAdaptiveQuoteLength:
+    def setup_method(self):
+        self.config = {"test_generation": {}}
+        self.generator = TestSetGenerator(self.config)
+
+    def test_cjk_quote_at_cjk_threshold_passes(self):
+        cjk_15 = "即时零售推动消费增长引擎新趋势"
+        assert len(cjk_15) == 15
+        segments = [{"text": cjk_15, "segment_index": 0}]
+        evidence = [{"segment_index": 0, "quote": cjk_15, "relevance": "test"}]
+        result = self.generator._validate_evidence(evidence, segments)
+        assert result["verified_evidence"][0]["verified"] is True
+
+    def test_cjk_quote_above_cjk_threshold_passes(self):
+        cjk_20 = "即时零售推动了即时型消费增长引擎加速发展"
+        assert len(cjk_20) == 20
+        segments = [{"text": cjk_20, "segment_index": 0}]
+        evidence = [{"segment_index": 0, "quote": cjk_20, "relevance": "test"}]
+        result = self.generator._validate_evidence(evidence, segments)
+        assert result["verified_evidence"][0]["verified"] is True
+
+    def test_english_quote_below_default_threshold_fails(self):
+        eng_25 = "a" * 25
+        segments = [{"text": eng_25, "segment_index": 0}]
+        evidence = [{"segment_index": 0, "quote": eng_25, "relevance": "test"}]
+        result = self.generator._validate_evidence(evidence, segments)
+        assert result["verified_evidence"][0]["verified"] is False
+        assert "too short" in result["invalid_quotes"][0]["reason"].lower()
+
+    def test_english_quote_at_default_threshold_passes(self):
+        eng_30 = "a" * 30
+        segments = [{"text": eng_30, "segment_index": 0}]
+        evidence = [{"segment_index": 0, "quote": eng_30, "relevance": "test"}]
         result = self.generator._validate_evidence(evidence, segments)
         assert result["verified_evidence"][0]["verified"] is True
 
@@ -578,6 +734,41 @@ class TestChineseToTypeKey:
         assert self.generator._chinese_to_type_key("未知类型") is None
 
 
+class TestEvidenceMaxTokens:
+    def setup_method(self):
+        self.config = {"test_generation": {}}
+        self.generator = TestSetGenerator(self.config)
+
+    def test_evidence_max_tokens_has_expected_types(self):
+        for q_type in ["comparative", "reasoning", "multi_fact"]:
+            assert q_type in self.generator.EVIDENCE_MAX_TOKENS
+
+    def test_evidence_max_tokens_values_are_2048(self):
+        for q_type in ["comparative", "reasoning", "multi_fact"]:
+            assert self.generator.EVIDENCE_MAX_TOKENS[q_type] == 2048
+
+    def test_evidence_max_tokens_falls_back_to_default(self):
+        default_max_tokens = self.generator.test_gen_max_tokens
+        for q_type in ["single_fact", "missing", "irrelevant", "adversarial"]:
+            assert (
+                self.generator.EVIDENCE_MAX_TOKENS.get(q_type, default_max_tokens)
+                == default_max_tokens
+            )
+
+    def test_effective_max_tokens_dynamic_selection(self):
+        default_max_tokens = self.generator.test_gen_max_tokens
+        for q_type in ["comparative", "reasoning", "multi_fact"]:
+            effective = self.generator.EVIDENCE_MAX_TOKENS.get(
+                q_type, default_max_tokens
+            )
+            assert effective == 2048
+        for q_type in ["single_fact", "missing", "irrelevant", "adversarial"]:
+            effective = self.generator.EVIDENCE_MAX_TOKENS.get(
+                q_type, default_max_tokens
+            )
+            assert effective == default_max_tokens
+
+
 class TestFormatProgressBar:
     def test_zero_total(self):
         from scripts.review_golden_testset import format_progress_bar
@@ -645,3 +836,212 @@ class TestDisplayAIDetail:
         assert "answer_accuracy" in captured.out
         assert "3.5" in captured.out
         assert "中等质量" in captured.out
+
+
+class TestMissingIndependentPrompt:
+    def test_prompt_is_non_empty_string(self):
+        assert isinstance(MISSING_INDEPENDENT_PROMPT, str)
+        assert len(MISSING_INDEPENDENT_PROMPT.strip()) > 0
+
+    def test_prompt_contains_segments_placeholder(self):
+        assert "{segments_text}" in MISSING_INDEPENDENT_PROMPT
+
+    def test_prompt_mentions_empty_evidence(self):
+        assert "[]" in MISSING_INDEPENDENT_PROMPT
+
+    def test_prompt_mentions_missing_answer(self):
+        assert "文档未提及该信息" in MISSING_INDEPENDENT_PROMPT
+
+    def test_prompt_format_succeeds(self):
+        result = MISSING_INDEPENDENT_PROMPT.format(segments_text="测试片段内容")
+        assert "测试片段内容" in result
+        assert "{segments_text}" not in result
+
+
+class TestGenerateMissingQuestion:
+    def setup_method(self):
+        self.config = {"test_generation": {}}
+        self.generator = TestSetGenerator(self.config)
+
+    def test_returns_qa_when_evidence_empty(self):
+        mock_generator = MagicMock()
+        mock_generator.generate.return_value = json.dumps(
+            {
+                "question": "ESG评级怎么样？",
+                "answer": "文档未提及该信息。",
+                "question_type": "缺失知识点",
+                "difficulty": "medium",
+                "evidence": [],
+                "selected_segments": [],
+            }
+        )
+
+        segments = [{"text": "光模块市场2024年增长12.5%", "segment_index": 0}]
+        result = self.generator._generate_missing_question(segments, mock_generator)
+
+        assert result is not None
+        assert result["question_type"] == "缺失知识点"
+        assert result["evidence"] == []
+        assert result["ground_truth_excerpt"] == ""
+
+    def test_retries_when_evidence_non_empty(self):
+        response_with_evidence = json.dumps(
+            {
+                "question": "ESG评级怎么样？",
+                "answer": "文档未提及该信息。",
+                "question_type": "缺失知识点",
+                "difficulty": "medium",
+                "evidence": [
+                    {"segment_index": 0, "quote": "光模块市场增长", "relevance": "test"}
+                ],
+                "selected_segments": [],
+            }
+        )
+        response_without_evidence = json.dumps(
+            {
+                "question": "ESG评级怎么样？",
+                "answer": "文档未提及该信息。",
+                "question_type": "缺失知识点",
+                "difficulty": "medium",
+                "evidence": [],
+                "selected_segments": [],
+            }
+        )
+
+        mock_generator = MagicMock()
+        mock_generator.generate.side_effect = [
+            response_with_evidence,
+            response_without_evidence,
+        ]
+
+        segments = [{"text": "光模块市场2024年增长12.5%", "segment_index": 0}]
+        result = self.generator._generate_missing_question(segments, mock_generator)
+
+        assert result is not None
+        assert result["evidence"] == []
+        assert mock_generator.generate.call_count == 2
+
+    def test_returns_none_on_all_failures(self):
+        mock_generator = MagicMock()
+        mock_generator.generate.side_effect = Exception("LLM error")
+
+        segments = [{"text": "光模块市场2024年增长12.5%", "segment_index": 0}]
+        result = self.generator._generate_missing_question(segments, mock_generator)
+
+        assert result is None
+
+    def test_returns_none_on_unparseable_response(self):
+        mock_generator = MagicMock()
+        mock_generator.generate.return_value = "not valid json"
+
+        segments = [{"text": "光模块市场2024年增长12.5%", "segment_index": 0}]
+        result = self.generator._generate_missing_question(segments, mock_generator)
+
+        assert result is None
+
+    def test_uses_missing_independent_prompt(self):
+        mock_generator = MagicMock()
+        mock_generator.generate.return_value = json.dumps(
+            {
+                "question": "ESG评级怎么样？",
+                "answer": "文档未提及该信息。",
+                "question_type": "缺失知识点",
+                "difficulty": "medium",
+                "evidence": [],
+                "selected_segments": [],
+            }
+        )
+
+        segments = [{"text": "光模块市场2024年增长12.5%", "segment_index": 0}]
+        self.generator._generate_missing_question(segments, mock_generator)
+
+        call_args = mock_generator.generate.call_args
+        prompt_used = call_args.kwargs.get("query", call_args[1].get("query", ""))
+        assert "文档中明显没有答案" in prompt_used
+
+
+class TestAnswerLengthLimits:
+    def setup_method(self):
+        self.config = {"test_generation": {}}
+        self.generator = TestSetGenerator(self.config)
+
+    def test_all_seven_types_present(self):
+        expected_types = {
+            "single_fact",
+            "missing",
+            "irrelevant",
+            "adversarial",
+            "multi_fact",
+            "comparative",
+            "reasoning",
+        }
+        assert set(self.generator.ANSWER_LENGTH_LIMITS.keys()) == expected_types
+
+    def test_truncate_at_period(self):
+        qa = {"id": "test_001", "answer": "这是一。这是二。这是三。"}
+        self.generator._truncate_answer(qa, qa["answer"], 5)
+        assert qa["answer"] == "这是一。"
+        assert qa["metadata"]["answer_truncated"] is True
+
+    def test_no_truncation_within_limit(self):
+        qa = {"id": "test_002", "answer": "短答案。"}
+        self.generator._truncate_answer(qa, qa["answer"], 200)
+        assert qa["answer"] == "短答案。"
+        assert "answer_truncated" not in qa.get("metadata", {})
+
+    def test_hard_truncation_no_period(self):
+        qa = {"id": "test_003", "answer": "abcdefghij"}
+        self.generator._truncate_answer(qa, qa["answer"], 5)
+        assert qa["answer"] == "abcde"
+        assert qa["metadata"]["answer_truncated"] is True
+
+
+class TestSupplementEvidenceForUncoveredNumbers:
+    def test_supplement_when_number_found_in_doc(self):
+        generator = TestSetGenerator({})
+        answer = "营收达到500亿元"
+        evidence = [{"quote": "公司业绩良好", "segment_index": 0}]
+        issues = ["数值 '500亿' 未在证据中找到"]
+        doc = "根据财报，公司营收达到500亿元，同比增长20%。"
+        updated_ev, remaining = generator._supplement_evidence_for_uncovered_numbers(
+            answer, evidence, issues, doc
+        )
+        assert len(updated_ev) == 2
+        assert updated_ev[1]["match_type"] == "auto_supplemented"
+        assert updated_ev[1]["segment_index"] == -1
+        assert len(remaining) == 0
+
+    def test_no_supplement_when_number_not_in_doc(self):
+        generator = TestSetGenerator({})
+        answer = "营收达到999亿元"
+        evidence = [{"quote": "公司业绩良好", "segment_index": 0}]
+        issues = ["数值 '999亿' 未在证据中找到"]
+        doc = "根据财报，公司营收达到500亿元。"
+        updated_ev, remaining = generator._supplement_evidence_for_uncovered_numbers(
+            answer, evidence, issues, doc
+        )
+        assert len(updated_ev) == 1
+        assert len(remaining) == 1
+
+    def test_no_supplement_when_no_number_issues(self):
+        generator = TestSetGenerator({})
+        answer = "公司表现优秀"
+        evidence = [{"quote": "公司业绩良好", "segment_index": 0}]
+        issues = ["专有名词 '量子计算行业' 未在证据中找到"]
+        doc = "公司业绩良好。"
+        updated_ev, remaining = generator._supplement_evidence_for_uncovered_numbers(
+            answer, evidence, issues, doc
+        )
+        assert len(updated_ev) == 1
+        assert len(remaining) == 1
+
+    def test_no_supplement_when_empty_doc(self):
+        generator = TestSetGenerator({})
+        answer = "营收达到500亿元"
+        evidence = [{"quote": "公司业绩良好", "segment_index": 0}]
+        issues = ["数值 '500亿' 未在证据中找到"]
+        updated_ev, remaining = generator._supplement_evidence_for_uncovered_numbers(
+            answer, evidence, issues, ""
+        )
+        assert len(updated_ev) == 1
+        assert len(remaining) == 1

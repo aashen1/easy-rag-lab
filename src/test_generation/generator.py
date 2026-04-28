@@ -40,7 +40,9 @@ from src.test_generation.chunk_locator import (
     verify_quote_in_segment as _verify_quote_in_segment_standalone,
 )
 from src.test_generation.models import (
+    ANSWER_LENGTH_LIMITS,
     DOCUMENT_TRUNCATE_MAX,
+    EVIDENCE_MAX_TOKENS,
     FAILURE_MODES,
     GOLDEN_TYPE_DISTRIBUTION,
     MIN_QUOTE_LENGTH,
@@ -54,6 +56,7 @@ from src.test_generation.prompts import (
     EVIDENCE_QUESTION_TYPE_SUPPLEMENTS,
     FACTUAL_PROMPT,
     IRRELEVANT_QUESTION_PROMPT,
+    MISSING_INDEPENDENT_PROMPT,
     MULTI_HOP_PROMPT,
     QUESTION_TYPE_SUPPLEMENTS,
 )
@@ -71,6 +74,15 @@ from src.test_generation.validators import (
 )
 from src.test_generation.validators import (
     detect_content_overlaps as _detect_content_overlaps_standalone,
+)
+from src.test_generation.validators import (
+    filter_adversarial_issues as _filter_adversarial_issues_standalone,
+)
+from src.test_generation.validators import (
+    supplement_evidence_for_uncovered_numbers as _supplement_evidence_for_uncovered_numbers_standalone,
+)
+from src.test_generation.validators import (
+    truncate_answer as _truncate_answer_standalone,
 )
 from src.test_generation.validators import (
     validate_answer_consistency as _validate_answer_consistency_standalone,
@@ -103,6 +115,8 @@ class TestSetGenerator:
     GOLDEN_TYPE_DISTRIBUTION = GOLDEN_TYPE_DISTRIBUTION
     FAILURE_MODES = FAILURE_MODES
     MIN_QUOTE_LENGTH = MIN_QUOTE_LENGTH
+    EVIDENCE_MAX_TOKENS = EVIDENCE_MAX_TOKENS
+    ANSWER_LENGTH_LIMITS = ANSWER_LENGTH_LIMITS
 
     def __init__(self, config: dict[str, Any]):
         """Initialize the TestSetGenerator with application configuration.
@@ -2190,6 +2204,61 @@ class TestSetGenerator:
 
         return None
 
+    def _generate_missing_question(
+        self,
+        selected_segments: list[dict[str, Any]],
+        generator: Generator,
+    ) -> dict[str, Any] | None:
+        """Generate a missing-type question using MISSING_INDEPENDENT_PROMPT.
+
+        Uses a dedicated prompt that first analyzes what the document covers,
+        then asks about a dimension clearly NOT covered. This avoids the
+        contradiction of using evidence-aware prompts for questions that
+        should have no evidence.
+
+        Args:
+            selected_segments: List of selected segment dictionaries.
+            generator: Generator instance for LLM calls.
+
+        Returns:
+            Dictionary with question data, or None if generation fails.
+        """
+        segments_text = ""
+        for i, seg in enumerate(selected_segments):
+            segments_text += f"片段{i}:\n{seg.get('text', '')}\n\n"
+
+        prompt = MISSING_INDEPENDENT_PROMPT.format(segments_text=segments_text.strip())
+
+        for _attempt in range(self.max_retries):
+            try:
+                response = generator.generate(
+                    query=prompt,
+                    contexts=[],
+                    system_prompt="你是一位金融行业从业者。请严格按照要求的JSON格式输出，不要输出任何其他内容。",
+                    category="test_generation",
+                    allow_no_contexts=True,
+                )
+
+                qa = self._parse_evidence_question_response(response)
+                if qa is None:
+                    continue
+
+                qa["question_type"] = self.QUESTION_TYPES.get("missing", "缺失知识点")
+
+                evidence_list = qa.get("evidence", [])
+                if evidence_list:
+                    logger.debug("Missing question has evidence, retrying...")
+                    continue
+
+                qa["ground_truth_excerpt"] = ""
+                return qa
+
+            except Exception as e:
+                logger.warning(f"Failed to generate missing question: {str(e)}")
+                continue
+
+        return None
+
     def _generate_irrelevant_question(
         self,
         doc_name: str,
@@ -2279,6 +2348,59 @@ class TestSetGenerator:
             Tuple of (is_valid, issues).
         """
         return _validate_answer_evidence_consistency_standalone(answer, evidence_list)
+
+    def _filter_adversarial_issues(
+        self,
+        issues: list[str],
+        question_text: str,
+    ) -> list[str]:
+        """Filter answer-evidence issues for adversarial question type.
+
+        Args:
+            issues: List of issue strings from _validate_answer_evidence_consistency.
+            question_text: The question text to check for number presence.
+
+        Returns:
+            Filtered list of issues relevant to adversarial type.
+        """
+        return _filter_adversarial_issues_standalone(issues, question_text)
+
+    def _supplement_evidence_for_uncovered_numbers(
+        self,
+        answer: str,
+        evidence_list: list[dict[str, Any]],
+        issues: list[str],
+        doc_content: str,
+    ) -> tuple[list[dict[str, Any]], list[str]]:
+        """Supplement evidence with document context for uncovered numbers.
+
+        Args:
+            answer: The generated answer text.
+            evidence_list: Current list of evidence dictionaries.
+            issues: List of issues from consistency check.
+            doc_content: Full document content for searching.
+
+        Returns:
+            Tuple of (updated_evidence_list, remaining_issues).
+        """
+        return _supplement_evidence_for_uncovered_numbers_standalone(
+            answer, evidence_list, issues, doc_content
+        )
+
+    def _truncate_answer(
+        self,
+        qa: dict[str, Any],
+        answer_text: str,
+        answer_limit: int,
+    ) -> None:
+        """Truncate answer to the specified length limit.
+
+        Args:
+            qa: Question-answer dictionary to modify in place.
+            answer_text: Original answer text.
+            answer_limit: Maximum character length for the answer.
+        """
+        return _truncate_answer_standalone(qa, answer_text, answer_limit)
 
     def _verify_excerpt_in_document(
         self,

@@ -41,3 +41,23 @@ FAILURE_MODES = {
 }
 
 MIN_QUOTE_LENGTH = 30
+
+MIN_QUOTE_LENGTH_DEFAULT = 30
+
+MIN_QUOTE_LENGTH_CJK = 15
+
+EVIDENCE_MAX_TOKENS = {
+    "comparative": 2048,
+    "reasoning": 2048,
+    "multi_fact": 2048,
+}
+
+ANSWER_LENGTH_LIMITS = {
+    "single_fact": 200,
+    "missing": 200,
+    "irrelevant": 200,
+    "adversarial": 200,
+    "multi_fact": 300,
+    "comparative": 300,
+    "reasoning": 350,
+}

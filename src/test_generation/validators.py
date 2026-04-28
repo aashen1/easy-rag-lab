@@ -4,7 +4,11 @@ from typing import Any
 from loguru import logger
 
 from src.test_generation.chunk_locator import verify_quote_in_segment
-from src.test_generation.models import MIN_QUOTE_LENGTH
+from src.test_generation.models import (
+    MIN_QUOTE_LENGTH,
+    MIN_QUOTE_LENGTH_CJK,
+    MIN_QUOTE_LENGTH_DEFAULT,
+)
 
 
 def validate_numerical_accuracy(
@@ -271,8 +275,18 @@ def validate_answer_evidence_consistency(
         r"[\u4e00-\u9fff]{2,8}(?:股份|集团|公司|行业|市场|技术|产品|业务)",
         answer,
     )
+    suffixes = ["股份", "集团", "公司", "行业", "市场", "技术", "产品", "业务"]
     for noun in proper_nouns:
-        if noun not in evidence_text:
+        if noun in evidence_text:
+            continue
+        core_found = False
+        for suffix in suffixes:
+            if noun.endswith(suffix):
+                core = noun[: -len(suffix)]
+                if len(core) >= 2 and core in evidence_text:
+                    core_found = True
+                    break
+        if not core_found:
             issues.append(f"专有名词 '{noun}' 未在证据中找到")
 
     return len(issues) == 0, issues
@@ -397,14 +411,17 @@ def validate_evidence(
     For each evidence entry, verifies that the segment_index is valid
     and that the quote exists in the specified segment. When the
     segment_index is invalid, falls back to searching the full document.
-    Quotes shorter than min_quote_length are rejected as too fragmented.
+    Quotes shorter than the adaptive minimum length are rejected as too fragmented.
+    The threshold is MIN_QUOTE_LENGTH_CJK (15) for CJK-dominant quotes (>50% CJK
+    characters) and MIN_QUOTE_LENGTH_DEFAULT (30) otherwise.
 
     Args:
         evidence_list: List of evidence dictionaries.
         segments: List of segment dictionaries.
         question_type: Type of question for logging context.
         doc_content: Full document content for fallback verification.
-        min_quote_length: Minimum quote length in characters.
+        min_quote_length: Minimum quote length in characters (deprecated, use
+            adaptive threshold instead).
         fuzzy_match_threshold: Threshold for fuzzy quote matching.
 
     Returns:
@@ -441,16 +458,22 @@ def validate_evidence(
             continue
 
         quote_clean = re.sub(r"\s+", "", quote)
-        if len(quote_clean) < min_quote_length:
+        cjk_count = sum(1 for c in quote_clean if "\u4e00" <= c <= "\u9fff")
+        cjk_ratio = cjk_count / len(quote_clean) if quote_clean else 0
+        adaptive_min_length = (
+            MIN_QUOTE_LENGTH_CJK if cjk_ratio > 0.5 else MIN_QUOTE_LENGTH_DEFAULT
+        )
+        if len(quote_clean) < adaptive_min_length:
             verified_evidence.append({**evidence, "verified": False})
             invalid_quotes.append(
                 {
                     "quote": quote[:50] + "..." if len(quote) > 50 else quote,
-                    "reason": f"Quote too short (< {min_quote_length} chars)",
+                    "reason": f"Quote too short (< {adaptive_min_length} chars)",
                 }
             )
             logger.debug(
-                f"Quote too short ({len(quote_clean)} chars): "
+                f"Quote too short ({len(quote_clean)} chars, "
+                f"min={adaptive_min_length}, CJK ratio={cjk_ratio:.0%}): "
                 f"'{quote[:30]}...' Question type: {question_type}"
             )
             continue
@@ -775,3 +798,165 @@ def build_primary_pool(
                 primary_map[supp_id] = primary_id
 
     return [d for d in documents if d["doc_id"] not in supplementary_ids]
+
+
+def filter_adversarial_issues(
+    issues: list[str],
+    question_text: str,
+) -> list[str]:
+    """Filter answer-evidence issues for adversarial question type.
+
+    Adversarial questions naturally contain interpretive language
+    and computed values (e.g., percentage differences). This method
+    removes issues that are expected for adversarial answers:
+
+    - All proper noun issues are removed, since adversarial answers
+      naturally contain interpretive language.
+    - Number issues are kept only if the number appears in the
+      question text (indicating it is a bait number from the
+      original document that should be in evidence). Numbers not
+      in the question are likely computed/derived by the LLM.
+
+    Args:
+        issues: List of issue strings from
+            validate_answer_evidence_consistency.
+        question_text: The question text to check for number presence.
+
+    Returns:
+        Filtered list of issues relevant to adversarial type.
+    """
+    filtered_issues = []
+    for issue in issues:
+        if issue.startswith("专有名词"):
+            continue
+        if issue.startswith("数值"):
+            num_match = re.search(r"'([^']+)'", issue)
+            if num_match:
+                num_str = re.sub(
+                    r"[亿万元个百分点个%％]+$",
+                    "",
+                    num_match.group(1),
+                )
+                try:
+                    num_val = float(num_str.replace(",", ""))
+                    if (
+                        num_val >= 10
+                        and str(int(num_val)) not in question_text
+                        and num_str not in question_text
+                    ):
+                        continue
+                except ValueError:
+                    pass
+        filtered_issues.append(issue)
+    return filtered_issues
+
+
+def supplement_evidence_for_uncovered_numbers(
+    answer: str,
+    evidence_list: list[dict[str, Any]],
+    issues: list[str],
+    doc_content: str,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Supplement evidence with document context for uncovered numbers.
+
+    When answer-evidence consistency check finds numbers in the answer
+    that are not covered by evidence quotes, this method searches the
+    full document for those numbers and appends surrounding context
+    as additional evidence entries.
+
+    Args:
+        answer: The generated answer text.
+        evidence_list: Current list of evidence dictionaries.
+        issues: List of issues from consistency check.
+        doc_content: Full document content for searching.
+
+    Returns:
+        Tuple of (updated_evidence_list, remaining_issues).
+    """
+    if not doc_content or not issues:
+        return evidence_list, issues
+
+    number_issues = [i for i in issues if i.startswith("数值 '")]
+    if not number_issues:
+        return evidence_list, issues
+
+    supplemented_evidence = list(evidence_list)
+    remaining_issues = [i for i in issues if not i.startswith("数值 '")]
+    supplemented_numbers: set[str] = set()
+
+    for issue in number_issues:
+        num_match = re.search(r"'([^']+)'", issue)
+        if not num_match:
+            remaining_issues.append(issue)
+            continue
+
+        num_str = num_match.group(1)
+        core_num = re.sub(r"[亿万元个百分点个%％]+$", "", num_str)
+        if not core_num or core_num in supplemented_numbers:
+            remaining_issues.append(issue)
+            continue
+
+        search_pattern = core_num.replace(",", r"[,\s]*")
+        try:
+            found_in_doc = False
+            for match in re.finditer(search_pattern, doc_content):
+                start = max(0, match.start() - 80)
+                end = min(len(doc_content), match.end() + 80)
+                context = doc_content[start:end].strip()
+                if start > 0:
+                    context = "..." + context
+                if end < len(doc_content):
+                    context = context + "..."
+                supplemented_evidence.append(
+                    {
+                        "segment_index": -1,
+                        "quote": context,
+                        "relevance": f"Auto-supplemented: contains number '{num_str}' from answer",
+                        "verified": True,
+                        "match_type": "auto_supplemented",
+                        "position": None,
+                    }
+                )
+                supplemented_numbers.add(core_num)
+                found_in_doc = True
+                break
+            if not found_in_doc:
+                remaining_issues.append(issue)
+        except re.error:
+            remaining_issues.append(issue)
+            continue
+
+    return supplemented_evidence, remaining_issues
+
+
+def truncate_answer(
+    qa: dict[str, Any],
+    answer_text: str,
+    answer_limit: int,
+) -> None:
+    """Truncate answer to the specified length limit.
+
+    Attempts to truncate at the last Chinese period (。) within the
+    limit if it is past the halfway point. Otherwise performs a hard
+    truncation at the limit. Sets metadata flag when truncation
+    occurs.
+
+    Args:
+        qa: Question-answer dictionary to modify in place.
+        answer_text: Original answer text.
+        answer_limit: Maximum character length for the answer.
+    """
+    if len(answer_text) <= answer_limit:
+        return
+
+    last_period = answer_text.rfind("。", 0, answer_limit)
+    if last_period > answer_limit // 2:
+        qa["answer"] = answer_text[: last_period + 1]
+    else:
+        qa["answer"] = answer_text[:answer_limit]
+    qa.setdefault("metadata", {})
+    qa["metadata"]["answer_truncated"] = True
+    logger.info(
+        f"Answer truncated for {qa.get('id', 'unknown')}: "
+        f"{len(answer_text)} -> {len(qa['answer'])} chars"
+    )
