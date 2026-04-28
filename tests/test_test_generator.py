@@ -1525,15 +1525,15 @@ class TestSupplementDocumentBasedQuestions:
                 return_value=parsed_dir,
             ),
             patch(
-                "src.test_generation.generator.MealManager",
+                "src.test_generation.supplement.MealManager",
                 return_value=mock_meal_manager,
             ),
             patch(
-                "src.test_generation.generator.Generator",
+                "src.test_generation.supplement.Generator",
                 return_value=mock_llm_generator,
             ),
             patch(
-                "src.test_generation.generator.get_llm_config",
+                "src.test_generation.supplement.get_llm_config",
                 return_value={
                     "model_name": "test",
                     "api_key": "test",
@@ -1600,15 +1600,15 @@ class TestSupplementDocumentBasedQuestions:
                 return_value=parsed_dir,
             ),
             patch(
-                "src.test_generation.generator.MealManager",
+                "src.test_generation.supplement.MealManager",
                 return_value=mock_meal_manager,
             ),
             patch(
-                "src.test_generation.generator.Generator",
+                "src.test_generation.supplement.Generator",
                 return_value=mock_llm_generator,
             ),
             patch(
-                "src.test_generation.generator.get_llm_config",
+                "src.test_generation.supplement.get_llm_config",
                 return_value={
                     "model_name": "test",
                     "api_key": "test",
@@ -2488,15 +2488,15 @@ class TestQuestionDeduplication:
                 return_value=parsed_dir,
             ),
             patch(
-                "src.test_generation.generator.MealManager",
+                "src.test_generation.supplement.MealManager",
                 return_value=mock_meal_manager,
             ),
             patch(
-                "src.test_generation.generator.Generator",
+                "src.test_generation.supplement.Generator",
                 return_value=mock_llm_generator,
             ),
             patch(
-                "src.test_generation.generator.get_llm_config",
+                "src.test_generation.supplement.get_llm_config",
                 return_value={
                     "model_name": "test",
                     "api_key": "test",
@@ -2586,15 +2586,15 @@ class TestQuestionDeduplication:
                 return_value=parsed_dir,
             ),
             patch(
-                "src.test_generation.generator.MealManager",
+                "src.test_generation.supplement.MealManager",
                 return_value=mock_meal_manager,
             ),
             patch(
-                "src.test_generation.generator.Generator",
+                "src.test_generation.supplement.Generator",
                 return_value=mock_llm_generator,
             ),
             patch(
-                "src.test_generation.generator.get_llm_config",
+                "src.test_generation.supplement.get_llm_config",
                 return_value={
                     "model_name": "test",
                     "api_key": "test",

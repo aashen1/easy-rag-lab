@@ -63,6 +63,10 @@ from src.test_generation.segment_builder import (
     select_segments_for_question_type,
     validate_segment_relevance,
 )
+from src.test_generation.supplement import (
+    generate_document_based_questions,
+    supplement_document_based_questions,
+)
 from src.test_generation.validators import (
     build_primary_pool,
     calculate_hybrid_quality_metrics,
@@ -113,6 +117,7 @@ __all__ = [
     "extract_segment_keywords",
     "filter_adversarial_issues",
     "fuzzy_match_quote",
+    "generate_document_based_questions",
     "generate_irrelevant_question",
     "generate_missing_question",
     "generate_question_with_evidence",
@@ -138,6 +143,7 @@ __all__ = [
     "select_candidate_segments",
     "select_diverse_segments",
     "select_segments_for_question_type",
+    "supplement_document_based_questions",
     "supplement_evidence_for_uncovered_numbers",
     "truncate_answer",
     "validate_answer_consistency",

@@ -10,22 +10,17 @@ from loguru import logger
 from src.exceptions import TestSetError
 from src.generator import Generator
 from src.meal import MealManager
-from src.test_generation.chunk_locator import (
-    locate_answer_chunks,
-    locate_source_chunks,
-)
+from src.test_generation.chunk_locator import locate_source_chunks
 from src.test_generation.document_loader import (
     load_document_chunks,
     load_document_pages,
     load_full_documents,
     load_meal_chunks,
-    resolve_chunks_dir,
 )
 from src.test_generation.llm_caller import (
     generate_irrelevant_question,
     generate_question_with_evidence,
     generate_question_with_llm,
-    generate_single_document_question,
 )
 from src.test_generation.models import (
     ANSWER_LENGTH_LIMITS,
@@ -44,10 +39,15 @@ from src.test_generation.segment_builder import (
     select_candidate_segments,
     select_segments_for_question_type,
 )
+from src.test_generation.supplement import (
+    generate_document_based_questions as _generate_document_based_questions,
+)
+from src.test_generation.supplement import (
+    supplement_document_based_questions as _supplement_document_based_questions,
+)
 from src.test_generation.validators import (
     build_primary_pool,
     calculate_hybrid_quality_metrics,
-    calculate_quality_metrics,
     detect_content_overlaps,
     validate_answer_consistency,
     validate_answer_evidence_consistency,
@@ -1245,216 +1245,20 @@ class TestSetGenerator:
         name = name or f"document_level_n{num_questions}"
         type_distribution = type_distribution or self.TYPE_DISTRIBUTION
 
-        meal_manager = MealManager(self.config)
-        meal_config = meal_manager.load_meal(meal_name)
-
-        logger.info(
-            f"Generating document-based questions for meal '{meal_name}' "
-            f"(num_questions={num_questions}, use_hybrid=False)"
-        )
-
-        document_contents = load_full_documents(self.config, meal_config)
-        if not document_contents:
-            raise TestSetError(f"No documents found for meal '{meal_name}'")
-
-        logger.info(f"Loaded {len(document_contents)} documents")
-
-        type_counts = self._calculate_question_distribution(
-            num_questions, type_distribution
-        )
-        logger.info(f"Question type distribution: {type_counts}")
-
-        doc_question_plans = self._distribute_questions_across_docs(
-            type_counts, list(document_contents.keys())
-        )
-        num_docs = len(document_contents)
-
-        logger.info(
-            f"Distributing {num_questions} questions across {num_docs} "
-            f"documents (~{num_questions // num_docs} per document)"
-        )
-
-        llm_config = get_llm_config(self.config, llm_preset)
-        generator = Generator(
-            model_name=llm_config["model_name"],
-            api_key=llm_config["api_key"],
-            base_url=llm_config["base_url"],
+        return _generate_document_based_questions(
+            config=self.config,
+            meal_name=meal_name,
+            num_questions=num_questions,
+            name=name,
+            type_distribution=type_distribution,
+            llm_preset=llm_preset,
+            token_tracker=token_tracker,
+            chunks_dir=chunks_dir,
             temperature=self.test_gen_temperature,
             max_tokens=self.test_gen_max_tokens,
-            token_tracker=token_tracker,
+            max_retries=self.max_retries,
+            doc_truncate_cache=self._doc_truncate_cache,
         )
-
-        questions = []
-        question_id = 1
-        total_attempts = 0
-        failed_count = 0
-
-        for doc_name, doc_data in document_contents.items():
-            assigned_types = doc_question_plans.get(doc_name, [])
-            if not assigned_types:
-                continue
-
-            doc_content = doc_data["content"]
-            source_path = doc_data["source_path"]
-
-            for q_type in assigned_types:
-                total_attempts += 1
-                logger.info(
-                    f"Generating question {question_id}/{num_questions} "
-                    f"(type={q_type}, doc={doc_name})..."
-                )
-
-                qa = generate_single_document_question(
-                    doc_content,
-                    q_type,
-                    generator,
-                    self.max_retries,
-                    self._doc_truncate_cache,
-                )
-
-                if qa is not None:
-                    qa["id"] = f"q{question_id:03d}"
-                    qa["source_document"] = doc_name
-                    qa["category"] = "document"
-
-                    if q_type == "irrelevant":
-                        qa["source_files"] = []
-                        qa["source_chunks"] = []
-                        qa["expect_retrieval"] = False
-                    elif q_type == "missing":
-                        qa["source_files"] = [source_path]
-                        qa["source_chunks"] = []
-                        qa["expect_no_answer"] = True
-                        qa["expect_retrieval"] = False
-                    else:
-                        qa["source_files"] = [source_path]
-                        answer_text = qa.get("answer", "")
-                        resolved_dir = (
-                            chunks_dir
-                            or resolve_chunks_dir(self.config, meal_config)
-                            or Path()
-                        )
-                        qa["source_chunks"] = locate_answer_chunks(
-                            answer_text,
-                            source_path,
-                            resolved_dir,
-                        )
-
-                    questions.append(qa)
-                    question_id += 1
-                else:
-                    failed_count += 1
-                    logger.warning(
-                        f"Failed to generate question, total failures: "
-                        f"{failed_count}/{total_attempts}"
-                    )
-
-        if len(questions) < num_questions:
-            deficit = num_questions - len(questions)
-            logger.info(
-                f"Main loop generated {len(questions)}/{num_questions} questions. "
-                f"Supplementing {deficit} more questions..."
-            )
-            doc_names = list(document_contents.keys())
-            all_types = list(self.TYPE_DISTRIBUTION.keys())
-            extra_attempt = 0
-            max_extra_attempts = deficit * 3
-
-            while len(questions) < num_questions and extra_attempt < max_extra_attempts:
-                extra_attempt += 1
-                doc_name = doc_names[extra_attempt % len(doc_names)]
-                q_type = all_types[extra_attempt % len(all_types)]
-                doc_data = document_contents[doc_name]
-                doc_content = doc_data["content"]
-                source_path = doc_data["source_path"]
-
-                logger.info(
-                    f"Supplemental question {len(questions) + 1}/{num_questions} "
-                    f"(type={q_type}, doc={doc_name})..."
-                )
-
-                qa = generate_single_document_question(
-                    doc_content,
-                    q_type,
-                    generator,
-                    self.max_retries,
-                    self._doc_truncate_cache,
-                )
-
-                if qa is not None:
-                    qa["id"] = f"q{question_id:03d}"
-                    qa["source_document"] = doc_name
-                    qa["category"] = "document"
-
-                    if q_type == "irrelevant":
-                        qa["source_files"] = []
-                        qa["source_chunks"] = []
-                        qa["expect_retrieval"] = False
-                    elif q_type == "missing":
-                        qa["source_files"] = [source_path]
-                        qa["source_chunks"] = []
-                        qa["expect_no_answer"] = True
-                        qa["expect_retrieval"] = False
-                    else:
-                        qa["source_files"] = [source_path]
-                        answer_text = qa.get("answer", "")
-                        resolved_dir = (
-                            chunks_dir
-                            or resolve_chunks_dir(self.config, meal_config)
-                            or Path()
-                        )
-                        qa["source_chunks"] = locate_answer_chunks(
-                            answer_text,
-                            source_path,
-                            resolved_dir,
-                        )
-
-                    questions.append(qa)
-                    question_id += 1
-                else:
-                    failed_count += 1
-                    logger.warning(
-                        f"Supplemental question failed, total failures: {failed_count}"
-                    )
-
-        if not questions:
-            raise TestSetError("No questions could be generated")
-
-        quality_metrics = calculate_quality_metrics(questions)
-
-        metadata = TestSetMetadata(
-            name=name,
-            meal_id=meal_config.data_id,
-            created_at=datetime.now().isoformat(),
-            updated_at=datetime.now().isoformat(),
-            generation={
-                "strategy": "document",
-                "num_questions": num_questions,
-                "type_distribution": type_distribution,
-                "llm_preset": llm_preset,
-            },
-            user_defined=False,
-        )
-
-        test_set = {
-            "metadata": metadata.to_dict(),
-            "quality_metrics": quality_metrics,
-            "questions": questions,
-        }
-
-        self._save_test_set(meal_name, test_set, name)
-
-        if len(questions) < num_questions:
-            logger.warning(
-                f"Could only generate {len(questions)}/{num_questions} questions "
-                f"after supplemental attempts"
-            )
-
-        logger.success(
-            f"Generated {len(questions)}/{num_questions} questions "
-            f"for meal '{meal_name}' (strategy: document)"
-        )
-        return test_set
 
     def supplement_document_based_questions(
         self,
@@ -1481,165 +1285,20 @@ class TestSetGenerator:
         Raises:
             ValueError: If no documents are found for the meal.
         """
-        existing_questions = existing_test_set.get("questions", [])
-        deficit = target_count - len(existing_questions)
-
-        if deficit <= 0:
-            logger.info(
-                f"Existing test set already has {len(existing_questions)} "
-                f"questions, no supplementation needed"
-            )
-            return existing_test_set
-
-        logger.info(
-            f"Supplementing test set for meal '{meal_name}': "
-            f"existing={len(existing_questions)}, target={target_count}, "
-            f"deficit={deficit}"
-        )
-
-        meal_manager = MealManager(self.config)
-        meal_config = meal_manager.load_meal(meal_name)
-
-        document_contents = load_full_documents(self.config, meal_config)
-        if not document_contents:
-            raise TestSetError(f"No documents found for meal '{meal_name}'")
-
-        llm_config = get_llm_config(self.config, llm_preset)
-        generator = Generator(
-            model_name=llm_config["model_name"],
-            api_key=llm_config["api_key"],
-            base_url=llm_config["base_url"],
-            temperature=self.test_gen_temperature,
-            max_tokens=self.test_gen_supplement_max_tokens,
+        return _supplement_document_based_questions(
+            config=self.config,
+            meal_name=meal_name,
+            existing_test_set=existing_test_set,
+            target_count=target_count,
+            llm_preset=llm_preset,
             token_tracker=token_tracker,
+            chunks_dir=chunks_dir,
+            type_distribution=self.TYPE_DISTRIBUTION,
+            temperature=self.test_gen_temperature,
+            supplement_max_tokens=self.test_gen_supplement_max_tokens,
+            max_retries=self.max_retries,
+            doc_truncate_cache=self._doc_truncate_cache,
         )
-
-        doc_names = list(document_contents.keys())
-        all_types = list(self.TYPE_DISTRIBUTION.keys())
-        question_id = len(existing_questions) + 1
-        new_questions = []
-        failed_count = 0
-        max_attempts = deficit * 3
-        attempt = 0
-        seen_questions: set[str] = {
-            q.get("question", "") for q in existing_questions if q.get("question")
-        }
-
-        while len(new_questions) < deficit and attempt < max_attempts:
-            attempt += 1
-            doc_name = doc_names[attempt % len(doc_names)]
-            q_type = all_types[attempt % len(all_types)]
-            doc_data = document_contents[doc_name]
-            doc_content = doc_data["content"]
-            source_path = doc_data["source_path"]
-
-            logger.info(
-                f"Supplementing question {len(new_questions) + 1}/{deficit} "
-                f"(type={q_type}, doc={doc_name})..."
-            )
-
-            qa = generate_single_document_question(
-                doc_content,
-                q_type,
-                generator,
-                self.max_retries,
-                self._doc_truncate_cache,
-            )
-
-            if qa is not None:
-                qa["id"] = f"q{question_id:03d}"
-                qa["source_document"] = doc_name
-                qa["category"] = "document"
-
-                if q_type == "irrelevant":
-                    qa["source_files"] = []
-                    qa["source_chunks"] = []
-                    qa["expect_retrieval"] = False
-                elif q_type == "missing":
-                    qa["source_files"] = [source_path]
-                    qa["source_chunks"] = []
-                    qa["expect_no_answer"] = True
-                    qa["expect_retrieval"] = False
-                else:
-                    qa["source_files"] = [source_path]
-                    answer_text = qa.get("answer", "")
-                    resolved_dir = (
-                        chunks_dir
-                        or resolve_chunks_dir(self.config, meal_config)
-                        or Path()
-                    )
-                    qa["source_chunks"] = locate_answer_chunks(
-                        answer_text,
-                        source_path,
-                        resolved_dir,
-                    )
-
-                question_text = qa.get("question", "")
-                if question_text in seen_questions:
-                    logger.debug(
-                        f"Skipping duplicate question: {question_text[:50]}..."
-                    )
-                    failed_count += 1
-                    continue
-
-                new_questions.append(qa)
-                seen_questions.add(question_text)
-                question_id += 1
-            else:
-                failed_count += 1
-                logger.warning(
-                    f"Supplemental question failed, total failures: "
-                    f"{failed_count}/{attempt}"
-                )
-
-        if not new_questions:
-            logger.warning("Could not generate any supplemental questions")
-            return existing_test_set
-
-        all_questions = existing_questions + new_questions
-        quality_metrics = calculate_quality_metrics(all_questions)
-
-        existing_test_set["questions"] = all_questions
-        existing_test_set["quality_metrics"] = quality_metrics
-
-        if "metadata" in existing_test_set:
-            existing_test_set["metadata"]["updated_at"] = datetime.now().isoformat()
-            if "generation" in existing_test_set["metadata"]:
-                existing_test_set["metadata"]["generation"]["num_questions"] = (
-                    target_count
-                )
-            audit_entry = {
-                "event": "supplemented",
-                "added_count": len(new_questions),
-                "timestamp": datetime.now().isoformat(),
-            }
-            existing_test_set["metadata"].setdefault("audit_log", []).append(
-                audit_entry
-            )
-            test_set_name = existing_test_set["metadata"]["name"]
-        else:
-            if "generation_config" not in existing_test_set:
-                existing_test_set["generation_config"] = {}
-            existing_test_set["generation_config"]["num_questions"] = target_count
-            test_set_name = existing_test_set.get(
-                "name", f"document_level_n{target_count}"
-            )
-
-        self._save_test_set(meal_name, existing_test_set, test_set_name)
-
-        logger.success(
-            f"Supplemented test set: {len(existing_questions)} + "
-            f"{len(new_questions)} = {len(all_questions)}/{target_count} "
-            f"questions for meal '{meal_name}'"
-        )
-
-        if len(all_questions) < target_count:
-            logger.warning(
-                f"Could only reach {len(all_questions)}/{target_count} "
-                f"questions after supplementation"
-            )
-
-        return existing_test_set
 
     def _chinese_to_type_key(self, chinese_type: str) -> str | None:
         """Convert a Chinese question type label to its English key.
