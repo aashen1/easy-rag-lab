@@ -1377,8 +1377,6 @@ class MealManager:
                 output_file.parent.mkdir(parents=True, exist_ok=True)
 
                 if use_page_chunks:
-                    import json
-
                     pages_data = [
                         {
                             "page_number": page.page_number,
