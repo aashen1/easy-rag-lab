@@ -315,7 +315,7 @@ class TestExperimentReporter:
         assert "## 1. Experiment Overview" in report
 
     @pytest.mark.unit
-    @patch("eval.experiment_reporter.ExperimentReporter._call_llm")
+    @patch("eval.reporter.llm_reporter.LLMReporter._call_llm")
     def test_llm_report_success(self, mock_call_llm, sample_result, tmp_path):
         mock_call_llm.return_value = "This is an LLM-generated analysis."
 
