@@ -49,7 +49,6 @@ from src.test_generation.validators import (
     build_primary_pool,
     calculate_hybrid_quality_metrics,
     detect_content_overlaps,
-    is_genuine_proper_noun,
     validate_answer_consistency,
     validate_answer_evidence_consistency,
     validate_evidence,
