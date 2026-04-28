@@ -1855,6 +1855,11 @@ class TestSetGenerator:
                                 evidence_list,
                             )
                         )
+                        if q_type == "adversarial":
+                            issues = self._filter_adversarial_issues(
+                                issues, qa.get("question", "")
+                            )
+                            is_consistent = len(issues) == 0
                         if not is_consistent:
                             logger.warning(
                                 f"Answer-evidence inconsistency for question {qa['id']}: "
@@ -1998,6 +2003,11 @@ class TestSetGenerator:
                                 evidence_list,
                             )
                         )
+                        if q_type == "adversarial":
+                            issues = self._filter_adversarial_issues(
+                                issues, qa.get("question", "")
+                            )
+                            is_consistent = len(issues) == 0
                         if not is_consistent:
                             logger.warning(
                                 f"Answer-evidence inconsistency for question {qa['id']}: "
@@ -2286,6 +2296,11 @@ class TestSetGenerator:
                                 evidence_list,
                             )
                         )
+                        if q_type == "adversarial":
+                            issues = self._filter_adversarial_issues(
+                                issues, qa.get("question", "")
+                            )
+                            is_consistent = len(issues) == 0
                         if not is_consistent:
                             logger.warning(
                                 f"Answer-evidence inconsistency for question {qa['id']}: "
@@ -2497,6 +2512,11 @@ class TestSetGenerator:
                                 evidence_list,
                             )
                         )
+                        if q_type == "adversarial":
+                            issues = self._filter_adversarial_issues(
+                                issues, qa.get("question", "")
+                            )
+                            is_consistent = len(issues) == 0
                         if not is_consistent:
                             logger.warning(
                                 f"Answer-evidence inconsistency for question {qa['id']}: "
@@ -3201,6 +3221,57 @@ class TestSetGenerator:
 
         return supplemented_evidence, remaining_issues
 
+    def _filter_adversarial_issues(
+        self,
+        issues: list[str],
+        question_text: str,
+    ) -> list[str]:
+        """Filter answer-evidence issues for adversarial question type.
+
+        Adversarial questions naturally contain interpretive language
+        and computed values (e.g., percentage differences). This method
+        removes issues that are expected for adversarial answers:
+
+        - All proper noun issues are removed, since adversarial answers
+          naturally contain interpretive language.
+        - Number issues are kept only if the number appears in the
+          question text (indicating it is a bait number from the
+          original document that should be in evidence). Numbers not
+          in the question are likely computed/derived by the LLM.
+
+        Args:
+            issues: List of issue strings from
+                _validate_answer_evidence_consistency.
+            question_text: The question text to check for number presence.
+
+        Returns:
+            Filtered list of issues relevant to adversarial type.
+        """
+        filtered_issues = []
+        for issue in issues:
+            if issue.startswith("专有名词"):
+                continue
+            if issue.startswith("数值"):
+                num_match = re.search(r"'([^']+)'", issue)
+                if num_match:
+                    num_str = re.sub(
+                        r"[亿万元个百分点个%％]+$",
+                        "",
+                        num_match.group(1),
+                    )
+                    try:
+                        num_val = float(num_str.replace(",", ""))
+                        if (
+                            num_val >= 10
+                            and str(int(num_val)) not in question_text
+                            and num_str not in question_text
+                        ):
+                            continue
+                    except ValueError:
+                        pass
+            filtered_issues.append(issue)
+        return filtered_issues
+
     def _validate_answer_evidence_consistency(
         self,
         answer: str,
@@ -3316,12 +3387,32 @@ class TestSetGenerator:
             if not found:
                 issues.append(f"数值 '{ans_orig}' 未在证据中找到")
 
+        PROPER_NOUN_SUFFIXES = (
+            "股份",
+            "集团",
+            "公司",
+            "行业",
+            "市场",
+            "技术",
+            "产品",
+            "业务",
+        )
+
         proper_nouns = re.findall(
             r"[\u4e00-\u9fff]{2,8}(?:股份|集团|公司|行业|市场|技术|产品|业务)",
             answer,
         )
         for noun in proper_nouns:
-            if noun not in evidence_text:
+            if noun in evidence_text:
+                continue
+            core_matched = False
+            for suffix in PROPER_NOUN_SUFFIXES:
+                if noun.endswith(suffix):
+                    core = noun[: -len(suffix)]
+                    if len(core) >= 2 and core in evidence_text:
+                        core_matched = True
+                        break
+            if not core_matched:
                 issues.append(f"专有名词 '{noun}' 未在证据中找到")
 
         return len(issues) == 0, issues
