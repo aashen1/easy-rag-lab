@@ -29,7 +29,7 @@ class Retriever:
         self.top_k = top_k
         self.score_threshold = score_threshold
 
-    def retrieve(self, query: str) -> list[dict[str, Any]]:
+    def retrieve(self, query: str, top_k: int | None = None) -> list[dict[str, Any]]:
         """Retrieve the top-k most relevant chunks for the given query.
 
         Embeds the query and searches the vector store for the closest
@@ -38,6 +38,8 @@ class Retriever:
 
         Args:
             query: The search query string. Must be non-empty.
+            top_k: Override the number of top results to return for this
+                call. When ``None``, uses the instance-level ``self.top_k``.
 
         Returns:
             A list of dictionaries, each containing ``chunk_id``, ``text``,
@@ -54,9 +56,11 @@ class Retriever:
             logger.error(error_msg)
             raise RetrievalError(error_msg)
 
+        effective_top_k = top_k if top_k is not None else self.top_k
+
         try:
             logger.info(
-                f"Retrieving top-{self.top_k} results for query: {query[:50]}..."
+                f"Retrieving top-{effective_top_k} results for query: {query[:50]}..."
             )
 
             query_embedding = self.embedder.embed_query(query)
@@ -64,7 +68,7 @@ class Retriever:
             search_results = self.indexer.client.query_points(
                 collection_name=self.indexer.collection_name,
                 query=query_embedding.tolist(),
-                limit=self.top_k,
+                limit=effective_top_k,
                 with_payload=True,
             ).points
 

@@ -16,6 +16,7 @@ class BM25Retriever:
         k1: float = 1.5,
         b: float = 0.75,
         epsilon: float = 0.25,
+        top_k: int = 5,
     ) -> None:
         """Initialize the BM25 retriever with Okapi BM25 parameters.
 
@@ -26,6 +27,8 @@ class BM25Retriever:
                 1 means full normalization. Defaults to 0.75.
             epsilon: Floor value for IDF to prevent negative scores for
                 very common terms. Defaults to 0.25.
+            top_k: Default number of top results to return when not
+                overridden in ``retrieve()``. Defaults to 5.
 
         Raises:
             ValueError: If k1 is negative or b is not in [0, 1].
@@ -38,6 +41,7 @@ class BM25Retriever:
         self.k1 = k1
         self.b = b
         self.epsilon = epsilon
+        self.top_k = top_k
 
         self._corpus_tokens: list[list[str]] = []
         self._corpus_size: int = 0
@@ -201,7 +205,7 @@ class BM25Retriever:
         for term in negative_idfs:
             self._idf[term] = eps
 
-    def retrieve(self, query: str, top_k: int = 5) -> list[dict[str, Any]]:
+    def retrieve(self, query: str, top_k: int | None = None) -> list[dict[str, Any]]:
         """Retrieve the top-k most relevant chunks for the given query.
 
         Scores each document against the query using the Okapi BM25
@@ -209,7 +213,8 @@ class BM25Retriever:
 
         Args:
             query: The search query string. Must be non-empty.
-            top_k: Number of top results to return. Defaults to 5.
+            top_k: Override the number of top results to return for this
+                call. When ``None``, uses the instance-level ``self.top_k``.
 
         Returns:
             A list of dictionaries, each containing ``chunk_id``, ``text``,
@@ -229,6 +234,8 @@ class BM25Retriever:
             logger.error(error_msg)
             raise IndexingError(error_msg)
 
+        effective_top_k = top_k if top_k is not None else self.top_k
+
         try:
             query_tokens = self.tokenize(query)
 
@@ -243,7 +250,7 @@ class BM25Retriever:
             scored_docs = list(enumerate(scores))
             scored_docs.sort(key=lambda x: x[1], reverse=True)
 
-            top_docs = scored_docs[:top_k]
+            top_docs = scored_docs[:effective_top_k]
 
             results = []
             for doc_idx, score in top_docs:

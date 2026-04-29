@@ -73,6 +73,7 @@ class RAGPipeline:
         setup_logger(self.config)
         self.meal_name = meal_name
         self.meal_config = None
+        self._chunks_dir: Path | None = None
         self.token_tracker = (
             token_tracker if token_tracker is not None else TokenTracker()
         )
@@ -99,6 +100,16 @@ class RAGPipeline:
             logger.info(
                 f"Using meal '{meal_name}' (data_id: {self.meal_config.data_id[:12]}, collection: {collection_name})"
             )
+
+            from src.meal import create_artifact_cache
+
+            cache = create_artifact_cache(self.config)
+            chunker_hash = self.meal_config.config_hashes.get("chunker", "")
+            self._chunks_dir = cache.get_chunks_dir(
+                self.meal_config.data_id, chunker_hash
+            )
+        else:
+            self._chunks_dir = None
 
         self.indexer = VectorIndexer(
             persist_dir=vector_store_config["persist_dir"],
@@ -146,12 +157,11 @@ class RAGPipeline:
         self.hybrid_retriever: HybridRetriever | None = None
         self.retrieval_method = retrieval_method
 
-        if retrieval_method in ("bm25", "hybrid"):
-            bm25_config = retrieval_config.get("bm25", {})
-            self.bm25_retriever = BM25Retriever(
-                k1=bm25_config.get("k1", 1.5),
-                b=bm25_config.get("b", 0.75),
-            )
+        bm25_config = retrieval_config.get("bm25", {})
+        self.bm25_retriever = BM25Retriever(
+            k1=bm25_config.get("k1", 1.5),
+            b=bm25_config.get("b", 0.75),
+        )
 
         if retrieval_method == "hybrid":
             hybrid_config = retrieval_config.get("hybrid", {})
@@ -388,6 +398,7 @@ class RAGPipeline:
                 self.profiler.end_stage()
 
         logger.success("Index built successfully")
+        self._chunks_dir = chunks_dir
         if sampling_config is None:
             logger.info(
                 f"Artifacts: parsed={parsed_dir}, chunks={chunks_dir} "
@@ -437,6 +448,12 @@ class RAGPipeline:
         self.meal_config = meal_manager.load_meal(meal_name)
         self.meal_name = meal_name
 
+        from src.meal import create_artifact_cache
+
+        cache = create_artifact_cache(self.config)
+        chunker_hash = self.meal_config.config_hashes.get("chunker", "")
+        self._chunks_dir = cache.get_chunks_dir(self.meal_config.data_id, chunker_hash)
+
         vector_store_config = self.config["vector_store"]
         self.indexer = VectorIndexer(
             persist_dir=vector_store_config["persist_dir"],
@@ -482,13 +499,27 @@ class RAGPipeline:
         )
         return self.meal_config
 
-    def query(self, question: str, return_contexts: bool = True) -> dict[str, Any]:
+    def query(
+        self,
+        question: str,
+        return_contexts: bool = True,
+        config_overrides: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Execute a RAG query: retrieve relevant contexts and generate an answer.
+
+        When ``config_overrides`` is provided, the overrides are deep-merged
+        with the pipeline's base config to produce an *effective config* that
+        drives this single query.  This allows callers to experiment with
+        different retrieval methods, top-k values, reranker settings, etc.
+        without re-initialising the pipeline.
 
         Args:
             question: The user question to answer. Must be a non-empty string.
             return_contexts: Whether to include retrieved contexts, scores, and
                 sources in the response dictionary. Defaults to True.
+            config_overrides: Optional dictionary of config overrides to
+                deep-merge with ``self.config`` for this query only. When
+                None, the pipeline's base config is used unchanged.
 
         Returns:
             A dictionary containing at minimum ``question`` and ``answer`` keys.
@@ -496,8 +527,8 @@ class RAGPipeline:
             ``scores``, ``sources``, ``chunk_ids``, and optionally ``token_usage``.
 
         Raises:
-            ValueError: If ``question`` is empty or not a string.
-            Exception: If retrieval or generation fails.
+            RetrievalError: If ``question`` is empty or not a string, or if
+                retrieval / generation fails.
         """
         if not question or not isinstance(question, str):
             error_msg = "Question must be a non-empty string"
@@ -507,10 +538,56 @@ class RAGPipeline:
         try:
             logger.info(f"Processing query: {question[:50]}...")
 
-            rewrite_strategy = self._get_rewrite_strategy()
+            if config_overrides is not None:
+                from src.utils import deep_merge
+
+                effective_config = deep_merge(self.config, config_overrides)
+                logger.debug(f"Using config overrides: {config_overrides}")
+            else:
+                effective_config = self.config
+
+            effective_retrieval = effective_config.get("retrieval", {})
+            effective_method = effective_retrieval.get("method", "vector")
+            effective_top_k = effective_retrieval.get("top_k", 5)
+            effective_reranker_enabled = effective_retrieval.get("reranker", {}).get(
+                "enabled", False
+            )
+            effective_rewrite_enabled = effective_retrieval.get(
+                "query_rewrite", {}
+            ).get("enabled", False)
+            effective_rewrite_strategy = effective_retrieval.get(
+                "query_rewrite", {}
+            ).get("strategy", "hyde")
+
+            if effective_rewrite_enabled:
+                self._ensure_query_rewriter(effective_rewrite_strategy)
+                rewrite_strategy = self._get_rewrite_strategy()
+            else:
+                rewrite_strategy = NoRewriteStrategy()
+
             rewritten = rewrite_strategy.rewrite(question)
-            retrieval_strategy = self._get_retrieval_strategy()
-            top_k = self.config["retrieval"]["top_k"]
+
+            if effective_method in ("bm25", "hybrid"):
+                self._ensure_bm25_index()
+
+            if effective_method == "bm25" and self.bm25_retriever is not None:
+                retrieval_strategy = BM25RetrievalStrategy(self.bm25_retriever)
+            elif effective_method == "hybrid" and self.bm25_retriever is not None:
+                if self.hybrid_retriever is None:
+                    hybrid_config = effective_retrieval.get("hybrid", {})
+                    self.hybrid_retriever = HybridRetriever(
+                        vector_retriever=self.retriever,
+                        bm25_retriever=self.bm25_retriever,
+                        fusion_method=hybrid_config.get("fusion", "rrf"),
+                        rrf_k=hybrid_config.get("rrf_k", 60),
+                        vector_weight=hybrid_config.get("vector_weight", 0.7),
+                        bm25_weight=hybrid_config.get("bm25_weight", 0.3),
+                        top_k=effective_top_k,
+                    )
+                retrieval_strategy = HybridRetrievalStrategy(self.hybrid_retriever)
+            else:
+                retrieval_strategy = VectorRetrievalStrategy(self.retriever)
+
             is_multi = rewritten.is_multi
 
             if not is_multi:
@@ -520,14 +597,15 @@ class RAGPipeline:
 
             if is_multi:
                 results = self._retrieve_multi(
-                    retrieval_strategy, rewritten.queries, top_k
+                    retrieval_strategy, rewritten.queries, effective_top_k
                 )
             else:
                 results = retrieval_strategy.retrieve(
-                    rewritten.queries[0], top_k
+                    rewritten.queries[0], effective_top_k
                 ).chunks
 
-            if self.reranker is not None and results:
+            if effective_reranker_enabled and results:
+                self._ensure_reranker()
                 logger.debug(
                     f"Reranking {'multi-query ' if is_multi else ''}results..."
                 )
@@ -569,17 +647,71 @@ class RAGPipeline:
             logger.error(error_msg)
             raise RetrievalError(error_msg) from e
 
-    def _get_retrieval_strategy(self) -> RetrievalStrategy:
-        """Get the appropriate retrieval strategy based on config.
+    def _ensure_bm25_index(self) -> None:
+        """Build BM25 index from chunks directory if not already built.
 
-        Returns:
-            A retrieval strategy instance (BM25, Hybrid, or Vector).
+        Uses the cached ``_chunks_dir`` to lazy-load the BM25 index on
+        first access. Subsequent calls are no-ops once the index is ready.
+
+        Raises:
+            RetrievalError: If chunks directory is not available.
         """
-        if self.retrieval_method == "bm25" and self.bm25_retriever is not None:
-            return BM25RetrievalStrategy(self.bm25_retriever)
-        if self.retrieval_method == "hybrid" and self.hybrid_retriever is not None:
-            return HybridRetrievalStrategy(self.hybrid_retriever)
-        return VectorRetrievalStrategy(self.retriever)
+        if self.bm25_retriever is not None and self.bm25_retriever.is_indexed():
+            return
+
+        if self._chunks_dir is None or not self._chunks_dir.exists():
+            raise RetrievalError(
+                "BM25 索引不可用：找不到 chunks 数据目录。"
+                "请先构建索引（pixi run python main.py --build-index）或选择一个 Meal。"
+            )
+
+        logger.info(f"Lazy-loading BM25 index from {self._chunks_dir}...")
+        self.bm25_retriever.build_index_from_chunks(str(self._chunks_dir))
+        logger.success("BM25 index lazy-loaded successfully")
+
+    def _ensure_reranker(self) -> None:
+        """Load reranker model if not already loaded.
+
+        Initializes the cross-encoder reranker on first call, reading
+        model name, device, and top_n from the retrieval config.
+        """
+        if self.reranker is not None:
+            return
+
+        reranker_config = self.config.get("retrieval", {}).get("reranker", {})
+        logger.info("Lazy-loading reranker model...")
+        self.reranker = Reranker(
+            model_name=reranker_config.get("model_name", "BAAI/bge-reranker-large"),
+            device=reranker_config.get("device", "cuda"),
+        )
+        self.reranker_top_n = reranker_config.get(
+            "top_n", self.config["retrieval"]["top_k"]
+        )
+        logger.success("Reranker model lazy-loaded successfully")
+
+    def _ensure_query_rewriter(self, strategy: str) -> None:
+        """Initialize query rewriter if not already initialized or strategy changed.
+
+        Args:
+            strategy: Query rewrite strategy (``"hyde"`` or ``"multi_query"``).
+        """
+        if self.query_rewriter is not None and self.query_rewriter.strategy == strategy:
+            return
+
+        logger.info(f"Lazy-initializing query rewriter (strategy={strategy})...")
+        llm_config = get_llm_config(self.config)
+        rewrite_config = self.config.get("retrieval", {}).get("query_rewrite", {})
+        self.query_rewriter = QueryRewriter(
+            strategy=strategy,
+            llm_model_name=llm_config["model_name"],
+            llm_api_key=llm_config["api_key"],
+            llm_base_url=llm_config["base_url"],
+            llm_temperature=llm_config.get("temperature", 0.0),
+            llm_max_tokens=llm_config.get("max_tokens", 512),
+            num_queries=rewrite_config.get("num_queries", 3),
+            token_tracker=self.token_tracker,
+        )
+        logger.success(f"Query rewriter lazy-initialized (strategy={strategy})")
 
     def _get_rewrite_strategy(self) -> QueryRewriteStrategy:
         if self.query_rewriter is None:

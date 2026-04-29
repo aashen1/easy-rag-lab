@@ -408,6 +408,18 @@ def render_qa_demo():
             "启用查询改写", value=False, key="use_query_rewrite"
         )
 
+        if _use_query_rewrite:
+            _query_rewrite_strategy = st.selectbox(
+                "改写策略",
+                ["hyde", "multi_query"],
+                index=0,
+                key="query_rewrite_strategy",
+                format_func=lambda x: {
+                    "hyde": "HyDE（假设性文档）",
+                    "multi_query": "Multi-Query（多查询）",
+                }[x],
+            )
+
     if st.button("🗑️ 清空结果", key="clear_btn"):
         st.session_state.last_result = None
         st.session_state.saved_question = ""
@@ -435,13 +447,37 @@ def render_qa_demo():
         st.session_state.last_result = None
         st.session_state.query_error = None
 
+        config_overrides = {
+            "retrieval": {
+                "method": st.session_state.retrieval_method,
+                "top_k": st.session_state.top_k,
+                "reranker": {"enabled": st.session_state.use_reranker},
+                "query_rewrite": {
+                    "enabled": st.session_state.use_query_rewrite,
+                    "strategy": st.session_state.get("query_rewrite_strategy", "hyde"),
+                },
+            }
+        }
+
         with st.spinner("🔍 正在检索相关文档并生成答案..."):
             try:
                 pipeline = get_pipeline(meal_name)
-                result = pipeline.query(question)
+                result = pipeline.query(question, config_overrides=config_overrides)
                 st.session_state.last_result = result
             except Exception as e:
                 logger.error(f"Query failed: {e}")
-                st.session_state.query_error = str(e)
+                error_str = str(e)
+                if "BM25" in error_str or "chunks" in error_str:
+                    st.session_state.query_error = (
+                        f"BM25 索引不可用：{error_str}\n\n"
+                        "💡 提示：请先构建索引或选择一个已构建的 Meal。"
+                    )
+                elif "reranker" in error_str.lower() or "model" in error_str.lower():
+                    st.session_state.query_error = (
+                        f"Reranker 加载失败：{error_str}\n\n"
+                        "💡 提示：请检查模型文件是否已下载，或取消勾选「启用 Reranker」。"
+                    )
+                else:
+                    st.session_state.query_error = error_str
 
         st.rerun()
