@@ -12,7 +12,20 @@ from src.test_set_manager import TestSetManager
 from src.utils import load_config, setup_logger
 
 
-def main():
+def main() -> None:
+    """Entry point for the RAG System CLI.
+
+    Parses command-line arguments and dispatches to the appropriate
+    handler functions for index building, meal management, test set
+    generation, and interactive Q&A.
+
+    The CLI supports the following main operations:
+    - Build/rebuild vector index from PDF documents
+    - Create, list, delete, rename, copy, repair, merge, and extend meals
+    - Generate test sets with various strategies
+    - Run interactive Q&A sessions
+    - Execute single queries
+    """
     parser = argparse.ArgumentParser(description="RAG System - Financial Report Q&A")
     parser.add_argument("--query", type=str, help="Query question")
     parser.add_argument("--build-index", action="store_true", help="Build vector index")
@@ -265,6 +278,20 @@ def main():
 
 
 def _build_sampling_config(args: argparse.Namespace) -> SamplingConfig | None:
+    """Build a SamplingConfig from command-line arguments.
+
+    Checks for sample-count, sample-pages, and sample-ratio arguments.
+    Only one sampling mode can be specified at a time.
+
+    Args:
+        args: Parsed command-line arguments.
+
+    Returns:
+        SamplingConfig if a sampling mode is specified, None otherwise.
+
+    Raises:
+        SystemExit: If multiple sampling modes are specified.
+    """
     sampling_config = None
     sample_modes = [
         ("count", args.sample_count),
@@ -285,6 +312,18 @@ def _build_sampling_config(args: argparse.Namespace) -> SamplingConfig | None:
 
 
 def _handle_meal_info(meal_manager: MealManager, name: str) -> None:
+    """Display detailed information about a meal.
+
+    Prints meal metadata, config snapshot, file list with status,
+    and any issues detected.
+
+    Args:
+        meal_manager: MealManager instance for meal operations.
+        name: Name of the meal to display.
+
+    Raises:
+        SystemExit: If the meal does not exist.
+    """
     if not meal_manager.meal_exists(name):
         logger.error(f"Meal '{name}' not found")
         sys.exit(1)
@@ -341,6 +380,15 @@ def _handle_meal_info(meal_manager: MealManager, name: str) -> None:
 
 
 def _handle_list_meals(meal_manager: MealManager) -> None:
+    """List all meals grouped by data_id.
+
+    Prints a table showing meal name, data_id, status, PDF count,
+    page count, chunk count, config, and creation date. Meals with
+    the same data_id are grouped together.
+
+    Args:
+        meal_manager: MealManager instance for meal operations.
+    """
     meals = meal_manager.list_meals()
     if not meals:
         print("No meals found.")
@@ -399,6 +447,15 @@ def _handle_list_meals(meal_manager: MealManager) -> None:
 
 
 def _handle_delete_meal(meal_manager: MealManager, name: str) -> None:
+    """Delete a meal by name.
+
+    Args:
+        meal_manager: MealManager instance for meal operations.
+        name: Name of the meal to delete.
+
+    Raises:
+        SystemExit: If the meal does not exist.
+    """
     if not meal_manager.meal_exists(name):
         logger.error(f"Meal '{name}' not found")
         sys.exit(1)
@@ -409,6 +466,16 @@ def _handle_delete_meal(meal_manager: MealManager, name: str) -> None:
 def _handle_rename_meal(
     meal_manager: MealManager, old_name: str, new_name: str
 ) -> None:
+    """Rename a meal.
+
+    Args:
+        meal_manager: MealManager instance for meal operations.
+        old_name: Current name of the meal.
+        new_name: New name for the meal.
+
+    Raises:
+        SystemExit: If the new name is invalid.
+    """
     if not validate_meal_name(new_name):
         logger.error(
             f"Invalid meal name '{new_name}'. "
@@ -419,6 +486,18 @@ def _handle_rename_meal(
 
 
 def _handle_copy_meal(meal_manager: MealManager, source: str, target: str) -> None:
+    """Create a shallow copy of a meal.
+
+    The copy shares the same vector index as the source meal.
+
+    Args:
+        meal_manager: MealManager instance for meal operations.
+        source: Name of the source meal to copy.
+        target: Name for the new meal copy.
+
+    Raises:
+        SystemExit: If the target name is invalid.
+    """
     if not validate_meal_name(target):
         logger.error(
             f"Invalid meal name '{target}'. "
@@ -429,6 +508,18 @@ def _handle_copy_meal(meal_manager: MealManager, source: str, target: str) -> No
 
 
 def _handle_create_meal(meal_manager: MealManager, args: argparse.Namespace) -> None:
+    """Create a new meal from sampled PDF files.
+
+    Requires a sampling configuration (--sample-count/pages/ratio).
+
+    Args:
+        meal_manager: MealManager instance for meal operations.
+        args: Parsed command-line arguments containing sampling config
+            and optional meal name.
+
+    Raises:
+        SystemExit: If sampling config is missing or creation fails.
+    """
     sampling_config = _build_sampling_config(args)
     if sampling_config is None:
         logger.error(
@@ -459,6 +550,18 @@ def _handle_create_meal(meal_manager: MealManager, args: argparse.Namespace) -> 
 
 
 def _handle_repair_meal(meal_manager: MealManager, name: str) -> None:
+    """Interactively repair a meal with missing or changed files.
+
+    Displays file status, prompts for replacement paths, and offers
+    options to create a new meal or repair in-place.
+
+    Args:
+        meal_manager: MealManager instance for meal operations.
+        name: Name of the meal to repair.
+
+    Raises:
+        SystemExit: If the meal does not exist or repair fails.
+    """
     if not meal_manager.meal_exists(name):
         logger.error(f"Meal '{name}' not found")
         sys.exit(1)
@@ -545,6 +648,20 @@ def _handle_repair_meal(meal_manager: MealManager, name: str) -> None:
 def _handle_generate_test_set(
     meal_manager: MealManager, config: dict[str, Any], args: argparse.Namespace
 ) -> None:
+    """Generate a test set for a specified meal.
+
+    Supports multiple strategies: factual, boundary, multi_hop, document,
+    hybrid, and golden.
+
+    Args:
+        meal_manager: MealManager instance for meal operations.
+        config: Configuration dictionary.
+        args: Parsed command-line arguments containing meal name, strategy,
+            num_questions, and optional name.
+
+    Raises:
+        SystemExit: If the meal does not exist or generation fails.
+    """
     from src.test_generator import TestSetGenerator
 
     generator = TestSetGenerator(config)
@@ -600,6 +717,15 @@ def _handle_generate_test_set(
 
 
 def _print_query_result(result: dict[str, Any]) -> None:
+    """Print a formatted query result to stdout.
+
+    Displays the question, answer, sources with relevance scores,
+    and token usage breakdown.
+
+    Args:
+        result: Query result dictionary containing 'question', 'answer',
+            and optionally 'sources', 'scores', 'token_usage'.
+    """
     print(f"\n{'=' * 60}")
     print(f"Question: {result['question']}")
     print(f"{'=' * 60}")
@@ -627,6 +753,16 @@ def _print_query_result(result: dict[str, Any]) -> None:
 
 
 def _interactive_qa(pipeline: RAGPipeline, meal_name: str | None = None) -> None:
+    """Run an interactive Q&A session.
+
+    Continuously prompts for questions and displays answers until
+    the user types 'quit' or 'exit'. Tracks and displays token usage
+    on exit.
+
+    Args:
+        pipeline: RAGPipeline instance for query execution.
+        meal_name: Optional meal name to display in the welcome message.
+    """
     collection_info = pipeline.indexer.get_collection_info()
     if meal_name:
         print(f"\n🤖 RAG 问答系统已启动（meal: {meal_name}）")
@@ -688,6 +824,19 @@ def _interactive_qa(pipeline: RAGPipeline, meal_name: str | None = None) -> None
 def _handle_merge_meals(
     meal_manager: MealManager, meal_names: list[str], name: str | None
 ) -> None:
+    """Merge multiple meals into a new meal.
+
+    Combines PDFs from all source meals, deduplicates by SHA256,
+    and creates a new meal with a new data_id.
+
+    Args:
+        meal_manager: MealManager instance for meal operations.
+        meal_names: List of meal names to merge.
+        name: Optional name for the new merged meal.
+
+    Raises:
+        SystemExit: If merge fails.
+    """
     try:
         meal = meal_manager.merge_meals(meal_names, name=name)
         composition = meal.composition or {}
@@ -720,6 +869,20 @@ def _handle_extend_meal(
     new_pdfs: list[str],
     name: str | None,
 ) -> None:
+    """Extend a meal by adding new PDF files.
+
+    Creates a new meal containing all PDFs from the source meal
+    plus the newly added PDFs.
+
+    Args:
+        meal_manager: MealManager instance for meal operations.
+        source_meal: Name of the source meal to extend.
+        new_pdfs: List of paths to new PDF files to add.
+        name: Optional name for the new extended meal.
+
+    Raises:
+        SystemExit: If extension fails.
+    """
     try:
         meal = meal_manager.extend_meal(source_meal, new_pdfs, name=name)
         composition = meal.composition or {}
@@ -746,6 +909,20 @@ def _handle_merge_test_sets(
     target_meal: str,
     name: str | None,
 ) -> None:
+    """Merge multiple test sets into a new test set.
+
+    Source specs should be in the format "meal:test_set".
+
+    Args:
+        meal_manager: MealManager instance for meal operations.
+        config: Configuration dictionary.
+        source_specs: List of source specs in "meal:test_set" format.
+        target_meal: Name of the meal to associate the merged test set with.
+        name: Optional name for the new merged test set.
+
+    Raises:
+        SystemExit: If the target meal does not exist or merge fails.
+    """
     if not meal_manager.meal_exists(target_meal):
         logger.error(f"Target meal '{target_meal}' not found")
         sys.exit(1)
