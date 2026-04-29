@@ -322,9 +322,9 @@ class BuiltinEvaluator(BaseEvaluator):
         """
         Evaluate a batch of samples using builtin metrics.
 
-        This implementation processes samples sequentially. For better
-        performance with LLM-based metrics, consider using the RAGAS
-        evaluator which supports batch processing.
+        Retrieval metrics are computed sequentially (pure computation, fast).
+        Generation metrics that require LLM calls are computed concurrently
+        using a thread pool for improved throughput.
 
         Args:
             samples: List of EvaluationSample objects.
@@ -335,11 +335,43 @@ class BuiltinEvaluator(BaseEvaluator):
         Returns:
             List of EvaluationResult objects.
         """
-        results = []
-        for i, sample in enumerate(samples):
-            logger.info(
-                f"Evaluating sample {i + 1}/{len(samples)}: {sample.question_id}"
-            )
+        has_gen_metrics = bool(generation_metrics) and bool(llm_config)
+        if not has_gen_metrics:
+            results = []
+            for i, sample in enumerate(samples):
+                logger.info(
+                    f"Evaluating sample {i + 1}/{len(samples)}: {sample.question_id}"
+                )
+                merged = EvaluationSample(
+                    question_id=sample.question_id,
+                    question=sample.question,
+                    answer=sample.answer,
+                    contexts=sample.contexts,
+                    expected_sources=sample.expected_sources,
+                    expected_answer=sample.expected_answer,
+                    llm_config=llm_config or sample.llm_config,
+                    retrieval_metrics=retrieval_metrics or sample.retrieval_metrics,
+                    generation_metrics=generation_metrics or sample.generation_metrics,
+                    chunk_ids=sample.chunk_ids,
+                    expected_chunks=sample.expected_chunks,
+                    equivalence_groups=sample.equivalence_groups,
+                    expect_retrieval=sample.expect_retrieval,
+                    expect_no_answer=sample.expect_no_answer,
+                    retrieved_sources=sample.retrieved_sources,
+                    question_type=sample.question_type,
+                )
+                result = self.evaluate_single(merged)
+                results.append(result)
+            return results
+
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        max_workers = self._config.get("evaluation", {}).get(
+            "builtin_concurrent_workers", 3
+        )
+
+        merged_samples = []
+        for sample in samples:
             merged = EvaluationSample(
                 question_id=sample.question_id,
                 question=sample.question,
@@ -358,6 +390,37 @@ class BuiltinEvaluator(BaseEvaluator):
                 retrieved_sources=sample.retrieved_sources,
                 question_type=sample.question_type,
             )
-            result = self.evaluate_single(merged)
-            results.append(result)
-        return results
+            merged_samples.append(merged)
+
+        logger.info(
+            f"Concurrent evaluation: {len(merged_samples)} samples, "
+            f"{max_workers} workers"
+        )
+
+        results_dict: dict[int, EvaluationResult] = {}
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_idx = {}
+            for i, sample in enumerate(merged_samples):
+                future = executor.submit(self.evaluate_single, sample)
+                future_to_idx[future] = i
+
+            for future in as_completed(future_to_idx):
+                idx = future_to_idx[future]
+                try:
+                    results_dict[idx] = future.result()
+                except Exception as e:
+                    sample = merged_samples[idx]
+                    logger.error(
+                        f"Concurrent evaluation failed for {sample.question_id}: {str(e)}"
+                    )
+                    results_dict[idx] = EvaluationResult(
+                        question_id=sample.question_id,
+                        question=sample.question,
+                        answer=sample.answer,
+                        contexts=sample.contexts,
+                        retrieval_metrics={},
+                        generation_metrics={},
+                        error=str(e),
+                    )
+
+        return [results_dict[i] for i in range(len(merged_samples))]

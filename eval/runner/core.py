@@ -210,6 +210,7 @@ def run_variant_evaluation(
         llm_config = get_llm_config(merged_config, llm_preset)
 
         checkpoint_dir = exp_dir / "checkpoints"
+        max_questions = exp_config.evaluation.get("max_questions")
 
         for test_set in test_sets:
             results = evaluate_test_set(
@@ -221,6 +222,7 @@ def run_variant_evaluation(
                 checkpoint_dir=checkpoint_dir,
                 variant_name=variant_name,
                 experiment_name=exp_config.name,
+                max_questions=max_questions,
             )
             all_results.extend(results)
 
@@ -255,6 +257,7 @@ def run_variant_evaluation(
             "variant_description": variant.get("description", ""),
             "timestamp": datetime.now().isoformat(),
             "total_questions": len(all_results),
+            "partial_evaluation": max_questions is not None,
             "total_time_seconds": total_time,
             "avg_time_per_question": total_time / len(all_results)
             if all_results
