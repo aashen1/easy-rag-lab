@@ -1,5 +1,6 @@
 from typing import Any
 
+from anthropic import Anthropic
 from loguru import logger
 
 from src.exceptions import ConfigurationError, GenerationError
@@ -62,15 +63,13 @@ class QueryRewriter:
 
         self._client = None
 
-    def _get_client(self):
+    def _get_client(self) -> Anthropic:
         """Lazy-initialize the Anthropic client.
 
         Returns:
             Anthropic client instance.
         """
         if self._client is None:
-            from anthropic import Anthropic
-
             self._client = Anthropic(
                 api_key=self.llm_api_key, base_url=self.llm_base_url
             )
@@ -192,7 +191,7 @@ class QueryRewriter:
         logger.success(f"Multi-Query rewrite: {len(sub_queries)} sub-queries generated")
         return result
 
-    def _call_llm(self, prompt: str) -> tuple:
+    def _call_llm(self, prompt: str) -> tuple[str, dict[str, Any] | None]:
         """Call the LLM API with the given prompt.
 
         Args:
