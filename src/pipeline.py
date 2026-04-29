@@ -713,18 +713,6 @@ class RAGPipeline:
         )
         logger.success(f"Query rewriter lazy-initialized (strategy={strategy})")
 
-    def _get_retrieval_strategy(self) -> RetrievalStrategy:
-        """Get the appropriate retrieval strategy based on config.
-
-        Returns:
-            A retrieval strategy instance (BM25, Hybrid, or Vector).
-        """
-        if self.retrieval_method == "bm25" and self.bm25_retriever is not None:
-            return BM25RetrievalStrategy(self.bm25_retriever)
-        if self.retrieval_method == "hybrid" and self.hybrid_retriever is not None:
-            return HybridRetrievalStrategy(self.hybrid_retriever)
-        return VectorRetrievalStrategy(self.retriever)
-
     def _get_rewrite_strategy(self) -> QueryRewriteStrategy:
         if self.query_rewriter is None:
             return NoRewriteStrategy()
