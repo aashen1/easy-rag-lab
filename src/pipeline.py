@@ -499,13 +499,27 @@ class RAGPipeline:
         )
         return self.meal_config
 
-    def query(self, question: str, return_contexts: bool = True) -> dict[str, Any]:
+    def query(
+        self,
+        question: str,
+        return_contexts: bool = True,
+        config_overrides: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Execute a RAG query: retrieve relevant contexts and generate an answer.
+
+        When ``config_overrides`` is provided, the overrides are deep-merged
+        with the pipeline's base config to produce an *effective config* that
+        drives this single query.  This allows callers to experiment with
+        different retrieval methods, top-k values, reranker settings, etc.
+        without re-initialising the pipeline.
 
         Args:
             question: The user question to answer. Must be a non-empty string.
             return_contexts: Whether to include retrieved contexts, scores, and
                 sources in the response dictionary. Defaults to True.
+            config_overrides: Optional dictionary of config overrides to
+                deep-merge with ``self.config`` for this query only. When
+                None, the pipeline's base config is used unchanged.
 
         Returns:
             A dictionary containing at minimum ``question`` and ``answer`` keys.
@@ -513,8 +527,8 @@ class RAGPipeline:
             ``scores``, ``sources``, ``chunk_ids``, and optionally ``token_usage``.
 
         Raises:
-            ValueError: If ``question`` is empty or not a string.
-            Exception: If retrieval or generation fails.
+            RetrievalError: If ``question`` is empty or not a string, or if
+                retrieval / generation fails.
         """
         if not question or not isinstance(question, str):
             error_msg = "Question must be a non-empty string"
@@ -524,10 +538,56 @@ class RAGPipeline:
         try:
             logger.info(f"Processing query: {question[:50]}...")
 
-            rewrite_strategy = self._get_rewrite_strategy()
+            if config_overrides is not None:
+                from src.utils import deep_merge
+
+                effective_config = deep_merge(self.config, config_overrides)
+                logger.debug(f"Using config overrides: {config_overrides}")
+            else:
+                effective_config = self.config
+
+            effective_retrieval = effective_config.get("retrieval", {})
+            effective_method = effective_retrieval.get("method", "vector")
+            effective_top_k = effective_retrieval.get("top_k", 5)
+            effective_reranker_enabled = effective_retrieval.get("reranker", {}).get(
+                "enabled", False
+            )
+            effective_rewrite_enabled = effective_retrieval.get(
+                "query_rewrite", {}
+            ).get("enabled", False)
+            effective_rewrite_strategy = effective_retrieval.get(
+                "query_rewrite", {}
+            ).get("strategy", "hyde")
+
+            if effective_rewrite_enabled:
+                self._ensure_query_rewriter(effective_rewrite_strategy)
+                rewrite_strategy = self._get_rewrite_strategy()
+            else:
+                rewrite_strategy = NoRewriteStrategy()
+
             rewritten = rewrite_strategy.rewrite(question)
-            retrieval_strategy = self._get_retrieval_strategy()
-            top_k = self.config["retrieval"]["top_k"]
+
+            if effective_method in ("bm25", "hybrid"):
+                self._ensure_bm25_index()
+
+            if effective_method == "bm25" and self.bm25_retriever is not None:
+                retrieval_strategy = BM25RetrievalStrategy(self.bm25_retriever)
+            elif effective_method == "hybrid" and self.bm25_retriever is not None:
+                if self.hybrid_retriever is None:
+                    hybrid_config = effective_retrieval.get("hybrid", {})
+                    self.hybrid_retriever = HybridRetriever(
+                        vector_retriever=self.retriever,
+                        bm25_retriever=self.bm25_retriever,
+                        fusion_method=hybrid_config.get("fusion", "rrf"),
+                        rrf_k=hybrid_config.get("rrf_k", 60),
+                        vector_weight=hybrid_config.get("vector_weight", 0.7),
+                        bm25_weight=hybrid_config.get("bm25_weight", 0.3),
+                        top_k=effective_top_k,
+                    )
+                retrieval_strategy = HybridRetrievalStrategy(self.hybrid_retriever)
+            else:
+                retrieval_strategy = VectorRetrievalStrategy(self.retriever)
+
             is_multi = rewritten.is_multi
 
             if not is_multi:
@@ -537,14 +597,15 @@ class RAGPipeline:
 
             if is_multi:
                 results = self._retrieve_multi(
-                    retrieval_strategy, rewritten.queries, top_k
+                    retrieval_strategy, rewritten.queries, effective_top_k
                 )
             else:
                 results = retrieval_strategy.retrieve(
-                    rewritten.queries[0], top_k
+                    rewritten.queries[0], effective_top_k
                 ).chunks
 
-            if self.reranker is not None and results:
+            if effective_reranker_enabled and results:
+                self._ensure_reranker()
                 logger.debug(
                     f"Reranking {'multi-query ' if is_multi else ''}results..."
                 )

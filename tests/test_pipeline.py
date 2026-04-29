@@ -169,7 +169,9 @@ class TestRAGPipeline:
         pipeline = RAGPipeline(config_path="dummy.yaml")
         result = pipeline.query("What is the revenue?")
 
-        mock_retriever_instance.retrieve.assert_called_once_with("What is the revenue?")
+        mock_retriever_instance.retrieve.assert_called_once_with(
+            "What is the revenue?", top_k=5
+        )
         mock_generator_instance.generate.assert_called_once_with(
             "What is the revenue?",
             ["Revenue was 100 billion.", "Profit increased by 10%."],
@@ -646,3 +648,289 @@ class TestRAGPipeline:
             source_filter=None,
             model_name="test-model",
         )
+
+    @patch("src.pipeline.Generator")
+    @patch("src.pipeline.Retriever")
+    @patch("src.pipeline.VectorIndexer")
+    @patch("src.pipeline.Embedder")
+    @patch("src.pipeline.get_llm_config")
+    @patch("src.pipeline.setup_logger")
+    @patch("src.pipeline.load_config")
+    def test_query_with_config_overrides_top_k(
+        self,
+        mock_load_config,
+        mock_setup_logger,
+        mock_get_llm_config,
+        mock_embedder,
+        mock_indexer,
+        mock_retriever,
+        mock_generator,
+    ):
+        mock_load_config.return_value = _make_config()
+        mock_get_llm_config.return_value = _make_llm_config()
+
+        mock_retriever_instance = mock_retriever.return_value
+        mock_retriever_instance.retrieve.return_value = [
+            {
+                "text": "Revenue was 100 billion.",
+                "score": 0.95,
+                "metadata": {"source": "report_2023.pdf"},
+            },
+        ]
+
+        mock_generator_instance = mock_generator.return_value
+        mock_generator_instance.generate.return_value = "Revenue was 100 billion."
+        mock_generator_instance.last_token_usage = None
+
+        pipeline = RAGPipeline(config_path="dummy.yaml")
+        result = pipeline.query(
+            "What is the revenue?",
+            config_overrides={"retrieval": {"top_k": 3}},
+        )
+
+        assert result["question"] == "What is the revenue?"
+        mock_retriever_instance.retrieve.assert_called_once_with(
+            "What is the revenue?", top_k=3
+        )
+
+    @patch("src.pipeline.Generator")
+    @patch("src.pipeline.Retriever")
+    @patch("src.pipeline.VectorIndexer")
+    @patch("src.pipeline.Embedder")
+    @patch("src.pipeline.get_llm_config")
+    @patch("src.pipeline.setup_logger")
+    @patch("src.pipeline.load_config")
+    def test_query_with_config_overrides_none_is_noop(
+        self,
+        mock_load_config,
+        mock_setup_logger,
+        mock_get_llm_config,
+        mock_embedder,
+        mock_indexer,
+        mock_retriever,
+        mock_generator,
+    ):
+        mock_load_config.return_value = _make_config()
+        mock_get_llm_config.return_value = _make_llm_config()
+
+        mock_retriever_instance = mock_retriever.return_value
+        mock_retriever_instance.retrieve.return_value = [
+            {
+                "text": "Revenue was 100 billion.",
+                "score": 0.95,
+                "metadata": {"source": "report_2023.pdf"},
+            },
+        ]
+
+        mock_generator_instance = mock_generator.return_value
+        mock_generator_instance.generate.return_value = "Revenue was 100 billion."
+        mock_generator_instance.last_token_usage = None
+
+        pipeline = RAGPipeline(config_path="dummy.yaml")
+        result = pipeline.query("What is the revenue?", config_overrides=None)
+
+        assert result["question"] == "What is the revenue?"
+        mock_retriever_instance.retrieve.assert_called_once_with(
+            "What is the revenue?", top_k=5
+        )
+
+    @patch("src.pipeline.Generator")
+    @patch("src.pipeline.Retriever")
+    @patch("src.pipeline.VectorIndexer")
+    @patch("src.pipeline.Embedder")
+    @patch("src.pipeline.get_llm_config")
+    @patch("src.pipeline.setup_logger")
+    @patch("src.pipeline.load_config")
+    def test_query_with_config_overrides_reranker_enabled(
+        self,
+        mock_load_config,
+        mock_setup_logger,
+        mock_get_llm_config,
+        mock_embedder,
+        mock_indexer,
+        mock_retriever,
+        mock_generator,
+    ):
+        mock_load_config.return_value = _make_config()
+        mock_get_llm_config.return_value = _make_llm_config()
+
+        mock_retriever_instance = mock_retriever.return_value
+        mock_retriever_instance.retrieve.return_value = [
+            {
+                "text": "Revenue was 100 billion.",
+                "score": 0.95,
+                "metadata": {"source": "report_2023.pdf"},
+                "chunk_id": "c1",
+            },
+        ]
+
+        mock_generator_instance = mock_generator.return_value
+        mock_generator_instance.generate.return_value = "Revenue was 100 billion."
+        mock_generator_instance.last_token_usage = None
+
+        pipeline = RAGPipeline(config_path="dummy.yaml")
+        assert pipeline.reranker is None
+
+        with patch("src.pipeline.Reranker") as mock_reranker_cls:
+            mock_reranker_instance = mock_reranker_cls.return_value
+            mock_reranker_instance.rerank.return_value = [
+                {
+                    "text": "Revenue was 100 billion.",
+                    "score": 0.99,
+                    "metadata": {"source": "report_2023.pdf"},
+                    "chunk_id": "c1",
+                },
+            ]
+
+            pipeline.query(
+                "What is the revenue?",
+                config_overrides={
+                    "retrieval": {"reranker": {"enabled": True}},
+                },
+            )
+
+            mock_reranker_cls.assert_called_once()
+            mock_reranker_instance.rerank.assert_called_once()
+
+    @patch("src.pipeline.Generator")
+    @patch("src.pipeline.Retriever")
+    @patch("src.pipeline.VectorIndexer")
+    @patch("src.pipeline.Embedder")
+    @patch("src.pipeline.get_llm_config")
+    @patch("src.pipeline.setup_logger")
+    @patch("src.pipeline.load_config")
+    def test_query_with_config_overrides_disables_rewrite(
+        self,
+        mock_load_config,
+        mock_setup_logger,
+        mock_get_llm_config,
+        mock_embedder,
+        mock_indexer,
+        mock_retriever,
+        mock_generator,
+    ):
+        config = _make_config()
+        config["retrieval"]["query_rewrite"] = {
+            "enabled": True,
+            "strategy": "hyde",
+        }
+        mock_load_config.return_value = config
+        mock_get_llm_config.return_value = _make_llm_config()
+
+        mock_retriever_instance = mock_retriever.return_value
+        mock_retriever_instance.retrieve.return_value = [
+            {
+                "text": "Revenue was 100 billion.",
+                "score": 0.95,
+                "metadata": {"source": "report_2023.pdf"},
+            },
+        ]
+
+        mock_generator_instance = mock_generator.return_value
+        mock_generator_instance.generate.return_value = "Revenue was 100 billion."
+        mock_generator_instance.last_token_usage = None
+
+        pipeline = RAGPipeline(config_path="dummy.yaml")
+
+        with patch.object(pipeline, "_get_rewrite_strategy") as mock_get_rw:
+            pipeline.query(
+                "What is the revenue?",
+                config_overrides={
+                    "retrieval": {"query_rewrite": {"enabled": False}},
+                },
+            )
+            mock_get_rw.assert_not_called()
+
+    @patch("src.pipeline.Generator")
+    @patch("src.pipeline.Retriever")
+    @patch("src.pipeline.VectorIndexer")
+    @patch("src.pipeline.Embedder")
+    @patch("src.pipeline.get_llm_config")
+    @patch("src.pipeline.setup_logger")
+    @patch("src.pipeline.load_config")
+    def test_query_with_config_overrides_bm25_method(
+        self,
+        mock_load_config,
+        mock_setup_logger,
+        mock_get_llm_config,
+        mock_embedder,
+        mock_indexer,
+        mock_retriever,
+        mock_generator,
+    ):
+        mock_load_config.return_value = _make_config()
+        mock_get_llm_config.return_value = _make_llm_config()
+
+        mock_generator_instance = mock_generator.return_value
+        mock_generator_instance.generate.return_value = "Revenue was 100 billion."
+        mock_generator_instance.last_token_usage = None
+
+        pipeline = RAGPipeline(config_path="dummy.yaml")
+
+        with (
+            patch.object(pipeline, "_ensure_bm25_index") as mock_ensure_bm25,
+            patch("src.pipeline.BM25RetrievalStrategy") as mock_bm25_strategy_cls,
+        ):
+            mock_bm25_strategy = MagicMock()
+            mock_bm25_strategy.retrieve.return_value = MagicMock(
+                chunks=[
+                    {
+                        "text": "Revenue was 100 billion.",
+                        "score": 0.9,
+                        "metadata": {"source": "report_2023.pdf"},
+                        "chunk_id": "c1",
+                    },
+                ]
+            )
+            mock_bm25_strategy_cls.return_value = mock_bm25_strategy
+
+            pipeline.query(
+                "What is the revenue?",
+                config_overrides={"retrieval": {"method": "bm25"}},
+            )
+
+            mock_ensure_bm25.assert_called_once()
+            mock_bm25_strategy_cls.assert_called_once_with(pipeline.bm25_retriever)
+
+    @patch("src.pipeline.Generator")
+    @patch("src.pipeline.Retriever")
+    @patch("src.pipeline.VectorIndexer")
+    @patch("src.pipeline.Embedder")
+    @patch("src.pipeline.get_llm_config")
+    @patch("src.pipeline.setup_logger")
+    @patch("src.pipeline.load_config")
+    def test_query_with_config_overrides_does_not_mutate_base_config(
+        self,
+        mock_load_config,
+        mock_setup_logger,
+        mock_get_llm_config,
+        mock_embedder,
+        mock_indexer,
+        mock_retriever,
+        mock_generator,
+    ):
+        mock_load_config.return_value = _make_config()
+        mock_get_llm_config.return_value = _make_llm_config()
+
+        mock_retriever_instance = mock_retriever.return_value
+        mock_retriever_instance.retrieve.return_value = [
+            {
+                "text": "Revenue was 100 billion.",
+                "score": 0.95,
+                "metadata": {"source": "report_2023.pdf"},
+            },
+        ]
+
+        mock_generator_instance = mock_generator.return_value
+        mock_generator_instance.generate.return_value = "Revenue was 100 billion."
+        mock_generator_instance.last_token_usage = None
+
+        pipeline = RAGPipeline(config_path="dummy.yaml")
+        original_top_k = pipeline.config["retrieval"]["top_k"]
+
+        pipeline.query(
+            "What is the revenue?",
+            config_overrides={"retrieval": {"top_k": 99}},
+        )
+
+        assert pipeline.config["retrieval"]["top_k"] == original_top_k
