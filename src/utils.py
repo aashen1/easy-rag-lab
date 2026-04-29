@@ -1,3 +1,4 @@
+import copy
 import os
 import sys
 from pathlib import Path
@@ -279,6 +280,30 @@ DEFAULT_CATEGORY_MAPPING: dict[str, str] = {
     "research_report": "research_report",
     "研报": "research_report",
 }
+
+
+def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Deep merge two dictionaries.
+
+    Values from override dictionary take precedence over base dictionary.
+    Nested dictionaries are merged recursively.
+
+    Args:
+        base: Base dictionary to merge into.
+        override: Dictionary with values to override.
+
+    Returns:
+        Merged dictionary.
+    """
+    result = copy.deepcopy(base)
+
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = deep_merge(result[key], value)
+        else:
+            result[key] = copy.deepcopy(value)
+
+    return result
 
 
 def detect_document_category(
