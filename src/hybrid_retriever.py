@@ -96,7 +96,7 @@ class HybridRetriever:
 
             fetch_k = effective_top_k * 3
 
-            vector_results = self.vector_retriever.retrieve(query)
+            vector_results = self.vector_retriever.retrieve(query, top_k=fetch_k)
             bm25_results = self.bm25_retriever.retrieve(query, top_k=fetch_k)
 
             if self.fusion_method == "rrf":
