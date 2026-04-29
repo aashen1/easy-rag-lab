@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import time
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -47,19 +49,97 @@ def create_evaluators(
     return evaluators
 
 
+def _save_question_checkpoint(
+    checkpoint_path: Path,
+    variant_name: str,
+    experiment_name: str,
+    samples: list[dict[str, Any]],
+    total_questions: int,
+    model_name: str = "",
+) -> None:
+    """
+    Save question-level checkpoint for resume support.
+
+    Args:
+        checkpoint_path: Path to the checkpoint file.
+        variant_name: Name of the variant being evaluated.
+        experiment_name: Name of the experiment.
+        samples: List of collected samples so far.
+        total_questions: Total number of questions to process.
+        model_name: LLM model name used for generation (for change detection).
+    """
+    checkpoint_data = {
+        "variant_name": variant_name,
+        "experiment_name": experiment_name,
+        "model_name": model_name,
+        "completed_questions": len(samples),
+        "total_questions": total_questions,
+        "samples": samples,
+    }
+    try:
+        with open(checkpoint_path, "w", encoding="utf-8") as f:
+            json.dump(checkpoint_data, f, ensure_ascii=False, indent=2)
+    except OSError as e:
+        logger.warning(f"Failed to save question checkpoint: {str(e)}")
+
+
+def _load_question_checkpoint(
+    checkpoint_path: Path,
+) -> list[dict[str, Any]] | None:
+    """
+    Load question-level checkpoint if available.
+
+    Args:
+        checkpoint_path: Path to the checkpoint file.
+
+    Returns:
+        List of previously collected samples, or None if no valid checkpoint.
+    """
+    if not checkpoint_path.exists():
+        return None
+
+    try:
+        with open(checkpoint_path, encoding="utf-8") as f:
+            data = json.load(f)
+        samples = data.get("samples", [])
+        if samples:
+            logger.info(
+                f"Loaded question checkpoint: {data.get('completed_questions', 0)}/"
+                f"{data.get('total_questions', '?')} questions already completed "
+                f"for variant '{data.get('variant_name', '?')}'"
+            )
+            return samples
+    except (json.JSONDecodeError, OSError) as e:
+        logger.warning(f"Failed to load question checkpoint: {str(e)}")
+
+    return None
+
+
 def collect_rag_samples(
     pipeline: RAGPipeline,
     test_set: dict[str, Any],
     equivalence_groups: dict[str, list[str]] | None = None,
+    checkpoint_dir: Path | None = None,
+    variant_name: str = "",
+    experiment_name: str = "",
+    model_name: str = "",
 ) -> list[dict[str, Any]]:
     """
     Run pipeline queries and collect raw samples for evaluation.
+
+    Supports question-level checkpointing: each completed question result is
+    appended to a checkpoint file so that if the process is interrupted, the
+    next run can resume from where it left off.
 
     Args:
         pipeline: Configured RAG pipeline.
         test_set: Test set dictionary with questions.
         equivalence_groups: Optional dict mapping group keys to lists of
             equivalent file paths for dedup normalization.
+        checkpoint_dir: Optional directory for saving question-level checkpoints.
+        variant_name: Name of the variant (for checkpoint file naming).
+        experiment_name: Name of the experiment (for checkpoint metadata).
+        model_name: LLM model name used for generation (for change detection).
 
     Returns:
         List of sample dictionaries with query results.
@@ -76,16 +156,38 @@ def collect_rag_samples(
         f"Collecting results for test set '{test_set_name}' ({len(questions)} questions)..."
     )
 
-    samples = []
-    for i, question_data in enumerate(questions, 1):
-        question_id = question_data.get("id", f"q{i}")
+    checkpoint_path: Path | None = None
+    if checkpoint_dir is not None and variant_name:
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        safe_name = variant_name.lower().replace(" ", "_").replace("-", "_")
+        safe_name = "".join(c for c in safe_name if c.isalnum() or c == "_")
+        checkpoint_path = checkpoint_dir / f"{safe_name}_checkpoint.json"
+
+    samples: list[dict[str, Any]] = []
+    start_index = 0
+
+    if checkpoint_path is not None:
+        existing = _load_question_checkpoint(checkpoint_path)
+        if existing is not None:
+            samples = existing
+            start_index = len(samples)
+            if start_index >= len(questions):
+                logger.info(
+                    f"All {len(questions)} questions already completed, using checkpoint"
+                )
+                return samples
+            logger.info(f"Resuming from question {start_index + 1}/{len(questions)}")
+
+    for i in range(start_index, len(questions)):
+        question_data = questions[i]
+        question_id = question_data.get("id", f"q{i + 1}")
         question_text = question_data.get("question", "")
 
         if not question_text:
             logger.warning(f"Question {question_id} has no text, skipping")
             continue
 
-        logger.info(f"Processing question {i}/{len(questions)}: {question_id}")
+        logger.info(f"Processing question {i + 1}/{len(questions)}: {question_id}")
 
         case_start_time = time.time()
         try:
@@ -143,6 +245,16 @@ def collect_rag_samples(
             }
 
         samples.append(sample)
+
+        if checkpoint_path is not None:
+            _save_question_checkpoint(
+                checkpoint_path,
+                variant_name,
+                experiment_name,
+                samples,
+                len(questions),
+                model_name=model_name,
+            )
 
     return samples
 
@@ -395,6 +507,9 @@ def evaluate_test_set(
     exp_config: ExperimentConfig | None = None,
     system_config: dict[str, Any] | None = None,
     meal_info: dict[str, Any] | None = None,
+    checkpoint_dir: Path | None = None,
+    variant_name: str = "",
+    experiment_name: str = "",
 ) -> list[dict[str, Any]]:
     """
     Evaluate a single test set against the pipeline.
@@ -408,6 +523,9 @@ def evaluate_test_set(
         exp_config: Experiment configuration for backend selection.
         system_config: System configuration for evaluator creation.
         meal_info: Optional meal information containing equivalence_groups.
+        checkpoint_dir: Optional directory for question-level checkpoints.
+        variant_name: Name of the variant (for checkpoint file naming).
+        experiment_name: Name of the experiment (for checkpoint metadata).
 
     Returns:
         List of evaluation result dictionaries.
@@ -458,7 +576,13 @@ def evaluate_test_set(
 
     equivalence_groups = meal_info.get("equivalence_groups") if meal_info else None
     samples = collect_rag_samples(
-        pipeline, test_set, equivalence_groups=equivalence_groups
+        pipeline,
+        test_set,
+        equivalence_groups=equivalence_groups,
+        checkpoint_dir=checkpoint_dir,
+        variant_name=variant_name,
+        experiment_name=experiment_name,
+        model_name=llm_config.get("model_name", "") if llm_config else "",
     )
 
     all_results: dict[str, dict[str, Any]] = {}

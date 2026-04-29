@@ -46,6 +46,7 @@ def run_variant_evaluation(
     test_generation_tracker: TokenTracker | None = None,
     profiler: PipelineProfiler | None = None,
     force_index: bool = False,
+    indexer_cache: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Run evaluation for a single variant.
@@ -60,6 +61,8 @@ def run_variant_evaluation(
         test_generation_tracker: TokenTracker from test set generation phase.
         profiler: Optional PipelineProfiler for performance tracking.
         force_index: If True, delete existing index and rebuild from scratch.
+        indexer_cache: Optional dict mapping chunker_hash to VectorIndexer for
+            index reuse across variants with identical chunker configs.
 
     Returns:
         Evaluation result dictionary.
@@ -71,6 +74,30 @@ def run_variant_evaluation(
     logger.info(f"Running evaluation for variant: {variant_name}")
 
     merged_config = merge_config(system_config, exp_config, variant)
+
+    checkpoint_dir = exp_dir / "checkpoints"
+    if checkpoint_dir.exists():
+        safe_name = variant_name.lower().replace(" ", "_").replace("-", "_")
+        safe_name = "".join(c for c in safe_name if c.isalnum() or c == "_")
+        checkpoint_file = checkpoint_dir / f"{safe_name}_checkpoint.json"
+        if checkpoint_file.exists():
+            try:
+                with open(checkpoint_file, encoding="utf-8") as f:
+                    ckpt_data = json.load(f)
+                ckpt_model = ckpt_data.get("model_name", "")
+                current_model = (
+                    merged_config.get("llm_presets", {})
+                    .get("default", {})
+                    .get("model_name", "")
+                )
+                if ckpt_model and current_model and ckpt_model != current_model:
+                    logger.warning(
+                        f"Model change detected for variant '{variant_name}': "
+                        f"checkpoint used '{ckpt_model}', current is '{current_model}'. "
+                        f"Results may be inconsistent. Use --force-rerun to start fresh."
+                    )
+            except (json.JSONDecodeError, OSError):
+                pass
 
     meal_name = meal_info["name"]
     meal_config = meal_info["config"]
@@ -102,9 +129,27 @@ def run_variant_evaluation(
 
         if profiler:
             profiler.begin_stage("S3")
-        indexer = prepare_index_for_variant(
-            merged_config, meal_config, variant_name, force_index=force_index
-        )
+
+        from src.meal import compute_chunker_config_hash
+
+        chunker_hash = compute_chunker_config_hash(merged_config.get("chunker", {}))
+
+        if (
+            indexer_cache is not None
+            and chunker_hash in indexer_cache
+            and not force_index
+        ):
+            logger.info(
+                f"Reusing cached index for variant '{variant_name}' (chunker_hash={chunker_hash[:8]})"
+            )
+            indexer = indexer_cache[chunker_hash]
+        else:
+            indexer = prepare_index_for_variant(
+                merged_config, meal_config, variant_name, force_index=force_index
+            )
+            if indexer_cache is not None and not force_index:
+                indexer_cache[chunker_hash] = indexer
+
         pipeline.indexer = indexer
         if profiler:
             profiler.end_stage()
@@ -164,6 +209,8 @@ def run_variant_evaluation(
 
         llm_config = get_llm_config(merged_config, llm_preset)
 
+        checkpoint_dir = exp_dir / "checkpoints"
+
         for test_set in test_sets:
             results = evaluate_test_set(
                 pipeline,
@@ -171,6 +218,9 @@ def run_variant_evaluation(
                 exp_config=exp_config,
                 system_config=system_config,
                 meal_info=meal_info,
+                checkpoint_dir=checkpoint_dir,
+                variant_name=variant_name,
+                experiment_name=exp_config.name,
             )
             all_results.extend(results)
 
@@ -247,6 +297,18 @@ def run_variant_evaluation(
 
         pipeline.close()
 
+        checkpoint_dir = exp_dir / "checkpoints"
+        if checkpoint_dir.exists():
+            safe_name = variant_name.lower().replace(" ", "_").replace("-", "_")
+            safe_name = "".join(c for c in safe_name if c.isalnum() or c == "_")
+            checkpoint_file = checkpoint_dir / f"{safe_name}_checkpoint.json"
+            if checkpoint_file.exists():
+                try:
+                    checkpoint_file.unlink()
+                    logger.info(f"Cleaned up checkpoint for variant '{variant_name}'")
+                except OSError:
+                    pass
+
         return variant_result
 
     except Exception as e:
@@ -262,15 +324,22 @@ def run_experiment(
     skip_preprocessing: bool = False,
     use_llm_report: bool = False,
     system_config_path: str = "config.yaml",
+    force_rerun: bool = False,
 ) -> dict[str, Any]:
     """
     Execute complete experiment workflow.
+
+    Supports checkpoint resume: if the experiment directory already exists and
+    some variants have been completed, those variants are skipped and only
+    the remaining ones are executed.  Use ``force_rerun`` to ignore checkpoints
+    and re-run everything from scratch.
 
     Args:
         config_path: Path to experiment configuration YAML file.
         skip_preprocessing: If True, skip meal and test set creation if missing.
         use_llm_report: If True, use LLM to generate experiment report.
         system_config_path: Path to system configuration file.
+        force_rerun: If True, ignore checkpoints and re-run all variants.
 
     Returns:
         Dictionary containing complete experiment results.
@@ -428,8 +497,63 @@ def run_experiment(
         all_variant_results = []
         experiment_tracker = TokenTracker()
 
+        completed_variants: set[str] = set()
+        if not force_rerun:
+            completed_variants = set(exp_manager.get_completed_variants(exp_dir))
+            if completed_variants:
+                logger.info(
+                    f"Checkpoint resume: {len(completed_variants)} variant(s) already completed: "
+                    f"{sorted(completed_variants)}"
+                )
+        else:
+            logger.info("Force rerun: ignoring checkpoints, re-running all variants")
+            exp_manager.update_manifest_field(exp_dir, "completed_variants", [])
+
+        indexer_cache: dict[str, Any] = {}
+
         for i, variant in enumerate(exp_config.variants, 1):
             variant_name = variant.get("name", f"variant_{i}")
+
+            if variant_name in completed_variants and not force_rerun:
+                logger.info(
+                    f"Skipping completed variant {i}/{len(exp_config.variants)}: {variant_name} (checkpoint)"
+                )
+                existing_result = exp_manager.load_variant_result(exp_dir, variant_name)
+                if existing_result is not None:
+                    all_variant_results.append(existing_result)
+                    if "token_usage" in existing_result:
+                        variant_tracker = TokenTracker()
+                        for rec_data in existing_result["token_usage"].get(
+                            "records", []
+                        ):
+                            from src.token_tracker import DetailedTokenUsage
+
+                            usage = DetailedTokenUsage(
+                                input_tokens=rec_data["usage"]["input_tokens"],
+                                output_tokens=rec_data["usage"]["output_tokens"],
+                                system_prompt_tokens=rec_data["usage"].get(
+                                    "system_prompt_tokens", 0
+                                ),
+                                contexts_tokens=rec_data["usage"].get(
+                                    "contexts_tokens", 0
+                                ),
+                                query_tokens=rec_data["usage"].get("query_tokens", 0),
+                            )
+                            variant_tracker.record(
+                                category=rec_data["category"],
+                                model_name=rec_data["model_name"],
+                                usage=usage,
+                                variant_name=variant_name,
+                            )
+                        experiment_tracker.merge(variant_tracker)
+                else:
+                    logger.warning(
+                        f"Variant '{variant_name}' marked completed but result file not found, re-running"
+                    )
+                    completed_variants.discard(variant_name)
+
+                continue
+
             logger.info(
                 f"Evaluating variant {i}/{len(exp_config.variants)}: {variant_name}"
             )
@@ -445,9 +569,11 @@ def run_experiment(
                     test_generation_tracker=test_generation_tracker,
                     profiler=profiler,
                     force_index=force_vector,
+                    indexer_cache=indexer_cache,
                 )
 
                 exp_manager.save_variant_result(exp_dir, variant_name, variant_result)
+                exp_manager.mark_variant_completed(exp_dir, variant_name)
                 all_variant_results.append(variant_result)
 
                 if "token_usage" in variant_result:
