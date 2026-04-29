@@ -73,6 +73,7 @@ class RAGPipeline:
         setup_logger(self.config)
         self.meal_name = meal_name
         self.meal_config = None
+        self._chunks_dir: Path | None = None
         self.token_tracker = (
             token_tracker if token_tracker is not None else TokenTracker()
         )
@@ -99,6 +100,16 @@ class RAGPipeline:
             logger.info(
                 f"Using meal '{meal_name}' (data_id: {self.meal_config.data_id[:12]}, collection: {collection_name})"
             )
+
+            from src.meal import create_artifact_cache
+
+            cache = create_artifact_cache(self.config)
+            chunker_hash = self.meal_config.config_hashes.get("chunker", "")
+            self._chunks_dir = cache.get_chunks_dir(
+                self.meal_config.data_id, chunker_hash
+            )
+        else:
+            self._chunks_dir = None
 
         self.indexer = VectorIndexer(
             persist_dir=vector_store_config["persist_dir"],
@@ -146,12 +157,11 @@ class RAGPipeline:
         self.hybrid_retriever: HybridRetriever | None = None
         self.retrieval_method = retrieval_method
 
-        if retrieval_method in ("bm25", "hybrid"):
-            bm25_config = retrieval_config.get("bm25", {})
-            self.bm25_retriever = BM25Retriever(
-                k1=bm25_config.get("k1", 1.5),
-                b=bm25_config.get("b", 0.75),
-            )
+        bm25_config = retrieval_config.get("bm25", {})
+        self.bm25_retriever = BM25Retriever(
+            k1=bm25_config.get("k1", 1.5),
+            b=bm25_config.get("b", 0.75),
+        )
 
         if retrieval_method == "hybrid":
             hybrid_config = retrieval_config.get("hybrid", {})
@@ -388,6 +398,7 @@ class RAGPipeline:
                 self.profiler.end_stage()
 
         logger.success("Index built successfully")
+        self._chunks_dir = chunks_dir
         if sampling_config is None:
             logger.info(
                 f"Artifacts: parsed={parsed_dir}, chunks={chunks_dir} "
@@ -436,6 +447,12 @@ class RAGPipeline:
         meal_manager = MealManager(self.config)
         self.meal_config = meal_manager.load_meal(meal_name)
         self.meal_name = meal_name
+
+        from src.meal import create_artifact_cache
+
+        cache = create_artifact_cache(self.config)
+        chunker_hash = self.meal_config.config_hashes.get("chunker", "")
+        self._chunks_dir = cache.get_chunks_dir(self.meal_config.data_id, chunker_hash)
 
         vector_store_config = self.config["vector_store"]
         self.indexer = VectorIndexer(
@@ -568,6 +585,72 @@ class RAGPipeline:
             error_msg = f"Failed to process query: {str(e)}"
             logger.error(error_msg)
             raise RetrievalError(error_msg) from e
+
+    def _ensure_bm25_index(self) -> None:
+        """Build BM25 index from chunks directory if not already built.
+
+        Uses the cached ``_chunks_dir`` to lazy-load the BM25 index on
+        first access. Subsequent calls are no-ops once the index is ready.
+
+        Raises:
+            RetrievalError: If chunks directory is not available.
+        """
+        if self.bm25_retriever is not None and self.bm25_retriever.is_indexed():
+            return
+
+        if self._chunks_dir is None or not self._chunks_dir.exists():
+            raise RetrievalError(
+                "BM25 索引不可用：找不到 chunks 数据目录。"
+                "请先构建索引（pixi run python main.py --build-index）或选择一个 Meal。"
+            )
+
+        logger.info(f"Lazy-loading BM25 index from {self._chunks_dir}...")
+        self.bm25_retriever.build_index_from_chunks(str(self._chunks_dir))
+        logger.success("BM25 index lazy-loaded successfully")
+
+    def _ensure_reranker(self) -> None:
+        """Load reranker model if not already loaded.
+
+        Initializes the cross-encoder reranker on first call, reading
+        model name, device, and top_n from the retrieval config.
+        """
+        if self.reranker is not None:
+            return
+
+        reranker_config = self.config.get("retrieval", {}).get("reranker", {})
+        logger.info("Lazy-loading reranker model...")
+        self.reranker = Reranker(
+            model_name=reranker_config.get("model_name", "BAAI/bge-reranker-large"),
+            device=reranker_config.get("device", "cuda"),
+        )
+        self.reranker_top_n = reranker_config.get(
+            "top_n", self.config["retrieval"]["top_k"]
+        )
+        logger.success("Reranker model lazy-loaded successfully")
+
+    def _ensure_query_rewriter(self, strategy: str) -> None:
+        """Initialize query rewriter if not already initialized or strategy changed.
+
+        Args:
+            strategy: Query rewrite strategy (``"hyde"`` or ``"multi_query"``).
+        """
+        if self.query_rewriter is not None and self.query_rewriter.strategy == strategy:
+            return
+
+        logger.info(f"Lazy-initializing query rewriter (strategy={strategy})...")
+        llm_config = get_llm_config(self.config)
+        rewrite_config = self.config.get("retrieval", {}).get("query_rewrite", {})
+        self.query_rewriter = QueryRewriter(
+            strategy=strategy,
+            llm_model_name=llm_config["model_name"],
+            llm_api_key=llm_config["api_key"],
+            llm_base_url=llm_config["base_url"],
+            llm_temperature=llm_config.get("temperature", 0.0),
+            llm_max_tokens=llm_config.get("max_tokens", 512),
+            num_queries=rewrite_config.get("num_queries", 3),
+            token_tracker=self.token_tracker,
+        )
+        logger.success(f"Query rewriter lazy-initialized (strategy={strategy})")
 
     def _get_retrieval_strategy(self) -> RetrievalStrategy:
         """Get the appropriate retrieval strategy based on config.
