@@ -42,11 +42,33 @@ class RAGPipeline:
     def __init__(
         self,
         config_path: str = "config.yaml",
-        llm_preset: str = None,
-        meal_name: str = None,
+        llm_preset: str | None = None,
+        meal_name: str | None = None,
         token_tracker: TokenTracker | None = None,
         profiler: PipelineProfiler | None = None,
     ):
+        """Initialize the RAG pipeline with all components.
+
+        Sets up the embedding model, vector indexer, retrievers (vector/BM25/hybrid),
+        optional reranker, optional query rewriter, and the LLM generator. When a
+        meal_name is provided, loads the pre-built Meal's vector collection instead
+        of creating a new one.
+
+        Args:
+            config_path: Path to the YAML configuration file. Defaults to
+                ``"config.yaml"``.
+            llm_preset: Optional LLM preset name from config. When None, uses
+                the default preset.
+            meal_name: Optional name of a pre-built Meal to load. When provided,
+                the pipeline uses the Meal's existing vector collection.
+            token_tracker: Optional TokenTracker for recording LLM API usage.
+                When None, creates a new TokenTracker instance.
+            profiler: Optional PipelineProfiler for performance profiling.
+
+        Raises:
+            ConfigurationError: If the config file is invalid or missing.
+            Exception: If any component fails to initialize.
+        """
         self.config = load_config(config_path)
         setup_logger(self.config)
         self.meal_name = meal_name
@@ -383,10 +405,10 @@ class RAGPipeline:
             self.indexer.close()
             logger.info("RAGPipeline indexer closed")
 
-    def __enter__(self):
+    def __enter__(self) -> RAGPipeline:
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
         self.close()
         return False
 
@@ -548,6 +570,11 @@ class RAGPipeline:
             raise RetrievalError(error_msg) from e
 
     def _get_retrieval_strategy(self) -> RetrievalStrategy:
+        """Get the appropriate retrieval strategy based on config.
+
+        Returns:
+            A retrieval strategy instance (BM25, Hybrid, or Vector).
+        """
         if self.retrieval_method == "bm25" and self.bm25_retriever is not None:
             return BM25RetrievalStrategy(self.bm25_retriever)
         if self.retrieval_method == "hybrid" and self.hybrid_retriever is not None:
@@ -569,6 +596,19 @@ class RAGPipeline:
         queries: list[str],
         top_k: int,
     ) -> list[dict[str, Any]]:
+        """Retrieve results for multiple queries and merge by deduplication.
+
+        Executes retrieval for each query, deduplicates by chunk_id, and
+        returns the top_k results sorted by score.
+
+        Args:
+            strategy: The retrieval strategy to use.
+            queries: List of query strings to retrieve for.
+            top_k: Maximum number of results to return.
+
+        Returns:
+            Deduplicated and sorted list of result dictionaries.
+        """
         all_results: list[dict[str, Any]] = []
         seen_ids: set[str] = set()
         for q in queries:
@@ -583,6 +623,18 @@ class RAGPipeline:
     def _compute_scores(
         self, results: list[dict[str, Any]], is_multi: bool
     ) -> list[float]:
+        """Extract scores from retrieval results.
+
+        For multi-query results, prefers rerank_score over base score when
+        available. For single-query results, uses the base score.
+
+        Args:
+            results: List of retrieval result dictionaries.
+            is_multi: Whether the results came from multi-query retrieval.
+
+        Returns:
+            List of float scores corresponding to each result.
+        """
         if is_multi:
             return [
                 r.get("rerank_score", r["score"]) if "rerank_score" in r else r["score"]
