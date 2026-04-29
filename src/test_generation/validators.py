@@ -550,6 +550,7 @@ def validate_answer_consistency(
 def validate_answer_evidence_consistency(
     answer: str,
     evidence_list: list[dict[str, Any]],
+    check_proper_nouns: bool = True,
 ) -> tuple[bool, list[str]]:
     """Validate that key information in answer appears in evidence.
 
@@ -563,6 +564,7 @@ def validate_answer_evidence_consistency(
         answer: The generated answer text.
         evidence_list: List of evidence dictionaries, each containing
             a 'quote' key with the source text.
+        check_proper_nouns: Whether to check proper nouns. Default True.
 
     Returns:
         Tuple of (is_valid, issues). is_valid is True if all key
@@ -658,30 +660,31 @@ def validate_answer_evidence_consistency(
         if not found:
             issues.append(f"数值 '{ans_orig}' 未在证据中找到")
 
-    proper_nouns = re.findall(
-        PROPER_NOUN_PATTERN,
-        answer,
-    )
-    proper_nouns = [n for n in proper_nouns if is_genuine_proper_noun(n)]
-    for noun in proper_nouns:
-        if noun in evidence_text:
-            continue
-        stripped = re.sub(r"^\d+", "", noun)
-        if stripped and stripped in evidence_text:
-            continue
-        core_found = False
-        for suffix in PROPER_NOUN_SUFFIXES:
-            if noun.endswith(suffix):
-                core = noun[: -len(suffix)]
-                if len(core) >= 2 and core in evidence_text:
-                    core_found = True
-                    break
-                stripped_core = re.sub(r"^\d+", "", core)
-                if len(stripped_core) >= 2 and stripped_core in evidence_text:
-                    core_found = True
-                    break
-        if not core_found:
-            issues.append(f"专有名词 '{noun}' 未在证据中找到")
+    if check_proper_nouns:
+        proper_nouns = re.findall(
+            PROPER_NOUN_PATTERN,
+            answer,
+        )
+        proper_nouns = [n for n in proper_nouns if is_genuine_proper_noun(n)]
+        for noun in proper_nouns:
+            if noun in evidence_text:
+                continue
+            stripped = re.sub(r"^\d+", "", noun)
+            if stripped and stripped in evidence_text:
+                continue
+            core_found = False
+            for suffix in PROPER_NOUN_SUFFIXES:
+                if noun.endswith(suffix):
+                    core = noun[: -len(suffix)]
+                    if len(core) >= 2 and core in evidence_text:
+                        core_found = True
+                        break
+                    stripped_core = re.sub(r"^\d+", "", core)
+                    if len(stripped_core) >= 2 and stripped_core in evidence_text:
+                        core_found = True
+                        break
+            if not core_found:
+                issues.append(f"专有名词 '{noun}' 未在证据中找到")
 
     return len(issues) == 0, issues
 

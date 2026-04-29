@@ -272,6 +272,9 @@ test_generation:
   supplement_max_tokens: 1024
   initial_max_tokens: 512
 
+  validation:
+    check_proper_nouns: false
+
   hybrid:
     enabled: true
     segment_size: 8000

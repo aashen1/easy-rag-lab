@@ -105,6 +105,8 @@ class TestSetGenerator:
         self.quote_fuzzy_match_threshold = tg_config.get(
             "quote_fuzzy_match_threshold", 0.85
         )
+        validation_config = tg_config.get("validation", {})
+        self.check_proper_nouns = validation_config.get("check_proper_nouns", True)
         self._doc_truncate_cache: dict[str, str] = {}
 
     @staticmethod
@@ -1393,14 +1395,18 @@ class TestSetGenerator:
                 pass
             elif strictness == "lenient":
                 is_consistent, issues = validate_answer_evidence_consistency(
-                    qa.get("answer", ""), evidence_list
+                    qa.get("answer", ""),
+                    evidence_list,
+                    check_proper_nouns=self.check_proper_nouns,
                 )
                 if not is_consistent:
                     qa.setdefault("metadata", {})
                     qa["metadata"]["answer_evidence_issues"] = issues
             else:
                 is_consistent, issues = validate_answer_evidence_consistency(
-                    qa.get("answer", ""), evidence_list
+                    qa.get("answer", ""),
+                    evidence_list,
+                    check_proper_nouns=self.check_proper_nouns,
                 )
                 if not is_consistent:
                     logger.warning(
