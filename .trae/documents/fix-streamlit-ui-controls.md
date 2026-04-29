@@ -1,102 +1,172 @@
-# Plan: Fix Streamlit UI Sidebar Controls
+# 修复计划：Streamlit 侧边栏控件"造假"问题
 
-## Problem
+## 问题直白解释
 
-`qa_demo.py` sidebar has 4 controls that are **completely fake** — they set `st.session_state` keys but never pass values to `pipeline.query()`. The pipeline always uses `config.yaml` defaults.
+你观察到的现象完全正确，这确实是"层级错误"。让我画个图说清楚：
 
-Fake controls:
-1. **检索策略** (vector/bm25/hybrid) — `st.session_state.retrieval_method`
-2. **Top-K** (1-10) — `st.session_state.top_k`
-3. **启用 Reranker** (checkbox) — `st.session_state.use_reranker`
-4. **启用查询改写** (checkbox) — `st.session_state.use_query_rewrite`
+```
+Streamlit 进程启动
+  │
+  ├─ 读取环境变量（API KEY 等）── 只读一次，进程不重启就不刷新
+  │
+  ├─ @st.cache_resource 缓存了 Pipeline 实例
+  │    │
+  │    ├─ 读取 config.yaml ── 只读一次，决定初始化哪些组件
+  │    │
+  │    ├─ config.yaml 说 retrieval.method = "vector"
+  │    │    → 只创建 VectorRetriever，不创建 BM25Retriever
+  │    │
+  │    ├─ config.yaml 说 reranker.enabled = false
+  │    │    → 不加载 Reranker 模型（~1GB）
+  │    │
+  │    └─ config.yaml 说 query_rewrite.enabled = false
+  │         → 不初始化 QueryRewriter
+  │
+  └─ 用户在侧边栏操作
+       │
+       ├─ 选了"hybrid"检索 ── 写入 st.session_state.retrieval_method
+       ├─ 勾了"启用 Reranker" ── 写入 st.session_state.use_reranker
+       ├─ 勾了"启用查询改写" ── 写入 st.session_state.use_query_rewrite
+       │
+       └─ 点击发送问题
+            │
+            └─ pipeline.query(question)  ← 完全没传任何侧边栏参数！
+                 │
+                 └─ 走的还是 config.yaml 的默认值
+                      → 纯向量检索，没 Reranker，没查询改写
+```
 
-## Strategy: Override Parameters + Lazy Initialization
+**所以你之前发现的环境变量问题也是同一个根因**：Pipeline 在启动时一次性读取配置，之后就不变了。Streamlit 的 Rerun 只是重新执行脚本，不会重启进程，所以环境变量和 Pipeline 缓存都不会刷新。
 
-Instead of re-creating the pipeline when settings change (expensive, defeats caching), we:
-1. Add override parameters to `pipeline.query()`
-2. Use **lazy initialization** for components that aren't pre-loaded (BM25 index, Reranker model, QueryRewriter)
-3. Pass UI values through to `query()` on each call
+## 修复思路
 
-## Difficulty Assessment
+**核心想法：不在启动时决定一切，而是在每次查询时按需决定。**
 
-| Control | Difficulty | Approach |
-|---------|-----------|----------|
-| Top-K | ⭐ Very Easy | Pass through to `query()`, fix strategy classes to forward it |
-| 检索策略 | ⭐⭐⭐ Moderate | Lazy-init BM25 index; always create BM25Retriever instance |
-| 启用查询改写 | ⭐⭐ Moderate | Lazy-init QueryRewriter (LLM API, no local model) |
-| 启用 Reranker | ⭐⭐⭐⭐ Hard | Lazy-load ~1GB cross-encoder model on first use |
+具体来说：
 
-All four are feasible. None need to be deleted.
+1. **给** **`query()`** **方法加"覆盖参数"**：用户在 UI 上选了什么，就传什么给 `query()`
+2. **用"懒加载"代替"启动时全量加载"**：用户勾了 Reranker，才去加载模型；没勾就不加载
+3. **Pipeline 实例仍然缓存**：不重建 Pipeline，只是让它在每次查询时能动态选择策略
 
-## Implementation Steps
+修复后的流程：
 
-### Step 1: Modify `Retriever.retrieve()` to accept dynamic `top_k`
+```
+用户点击发送问题
+  │
+  └─ pipeline.query(
+       question,
+       retrieval_method="hybrid",    ← 从 UI 传入
+       top_k=8,                      ← 从 UI 传入
+       use_reranker=True,            ← 从 UI 传入
+       use_query_rewrite=True,       ← 从 UI 传入
+     )
+       │
+       ├─ 检测到 retrieval_method="hybrid"
+       │    → BM25 索引还没建？那就现在建（懒加载）
+       │    → 用 HybridRetriever 检索
+       │
+       ├─ 检测到 use_reranker=True
+       │    → Reranker 模型还没加载？那就现在加载（懒加载，首次约 10-30 秒）
+       │    → 对检索结果做重排序
+       │
+       └─ 检测到 use_query_rewrite=True
+            → QueryRewriter 还没初始化？那就现在初始化（调 LLM API，很快）
+            → 先改写查询再检索
+```
 
-**File**: `src/retriever.py`
+## 4 个控件的难度评估
 
-Current: `retrieve(self, query: str)` uses `self.top_k`
-Change: Add optional `top_k` parameter that overrides `self.top_k` when provided
+| 控件       | 难度      | 说明                                      |
+| -------- | ------- | --------------------------------------- |
+| Top-K    | ⭐ 很简单   | 直接传参，改一行代码                              |
+| 检索策略     | ⭐⭐⭐ 中等  | 需要懒加载 BM25 索引（从 JSONL 文件构建，几秒到几十秒）      |
+| 查询改写     | ⭐⭐ 中等   | 需要懒初始化 QueryRewriter（调 LLM API，不需要本地模型） |
+| Reranker | ⭐⭐⭐⭐ 较难 | 需要懒加载 \~1GB 交叉编码器模型（首次启用慢 10-30 秒，之后正常） |
 
-### Step 2: Modify `HybridRetriever.retrieve()` to accept dynamic `top_k`
+**四个都能做，不需要删任何一个。**
 
-**File**: `src/hybrid_retriever.py`
+## 实施步骤
 
-Current: `retrieve(self, query: str)` uses `self.top_k`
-Change: Add optional `top_k` parameter that overrides `self.top_k` when provided
+### 第 1 步：让 Retriever 支持动态 top\_k
 
-### Step 3: Fix strategy classes to forward `top_k`
+**文件**：`src/retriever.py`
 
-**File**: `src/retrieval_strategies.py`
+现在 `retrieve(query)` 写死了用 `self.top_k`。改成可以传参覆盖：
 
-Current: `VectorRetrievalStrategy.retrieve()` ignores the `top_k` parameter
-Change: Forward `top_k` to the underlying retriever for all three strategies
+```python
+def retrieve(self, query: str, top_k: int | None = None) -> list[dict]:
+    effective_top_k = top_k if top_k is not None else self.top_k
+    # 用 effective_top_k 去检索
+```
 
-### Step 4: Add lazy initialization methods to `RAGPipeline`
+### 第 2 步：让 HybridRetriever 也支持动态 top\_k
 
-**File**: `src/pipeline.py`
+**文件**：`src/hybrid_retriever.py`
 
-Add three methods:
-- `_ensure_bm25_index()` — Build BM25 index from chunks_dir if not already built
-- `_ensure_reranker()` — Load reranker model if not already loaded
-- `_ensure_query_rewriter()` — Initialize QueryRewriter if not already initialized
+同上，加 `top_k` 参数。
 
-Also store `self._chunks_dir: Path | None` during init (from meal_config) and during `build_index()`/`use_meal()`.
+### 第 3 步：修复策略类，把 top\_k 传下去
 
-### Step 5: Modify `_setup_retrievers()` to always create BM25Retriever
+**文件**：`src/retrieval_strategies.py`
 
-**File**: `src/pipeline.py`
+现在的 `VectorRetrievalStrategy.retrieve()` 收到了 `top_k` 参数但完全忽略了！修一下，让它传给底层 Retriever。
 
-Current: BM25Retriever only created when config method is bm25/hybrid
-Change: Always create BM25Retriever instance, but only build its index when needed (lazy)
+### 第 4 步：给 Pipeline 加懒加载方法
 
-### Step 6: Modify `RAGPipeline.query()` to accept override parameters
+**文件**：`src/pipeline.py`
 
-**File**: `src/pipeline.py`
+加三个方法：
 
-New signature:
+* `_ensure_bm25_index()` — 如果 BM25 索引没建，就从 chunks 文件建一个
+
+* `_ensure_reranker()` — 如果 Reranker 模型没加载，就加载
+
+* `_ensure_query_rewriter()` — 如果 QueryRewriter 没初始化，就初始化
+
+同时存一个 `self._chunks_dir`，这样懒加载 BM25 时知道去哪找 chunks 文件。
+
+### 第 5 步：修改 `_setup_retrievers()`，始终创建 BM25Retriever 实例
+
+**文件**：`src/pipeline.py`
+
+现在只有 config 说用 bm25/hybrid 时才创建 BM25Retriever。改成**始终创建实例**（但不建索引），这样用户切换到 bm25/hybrid 时可以懒加载索引。
+
+### 第 6 步：给 `query()` 加覆盖参数
+
+**文件**：`src/pipeline.py`
+
+新签名：
+
 ```python
 def query(
     self,
     question: str,
     return_contexts: bool = True,
-    retrieval_method: str | None = None,
-    top_k: int | None = None,
-    use_reranker: bool | None = None,
-    use_query_rewrite: bool | None = None,
+    retrieval_method: str | None = None,   # 新增
+    top_k: int | None = None,              # 新增
+    use_reranker: bool | None = None,      # 新增
+    use_query_rewrite: bool | None = None, # 新增
 ) -> dict[str, Any]:
 ```
 
-Logic:
-- `retrieval_method`: If provided, use it to select strategy; call `_ensure_bm25_index()` if bm25/hybrid
-- `top_k`: If provided, pass to strategy's `retrieve()` call
-- `use_reranker`: If True, call `_ensure_reranker()` and apply reranking
-- `use_query_rewrite`: If True, call `_ensure_query_rewriter()` and apply rewriting
+逻辑：
 
-### Step 7: Modify `qa_demo.py` to pass UI values
+* 传了 `retrieval_method` → 用它选策略，需要 BM25 就懒加载
 
-**File**: `src/app_pages/qa_demo.py`
+* 传了 `top_k` → 传给检索策略
 
-Change `pipeline.query(question)` to:
+* 传了 `use_reranker=True` → 懒加载 Reranker 并重排序
+
+* 传了 `use_query_rewrite=True` → 懒加载 QueryRewriter 并改写查询
+
+* 都没传 → 走 config.yaml 默认值（向后兼容）
+
+### 第 7 步：修改 qa\_demo.py，把 UI 值传进去
+
+**文件**：`src/app_pages/qa_demo.py`
+
+把 `pipeline.query(question)` 改成：
+
 ```python
 result = pipeline.query(
     question,
@@ -107,42 +177,43 @@ result = pipeline.query(
 )
 ```
 
-Add error handling for lazy-init failures (e.g., BM25 index unavailable).
+加上错误处理：BM25 索引建不了、Reranker 加载失败等，给用户看友好的提示。
 
-### Step 8: Add query rewrite strategy selector in UI
+### 第 8 步：查询改写加策略选择器
 
-**File**: `src/app_pages/qa_demo.py`
+**文件**：`src/app_pages/qa_demo.py`
 
-When "启用查询改写" is checked, show a selectbox for strategy (hyde/multi_query).
+勾了"启用查询改写"后，显示一个下拉框选策略（HyDE / Multi-Query）。
 
-### Step 9: Update tests
+### 第 9 步：更新测试
 
-**File**: `tests/test_pipeline.py`
+**文件**：`tests/test_pipeline.py`
 
-Add tests for `query()` with override parameters.
+给 `query()` 的覆盖参数加测试。
 
-### Step 10: Run lint and tests
+### 第 10 步：跑 lint 和测试
 
 ```bash
 pixi run lint
 pixi run test
 ```
 
-## Key Design Decisions
+## 关键设计决策
 
-1. **Lazy initialization over eager loading**: Don't load the reranker model or build BM25 index at startup. Only do it when the user actually enables the feature. First query will be slower, but startup is fast.
+1. **懒加载优于启动时全量加载**：不提前加载 Reranker 模型或建 BM25 索引。用户启用时才加载，首次查询慢一点，但启动快。
 
-2. **Override parameters over config mutation**: Don't modify `self.config` when UI settings change. Pass overrides to `query()` instead. This keeps the pipeline stateless with respect to UI settings.
+2. **覆盖参数优于改配置**：不改 `self.config`，而是把 UI 值作为参数传给 `query()`。这样 Pipeline 对 UI 设置是无状态的。
 
-3. **Graceful degradation**: If BM25 index can't be built (no chunks_dir), show a clear error message in the UI instead of crashing.
+3. **优雅降级**：BM25 索引建不了（找不到 chunks 文件），给用户看清晰的错误提示，不崩溃。
 
-4. **chunks_dir storage**: Store `_chunks_dir` during `__init__()` (from meal_config), `build_index()`, and `use_meal()`. For non-meal pipelines, try to resolve from artifact cache pointers.
+4. **chunks\_dir 存储**：在 `__init__()`（从 meal\_config 算）、`build_index()`、`use_meal()` 三个地方存 `_chunks_dir`，懒加载 BM25 时用。
 
-## Files to Modify
+## 需要修改的文件
 
-1. `src/retriever.py` — Add `top_k` parameter to `retrieve()`
-2. `src/hybrid_retriever.py` — Add `top_k` parameter to `retrieve()`
-3. `src/retrieval_strategies.py` — Forward `top_k` to retrievers
-4. `src/pipeline.py` — Add lazy init methods, override params in `query()`, always create BM25Retriever
-5. `src/app_pages/qa_demo.py` — Pass UI values, add strategy selector, error handling
-6. `tests/test_pipeline.py` — Add tests for override parameters
+1. `src/retriever.py` — `retrieve()` 加 `top_k` 参数
+2. `src/hybrid_retriever.py` — `retrieve()` 加 `top_k` 参数
+3. `src/retrieval_strategies.py` — 把 `top_k` 传给底层 Retriever
+4. `src/pipeline.py` — 加懒加载方法、`query()` 加覆盖参数、始终创建 BM25Retriever
+5. `src/app_pages/qa_demo.py` — 传 UI 值、加策略选择器、错误处理
+6. `tests/test_pipeline.py` — 加覆盖参数测试
+
