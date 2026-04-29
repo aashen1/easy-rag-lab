@@ -25,7 +25,7 @@ class VectorRetrievalStrategy(RetrievalStrategy):
         self._retriever = retriever
 
     def retrieve(self, query: str, top_k: int, **kwargs) -> RetrievalResult:
-        chunks = self._retriever.retrieve(query)
+        chunks = self._retriever.retrieve(query, top_k=top_k)
         return RetrievalResult(chunks=chunks)
 
 
@@ -43,5 +43,5 @@ class HybridRetrievalStrategy(RetrievalStrategy):
         self._retriever = retriever
 
     def retrieve(self, query: str, top_k: int, **kwargs) -> RetrievalResult:
-        chunks = self._retriever.retrieve(query)
+        chunks = self._retriever.retrieve(query, top_k=top_k)
         return RetrievalResult(chunks=chunks)
