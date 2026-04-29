@@ -6,7 +6,7 @@ from src.exceptions import GenerationError
 
 def create_anthropic_client(
     api_key: str,
-    base_url: str = None,
+    base_url: str | None = None,
 ) -> Anthropic:
     """Create an Anthropic client with the project's standard authentication pattern.
 

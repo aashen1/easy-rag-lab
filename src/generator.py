@@ -72,9 +72,9 @@ class Generator:
 
     def __init__(
         self,
-        model_name: str = None,
-        api_key: str = None,
-        base_url: str = None,
+        model_name: str | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
         temperature: float = 0.0,
         max_tokens: int = 1024,
         token_tracker: TokenTracker | None = None,
@@ -174,7 +174,7 @@ class Generator:
         self,
         query: str,
         contexts: list[str],
-        system_prompt: str = None,
+        system_prompt: str | None = None,
         category: str = "rag_qa",
         sources: list[str] | None = None,
         allow_no_contexts: bool = False,
