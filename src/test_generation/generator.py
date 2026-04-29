@@ -32,6 +32,7 @@ from src.test_generation.models import (
     MIN_QUOTE_LENGTH,
     QUESTION_TYPES,
     TYPE_DISTRIBUTION,
+    VALIDATION_STRICTNESS,
 )
 from src.test_generation.segment_builder import (
     build_segments_from_pages,
@@ -71,6 +72,7 @@ class TestSetGenerator:
     MIN_QUOTE_LENGTH = MIN_QUOTE_LENGTH
     EVIDENCE_MAX_TOKENS = EVIDENCE_MAX_TOKENS
     ANSWER_LENGTH_LIMITS = ANSWER_LENGTH_LIMITS
+    VALIDATION_STRICTNESS = VALIDATION_STRICTNESS
 
     def __init__(self, config: dict[str, Any]):
         """Initialize the TestSetGenerator with application configuration.
@@ -1385,27 +1387,47 @@ class TestSetGenerator:
 
         evidence_list = qa.get("evidence", [])
         if evidence_list and q_type not in ("irrelevant", "missing"):
-            is_consistent, issues = validate_answer_evidence_consistency(
-                qa.get("answer", ""), evidence_list
-            )
-            if not is_consistent:
-                logger.warning(
-                    f"Answer-evidence inconsistency for question {qa['id']}: "
-                    f"{'; '.join(issues)}"
-                )
-                qa.setdefault("metadata", {})
-                qa["metadata"]["answer_evidence_issues"] = issues
+            strictness = self.VALIDATION_STRICTNESS.get(q_type, "moderate")
 
-                numerical_issues = [i for i in issues if i.startswith("数值")]
-                should_reject = len(issues) > 3 or len(numerical_issues) > 1
-                if should_reject:
-                    logger.info(
-                        f"Rejecting question {qa['id']} due to "
-                        f"evidence inconsistency: "
-                        f"{len(numerical_issues)} numerical issues, "
-                        f"{len(issues)} total issues"
+            if strictness == "none":
+                pass
+            elif strictness == "lenient":
+                is_consistent, issues = validate_answer_evidence_consistency(
+                    qa.get("answer", ""), evidence_list
+                )
+                if not is_consistent:
+                    qa.setdefault("metadata", {})
+                    qa["metadata"]["answer_evidence_issues"] = issues
+            else:
+                is_consistent, issues = validate_answer_evidence_consistency(
+                    qa.get("answer", ""), evidence_list
+                )
+                if not is_consistent:
+                    logger.warning(
+                        f"Answer-evidence inconsistency for question {qa['id']}: "
+                        f"{'; '.join(issues)}"
                     )
-                    return False
+                    qa.setdefault("metadata", {})
+                    qa["metadata"]["answer_evidence_issues"] = issues
+
+                    numerical_issues = [i for i in issues if i.startswith("数值")]
+                    proper_noun_issues = [i for i in issues if i.startswith("专有名词")]
+
+                    if strictness == "strict":
+                        should_reject = len(issues) > 3 or len(numerical_issues) > 1
+                    else:
+                        should_reject = len(numerical_issues) > 2 or (
+                            len(numerical_issues) > 1 and len(proper_noun_issues) > 2
+                        )
+
+                    if should_reject:
+                        logger.info(
+                            f"Rejecting question {qa['id']} due to "
+                            f"evidence inconsistency: "
+                            f"{len(numerical_issues)} numerical issues, "
+                            f"{len(issues)} total issues"
+                        )
+                        return False
 
         if golden_metadata is not None:
             qa.setdefault("metadata", {})

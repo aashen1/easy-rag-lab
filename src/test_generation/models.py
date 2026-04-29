@@ -106,3 +106,13 @@ PROPER_NOUN_SUFFIXES = [
 ]
 
 PROPER_NOUN_PATTERN = r"[\u4e00-\u9fff]{2,8}(?:" + "|".join(PROPER_NOUN_SUFFIXES) + ")"
+
+VALIDATION_STRICTNESS = {
+    "single_fact": "strict",
+    "adversarial": "strict",
+    "multi_fact": "moderate",
+    "comparative": "moderate",
+    "reasoning": "lenient",
+    "missing": "none",
+    "irrelevant": "none",
+}
