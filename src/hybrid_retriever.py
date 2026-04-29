@@ -62,7 +62,7 @@ class HybridRetriever:
         self.bm25_weight = bm25_weight
         self.top_k = top_k
 
-    def retrieve(self, query: str) -> list[dict[str, Any]]:
+    def retrieve(self, query: str, top_k: int | None = None) -> list[dict[str, Any]]:
         """Retrieve the top-k results using hybrid fusion of vector and BM25.
 
         Executes both retrieval strategies, fuses their results using the
@@ -70,6 +70,8 @@ class HybridRetriever:
 
         Args:
             query: The search query string. Must be non-empty.
+            top_k: Override the number of top results to return for this
+                call. When ``None``, uses the instance-level ``self.top_k``.
 
         Returns:
             A list of dictionaries, each containing ``chunk_id``, ``text``,
@@ -84,21 +86,27 @@ class HybridRetriever:
             logger.error(error_msg)
             raise RetrievalError(error_msg)
 
+        effective_top_k = top_k if top_k is not None else self.top_k
+
         try:
             logger.info(
                 f"Hybrid retrieving (method={self.fusion_method}, "
-                f"top_k={self.top_k}) for query: {query[:50]}..."
+                f"top_k={effective_top_k}) for query: {query[:50]}..."
             )
 
-            fetch_k = self.top_k * 3
+            fetch_k = effective_top_k * 3
 
             vector_results = self.vector_retriever.retrieve(query)
             bm25_results = self.bm25_retriever.retrieve(query, top_k=fetch_k)
 
             if self.fusion_method == "rrf":
-                results = self._rrf_fusion(vector_results, bm25_results)
+                results = self._rrf_fusion(
+                    vector_results, bm25_results, effective_top_k
+                )
             else:
-                results = self._weighted_fusion(vector_results, bm25_results)
+                results = self._weighted_fusion(
+                    vector_results, bm25_results, effective_top_k
+                )
 
             logger.success(f"Hybrid retrieved {len(results)} results")
             return results
@@ -112,6 +120,7 @@ class HybridRetriever:
         self,
         vector_results: list[dict[str, Any]],
         bm25_results: list[dict[str, Any]],
+        top_k: int,
     ) -> list[dict[str, Any]]:
         """Fuse results using Reciprocal Rank Fusion (RRF).
 
@@ -122,6 +131,7 @@ class HybridRetriever:
         Args:
             vector_results: Results from the vector retriever.
             bm25_results: Results from the BM25 retriever.
+            top_k: Number of top results to return after fusion.
 
         Returns:
             Top-k fused results sorted by descending RRF score.
@@ -158,7 +168,7 @@ class HybridRetriever:
         )
 
         results = []
-        for chunk_id in sorted_ids[: self.top_k]:
+        for chunk_id in sorted_ids[:top_k]:
             entry = doc_data[chunk_id].copy()
             entry["score"] = rrf_scores[chunk_id]
             results.append(entry)
@@ -169,6 +179,7 @@ class HybridRetriever:
         self,
         vector_results: list[dict[str, Any]],
         bm25_results: list[dict[str, Any]],
+        top_k: int,
     ) -> list[dict[str, Any]]:
         """Fuse results using weighted score combination.
 
@@ -178,6 +189,7 @@ class HybridRetriever:
         Args:
             vector_results: Results from the vector retriever.
             bm25_results: Results from the BM25 retriever.
+            top_k: Number of top results to return after fusion.
 
         Returns:
             Top-k fused results sorted by descending weighted score.
@@ -222,7 +234,7 @@ class HybridRetriever:
         )
 
         results = []
-        for chunk_id in sorted_ids[: self.top_k]:
+        for chunk_id in sorted_ids[:top_k]:
             entry = doc_data[chunk_id].copy()
             entry["score"] = combined_scores[chunk_id]
             results.append(entry)
