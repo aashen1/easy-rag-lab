@@ -63,10 +63,8 @@ def count_pdf_pages(pdf_path: Path) -> int:
         Exception: If the PDF cannot be opened or read.
     """
     try:
-        doc = fitz.open(str(pdf_path))
-        page_count = len(doc)
-        doc.close()
-        return page_count
+        with fitz.open(str(pdf_path)) as doc:
+            return len(doc)
     except Exception as e:
         error_msg = f"Failed to count pages in {pdf_path}: {str(e)}"
         logger.error(error_msg)
