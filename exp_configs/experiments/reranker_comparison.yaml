@@ -2,13 +2,13 @@ name: "reranker_comparison"
 description: "重排序对比实验 - 探究Cross-Encoder重排对检索和生成质量的影响"
 
 data:
-  meal: "meal_reranker_comparison"
+  meal: "meal_shared_comparison"
   create_if_missing:
     sample_ratio: 0.2
     seed: 42
 
 test_sets:
-  - name: "reranker_eval"
+  - name: "shared_eval_65q"
     on_missing: "auto"
     generation:
       strategy: "hybrid"

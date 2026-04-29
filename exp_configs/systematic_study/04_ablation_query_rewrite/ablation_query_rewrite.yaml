@@ -21,13 +21,13 @@ name: "ablation_query_rewrite"
 description: "消融实验C - 查询改写策略消融，固定检索条件，评估HyDE与Multi-Query的效果"
 
 data:
-  meal: "meal_ablation_query_rewrite"
+  meal: "meal_shared_comparison"
   create_if_missing:
     sample_ratio: 0.2
     seed: 42
 
 test_sets:
-  - name: "ablation_qrewrite_eval"
+  - name: "shared_eval_65q"
     on_missing: "auto"
     generation:
       strategy: "hybrid"

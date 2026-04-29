@@ -2,13 +2,13 @@ name: "retrieval_comparison"
 description: "检索方式对比实验 - 对比稀疏检索(BM25)、稠密检索(Vector)、混合检索(Hybrid RRF/Weighted)对问答质量的影响"
 
 data:
-  meal: "meal_retrieval_comparison"
+  meal: "meal_shared_comparison"
   create_if_missing:
     sample_ratio: 0.2
     seed: 42
 
 test_sets:
-  - name: "retrieval_eval"
+  - name: "shared_eval_65q"
     on_missing: "auto"
     generation:
       strategy: "hybrid"

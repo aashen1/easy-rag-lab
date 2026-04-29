@@ -2,13 +2,13 @@ name: "overlap_comparison"
 description: "chunk_overlap 对比实验 - 探究不同 overlap 值对检索质量的影响（chunk_size 固定 512）"
 
 data:
-  meal: "meal_overlap_comparison"
+  meal: "meal_shared_comparison"
   create_if_missing:
     sample_ratio: 0.2
     seed: 42
 
 test_sets:
-  - name: "overlap_eval"
+  - name: "shared_eval_50q"
     on_missing: "auto"
     generation:
       strategy: "hybrid"

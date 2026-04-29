@@ -2,13 +2,13 @@ name: "chunk_comparison"
 description: "分块参数对比实验 - 探究不同 chunk_size 和 overlap 对检索质量的影响"
 
 data:
-  meal: "meal_chunk_comparison"
+  meal: "meal_shared_comparison"
   create_if_missing:
     sample_ratio: 0.2
     seed: 42
 
 test_sets:
-  - name: "chunk_eval"
+  - name: "shared_eval_50q"
     on_missing: "auto"
     generation:
       strategy: "hybrid"

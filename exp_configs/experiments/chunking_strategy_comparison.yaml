@@ -2,13 +2,13 @@ name: "chunking_strategy_comparison"
 description: "分块策略对比实验 - 对比固定分块与语义分块对问答质量的影响"
 
 data:
-  meal: "meal_chunking_strategy_comparison"
+  meal: "meal_shared_comparison"
   create_if_missing:
     sample_ratio: 0.2
     seed: 42
 
 test_sets:
-  - name: "chunking_strategy_eval"
+  - name: "shared_eval_65q"
     on_missing: "auto"
     generation:
       strategy: "hybrid"
