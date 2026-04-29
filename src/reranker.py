@@ -14,6 +14,7 @@ class Reranker:
         device: str = "cuda",
         use_fp16: bool = True,
         max_length: int = 512,
+        batch_size: int = 16,
     ) -> None:
         """Initialize the Reranker with a cross-encoder model.
 
@@ -27,6 +28,8 @@ class Reranker:
             device: Device for inference (``"cuda"`` or ``"cpu"``).
             use_fp16: Whether to use half-precision on CUDA. Ignored on CPU.
             max_length: Maximum token length for input pairs. Defaults to 512.
+            batch_size: Batch size for scoring query-document pairs.
+                Defaults to 16.
 
         Raises:
             Exception: If the model or tokenizer fails to load.
@@ -35,6 +38,7 @@ class Reranker:
         self.device = device
         self.use_fp16 = use_fp16
         self.max_length = max_length
+        self._batch_size = batch_size
 
         try:
             logger.info(f"Loading reranker model: {model_name}")
@@ -132,10 +136,9 @@ class Reranker:
             List of relevance scores, one per pair.
         """
         all_scores = []
-        batch_size = 16
 
-        for i in range(0, len(pairs), batch_size):
-            batch_pairs = pairs[i : i + batch_size]
+        for i in range(0, len(pairs), self._batch_size):
+            batch_pairs = pairs[i : i + self._batch_size]
 
             queries = [p[0] for p in batch_pairs]
             documents = [p[1] for p in batch_pairs]
