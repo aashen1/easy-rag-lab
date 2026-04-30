@@ -18,6 +18,7 @@ from typing import Any
 from loguru import logger
 
 from eval.evaluators.base import BaseEvaluator, EvaluationResult, EvaluationSample
+from eval.evaluators.error_handler import log_evaluation_error
 from src.exceptions import EvaluationError
 
 REFERENCE_REQUIRED_METRICS = {
@@ -464,8 +465,7 @@ class RagasEvaluator(BaseEvaluator):
                                 )
 
         except Exception as e:
-            error = str(e)
-            logger.error(f"RAGAS evaluation failed for {question_id}: {error}")
+            error = log_evaluation_error("RAGAS evaluation", question_id, e)
 
         return EvaluationResult(
             question_id=question_id,
@@ -661,8 +661,7 @@ class RagasEvaluator(BaseEvaluator):
                     )
 
         except Exception as e:
-            error_msg = str(e)
-            logger.error(f"RAGAS batch evaluation failed: {error_msg}")
+            error_msg = log_evaluation_error("RAGAS batch evaluation", "", e)
             for i, sample in enumerate(samples):
                 if results[i] is None:
                     results[i] = EvaluationResult(
