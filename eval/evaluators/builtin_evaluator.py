@@ -366,7 +366,7 @@ class BuiltinEvaluator(BaseEvaluator):
 
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        max_workers = self._config.get("evaluation", {}).get(
+        max_workers = self.config.get("evaluation", {}).get(
             "builtin_concurrent_workers", 3
         )
 
