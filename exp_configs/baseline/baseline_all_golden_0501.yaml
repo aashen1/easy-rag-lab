@@ -1,0 +1,51 @@
+name: "baseline-allmeal-2026-05-01"
+description: "全量golden测试"
+data:
+  meal: "all_meal"
+
+test_sets:
+test_sets:
+  - name: "golden_150"
+    golden: true
+
+variants:
+  - name: "baseline"
+    description: "基线配置 (chunk_size: 512, chunk_overlap: 0)"
+    config_overrides: {}
+
+  # - name: "with_overlap"
+  #   description: "加入 chunk_overlap: 50 的对照 (chunk_size: 512, chunk_overlap: 50)"
+  #   config_overrides:
+  #     chunker:
+  #       chunk_overlap: 50
+
+evaluation:
+  backends: ["builtin", "ragas"]
+  llm_preset: "default"
+  llm_report: true
+  metrics_preset: "extended"
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
+
+llm:
+  question_generation: "default"
+  answering: "default"
+
+# 修 bug 时常因命中缓存而无法验证修复效果，此选项可精确控制
+# 哪些环节跳过缓存、强制重新生成。
+#
+# 可选阶段：
+#   parsed  — PDF 解析（重新解析所有 PDF）
+#   chunk   — 文档分块（重新分块）
+#   vector  — 向量索引（删除已有集合并重建）
+#   testset — 测试集（删除已有测试集并重新生成）
+#   meal    — Meal（删除已有 meal 并重新创建，旧 meal 移入 .trashbin）
+#
+# 用法一：指定若干阶段
+#   force_overwrite: ["parsed", "chunk"]
+#
+# 用法二：全部重来
+#   force_overwrite: "all"
+
+# 注意：force_overwrite 是顶层配置，不是 llm 的子键！
+force_overwrite: []
