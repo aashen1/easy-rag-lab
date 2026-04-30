@@ -437,14 +437,42 @@ def render_qa_demo():
 
     if st.session_state.messages:
         components.html(
-            "<script>"
-            "  const chatInput = window.parent.document.querySelector("
-            "    '[data-testid=\"stChatInput\"]'"
-            "  );"
-            "  if (chatInput) {"
-            "    chatInput.scrollIntoView({behavior: 'smooth', block: 'end'});"
-            "  }"
-            "</script>",
+            """
+<style>
+  #st-scroll-nav { position:fixed; z-index:9999; transition:all .3s ease; cursor:pointer;
+    width:44px; height:44px; border-radius:50%; display:flex; align-items:center;
+    justify-content:center; font-size:22px; box-shadow:0 2px 8px rgba(0,0,0,.25);
+    background:#fff; border:1px solid #e0e0e0; user-select:none; }
+  #st-scroll-nav:hover { box-shadow:0 4px 14px rgba(0,0,0,.3); transform:scale(1.1); }
+  #st-scroll-nav.nav-bottom { bottom:80px; right:24px; }
+  #st-scroll-nav.nav-top    { top:80px;  right:24px; }
+</style>
+<div id="st-scroll-nav" class="nav-bottom">↓</div>
+<script>{{
+  const doc = window.parent.document;
+  const btn = doc.getElementById('st-scroll-nav');
+  if (!btn) return;
+  const main = doc.querySelector('.main') || doc.querySelector('[data-testid="stMainBlockContainer"]');
+  const chatInput = doc.querySelector('[data-testid="stChatInput"]');
+  function isNearBottom() {{
+    return main && (main.scrollHeight - main.scrollTop - main.clientHeight < 80);
+  }}
+  function updateBtn() {{
+    if (isNearBottom()) {{
+      btn.className = 'nav-top'; btn.textContent = '↑';
+      btn.onclick = () => main.scrollTo({{top:0, behavior:'smooth'}});
+    }} else {{
+      btn.className = 'nav-bottom'; btn.textContent = '↓';
+      btn.onclick = () => {{
+        const target = chatInput || main;
+        target.scrollIntoView({{behavior:'smooth', block:'end'}});
+      }};
+    }}
+  }}
+  if (main) main.addEventListener('scroll', updateBtn);
+  updateBtn();
+}}</script>
+            """,
             height=0,
         )
 
