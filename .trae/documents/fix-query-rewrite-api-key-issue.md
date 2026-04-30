@@ -33,105 +33,135 @@ pipeline.config = merged_config  # 问题：配置在初始化后才设置
 
 **结果**：`QueryRewriter` 使用了错误的LLM配置，导致API认证失败。
 
-## 修复方案
+---
 
-### 方案A：修改 RAGPipeline 支持延迟初始化（推荐）
+## 方案讨论与评价
 
-修改 `RAGPipeline` 的初始化流程，支持在设置 `config` 属性后重新初始化相关组件。
+### 方案A：延迟初始化/配置热更新
 
-**优点**：
-- 保持现有的实验运行器代码不变
-- 更灵活，支持配置热更新
+**核心思想**：允许配置改变后，重新初始化依赖配置的组件。
 
-**缺点**：
-- 需要修改 `RAGPipeline` 的内部逻辑
+**评价**：
+- **短期价值**：对修复当前bug来说是"杀鸡用牛刀"
+- **长期价值**：如果实现完整的配置热更新，对实验批量运行、生产环境动态调整都有价值
+- **风险**：需要解决状态一致性、资源释放、事务性等问题，不是简单加一个reload方法能解决的
+- **结论**：**暂不采用**，但值得未来系统性讨论。详见专题文档 `config-hot-swap-architecture.md`
 
-### 方案B：修改实验运行器，在创建Pipeline前合并配置
+### 方案B：临时配置文件
 
-修改 `eval/runner/core.py`，在创建 `RAGPipeline` 之前就完成配置合并，并保存到临时文件。
+**核心思想**：把合并后的配置写入临时文件，让 `RAGPipeline` 从文件加载。
 
-**优点**：
-- 不需要修改 `RAGPipeline` 的逻辑
-- 更符合"配置优先"的设计原则
+**评价**：
+- **优点**：不需要改 `RAGPipeline` 的接口
+- **缺点**：
+  - 运行时开销（每次都要写文件、读文件）
+  - 需要管理临时文件生命周期
+  - 潜在问题：文件残留、路径冲突、Windows文件锁
+  - 违反"最短路径"原则（配置已在内存，非要写文件再读）
+- **结论**：**不采用**，是"快速修复"但会留下技术债务
 
-**缺点**：
-- 需要创建临时配置文件
-- 可能影响其他使用 `RAGPipeline` 的代码
+### 方案C：统一配置参数（采用）
 
-### 方案C：修改 RAGPipeline 支持直接传入配置字典
+**核心思想**：修改 `RAGPipeline` 的接口，统一配置参数，支持字符串（文件路径）或字典。
 
-为 `RAGPipeline.__init__()` 添加一个 `config_dict` 参数，允许直接传入配置字典。
+**评价**：
+- **优点**：
+  - 最直接解决问题，无额外开销
+  - 接口语义清晰（`config` 参数支持多种形态）
+  - 向后兼容（不传参数时用默认值）
+  - 承认现实：配置可能来自不同地方（文件、内存）
+- **缺点**：需要修改 `RAGPipeline` 的接口
+- **结论**：**采用**
 
-**优点**：
-- 最干净的解决方案
-- 避免临时文件
-- 明确的配置来源
+---
 
-**缺点**：
-- 需要修改 `RAGPipeline` 的接口
+## 最终方案：改进版方案C
 
-## 推荐方案：方案C
+### 接口设计
 
-修改 `RAGPipeline.__init__()` 添加 `config_dict` 参数：
+将 `config_path` 和 `config_dict` 合并为一个统一的 `config` 参数：
 
 ```python
 def __init__(
     self,
-    config_path: str = "config.yaml",
-    config_dict: dict[str, Any] | None = None,  # 新增参数
+    config: str | dict | None = None,  # 统一参数：文件路径或字典
     llm_preset: str | None = None,
     meal_name: str | None = None,
     token_tracker: TokenTracker | None = None,
     profiler: PipelineProfiler | None = None,
 ):
-    if config_dict is not None:
-        self.config = config_dict
+    if config is None:
+        config = "config.yaml"
+    
+    if isinstance(config, str):
+        self.config = load_config(config)
     else:
-        self.config = load_config(config_path)
+        self.config = config
+    
+    self.llm_preset = llm_preset  # 存储为实例变量
     # ... 其余初始化代码
 ```
 
-然后修改实验运行器：
+### 调用方式变更
 
 ```python
+# 实验运行器
 pipeline = RAGPipeline(
-    config_dict=merged_config,  # 直接传入合并后的配置
+    config=merged_config,  # 直接传入字典
     llm_preset=llm_preset,
     meal_name=meal_name,
     token_tracker=variant_tracker,
     profiler=profiler,
 )
+
+# 现有代码（向后兼容）
+pipeline = RAGPipeline()  # 使用默认 config.yaml
+pipeline = RAGPipeline(config="custom_config.yaml")  # 使用指定文件
 ```
+
+---
 
 ## 实施步骤
 
-1. **修改 `src/pipeline.py`**
-   - 为 `RAGPipeline.__init__()` 添加 `config_dict` 参数
-   - 修改配置加载逻辑，优先使用 `config_dict`
-   - 确保 `_setup_retrievers()` 中的 `get_llm_config()` 调用使用正确的 `llm_preset`
+### 1. 修改 `src/pipeline.py`
 
-2. **修改 `eval/runner/core.py`**
-   - 修改 `run_variant()` 函数，使用 `config_dict` 参数传入合并后的配置
-   - 移除 `pipeline.config = merged_config` 这行代码
+- [ ] 修改 `__init__()` 签名，将 `config_path` 改为 `config`
+- [ ] 修改配置加载逻辑，支持字符串或字典
+- [ ] 将 `llm_preset` 存储为实例变量 `self.llm_preset`
+- [ ] 确保 `_setup_retrievers()` 中的 `get_llm_config()` 使用 `self.llm_preset`
 
-3. **修改 `_setup_retrievers()` 方法**
-   - 确保 `get_llm_config()` 调用时传递正确的 `llm_preset`
-   - 需要将 `llm_preset` 存储为实例变量
+### 2. 修改 `eval/runner/core.py`
 
-4. **更新测试**
-   - 添加测试用例验证 `config_dict` 参数的功能
-   - 确保现有测试不被破坏
+- [ ] 修改 `run_variant()` 函数，使用 `config=merged_config`
+- [ ] 移除 `pipeline.config = merged_config` 这行代码
 
-5. **验证修复**
-   - 重新运行失败的3个变体
-   - 确认API认证成功
+### 3. 更新测试
+
+- [ ] 添加测试用例验证 `config` 参数接受字典
+- [ ] 添加测试用例验证 `config` 参数接受文件路径
+- [ ] 确保现有测试不被破坏
+
+### 4. 验证修复
+
+- [ ] 重新运行失败的3个变体（hyde、multi_query_3、combo_full）
+- [ ] 确认API认证成功
+- [ ] 确认其他变体不受影响
+
+---
 
 ## 风险评估
 
-- **影响范围**：`RAGPipeline` 是核心组件，修改需谨慎
-- **向后兼容**：`config_dict` 参数是可选的，不影响现有代码
-- **测试覆盖**：需要确保所有使用 `RAGPipeline` 的场景都有测试覆盖
+| 风险类型 | 说明 | 缓解措施 |
+|----------|------|----------|
+| 接口变更 | 修改 `RAGPipeline` 的签名 | 使用默认参数保持向后兼容 |
+| 调用方改动 | 需要修改实验运行器 | 改动量小，仅一行代码 |
+| 测试覆盖 | 需要确保所有场景都有测试 | 添加新的测试用例 |
+
+---
 
 ## 预期结果
 
-修复后，hyde、multi_query_3、combo_full 三个变体应该能够正常运行，不再出现API认证失败错误。
+修复后：
+1. hyde、multi_query_3、combo_full 三个变体能够正常运行
+2. 不再出现API认证失败错误
+3. 现有代码继续正常工作（向后兼容）
