@@ -2,7 +2,7 @@
 
 <!-- status: active -->
 
-> 最后更新: 2026-04-18
+> 最后更新: 2026-05-01
 
 本文档列出所有 CLI 命令及其参数。
 
@@ -185,7 +185,39 @@ pixi run python eval/run_experiment.py --reproduce <exp_dir>
 
 # 生成 LLM 报告
 pixi run python eval/run_experiment.py --config <config> --llm-report
+
+# 增量实验：resume 已有实验目录
+pixi run python eval/run_experiment.py --config <config> --resume <exp_dir>
+
+# 增量实验：选择性重跑指定 variant
+pixi run python eval/run_experiment.py --config <config> --resume <exp_dir> --force-variant variant_a
+
+# 强制重跑所有 variant
+pixi run python eval/run_experiment.py --config <config> --resume <exp_dir> --force-rerun
 ```
+
+#### 实验系统参数
+
+| 参数 | 说明 |
+|------|------|
+| `--config <path>` | 实验配置 YAML 文件路径 |
+| `--list` | 列出所有实验 |
+| `--info <exp_id>` | 查看实验详情 |
+| `--compare <ids...>` | 对比多个实验 |
+| `--reproduce <dir>` | 复现实验 |
+| `--resume <dir>` | 复用已有实验目录，跳过已完成的 variant（自动验证 Config Hash） |
+| `--force-rerun` | 强制重跑所有 variant，忽略 checkpoint |
+| `--force-variant <names...>` | 选择性重跑指定 variant，不影响其他已完成的 variant |
+| `--llm-report` | 使用 LLM 生成深度分析报告 |
+| `--skip-preprocessing` | 跳过 Meal 和测试集创建 |
+| `--skip-verification` | 复现实验时跳过资产验证 |
+| `--skip-hash-verification` | 跳过 PDF SHA256 验证 |
+| `--system-config <path>` | 系统配置文件路径（默认 config.yaml） |
+| `--output-format <fmt>` | 对比输出格式：table / json |
+| `--save-report` | 保存对比报告为 Markdown |
+| `--report-path <path>` | 指定对比报告保存路径 |
+
+> 增量实验工作流的详细说明请参阅 [实验评测系统使用指南](experiment-system.md#增量实验工作流)。
 
 ---
 

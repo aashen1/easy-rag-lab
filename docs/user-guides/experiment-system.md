@@ -1,6 +1,6 @@
 # 实验评测系统使用指南
 
-> 最后更新: 2026-04-27
+> 最后更新: 2026-05-01
 
 本文档介绍如何使用自动化评测系统进行 RAG 系统实验。
 
@@ -10,6 +10,7 @@
 
 自动化评测系统支持：
 - **多 Variant 对比实验**：在一个实验中对比多种配置
+- **增量实验工作流**：先跑一个 variant，看结果后逐步添加更多 variant，已验证的结果自动复用
 - **自动数据准备**：自动创建 Meal 和测试集
 - **文档级问题生成**：基于完整文档生成真实场景问题
 - **多维度评测指标**：检索指标 + 生成质量指标
@@ -176,18 +177,135 @@ test_sets:
 
 ---
 
+## 增量实验工作流
+
+增量实验工作流允许你**逐步构建实验**：先跑一个 variant，检查结果，不满意就调整参数重跑，满意后再添加新的 variant。系统通过 **Config Hash 验证**确保复用的结果确实与当前配置一致。
+
+### 核心概念
+
+| 概念 | 说明 |
+|------|------|
+| **Config Hash** | 对 variant 的完整配置（config_overrides + merged config + data/test_sets/evaluation）计算的确定性哈希，存储在 `manifest.json` 的 `variant_config_hashes` 字段中 |
+| **Resume** | 使用 `--resume` 参数复用已有实验目录，跳过已完成的 variant |
+| **Hash 验证** | Resume 时自动比较当前配置的 hash 与存储的 hash，匹配则复用结果，不匹配则自动重跑 |
+| **Invalidate** | 当 hash 不匹配时，系统自动将 variant 标记为未完成，强制重跑 |
+
+### 典型工作流
+
+```bash
+# ── 第 1 步：先跑一个 variant ──
+pixi run exp my_experiment.yaml
+# → 创建实验目录 exp_20260501_120000_my_experiment
+# → 跑完 variant_a，结果和 config hash 写入 manifest
+
+# ── 第 2 步：查看结果 ──
+pixi run python eval/run_experiment.py --info exp_20260501_120000_my_experiment
+
+# ── 第 3 步：不满意？修改 YAML 中 variant_a 的参数，然后 resume ──
+pixi run exp my_experiment.yaml --resume data/exp_reports/exp_20260501_120000_my_experiment
+# → 检测到 variant_a 的 config hash 变了
+# → 自动 invalidate 并重跑 variant_a
+
+# ── 第 4 步：满意了！在 YAML 中添加 variant_b，再 resume ──
+pixi run exp my_experiment.yaml --resume data/exp_reports/exp_20260501_120000_my_experiment
+# → variant_a 的 hash 验证通过 ✅ 直接复用已有结果
+# → variant_b 是新的，正常跑 ✅
+
+# ── 第 5 步：继续添加更多 variant ──
+# 在 YAML 中添加 variant_c, variant_d ...
+pixi run exp my_experiment.yaml --resume data/exp_reports/exp_20260501_120000_my_experiment
+# → variant_a, variant_b 复用 ✅
+# → variant_c, variant_d 新跑 ✅
+```
+
+### 选择性重跑
+
+如果只想重跑某一个 variant，而不影响其他已完成的 variant，使用 `--force-variant`：
+
+```bash
+# 只重跑 variant_b，其他 variant 继续复用
+pixi run exp my_experiment.yaml --resume <exp_dir> --force-variant variant_b
+```
+
+也可以同时指定多个 variant：
+
+```bash
+pixi run exp my_experiment.yaml --resume <exp_dir> --force-variant variant_a variant_b
+```
+
+### 全部重跑
+
+如果需要从头开始，使用 `--force-rerun`：
+
+```bash
+pixi run exp my_experiment.yaml --resume <exp_dir> --force-rerun
+# → 忽略所有 checkpoint，重跑所有 variant
+```
+
+### Hash 验证机制详解
+
+Resume 时，系统对每个已完成的 variant 执行以下验证：
+
+1. **计算当前 hash**：根据 YAML 中的 variant 配置 + 系统配置 + 实验级配置计算 hash
+2. **比较存储 hash**：从 `manifest.json` 的 `variant_config_hashes` 中读取之前存储的 hash
+3. **判断结果**：
+   - **Hash 匹配** → 复用已有结果，跳过该 variant
+   - **Hash 不匹配** → 输出警告，自动 invalidate 并重跑
+   - **无存储 hash**（旧 manifest）→ 输出警告，安全起见重跑
+
+**Hash 包含的内容**：
+
+| 组成部分 | 说明 |
+|---------|------|
+| `variant.config_overrides` | variant 的配置覆盖 |
+| `merged config`（sanitized） | 合并后的完整管道配置（去除 API key 等敏感信息） |
+| `exp_data` | 实验的 data 配置（meal 名称、采样率等） |
+| `exp_test_sets` | 测试集配置 |
+| `exp_evaluation` | 评测配置 |
+
+> **注意**：修改系统级 `config.yaml` 也会改变 merged config，从而触发 hash 变化。这是预期行为——系统配置的变更确实会影响实验结果。
+
+### 向后兼容
+
+对于在引入 Config Hash 之前创建的实验目录，`manifest.json` 中没有 `variant_config_hashes` 字段。此时系统会：
+
+- 输出警告日志，提示无法验证结果一致性
+- 安全起见，**重跑所有已完成的 variant**
+- 建议不使用 `--resume`，而是重新开始一次完整实验以生成 hash
+
+### Manifest 结构
+
+`manifest.json` 新增 `variant_config_hashes` 字段：
+
+```json
+{
+  "experiment_id": "exp_20260501_120000_my_experiment",
+  "name": "my_experiment",
+  "status": "running",
+  "variants": ["variant_a", "variant_b"],
+  "completed_variants": ["variant_a"],
+  "variant_config_hashes": {
+    "variant_a": "a1b2c3d4e5f6"
+  },
+  "test_sets": ["document"]
+}
+```
+
+---
+
 ## 实验结果
 
 实验结果保存在 `data/exp_reports/` 目录：
 
 ```
-data/exp_reports/exp_20250416_120000/
-├── manifest.json           # 实验元数据
+data/exp_reports/exp_20260416_120000/
+├── manifest.json           # 实验元数据（含 variant_config_hashes）
 ├── config_snapshot.yaml    # 配置快照
 ├── meal_snapshot.json      # Meal 快照
 ├── results/                # 各 variant 结果
 │   ├── variant_1.json
 │   └── variant_2.json
+├── checkpoints/            # 问题级断点（运行中）
 ├── test_sets/              # 测试集
 └── experiment_report.md    # 实验报告
 ```
@@ -293,6 +411,18 @@ A: 使用 `--reproduce` 命令，指定实验目录路径。
 ### Q: 如何生成更详细的分析报告？
 
 A: 使用 `--llm-report` 参数，系统会使用 LLM 生成深度分析报告。
+
+### Q: 增量实验时，修改了系统 config.yaml 会怎样？
+
+A: 系统级配置的变更会影响所有 variant 的 merged config，导致 hash 变化。Resume 时系统会检测到 hash 不匹配，自动重跑受影响的 variant。这是预期行为——系统配置变更确实影响实验结果。
+
+### Q: 只想重跑一个 variant，不想影响其他已完成的怎么办？
+
+A: 使用 `--force-variant variant_name` 参数，只重跑指定的 variant，其他已完成的 variant 继续复用。
+
+### Q: 旧的实验目录没有 variant_config_hashes，能 resume 吗？
+
+A: 可以，但系统无法验证结果一致性，会发出警告并安全地重跑所有已完成的 variant。建议重新开始一次完整实验以生成 hash。
 
 ---
 
