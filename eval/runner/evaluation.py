@@ -11,7 +11,7 @@ from typing import Any
 
 from loguru import logger
 
-from eval.evaluators.base import BaseEvaluator, EvaluationSample
+from eval.evaluators.base import BaseEvaluator, EvaluationResult, EvaluationSample
 from eval.evaluators.builtin_evaluator import BuiltinEvaluator
 from eval.evaluators.ragas_evaluator import RagasEvaluator
 from eval.metrics.metric_resolver import MetricResolver
@@ -579,6 +579,75 @@ def _collect_rag_samples_concurrent(
     return samples
 
 
+def _format_eval_result(
+    sample: dict[str, Any],
+    eval_result: EvaluationResult,
+) -> dict[str, Any]:
+    """Format an EvaluationResult into the result dict used by evaluate_with_builtin.
+
+    Args:
+        sample: Original sample dictionary from collect_rag_samples.
+        eval_result: EvaluationResult from the builtin evaluator.
+
+    Returns:
+        Formatted result dictionary.
+    """
+    question_id = sample["question_id"]
+    raw_retrieval = eval_result.retrieval_metrics
+
+    doc_metrics: dict[str, Any] = {}
+    chunk_metrics: dict[str, Any] = {}
+    dedup_metrics: dict[str, Any] = {}
+    fpr_value = None
+
+    for k, v in raw_retrieval.items():
+        if k.startswith("chunk_"):
+            chunk_metrics[k.removeprefix("chunk_")] = v
+        elif k.startswith("dedup_"):
+            dedup_metrics[k.removeprefix("dedup_")] = v
+        elif k == "false_positive_rate":
+            fpr_value = v
+        else:
+            doc_metrics[k] = v
+
+    result: dict[str, Any] = {
+        "id": question_id,
+        "question": sample["question"],
+        "answer": sample["answer"],
+        "retrieval": doc_metrics,
+        "chunk_retrieval": chunk_metrics if chunk_metrics else None,
+        "dedup_retrieval": dedup_metrics if dedup_metrics else None,
+        "false_positive_rate": fpr_value,
+        "sources": sample.get("retrieved_sources", []),
+        "expected_sources": sample.get("expected_sources", []),
+        "time_seconds": sample.get("time_seconds", 0),
+        "test_set": sample.get("test_set", ""),
+        "category": sample.get("category"),
+        "difficulty": sample.get("difficulty"),
+        "question_type": sample.get("question_type"),
+        "expect_retrieval": sample.get("expect_retrieval", True),
+        "token_usage": sample.get("token_usage"),
+    }
+
+    if eval_result.generation_metrics:
+        result["generation"] = eval_result.generation_metrics
+
+    if eval_result.error:
+        result["error"] = eval_result.error
+
+    metric_parts = []
+    for k, v in eval_result.retrieval_metrics.items():
+        if v is not None:
+            metric_parts.append(f"{k.upper()}={v:.4f}")
+    for k, v in eval_result.generation_metrics.items():
+        if v is not None:
+            metric_parts.append(f"{k}={v:.4f}")
+    metric_str = ", ".join(metric_parts) if metric_parts else "no metrics"
+    logger.success(f"Question {question_id}: {metric_str}")
+
+    return result
+
+
 def evaluate_with_builtin(
     samples: list[dict[str, Any]],
     evaluator: BuiltinEvaluator,
@@ -588,6 +657,10 @@ def evaluate_with_builtin(
 ) -> list[dict[str, Any]]:
     """
     Evaluate samples using the builtin evaluator.
+
+    Uses evaluator.evaluate_batch() which supports concurrent generation
+    metric computation via ThreadPoolExecutor when generation metrics are
+    requested and builtin_concurrent_workers > 1 in config.
 
     Args:
         samples: List of sample dictionaries from collect_rag_samples.
@@ -599,12 +672,14 @@ def evaluate_with_builtin(
     Returns:
         List of evaluation result dictionaries.
     """
-    results = []
-    for sample in samples:
+    error_results: dict[int, dict[str, Any]] = {}
+    valid_entries: list[tuple[int, dict[str, Any], EvaluationSample]] = []
+
+    for idx, sample in enumerate(samples):
         question_id = sample["question_id"]
 
         if "error" in sample:
-            result = {
+            error_results[idx] = {
                 "id": question_id,
                 "question": sample["question"],
                 "answer": None,
@@ -614,89 +689,46 @@ def evaluate_with_builtin(
                 "test_set": sample.get("test_set", ""),
                 "category": sample.get("category"),
             }
-            results.append(result)
             continue
 
         expected_answer = sample.get("ground_truth_excerpt")
         if not expected_answer and sample.get("expect_retrieval", True):
             expected_answer = sample.get("expected_answer")
 
-        eval_result = evaluator.evaluate_single(
-            EvaluationSample(
-                question_id=question_id,
-                question=sample["question"],
-                answer=sample["answer"],
-                contexts=sample.get("contexts", []),
-                expected_sources=sample.get("expected_sources"),
-                expected_answer=expected_answer,
-                llm_config=llm_config,
-                retrieval_metrics=retrieval_metrics,
-                generation_metrics=generation_metrics,
-                chunk_ids=sample.get("chunk_ids"),
-                expected_chunks=sample.get("expected_chunks"),
-                equivalence_groups=sample.get("equivalence_groups"),
-                expect_retrieval=sample.get("expect_retrieval", True),
-                expect_no_answer=sample.get("expect_no_answer", False),
-                retrieved_sources=sample.get("retrieved_sources", []),
-                question_type=sample.get("question_type"),
-            )
+        eval_sample = EvaluationSample(
+            question_id=question_id,
+            question=sample["question"],
+            answer=sample["answer"],
+            contexts=sample.get("contexts", []),
+            expected_sources=sample.get("expected_sources"),
+            expected_answer=expected_answer,
+            llm_config=llm_config,
+            retrieval_metrics=retrieval_metrics,
+            generation_metrics=generation_metrics,
+            chunk_ids=sample.get("chunk_ids"),
+            expected_chunks=sample.get("expected_chunks"),
+            equivalence_groups=sample.get("equivalence_groups"),
+            expect_retrieval=sample.get("expect_retrieval", True),
+            expect_no_answer=sample.get("expect_no_answer", False),
+            retrieved_sources=sample.get("retrieved_sources", []),
+            question_type=sample.get("question_type"),
+        )
+        valid_entries.append((idx, sample, eval_sample))
+
+    if valid_entries:
+        eval_samples = [es for _, _, es in valid_entries]
+        batch_results = evaluator.evaluate_batch(
+            samples=eval_samples,
+            llm_config=llm_config,
+            retrieval_metrics=retrieval_metrics,
+            generation_metrics=generation_metrics,
         )
 
-        raw_retrieval = eval_result.retrieval_metrics
+        for entry, eval_result in zip(valid_entries, batch_results, strict=True):
+            idx, sample, _ = entry
+            error_results[idx] = _format_eval_result(sample, eval_result)
 
-        doc_metrics = {}
-        chunk_metrics = {}
-        dedup_metrics = {}
-        fpr_value = None
-
-        for k, v in raw_retrieval.items():
-            if k.startswith("chunk_"):
-                chunk_metrics[k.removeprefix("chunk_")] = v
-            elif k.startswith("dedup_"):
-                dedup_metrics[k.removeprefix("dedup_")] = v
-            elif k == "false_positive_rate":
-                fpr_value = v
-            else:
-                doc_metrics[k] = v
-
-        result = {
-            "id": question_id,
-            "question": sample["question"],
-            "answer": sample["answer"],
-            "retrieval": doc_metrics,
-            "chunk_retrieval": chunk_metrics if chunk_metrics else None,
-            "dedup_retrieval": dedup_metrics if dedup_metrics else None,
-            "false_positive_rate": fpr_value,
-            "sources": sample.get("retrieved_sources", []),
-            "expected_sources": sample.get("expected_sources", []),
-            "time_seconds": sample.get("time_seconds", 0),
-            "test_set": sample.get("test_set", ""),
-            "category": sample.get("category"),
-            "difficulty": sample.get("difficulty"),
-            "question_type": sample.get("question_type"),
-            "expect_retrieval": sample.get("expect_retrieval", True),
-            "token_usage": sample.get("token_usage"),
-        }
-
-        if eval_result.generation_metrics:
-            result["generation"] = eval_result.generation_metrics
-
-        if eval_result.error:
-            result["error"] = eval_result.error
-
-        metric_parts = []
-        for k, v in eval_result.retrieval_metrics.items():
-            if v is not None:
-                metric_parts.append(f"{k.upper()}={v:.4f}")
-        for k, v in eval_result.generation_metrics.items():
-            if v is not None:
-                metric_parts.append(f"{k}={v:.4f}")
-        metric_str = ", ".join(metric_parts) if metric_parts else "no metrics"
-        logger.success(f"Question {question_id}: {metric_str}")
-
-        results.append(result)
-
-    return results
+    return [error_results[i] for i in range(len(samples))]
 
 
 def evaluate_with_ragas(
