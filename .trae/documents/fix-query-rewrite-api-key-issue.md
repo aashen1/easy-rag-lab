@@ -10,6 +10,10 @@ Error code: 401 - {'error': {'code': 'invalid_api_key', 'message': 'missing_api_
 
 ### 根本原因
 
+经过深入排查，发现存在**两个独立的问题**：
+
+#### 问题1：配置传递时机错误
+
 在 `eval/runner/core.py` 的 `run_variant()` 函数中：
 
 ```python
@@ -31,7 +35,18 @@ pipeline.config = merged_config  # 问题：配置在初始化后才设置
 5. 实验配置中的 `llm_preset` 参数也没有被传递给 `_setup_retrievers()` 中的 `get_llm_config()` 调用
 6. 然后才执行 `pipeline.config = merged_config`，但为时已晚
 
-**结果**：`QueryRewriter` 使用了错误的LLM配置，导致API认证失败。
+#### 问题2：QueryRewriter 未使用标准认证模式
+
+在 `src/query_rewriter.py` 中：
+
+```python
+# 错误的方式
+self._client = Anthropic(
+    api_key=self.llm_api_key, base_url=self.llm_base_url
+)
+```
+
+项目的 API 代理要求将 API key 放在 `Authorization: Bearer` header 中，而不是默认的 `x-api-key` header。`QueryRewriter` 没有使用项目的标准认证模式，导致 API 调用失败。
 
 ---
 
@@ -75,9 +90,9 @@ pipeline.config = merged_config  # 问题：配置在初始化后才设置
 
 ---
 
-## 最终方案：改进版方案C
+## 最终方案
 
-### 接口设计
+### 修复1：统一配置参数
 
 将 `config_path` 和 `config_dict` 合并为一个统一的 `config` 参数：
 
@@ -102,66 +117,72 @@ def __init__(
     # ... 其余初始化代码
 ```
 
-### 调用方式变更
+### 修复2：QueryRewriter 使用标准认证模式
 
 ```python
-# 实验运行器
-pipeline = RAGPipeline(
-    config=merged_config,  # 直接传入字典
-    llm_preset=llm_preset,
-    meal_name=meal_name,
-    token_tracker=variant_tracker,
-    profiler=profiler,
+# 修改前
+self._client = Anthropic(
+    api_key=self.llm_api_key, base_url=self.llm_base_url
 )
 
-# 现有代码（向后兼容）
-pipeline = RAGPipeline()  # 使用默认 config.yaml
-pipeline = RAGPipeline(config="custom_config.yaml")  # 使用指定文件
+# 修改后
+from src.llm_client import create_anthropic_client
+
+self._client = create_anthropic_client(
+    api_key=self.llm_api_key,
+    base_url=self.llm_base_url,
+)
 ```
 
 ---
 
-## 实施步骤
+## 实施结果
 
-### 1. 修改 `src/pipeline.py`
+### 已完成的修改
 
-- [ ] 修改 `__init__()` 签名，将 `config_path` 改为 `config`
-- [ ] 修改配置加载逻辑，支持字符串或字典
-- [ ] 将 `llm_preset` 存储为实例变量 `self.llm_preset`
-- [ ] 确保 `_setup_retrievers()` 中的 `get_llm_config()` 使用 `self.llm_preset`
+- [x] 修改 `RAGPipeline.__init__()` 签名，将 `config_path` 改为 `config`
+- [x] 修改配置加载逻辑，支持字符串或字典
+- [x] 将 `llm_preset` 存储为实例变量 `self.llm_preset`
+- [x] 确保 `_setup_retrievers()` 中的 `get_llm_config()` 使用 `self.llm_preset`
+- [x] 修改 `eval/runner/core.py`，使用 `config=merged_config`
+- [x] 修改 `QueryRewriter` 使用标准认证模式
+- [x] 运行测试确保现有功能不受影响
+- [x] 验证修复：重新运行失败的3个变体
 
-### 2. 修改 `eval/runner/core.py`
+### 验证结果
 
-- [ ] 修改 `run_variant()` 函数，使用 `config=merged_config`
-- [ ] 移除 `pipeline.config = merged_config` 这行代码
+实验 `exp_20260430_185054_verify_fix` 结果：
 
-### 3. 更新测试
+```
+- Total Variants: 3
+- Successful Variants: 3
+- Failed Variants: 0
+```
 
-- [ ] 添加测试用例验证 `config` 参数接受字典
-- [ ] 添加测试用例验证 `config` 参数接受文件路径
-- [ ] 确保现有测试不被破坏
+| Variant | Hit Rate | Faithfulness | Relevancy |
+|---------|----------|--------------|-----------|
+| hyde | 1.0 | 0.98 | 0.94 |
+| multi_query_3 | 1.0 | 0.78 | 0.92 |
+| combo_full | 1.0 | 0.98 | 0.96 |
 
-### 4. 验证修复
-
-- [ ] 重新运行失败的3个变体（hyde、multi_query_3、combo_full）
-- [ ] 确认API认证成功
-- [ ] 确认其他变体不受影响
-
----
-
-## 风险评估
-
-| 风险类型 | 说明 | 缓解措施 |
-|----------|------|----------|
-| 接口变更 | 修改 `RAGPipeline` 的签名 | 使用默认参数保持向后兼容 |
-| 调用方改动 | 需要修改实验运行器 | 改动量小，仅一行代码 |
-| 测试覆盖 | 需要确保所有场景都有测试 | 添加新的测试用例 |
+**修复成功！**
 
 ---
 
-## 预期结果
+## 提交记录
 
-修复后：
-1. hyde、multi_query_3、combo_full 三个变体能够正常运行
-2. 不再出现API认证失败错误
-3. 现有代码继续正常工作（向后兼容）
+1. `fix: pass merged config to RAGPipeline at initialization`
+   - 修改 `RAGPipeline.__init__()` 签名
+   - 修改配置加载逻辑
+   - 修改实验运行器
+
+2. `fix: use standard auth pattern in QueryRewriter`
+   - 导入 `create_anthropic_client`
+   - 替换直接的 `Anthropic()` 实例化
+
+---
+
+## 相关文档
+
+- [配置热更新架构设计](config-hot-swap-architecture.md)
+- Issue: [RF-20260430-001-w0: 配置热更新架构设计](../.issues/active/RF-20260430-001-w0-配置热更新架构设计.md)
