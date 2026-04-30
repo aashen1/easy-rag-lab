@@ -179,4 +179,3 @@
 1. 运行 `pixi run lint` 确保代码格式合规
 2. 运行 `pixi run python -m pytest tests/test_golden_testset.py -v` 确保测试通过
 3. 重新生成 20 题 golden test 对比修复前后质量指标
-

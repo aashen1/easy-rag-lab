@@ -96,4 +96,3 @@
 * `HybridRetriever.retrieve()` 传入 `top_k=fetch_k`（int），兼容 `int | None`
 
 * 其他直接调用 `bm25_retriever.retrieve()` 的地方需确认
-

@@ -112,6 +112,38 @@ Reorganized archive directory from fragmented structure (6+ top-level directorie
 
 ### New directory structure
 ```
+
+## 2026-05-01 — Archive v0.1.15 documents
+
+### v0.1.15-experiment-acceleration-era/
+
+#### release/
+- v0.1.15/v0.1.15-release-verification-and-next-version-plan.md
+
+#### experiment-runner/
+- experiment-speed-optimization-and-checkpoint.md
+- verify-baseline-code-health-fixes.md
+
+#### webui-upgrade/
+- fix-webui-controls/ (spec triplet + acceptance-report + fix-streamlit-ui-controls.md)
+
+#### pipeline-refactor/
+- config-hot-swap-architecture.md
+- fix-dead-code-hybrid-topk-bm25-signature.md
+- fix-query-rewrite-api-key-issue.md
+
+#### evaluation-enhancement/
+- golden-test-quality-polish.md
+- reduce-proper-noun-false-positives.md
+- evidence-validation-analysis.md
+
+#### code-health/
+- shit-mountain-fix-round2/ (spec triplet + shit-mountain-fix-plan.md)
+- claude-md-length-optimization.md
+- docs-deep-restructure-plan.md
+
+### v0.1.14 补充
+- v0.1.14-code-health-era/release/v0.1.14/v0.1.14-release-plan.md (原属 v0.1.14，误放在 .trae/documents/)
 docs/archive/
 ├── archive-log.md
 ├── idea-ai-era-git-practice.md

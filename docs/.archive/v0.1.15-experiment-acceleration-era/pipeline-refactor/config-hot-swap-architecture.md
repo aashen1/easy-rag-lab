@@ -8,7 +8,7 @@
 ```python
 def _setup_retrievers(self) -> None:
     """Set up retrievers based on the current retrieval config.
-    
+
     Called during initialization and when the config is hot-swapped during experiments.
     """
 ```
@@ -115,10 +115,10 @@ self.llm_client = LLMClient(api_key="key_A")
 def reload_config(self, new_config):
     # 步骤1：重置 QueryRewriter
     self.query_rewriter = create_query_rewriter(new_config)  # 成功
-    
+
     # 步骤2：重置 Generator
     self.generator = create_generator(new_config)  # 失败！
-    
+
     # 现在怎么办？系统处于不一致状态
 ```
 
@@ -151,11 +151,11 @@ class RAGPipeline:
         self._config_dependent_components = []
         self._register_component("query_rewriter", self._create_query_rewriter)
         self._register_component("generator", self._create_generator)
-    
+
     def _register_component(self, name, factory):
         """注册依赖配置的组件"""
         self._config_dependent_components.append((name, factory))
-    
+
     def reload_config(self, new_config):
         """重置所有依赖配置的组件"""
         old_components = {}
@@ -181,10 +181,10 @@ class ConfigProxy:
     def __init__(self, config):
         self._config = config
         self._listeners = []
-    
+
     def add_listener(self, callback):
         self._listeners.append(callback)
-    
+
     def update(self, new_config):
         old_config = self._config
         self._config = new_config
@@ -195,7 +195,7 @@ class QueryRewriter:
     def __init__(self, config_proxy):
         self._config_proxy = config_proxy
         config_proxy.add_listener(self._on_config_change)
-    
+
     def _on_config_change(self, old_config, new_config):
         # 自动响应配置变更
         self._reinitialize(new_config)
@@ -209,7 +209,7 @@ class QueryRewriter:
 ```python
 class RAGPipeline:
     """不可变Pipeline，配置变更时创建新实例"""
-    
+
     def with_config(self, new_config) -> "RAGPipeline":
         """创建使用新配置的Pipeline实例"""
         new_pipeline = RAGPipeline.__new__(RAGPipeline)

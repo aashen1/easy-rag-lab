@@ -226,4 +226,3 @@ pixi run test
 6. `src/pipeline.py` — 加懒加载方法、`query()` 加 `config_overrides`、始终创建 BM25Retriever
 7. `src/app_pages/qa_demo.py` — 构建 config\_overrides 并传入、加策略选择器、错误处理
 8. `tests/test_pipeline.py` — 加 config\_overrides 测试
-

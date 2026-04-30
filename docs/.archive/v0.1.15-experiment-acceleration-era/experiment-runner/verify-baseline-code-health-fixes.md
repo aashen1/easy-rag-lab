@@ -489,4 +489,3 @@ Fix-8 (并发 checkpoint)     ← 依赖 Fix-4
 1. 运行 `pixi run lint` 确保代码格式正确
 2. 运行相关 pytest 测试确保无回归
 3. 按 commit-rule 原子提交
-

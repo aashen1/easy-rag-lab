@@ -107,12 +107,12 @@ def __init__(
 ):
     if config is None:
         config = "config.yaml"
-    
+
     if isinstance(config, str):
         self.config = load_config(config)
     else:
         self.config = config
-    
+
     self.llm_preset = llm_preset  # 存储为实例变量
     # ... 其余初始化代码
 ```
