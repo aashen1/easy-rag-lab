@@ -9,7 +9,7 @@ import yaml
 from loguru import logger
 
 from src.exceptions import ConfigurationError
-from src.utils import deep_merge
+from src.utils import deep_merge, sanitize_name
 
 VALID_RETRIEVAL_METRICS = {
     "hit_rate",
@@ -522,8 +522,7 @@ class ExperimentManager:
         from datetime import datetime
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe_name = config.name.lower().replace(" ", "_").replace("-", "_")
-        safe_name = "".join(c for c in safe_name if c.isalnum() or c == "_")
+        safe_name = sanitize_name(config.name)
         return f"exp_{timestamp}_{safe_name}"
 
     def create_experiment_dir(self, config: ExperimentConfig) -> Path:
@@ -956,8 +955,7 @@ class ExperimentManager:
             Variant result dictionary, or None if not found.
         """
         results_dir = exp_dir / "results"
-        safe_name = variant_name.lower().replace(" ", "_").replace("-", "_")
-        safe_name = "".join(c for c in safe_name if c.isalnum() or c == "_")
+        safe_name = sanitize_name(variant_name)
         result_path = results_dir / f"{safe_name}.json"
 
         if not result_path.exists():
@@ -994,8 +992,7 @@ class ExperimentManager:
         results_dir = exp_dir / "results"
         results_dir.mkdir(exist_ok=True)
 
-        safe_name = variant_name.lower().replace(" ", "_").replace("-", "_")
-        safe_name = "".join(c for c in safe_name if c.isalnum() or c == "_")
+        safe_name = sanitize_name(variant_name)
         result_path = results_dir / f"{safe_name}.json"
 
         try:

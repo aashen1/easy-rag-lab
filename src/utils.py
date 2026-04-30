@@ -274,6 +274,22 @@ def ensure_dir(path: str) -> Path:
     return dir_path
 
 
+def sanitize_name(name: str) -> str:
+    """Sanitize a name for use as a file system path component.
+
+    Converts to lowercase, replaces spaces and hyphens with underscores,
+    and removes all characters except alphanumeric and underscore.
+
+    Args:
+        name: The raw name string to sanitize.
+
+    Returns:
+        A sanitized string safe for use in file paths.
+    """
+    safe = name.lower().replace(" ", "_").replace("-", "_")
+    return "".join(c for c in safe if c.isalnum() or c == "_")
+
+
 DEFAULT_CATEGORY_MAPPING: dict[str, str] = {
     "annual_report": "annual_report",
     "年报": "annual_report",

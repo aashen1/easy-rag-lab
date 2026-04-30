@@ -18,7 +18,7 @@ from eval.runner.metrics import build_legacy_resolver, merge_result, namespace_r
 from src.exceptions import ConfigurationError
 from src.experiment import ExperimentConfig
 from src.pipeline import RAGPipeline
-from src.utils import get_llm_config
+from src.utils import get_llm_config, sanitize_name
 
 
 def create_evaluators(
@@ -173,8 +173,7 @@ def collect_rag_samples(
     checkpoint_path: Path | None = None
     if checkpoint_dir is not None and variant_name:
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        safe_name = variant_name.lower().replace(" ", "_").replace("-", "_")
-        safe_name = "".join(c for c in safe_name if c.isalnum() or c == "_")
+        safe_name = sanitize_name(variant_name)
         checkpoint_path = checkpoint_dir / f"{safe_name}_checkpoint.json"
 
     samples: list[dict[str, Any]] = []

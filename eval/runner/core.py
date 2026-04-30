@@ -33,7 +33,7 @@ from src.hybrid_retriever import HybridRetriever
 from src.meal import create_artifact_cache
 from src.pipeline import RAGPipeline
 from src.token_tracker import TokenTracker
-from src.utils import get_llm_config, load_config, setup_logger
+from src.utils import get_llm_config, load_config, sanitize_name, setup_logger
 
 
 def run_variant_evaluation(
@@ -77,8 +77,7 @@ def run_variant_evaluation(
 
     checkpoint_dir = exp_dir / "checkpoints"
     if checkpoint_dir.exists():
-        safe_name = variant_name.lower().replace(" ", "_").replace("-", "_")
-        safe_name = "".join(c for c in safe_name if c.isalnum() or c == "_")
+        safe_name = sanitize_name(variant_name)
         checkpoint_file = checkpoint_dir / f"{safe_name}_checkpoint.json"
         if checkpoint_file.exists():
             try:
@@ -302,8 +301,7 @@ def run_variant_evaluation(
 
         checkpoint_dir = exp_dir / "checkpoints"
         if checkpoint_dir.exists():
-            safe_name = variant_name.lower().replace(" ", "_").replace("-", "_")
-            safe_name = "".join(c for c in safe_name if c.isalnum() or c == "_")
+            safe_name = sanitize_name(variant_name)
             checkpoint_file = checkpoint_dir / f"{safe_name}_checkpoint.json"
             if checkpoint_file.exists():
                 try:

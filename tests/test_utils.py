@@ -12,6 +12,7 @@ from src.utils import (
     get_env_var,
     get_llm_config,
     load_config,
+    sanitize_name,
 )
 
 
@@ -430,3 +431,33 @@ class TestCreateLlmClient:
             max_tokens=8192,
             temperature=0.5,
         )
+
+
+@pytest.mark.unit
+class TestSanitizeName:
+    def test_basic_lowercase(self):
+        assert sanitize_name("HelloWorld") == "helloworld"
+
+    def test_spaces_replaced(self):
+        assert sanitize_name("my variant name") == "my_variant_name"
+
+    def test_hyphens_replaced(self):
+        assert sanitize_name("chunk-512-overlap") == "chunk_512_overlap"
+
+    def test_special_chars_removed(self):
+        assert sanitize_name("test@#$%name!") == "testname"
+
+    def test_mixed(self):
+        assert sanitize_name("My Variant-Name (v2)") == "my_variant_name_v2"
+
+    def test_already_clean(self):
+        assert sanitize_name("clean_name_123") == "clean_name_123"
+
+    def test_empty_string(self):
+        assert sanitize_name("") == ""
+
+    def test_unicode_kept_as_alnum(self):
+        assert sanitize_name("变体名称") == "变体名称"
+
+    def test_underscore_preserved(self):
+        assert sanitize_name("already_underscored") == "already_underscored"
