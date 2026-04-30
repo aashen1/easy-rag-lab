@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import streamlit as st
+import streamlit.components.v1 as components
 from loguru import logger
 
 from src.app_pages.pdf_server import PdfServer, get_or_create_pdf_server
@@ -228,10 +229,8 @@ def _display_result(result: dict[str, Any], meal_config: MealConfig | None):
 def _init_session_state():
     if "meals_cache" not in st.session_state:
         st.session_state.meals_cache = get_meals()
-    if "last_result" not in st.session_state:
-        st.session_state.last_result = None
-    if "saved_question" not in st.session_state:
-        st.session_state.saved_question = ""
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
     if "query_error" not in st.session_state:
         st.session_state.query_error = None
 
@@ -420,9 +419,8 @@ def render_qa_demo():
                 }[x],
             )
 
-    if st.button("🗑️ 清空结果", key="clear_btn"):
-        st.session_state.last_result = None
-        st.session_state.saved_question = ""
+    if st.button("🗑️ 清空对话", key="clear_btn"):
+        st.session_state.messages = []
         st.session_state.query_error = None
         st.rerun()
 
@@ -430,12 +428,25 @@ def render_qa_demo():
         st.error(f"查询失败: {st.session_state.query_error}")
         st.session_state.query_error = None
 
-    if st.session_state.last_result is not None:
-        if st.session_state.saved_question:
-            with st.chat_message("user"):
-                st.write(st.session_state.saved_question)
-        with st.chat_message("assistant"):
-            _display_result(st.session_state.last_result, meal_config)
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            if msg["role"] == "user":
+                st.write(msg["content"])
+            else:
+                _display_result(msg["result"], meal_config)
+
+    if st.session_state.messages:
+        components.html(
+            "<script>"
+            "  const chatInput = window.parent.document.querySelector("
+            "    '[data-testid=\"stChatInput\"]'"
+            "  );"
+            "  if (chatInput) {"
+            "    chatInput.scrollIntoView({behavior: 'smooth', block: 'end'});"
+            "  }"
+            "</script>",
+            height=0,
+        )
 
     question = st.chat_input(
         "输入问题，Enter 发送，Shift+Enter 换行",
@@ -443,8 +454,7 @@ def render_qa_demo():
     )
 
     if question:
-        st.session_state.saved_question = question
-        st.session_state.last_result = None
+        st.session_state.messages.append({"role": "user", "content": question})
         st.session_state.query_error = None
 
         config_overrides = {
@@ -463,7 +473,9 @@ def render_qa_demo():
             try:
                 pipeline = get_pipeline(meal_name)
                 result = pipeline.query(question, config_overrides=config_overrides)
-                st.session_state.last_result = result
+                st.session_state.messages.append(
+                    {"role": "assistant", "result": result}
+                )
             except Exception as e:
                 logger.error(f"Query failed: {e}")
                 error_str = str(e)
