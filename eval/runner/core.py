@@ -32,7 +32,7 @@ from src.generator import Generator
 from src.hybrid_retriever import HybridRetriever
 from src.meal import create_artifact_cache
 from src.pipeline import RAGPipeline
-from src.token_tracker import TokenTracker
+from src.token_tracker import DetailedTokenUsage, TokenTracker
 from src.utils import get_llm_config, load_config, sanitize_name, setup_logger
 
 
@@ -527,8 +527,6 @@ def run_experiment(
                         for rec_data in existing_result["token_usage"].get(
                             "records", []
                         ):
-                            from src.token_tracker import DetailedTokenUsage
-
                             usage = DetailedTokenUsage(
                                 input_tokens=rec_data["usage"]["input_tokens"],
                                 output_tokens=rec_data["usage"]["output_tokens"],
@@ -580,8 +578,6 @@ def run_experiment(
                 if "token_usage" in variant_result:
                     variant_tracker = TokenTracker()
                     for rec_data in variant_result["token_usage"].get("records", []):
-                        from src.token_tracker import DetailedTokenUsage
-
                         usage = DetailedTokenUsage(
                             input_tokens=rec_data["usage"]["input_tokens"],
                             output_tokens=rec_data["usage"]["output_tokens"],
