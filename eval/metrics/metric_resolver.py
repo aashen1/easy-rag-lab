@@ -111,11 +111,17 @@ class MetricResolver:
         else:
             missing = [b for b in backend_priority if b not in evaluators]
             if missing:
-                raise ValueError(
+                logger.warning(
                     f"Backend(s) {missing} in backend_priority not found "
-                    f"in evaluators. Available: {list(evaluators.keys())}"
+                    f"in evaluators. Available: {list(evaluators.keys())}. "
+                    f"Filtering to available backends only."
                 )
-            self.backend_priority = backend_priority
+            self.backend_priority = [b for b in backend_priority if b in evaluators]
+            if not self.backend_priority:
+                raise ValueError(
+                    f"No valid backends in backend_priority. "
+                    f"Requested: {backend_priority}, Available: {list(evaluators.keys())}"
+                )
 
         self._requested_metrics = self._expand_preset(metrics_preset, custom_metrics)
 
