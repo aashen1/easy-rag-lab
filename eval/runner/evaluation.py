@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -79,11 +80,15 @@ def _save_question_checkpoint(
         "total_questions": total_questions,
         "samples": samples,
     }
+    tmp_path = checkpoint_path.with_suffix(".json.tmp")
     try:
-        with open(checkpoint_path, "w", encoding="utf-8") as f:
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(checkpoint_data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, checkpoint_path)
     except OSError as e:
         logger.warning(f"Failed to save question checkpoint: {str(e)}")
+        with contextlib.suppress(OSError):
+            tmp_path.unlink()
 
 
 def _load_question_checkpoint(
