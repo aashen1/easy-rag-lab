@@ -123,6 +123,14 @@ class MetricResolver:
                     f"Requested: {backend_priority}, Available: {list(evaluators.keys())}"
                 )
 
+            omitted = set(evaluators.keys()) - set(self.backend_priority)
+            if omitted:
+                raise ValueError(
+                    f"Backend(s) {list(omitted)} are enabled but not in backend_priority. "
+                    f"This may be a typo. backend_priority: {backend_priority}, "
+                    f"enabled backends: {list(evaluators.keys())}"
+                )
+
         self._requested_metrics = self._expand_preset(metrics_preset, custom_metrics)
 
     def _expand_preset(
