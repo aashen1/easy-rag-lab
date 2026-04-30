@@ -12,6 +12,16 @@ from eval.runner.metrics import merge_result, namespace_result
 from src.experiment import ExperimentManager
 
 
+def _make_mock_pipeline(**query_returns) -> MagicMock:
+    """Create a MagicMock pipeline with a proper config for _get_concurrent_workers."""
+    pipeline = MagicMock()
+    pipeline.config = {"evaluation": {"concurrent_queries": 1}}
+    if query_returns:
+        pipeline.query.return_value = query_returns.get("return_value")
+        pipeline.query.side_effect = query_returns.get("side_effect")
+    return pipeline
+
+
 class TestQuestionLevelCheckpoint:
     def test_save_and_load_checkpoint(self, tmp_path):
         checkpoint_path = tmp_path / "test_variant_checkpoint.json"
@@ -103,14 +113,15 @@ class TestCollectRagSamplesCheckpointResume:
         return {"name": "test_set", "questions": questions}
 
     def test_collect_from_scratch_no_checkpoint(self, tmp_path):
-        pipeline = MagicMock()
-        pipeline.query.return_value = {
-            "answer": "Test answer",
-            "contexts": ["ctx1"],
-            "sources": ["doc1.pdf"],
-            "chunk_ids": ["doc1::chunk::001"],
-            "token_usage": None,
-        }
+        pipeline = _make_mock_pipeline(
+            return_value={
+                "answer": "Test answer",
+                "contexts": ["ctx1"],
+                "sources": ["doc1.pdf"],
+                "chunk_ids": ["doc1::chunk::001"],
+                "token_usage": None,
+            }
+        )
 
         test_set = self._make_test_set(3)
         checkpoint_dir = tmp_path / "checkpoints"
@@ -159,14 +170,15 @@ class TestCollectRagSamplesCheckpointResume:
             model_name="gpt-4",
         )
 
-        pipeline = MagicMock()
-        pipeline.query.return_value = {
-            "answer": "Resumed answer",
-            "contexts": ["ctx"],
-            "sources": ["doc.pdf"],
-            "chunk_ids": ["doc::chunk::001"],
-            "token_usage": None,
-        }
+        pipeline = _make_mock_pipeline(
+            return_value={
+                "answer": "Resumed answer",
+                "contexts": ["ctx"],
+                "sources": ["doc.pdf"],
+                "chunk_ids": ["doc::chunk::001"],
+                "token_usage": None,
+            }
+        )
 
         test_set = self._make_test_set(5)
         samples = collect_rag_samples(
@@ -207,7 +219,7 @@ class TestCollectRagSamplesCheckpointResume:
             model_name="gpt-4",
         )
 
-        pipeline = MagicMock()
+        pipeline = _make_mock_pipeline()
         test_set = self._make_test_set(3)
 
         samples = collect_rag_samples(
@@ -223,14 +235,15 @@ class TestCollectRagSamplesCheckpointResume:
         pipeline.query.assert_not_called()
 
     def test_no_checkpoint_dir_means_no_checkpoint(self, tmp_path):
-        pipeline = MagicMock()
-        pipeline.query.return_value = {
-            "answer": "A",
-            "contexts": ["c"],
-            "sources": ["s"],
-            "chunk_ids": [],
-            "token_usage": None,
-        }
+        pipeline = _make_mock_pipeline(
+            return_value={
+                "answer": "A",
+                "contexts": ["c"],
+                "sources": ["s"],
+                "chunk_ids": [],
+                "token_usage": None,
+            }
+        )
 
         test_set = self._make_test_set(2)
         samples = collect_rag_samples(
@@ -246,14 +259,15 @@ class TestCollectRagSamplesCheckpointResume:
 
     def test_checkpoint_saved_after_each_question(self, tmp_path):
         checkpoint_dir = tmp_path / "checkpoints"
-        pipeline = MagicMock()
-        pipeline.query.return_value = {
-            "answer": "A",
-            "contexts": ["c"],
-            "sources": ["s"],
-            "chunk_ids": [],
-            "token_usage": None,
-        }
+        pipeline = _make_mock_pipeline(
+            return_value={
+                "answer": "A",
+                "contexts": ["c"],
+                "sources": ["s"],
+                "chunk_ids": [],
+                "token_usage": None,
+            }
+        )
 
         test_set = self._make_test_set(3)
         collect_rag_samples(
@@ -274,14 +288,15 @@ class TestCollectRagSamplesCheckpointResume:
 
     def test_variant_name_sanitized_in_checkpoint_filename(self, tmp_path):
         checkpoint_dir = tmp_path / "checkpoints"
-        pipeline = MagicMock()
-        pipeline.query.return_value = {
-            "answer": "A",
-            "contexts": ["c"],
-            "sources": ["s"],
-            "chunk_ids": [],
-            "token_usage": None,
-        }
+        pipeline = _make_mock_pipeline(
+            return_value={
+                "answer": "A",
+                "contexts": ["c"],
+                "sources": ["s"],
+                "chunk_ids": [],
+                "token_usage": None,
+            }
+        )
 
         test_set = self._make_test_set(1)
         collect_rag_samples(
@@ -296,14 +311,15 @@ class TestCollectRagSamplesCheckpointResume:
         assert expected_path.exists()
 
     def test_rejected_questions_filtered_out(self, tmp_path):
-        pipeline = MagicMock()
-        pipeline.query.return_value = {
-            "answer": "A",
-            "contexts": ["c"],
-            "sources": ["s"],
-            "chunk_ids": [],
-            "token_usage": None,
-        }
+        pipeline = _make_mock_pipeline(
+            return_value={
+                "answer": "A",
+                "contexts": ["c"],
+                "sources": ["s"],
+                "chunk_ids": [],
+                "token_usage": None,
+            }
+        )
 
         test_set = {
             "name": "test_set",
@@ -663,23 +679,24 @@ class TestEndToEndCheckpointFlow:
     def test_full_question_level_resume_flow(self, tmp_path):
         checkpoint_dir = tmp_path / "checkpoints"
 
-        pipeline = MagicMock()
-        pipeline.query.side_effect = [
-            {
-                "answer": "A1",
-                "contexts": ["c1"],
-                "sources": ["s1"],
-                "chunk_ids": [],
-                "token_usage": None,
-            },
-            {
-                "answer": "A2",
-                "contexts": ["c2"],
-                "sources": ["s2"],
-                "chunk_ids": [],
-                "token_usage": None,
-            },
-        ]
+        pipeline = _make_mock_pipeline(
+            side_effect=[
+                {
+                    "answer": "A1",
+                    "contexts": ["c1"],
+                    "sources": ["s1"],
+                    "chunk_ids": [],
+                    "token_usage": None,
+                },
+                {
+                    "answer": "A2",
+                    "contexts": ["c2"],
+                    "sources": ["s2"],
+                    "chunk_ids": [],
+                    "token_usage": None,
+                },
+            ]
+        )
 
         test_set = {
             "name": "test_set",
@@ -704,14 +721,15 @@ class TestEndToEndCheckpointFlow:
         checkpoint_path = checkpoint_dir / "v1_checkpoint.json"
         assert checkpoint_path.exists()
 
-        pipeline2 = MagicMock()
-        pipeline2.query.return_value = {
-            "answer": "A2_new",
-            "contexts": ["c2_new"],
-            "sources": ["s2_new"],
-            "chunk_ids": [],
-            "token_usage": None,
-        }
+        pipeline2 = _make_mock_pipeline(
+            return_value={
+                "answer": "A2_new",
+                "contexts": ["c2_new"],
+                "sources": ["s2_new"],
+                "chunk_ids": [],
+                "token_usage": None,
+            }
+        )
 
         samples2 = collect_rag_samples(
             pipeline=pipeline2,
@@ -741,14 +759,15 @@ class TestEndToEndCheckpointFlow:
             model_name="gpt-4",
         )
 
-        pipeline = MagicMock()
-        pipeline.query.return_value = {
-            "answer": "A3",
-            "contexts": ["c3"],
-            "sources": ["s3"],
-            "chunk_ids": [],
-            "token_usage": None,
-        }
+        pipeline = _make_mock_pipeline(
+            return_value={
+                "answer": "A3",
+                "contexts": ["c3"],
+                "sources": ["s3"],
+                "chunk_ids": [],
+                "token_usage": None,
+            }
+        )
 
         test_set = {
             "name": "test_set",
