@@ -657,14 +657,18 @@ if __name__ == "__main__":
     elif args.meal:
         meal_name_for_pipeline = args.meal
 
-    pipeline = RAGPipeline(
-        config_path=args.config,
-        llm_preset=llm_preset,
-        meal_name=meal_name_for_pipeline,
-    )
-
     if args.exp_config:
-        pipeline.config = config
+        pipeline = RAGPipeline(
+            config=config,
+            llm_preset=llm_preset,
+            meal_name=meal_name_for_pipeline,
+        )
+    else:
+        pipeline = RAGPipeline(
+            config=args.config,
+            llm_preset=llm_preset,
+            meal_name=meal_name_for_pipeline,
+        )
 
     if not meal_name_for_pipeline:
         collection_info = pipeline.indexer.get_collection_info()

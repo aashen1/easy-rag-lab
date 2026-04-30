@@ -116,13 +116,12 @@ def run_variant_evaluation(
         indexer_from_cache = False
 
         pipeline = RAGPipeline(
-            config_path=None,
+            config=merged_config,
             llm_preset=llm_preset,
             meal_name=meal_name,
             token_tracker=variant_tracker,
             profiler=profiler,
         )
-        pipeline.config = merged_config
 
         if profiler:
             profiler.begin_stage("S3")

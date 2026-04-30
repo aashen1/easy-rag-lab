@@ -41,7 +41,7 @@ from src.utils import get_llm_config, load_config, setup_logger
 class RAGPipeline:
     def __init__(
         self,
-        config_path: str = "config.yaml",
+        config: str | dict[str, Any] | None = None,
         llm_preset: str | None = None,
         meal_name: str | None = None,
         token_tracker: TokenTracker | None = None,
@@ -55,8 +55,10 @@ class RAGPipeline:
         of creating a new one.
 
         Args:
-            config_path: Path to the YAML configuration file. Defaults to
-                ``"config.yaml"``.
+            config: Configuration source. Can be:
+                - ``None``: Load from default ``"config.yaml"``
+                - ``str``: Path to a YAML configuration file
+                - ``dict``: Configuration dictionary (e.g., merged experiment config)
             llm_preset: Optional LLM preset name from config. When None, uses
                 the default preset.
             meal_name: Optional name of a pre-built Meal to load. When provided,
@@ -69,7 +71,15 @@ class RAGPipeline:
             ConfigurationError: If the config file is invalid or missing.
             Exception: If any component fails to initialize.
         """
-        self.config = load_config(config_path)
+        if config is None:
+            config = "config.yaml"
+
+        if isinstance(config, str):
+            self.config = load_config(config)
+        else:
+            self.config = config
+
+        self.llm_preset = llm_preset
         setup_logger(self.config)
         self.meal_name = meal_name
         self.meal_config = None
@@ -183,7 +193,7 @@ class RAGPipeline:
         self.query_rewriter: QueryRewriter | None = None
         rewrite_config = retrieval_config.get("query_rewrite", {})
         if rewrite_config.get("enabled", False):
-            llm_config = get_llm_config(self.config)
+            llm_config = get_llm_config(self.config, self.llm_preset)
             self.query_rewriter = QueryRewriter(
                 strategy=rewrite_config.get("strategy", "hyde"),
                 llm_model_name=llm_config["model_name"],
@@ -441,7 +451,7 @@ class RAGPipeline:
 
         clone._setup_retrievers()
 
-        llm_config = get_llm_config(self.config, "default")
+        llm_config = get_llm_config(self.config, self.llm_preset)
         clone.generator = Generator(
             model_name=llm_config["model_name"],
             api_key=llm_config["api_key"],
@@ -744,7 +754,7 @@ class RAGPipeline:
             return
 
         logger.info(f"Lazy-initializing query rewriter (strategy={strategy})...")
-        llm_config = get_llm_config(self.config)
+        llm_config = get_llm_config(self.config, self.llm_preset)
         rewrite_config = self.config.get("retrieval", {}).get("query_rewrite", {})
         self.query_rewriter = QueryRewriter(
             strategy=strategy,
