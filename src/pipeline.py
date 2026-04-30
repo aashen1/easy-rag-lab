@@ -378,6 +378,14 @@ class RAGPipeline:
             self.profiler.begin_stage("S3")
 
         logger.info("Step 3: Building vector index...")
+        if self.indexer is None:
+            vector_store_config = self.config["vector_store"]
+            self.indexer = VectorIndexer(
+                persist_dir=vector_store_config["persist_dir"],
+                collection_name=vector_store_config["collection_name"],
+                distance=vector_store_config["distance"],
+            )
+            self._setup_retrievers()
         self.indexer.build_index(
             chunks_dir=str(chunks_dir),
             embedder=self.embedder,

@@ -1676,8 +1676,10 @@ class TestRunExperimentExceptionPaths:
         mock_create_evaluators.return_value = {"builtin": mock_evaluator}
 
         exp_config = self._make_exp_config()
+        mock_pipeline = MagicMock()
+        mock_pipeline.config = {}
         results = evaluate_test_set(
-            pipeline=MagicMock(),
+            pipeline=mock_pipeline,
             test_set={"questions": []},
             exp_config=exp_config,
             system_config={},
@@ -1688,6 +1690,7 @@ class TestRunExperimentExceptionPaths:
     @pytest.mark.unit
     def testcollect_rag_samples_skips_empty_question(self):
         pipeline = MagicMock()
+        pipeline.config = {}
         test_set = {
             "name": "test_set_1",
             "questions": [

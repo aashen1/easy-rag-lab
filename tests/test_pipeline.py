@@ -64,13 +64,9 @@ class TestRAGPipeline:
         mock_embedder.assert_called_once_with(
             model_name="test-model", device="cpu", query_instruction=None
         )
-        mock_indexer.assert_called_once_with(
-            persist_dir="/tmp/vs",
-            collection_name="default_col",
-            distance="Cosine",
-        )
+        mock_indexer.assert_not_called()
         mock_retriever.assert_called_once_with(
-            indexer=mock_indexer.return_value,
+            indexer=None,
             embedder=mock_embedder.return_value,
             top_k=5,
             score_threshold=0,
@@ -87,6 +83,7 @@ class TestRAGPipeline:
         )
         assert pipeline.meal_name is None
         assert pipeline.meal_config is None
+        assert pipeline.indexer is None
 
     @patch("src.pipeline.Generator")
     @patch("src.pipeline.Retriever")
@@ -120,13 +117,10 @@ class TestRAGPipeline:
 
             mock_meal_mgr.load_meal.assert_called_once_with("test_meal")
 
-        mock_indexer.assert_called_once_with(
-            persist_dir="/tmp/vs",
-            collection_name="meal_col_123",
-            distance="Cosine",
-        )
+        mock_indexer.assert_not_called()
         assert pipeline.meal_name == "test_meal"
         assert pipeline.meal_config is mock_meal_config
+        assert pipeline.indexer is None
 
     @patch("src.pipeline.Generator")
     @patch("src.pipeline.Retriever")
@@ -289,6 +283,32 @@ class TestRAGPipeline:
         pipeline = RAGPipeline(config="dummy.yaml")
         pipeline.close()
 
+        mock_indexer.return_value.close.assert_not_called()
+
+    @patch("src.pipeline.Generator")
+    @patch("src.pipeline.Retriever")
+    @patch("src.pipeline.VectorIndexer")
+    @patch("src.pipeline.Embedder")
+    @patch("src.pipeline.get_llm_config")
+    @patch("src.pipeline.setup_logger")
+    @patch("src.pipeline.load_config")
+    def test_close_calls_indexer_close_when_indexer_exists(
+        self,
+        mock_load_config,
+        mock_setup_logger,
+        mock_get_llm_config,
+        mock_embedder,
+        mock_indexer,
+        mock_retriever,
+        mock_generator,
+    ):
+        mock_load_config.return_value = _make_config()
+        mock_get_llm_config.return_value = _make_llm_config()
+
+        pipeline = RAGPipeline(config="dummy.yaml")
+        pipeline.indexer = mock_indexer.return_value
+        pipeline.close()
+
         mock_indexer.return_value.close.assert_called_once()
 
     @patch("src.pipeline.Generator")
@@ -311,8 +331,8 @@ class TestRAGPipeline:
         mock_load_config.return_value = _make_config()
         mock_get_llm_config.return_value = _make_llm_config()
 
-        with RAGPipeline(config="dummy.yaml"):
-            pass
+        with RAGPipeline(config="dummy.yaml") as pipeline:
+            pipeline.indexer = mock_indexer.return_value
 
         mock_indexer.return_value.close.assert_called_once()
 
@@ -337,7 +357,8 @@ class TestRAGPipeline:
         mock_get_llm_config.return_value = _make_llm_config()
 
         pipeline = RAGPipeline(config="dummy.yaml")
-        old_indexer = pipeline.indexer
+        old_indexer = MagicMock()
+        pipeline.indexer = old_indexer
 
         mock_new_meal_config = MagicMock()
         mock_new_meal_config.collection_name = "new_meal_col_789"
