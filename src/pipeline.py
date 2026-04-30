@@ -111,11 +111,7 @@ class RAGPipeline:
         else:
             self._chunks_dir = None
 
-        self.indexer = VectorIndexer(
-            persist_dir=vector_store_config["persist_dir"],
-            collection_name=collection_name,
-            distance=vector_store_config["distance"],
-        )
+        self.indexer: VectorIndexer | None = None
 
         self._setup_retrievers()
 

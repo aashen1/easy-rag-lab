@@ -113,6 +113,7 @@ def run_variant_evaluation(
 
     try:
         variant_tracker = TokenTracker()
+        indexer_from_cache = False
 
         pipeline = RAGPipeline(
             config_path=None,
@@ -122,9 +123,6 @@ def run_variant_evaluation(
             profiler=profiler,
         )
         pipeline.config = merged_config
-
-        if hasattr(pipeline, "indexer") and pipeline.indexer is not None:
-            pipeline.indexer.close()
 
         if profiler:
             profiler.begin_stage("S3")
@@ -142,12 +140,23 @@ def run_variant_evaluation(
                 f"Reusing cached index for variant '{variant_name}' (chunker_hash={chunker_hash[:8]})"
             )
             indexer = indexer_cache[chunker_hash]
+            if indexer.is_closed():
+                for cached_indexer in indexer_cache.values():
+                    if not cached_indexer.is_closed():
+                        cached_indexer.close()
+                indexer.reopen()
+            indexer_from_cache = True
         else:
+            if indexer_cache is not None:
+                for cached_indexer in indexer_cache.values():
+                    if not cached_indexer.is_closed():
+                        cached_indexer.close()
             indexer = prepare_index_for_variant(
                 merged_config, meal_config, variant_name, force_index=force_index
             )
             if indexer_cache is not None and not force_index:
                 indexer_cache[chunker_hash] = indexer
+            indexer_from_cache = False
 
         pipeline.indexer = indexer
         if profiler:
@@ -297,7 +306,10 @@ def run_variant_evaluation(
             f"total={token_total.total_tokens:,}"
         )
 
-        pipeline.close()
+        if indexer_cache is None:
+            pipeline.close()
+        else:
+            pipeline.indexer = None
 
         checkpoint_dir = exp_dir / "checkpoints"
         if checkpoint_dir.exists():
@@ -316,7 +328,10 @@ def run_variant_evaluation(
         logger.error(f"Failed to evaluate variant '{variant_name}': {str(e)}")
         if "pipeline" in locals():
             with contextlib.suppress(Exception):
-                pipeline.close()
+                if indexer_cache is None:
+                    pipeline.close()
+                else:
+                    pipeline.indexer = None
         raise
 
 
