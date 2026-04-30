@@ -486,8 +486,6 @@ def _collect_rag_samples_concurrent(
     Returns:
         List of sample dictionaries with query results.
     """
-    import copy
-
     remaining_questions = questions[start_index:]
     logger.info(
         f"Concurrent query mode: {len(remaining_questions)} questions, "
@@ -496,10 +494,7 @@ def _collect_rag_samples_concurrent(
 
     pipelines: list[RAGPipeline] = [pipeline]
     for _ in range(concurrent_workers - 1):
-        clone = copy.deepcopy(pipeline)
-        clone.token_tracker = pipeline.token_tracker
-        clone.indexer = pipeline.indexer
-        pipelines.append(clone)
+        pipelines.append(pipeline.clone_for_concurrency())
 
     _pipeline_idx = [0]
     _idx_lock = threading.Lock()

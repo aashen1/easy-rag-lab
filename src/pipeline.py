@@ -416,6 +416,55 @@ class RAGPipeline:
             self.indexer.close()
             logger.info("RAGPipeline indexer closed")
 
+    def clone_for_concurrency(self) -> RAGPipeline:
+        """Create a lightweight clone for concurrent query execution.
+
+        Shares the indexer (Qdrant client, thread-safe for reads) and
+        embedder (stateless inference) with the original. Creates new
+        instances of components that hold per-call state (generator,
+        reranker, query_rewriter). The cloned pipeline must NOT call
+        ``close()`` — only the original owner should close the shared
+        indexer.
+
+        Returns:
+            A new RAGPipeline instance suitable for use in a separate thread.
+
+        Raises:
+            ConfigurationError: If the LLM config is missing or invalid.
+        """
+        clone = RAGPipeline.__new__(RAGPipeline)
+        clone.config = self.config
+        clone.meal_name = self.meal_name
+        clone.meal_config = self.meal_config
+        clone._chunks_dir = self._chunks_dir
+
+        clone.indexer = self.indexer
+        clone.embedder = self.embedder
+        clone.token_tracker = self.token_tracker
+        clone.profiler = self.profiler
+
+        clone._setup_retrievers()
+
+        llm_config = get_llm_config(self.config, "default")
+        clone.generator = Generator(
+            model_name=llm_config["model_name"],
+            api_key=llm_config["api_key"],
+            base_url=llm_config["base_url"],
+            temperature=llm_config["temperature"],
+            max_tokens=llm_config["max_tokens"],
+            token_tracker=clone.token_tracker,
+            system_prompt=self.config.get("generation", {}).get("system_prompt"),
+            max_context_tokens=self.config.get("generation", {}).get(
+                "max_context_tokens"
+            ),
+        )
+
+        clone.reranker = None
+        clone.query_rewriter = None
+
+        logger.debug("Created lightweight pipeline clone for concurrent execution")
+        return clone
+
     def __enter__(self) -> RAGPipeline:
         return self
 
