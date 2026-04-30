@@ -4,6 +4,7 @@ from anthropic import Anthropic
 from loguru import logger
 
 from src.exceptions import ConfigurationError, GenerationError
+from src.llm_client import create_anthropic_client
 from src.token_tracker import DetailedTokenUsage, TokenTracker
 
 
@@ -70,8 +71,9 @@ class QueryRewriter:
             Anthropic client instance.
         """
         if self._client is None:
-            self._client = Anthropic(
-                api_key=self.llm_api_key, base_url=self.llm_base_url
+            self._client = create_anthropic_client(
+                api_key=self.llm_api_key,
+                base_url=self.llm_base_url,
             )
         return self._client
 
