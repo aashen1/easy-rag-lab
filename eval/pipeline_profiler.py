@@ -22,6 +22,7 @@ STAGE_NAMES = {
     "S6": "检索匹配",
     "S7": "答案生成",
     "S8": "报告整合",
+    "S9": "评估计算",
 }
 
 
@@ -313,7 +314,7 @@ class PipelineProfiler:
             self._stages[s].duration_seconds for s in doc_stages if s in self._stages
         )
 
-        qa_stages = ["S6", "S7"]
+        qa_stages = ["S6", "S7", "S9"]
         qa_time = sum(
             self._stages[s].duration_seconds for s in qa_stages if s in self._stages
         )
@@ -427,7 +428,7 @@ class PipelineProfiler:
         lines.append("## 1. 总体耗时概览")
         lines.append("")
         lines.append(
-            "> **说明**: 此报告统计的是完整 Pipeline 耗时（S1-S8 所有阶段），包含文档解析、分块、嵌入、测试集生成、检索、问答等全部环节。"
+            "> **说明**: 此报告统计的是完整 Pipeline 耗时（S1-S9 所有阶段），包含文档解析、分块、嵌入、测试集生成、检索、问答、评估计算等全部环节。"
         )
         lines.append(
             "> experiment_report.md 中的 `total_time_seconds` 仅统计问答阶段（S6 检索 + S7 答案生成），因此两者数值不同。"
@@ -441,14 +442,26 @@ class PipelineProfiler:
         )
 
         total_duration = self.get_total_duration()
+        tracked_time = 0.0
         for stage_id in sorted(self._stages.keys()):
             m = self._stages[stage_id]
+            tracked_time += m.duration_seconds
             pct = (
                 (m.duration_seconds / total_duration * 100) if total_duration > 0 else 0
             )
             lines.append(
                 f"| {stage_id} | {m.stage_name} | {m.duration_seconds:.2f} | "
                 f"{pct:.1f}% | {m.call_count} | {m.cpu_percent_avg:.1f}% | {m.memory_mb_peak:.1f} |"
+            )
+
+        untracked_time = total_duration - tracked_time
+        if untracked_time > 0.5:
+            untracked_pct = (
+                (untracked_time / total_duration * 100) if total_duration > 0 else 0
+            )
+            lines.append(
+                f"| - | **未追踪时间** | **{untracked_time:.2f}** | "
+                f"**{untracked_pct:.1f}%** | - | - | - |"
             )
 
         lines.append(
@@ -541,6 +554,17 @@ class PipelineProfiler:
         ):
             suggestions.append(
                 "1. **检索优化**: 检索耗时偏高，检查向量索引规模和检索参数"
+            )
+        if (
+            "S9" in self._stages
+            and self._stages["S9"].duration_seconds > total_duration * 0.3
+        ):
+            suggestions.append(
+                "1. **评估计算优化**: 评估阶段耗时偏高，考虑增大 builtin_concurrent_workers 或使用更快的评估模型"
+            )
+        if untracked_time > total_duration * 0.1:
+            suggestions.append(
+                "1. **未追踪时间**: 存在较多未追踪时间，检查是否有新阶段未纳入 profiling"
             )
 
         for i, s in enumerate(suggestions, 1):

@@ -135,7 +135,7 @@ class TestPipelineProfilerStages:
 
         profiler.start_profiling()
 
-        for stage_id in ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8"]:
+        for stage_id in ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9"]:
             profiler.begin_stage(stage_id)
             profiler.end_stage()
 
@@ -144,6 +144,7 @@ class TestPipelineProfilerStages:
         report = profiler.generate_markdown_report()
         assert "S1" in report
         assert "S8" in report
+        assert "S9" in report
 
     def test_profiler_profile_stage_context_manager(self):
         from eval.pipeline_profiler import PipelineProfiler
@@ -205,6 +206,41 @@ class TestPipelineProfilerStages:
         metrics = profiler.get_stage_metrics("S7")
         assert metrics.input_tokens == 100
         assert metrics.output_tokens == 50
+
+    def test_profiler_untracked_time(self):
+        import time
+
+        from eval.pipeline_profiler import PipelineProfiler
+
+        profiler = PipelineProfiler(
+            experiment_name="test_exp",
+            total_pages=10,
+            total_questions=5,
+        )
+
+        profiler.start_profiling()
+
+        profiler.begin_stage("S1")
+        time.sleep(0.01)
+        profiler.end_stage()
+
+        time.sleep(0.1)
+
+        profiler.begin_stage("S2")
+        time.sleep(0.01)
+        profiler.end_stage()
+
+        profiler.stop_profiling()
+
+        report = profiler.generate_markdown_report()
+        assert "未追踪时间" in report
+
+        s1 = profiler.get_stage_metrics("S1")
+        s2 = profiler.get_stage_metrics("S2")
+        tracked = s1.duration_seconds + s2.duration_seconds
+        total = profiler.get_total_duration()
+        untracked = total - tracked
+        assert untracked > 0.05
 
 
 class TestTokenTrackerMerge:

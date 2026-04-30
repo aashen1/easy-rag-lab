@@ -647,6 +647,7 @@ class ExperimentManager:
             "status": "running",
             "variants": variant_names,
             "completed_variants": [],
+            "variant_config_hashes": {},
             "test_sets": test_set_strategies,
         }
 
@@ -853,13 +854,22 @@ class ExperimentManager:
             logger.error(f"Failed to update manifest status: {str(e)}")
             raise
 
-    def mark_variant_completed(self, exp_dir: Path, variant_name: str) -> None:
-        """
-        Mark a variant as completed in the manifest file.
+    def mark_variant_completed(
+        self, exp_dir: Path, variant_name: str, config_hash: str | None = None
+    ) -> None:
+        """Mark a variant as completed in the manifest file.
+
+        Optionally stores a config hash that allows future resume runs to
+        verify whether the variant's configuration has changed since it was
+        last run.  If the hash is provided and differs on a subsequent
+        resume, the variant will be re-run automatically.
 
         Args:
             exp_dir: Path to the experiment directory.
             variant_name: Name of the completed variant.
+            config_hash: Optional deterministic hash of the variant's full
+                configuration.  When provided, it is stored in the manifest
+                under ``variant_config_hashes`` for later verification.
 
         Raises:
             OSError: If file writing fails.
@@ -880,10 +890,15 @@ class ExperimentManager:
                 completed.append(variant_name)
                 manifest["completed_variants"] = completed
 
-                with open(manifest_path, "w", encoding="utf-8") as f:
-                    json.dump(manifest, f, ensure_ascii=False, indent=2)
+            if config_hash is not None:
+                hashes = manifest.get("variant_config_hashes", {})
+                hashes[variant_name] = config_hash
+                manifest["variant_config_hashes"] = hashes
 
-                logger.info(f"Marked variant '{variant_name}' as completed in manifest")
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+            logger.info(f"Marked variant '{variant_name}' as completed in manifest")
         except (json.JSONDecodeError, OSError) as e:
             logger.error(f"Failed to mark variant completed: {str(e)}")
 
@@ -977,6 +992,69 @@ class ExperimentManager:
         except (json.JSONDecodeError, OSError) as e:
             logger.warning(f"Failed to read manifest: {str(e)}")
             return []
+
+    def get_variant_config_hashes(self, exp_dir: Path) -> dict[str, str]:
+        """Get the mapping of variant name -> config hash from the manifest.
+
+        Args:
+            exp_dir: Path to the experiment directory.
+
+        Returns:
+            Dict mapping variant names to their stored config hashes.
+            Empty dict if the manifest has no ``variant_config_hashes`` field
+            (i.e. was created before this feature was added).
+        """
+        manifest_path = exp_dir / "manifest.json"
+        if not manifest_path.exists():
+            return {}
+
+        try:
+            with open(manifest_path, encoding="utf-8") as f:
+                manifest = json.load(f)
+            return manifest.get("variant_config_hashes", {})
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"Failed to read manifest: {str(e)}")
+            return {}
+
+    def invalidate_variant(self, exp_dir: Path, variant_name: str) -> None:
+        """Remove a variant from the completed list, forcing it to re-run on next resume.
+
+        Also removes the variant's stored config hash so that stale hashes
+        don't accumulate.
+
+        Args:
+            exp_dir: Path to the experiment directory.
+            variant_name: Name of the variant to invalidate.
+
+        Raises:
+            OSError: If file writing fails.
+        """
+        manifest_path = exp_dir / "manifest.json"
+        if not manifest_path.exists():
+            return
+
+        try:
+            with open(manifest_path, encoding="utf-8") as f:
+                manifest = json.load(f)
+
+            completed = manifest.get("completed_variants", [])
+            if variant_name in completed:
+                completed.remove(variant_name)
+                manifest["completed_variants"] = completed
+
+            hashes = manifest.get("variant_config_hashes", {})
+            if variant_name in hashes:
+                del hashes[variant_name]
+                manifest["variant_config_hashes"] = hashes
+
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+            logger.info(
+                f"Invalidated variant '{variant_name}' — will re-run on next resume"
+            )
+        except (json.JSONDecodeError, OSError) as e:
+            logger.error(f"Failed to invalidate variant: {str(e)}")
 
     def load_variant_result(
         self, exp_dir: Path, variant_name: str

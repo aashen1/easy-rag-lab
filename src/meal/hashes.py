@@ -139,6 +139,45 @@ def compute_index_key(data_id: str, config_hashes: dict[str, str]) -> str:
     return hashlib.sha256(combined.encode()).hexdigest()
 
 
+def compute_variant_config_hash(
+    variant: dict,
+    merged_config: dict,
+    exp_data: dict | None = None,
+    exp_test_sets: list | None = None,
+    exp_evaluation: dict | None = None,
+) -> str:
+    """Compute a deterministic hash of all config that affects a variant's results.
+
+    This hash captures everything that determines variant behavior: the variant's
+    config_overrides, the merged pipeline config, and the experiment-level data/
+    test_sets/evaluation settings.  If any of these change, the variant must be
+    re-run.
+
+    Args:
+        variant: Variant dict (must contain ``name``; may contain
+            ``config_overrides`` and ``description``).
+        merged_config: The fully-merged pipeline config (system + experiment +
+            variant overrides), after sanitization.
+        exp_data: Experiment-level ``data`` block (meal name, sample ratio, etc.).
+        exp_test_sets: Experiment-level ``test_sets`` list.
+        exp_evaluation: Experiment-level ``evaluation`` block.
+
+    Returns:
+        First 12 characters of the SHA-256 hex digest.
+    """
+    payload = {
+        "variant_overrides": variant.get("config_overrides", {}),
+        "merged": merged_config,
+    }
+    if exp_data is not None:
+        payload["data"] = exp_data
+    if exp_test_sets is not None:
+        payload["test_sets"] = exp_test_sets
+    if exp_evaluation is not None:
+        payload["evaluation"] = exp_evaluation
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:12]
+
+
 def generate_collection_name(index_key: str, prefix: str = "m_") -> str:
     """Generate a Qdrant collection name from an index key.
 

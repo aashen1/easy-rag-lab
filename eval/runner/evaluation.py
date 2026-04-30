@@ -872,6 +872,7 @@ def evaluate_test_set(
     variant_name: str = "",
     experiment_name: str = "",
     max_questions: int | None = None,
+    profiler: Any | None = None,
 ) -> list[dict[str, Any]]:
     """
     Evaluate a single test set against the pipeline.
@@ -889,6 +890,7 @@ def evaluate_test_set(
         variant_name: Name of the variant (for checkpoint file naming).
         experiment_name: Name of the experiment (for checkpoint metadata).
         max_questions: If set, only evaluate the first N questions.
+        profiler: Optional PipelineProfiler for S9 evaluation stage tracking.
 
     Returns:
         List of evaluation result dictionaries.
@@ -952,50 +954,65 @@ def evaluate_test_set(
     all_results: dict[str, dict[str, Any]] = {}
     use_namespace = resolver.strategy == "comparison"
 
-    for backend_name, metrics in allocation.items():
-        if backend_name not in evaluators:
-            logger.warning(f"Backend '{backend_name}' not available, skipping")
-            continue
+    eval_backend_names = list(allocation.keys())
+    s9_metadata = {
+        "backends": eval_backend_names,
+        "num_samples": len(samples),
+    }
 
-        evaluator = evaluators[backend_name]
-        ret_metrics = metrics.get("retrieval", [])
-        gen_metrics = metrics.get("generation", [])
+    s9_context = (
+        profiler.profile_stage("S9", s9_metadata)
+        if profiler
+        else contextlib.nullcontext()
+    )
 
-        if not ret_metrics and not gen_metrics:
-            continue
+    with s9_context:
+        for backend_name, metrics in allocation.items():
+            if backend_name not in evaluators:
+                logger.warning(f"Backend '{backend_name}' not available, skipping")
+                continue
 
-        needs_llm = bool(
-            gen_metrics
-            or any(m in ("context_precision", "context_recall") for m in ret_metrics)
-        )
+            evaluator = evaluators[backend_name]
+            ret_metrics = metrics.get("retrieval", [])
+            gen_metrics = metrics.get("generation", [])
 
-        if backend_name == "builtin":
-            results = evaluate_with_builtin(
-                samples=samples,
-                evaluator=evaluator,
-                llm_config=llm_config if needs_llm else None,
-                retrieval_metrics=ret_metrics or None,
-                generation_metrics=gen_metrics or None,
+            if not ret_metrics and not gen_metrics:
+                continue
+
+            needs_llm = bool(
+                gen_metrics
+                or any(
+                    m in ("context_precision", "context_recall") for m in ret_metrics
+                )
             )
-        elif backend_name == "ragas":
-            results = evaluate_with_ragas(
-                samples=samples,
-                evaluator=evaluator,
-                llm_config=llm_config,
-                generation_metrics=gen_metrics or None,
-                retrieval_metrics=ret_metrics or None,
-            )
-        else:
-            logger.warning(f"Unknown backend '{backend_name}', skipping")
-            continue
 
-        for r in results:
-            if use_namespace:
-                r = namespace_result(r, backend_name)
-            qid = r["id"]
-            if qid in all_results:
-                merge_result(all_results[qid], r)
+            if backend_name == "builtin":
+                results = evaluate_with_builtin(
+                    samples=samples,
+                    evaluator=evaluator,
+                    llm_config=llm_config if needs_llm else None,
+                    retrieval_metrics=ret_metrics or None,
+                    generation_metrics=gen_metrics or None,
+                )
+            elif backend_name == "ragas":
+                results = evaluate_with_ragas(
+                    samples=samples,
+                    evaluator=evaluator,
+                    llm_config=llm_config,
+                    generation_metrics=gen_metrics or None,
+                    retrieval_metrics=ret_metrics or None,
+                )
             else:
-                all_results[qid] = r
+                logger.warning(f"Unknown backend '{backend_name}', skipping")
+                continue
+
+            for r in results:
+                if use_namespace:
+                    r = namespace_result(r, backend_name)
+                qid = r["id"]
+                if qid in all_results:
+                    merge_result(all_results[qid], r)
+                else:
+                    all_results[qid] = r
 
     return list(all_results.values())

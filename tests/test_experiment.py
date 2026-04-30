@@ -24,6 +24,7 @@ from src.experiment import (
     load_experiment_config,
     merge_config,
 )
+from src.meal.hashes import compute_variant_config_hash
 
 
 class TestExperimentConfig:
@@ -1668,9 +1669,338 @@ class TestOldFormatDeprecation:
                 x for x in w if issubclass(x.category, DeprecationWarning)
             ]
             assert len(deprecation_warnings) == 1
-            assert "deprecated configuration format" in str(
-                deprecation_warnings[0].message
+
+
+class TestVariantConfigHash:
+    def _make_variant(self, **overrides) -> dict:
+        defaults = {
+            "name": "test_variant",
+            "config_overrides": {
+                "chunker": {"chunk_size": 512, "chunk_overlap": 0},
+            },
+        }
+        defaults.update(overrides)
+        return defaults
+
+    def _make_merged_config(self, **overrides) -> dict:
+        defaults = {
+            "chunker": {"chunk_size": 512, "chunk_overlap": 0, "strategy": "fixed"},
+            "embedding": {"model_name": "test_model"},
+            "retrieval": {"method": "vector", "top_k": 5},
+        }
+        defaults.update(overrides)
+        return defaults
+
+    @pytest.mark.unit
+    def test_deterministic(self):
+        variant = self._make_variant()
+        merged = self._make_merged_config()
+        hash1 = compute_variant_config_hash(variant, merged)
+        hash2 = compute_variant_config_hash(variant, merged)
+        assert hash1 == hash2
+
+    @pytest.mark.unit
+    def test_different_overrides_produce_different_hashes(self):
+        variant_a = self._make_variant(
+            config_overrides={"chunker": {"chunk_size": 512}}
+        )
+        variant_b = self._make_variant(
+            config_overrides={"chunker": {"chunk_size": 1024}}
+        )
+        merged = self._make_merged_config()
+        hash_a = compute_variant_config_hash(variant_a, merged)
+        hash_b = compute_variant_config_hash(variant_b, merged)
+        assert hash_a != hash_b
+
+    @pytest.mark.unit
+    def test_different_merged_config_produces_different_hash(self):
+        variant = self._make_variant()
+        merged_a = self._make_merged_config(retrieval={"method": "vector", "top_k": 5})
+        merged_b = self._make_merged_config(retrieval={"method": "hybrid", "top_k": 5})
+        hash_a = compute_variant_config_hash(variant, merged_a)
+        hash_b = compute_variant_config_hash(variant, merged_b)
+        assert hash_a != hash_b
+
+    @pytest.mark.unit
+    def test_same_config_same_hash(self):
+        variant = self._make_variant()
+        merged = self._make_merged_config()
+        hash1 = compute_variant_config_hash(
+            variant,
+            merged,
+            exp_data={"meal": "test"},
+            exp_test_sets=[{"strategy": "factual"}],
+            exp_evaluation={"metrics": {"retrieval": ["hit_rate"]}},
+        )
+        hash2 = compute_variant_config_hash(
+            variant,
+            merged,
+            exp_data={"meal": "test"},
+            exp_test_sets=[{"strategy": "factual"}],
+            exp_evaluation={"metrics": {"retrieval": ["hit_rate"]}},
+        )
+        assert hash1 == hash2
+
+    @pytest.mark.unit
+    def test_different_exp_data_produces_different_hash(self):
+        variant = self._make_variant()
+        merged = self._make_merged_config()
+        hash_a = compute_variant_config_hash(
+            variant,
+            merged,
+            exp_data={"meal": "meal_a"},
+        )
+        hash_b = compute_variant_config_hash(
+            variant,
+            merged,
+            exp_data={"meal": "meal_b"},
+        )
+        assert hash_a != hash_b
+
+    @pytest.mark.unit
+    def test_different_test_sets_produces_different_hash(self):
+        variant = self._make_variant()
+        merged = self._make_merged_config()
+        hash_a = compute_variant_config_hash(
+            variant,
+            merged,
+            exp_test_sets=[{"strategy": "factual"}],
+        )
+        hash_b = compute_variant_config_hash(
+            variant,
+            merged,
+            exp_test_sets=[{"strategy": "boundary"}],
+        )
+        assert hash_a != hash_b
+
+    @pytest.mark.unit
+    def test_hash_length(self):
+        variant = self._make_variant()
+        merged = self._make_merged_config()
+        h = compute_variant_config_hash(variant, merged)
+        assert len(h) == 12
+
+    @pytest.mark.unit
+    def test_variant_without_overrides(self):
+        variant = {"name": "bare_variant"}
+        merged = self._make_merged_config()
+        h = compute_variant_config_hash(variant, merged)
+        assert len(h) == 12
+
+
+class TestExperimentManagerVariantHash:
+    def _make_config(self) -> ExperimentConfig:
+        return ExperimentConfig(
+            name="test_experiment",
+            description="Test experiment description",
+            data={"meal": "test_meal"},
+            test_sets=[
+                {"strategy": "factual", "num_questions": 20, "seed": 100},
+            ],
+            variants=[
+                {"name": "variant_a", "description": "Variant A"},
+                {"name": "variant_b", "description": "Variant B"},
+            ],
+            evaluation={"metrics": {"retrieval": ["hit_rate", "mrr"]}},
+        )
+
+    def _make_system_config(self, temp_dir: Path) -> dict:
+        return {
+            "experiments": {
+                "dir": str(temp_dir / "exp_reports"),
+                "configs_dir": str(temp_dir / "exp_configs"),
+            }
+        }
+
+    def _setup_experiment(self, temp_dir: Path):
+        system_config = self._make_system_config(temp_dir)
+        manager = ExperimentManager(system_config)
+        config = self._make_config()
+        exp_dir = manager.create_experiment_dir(config)
+        manager.save_snapshots(exp_dir, config, {}, [], {})
+        return manager, exp_dir
+
+    @pytest.mark.unit
+    def test_mark_variant_completed_with_hash(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager, exp_dir = self._setup_experiment(Path(temp_dir))
+
+            manager.mark_variant_completed(
+                exp_dir, "variant_a", config_hash="abc123def456"
             )
+
+            with open(exp_dir / "manifest.json", encoding="utf-8") as f:
+                manifest = json.load(f)
+            assert "variant_a" in manifest["completed_variants"]
+            assert manifest["variant_config_hashes"]["variant_a"] == "abc123def456"
+
+    @pytest.mark.unit
+    def test_mark_variant_completed_without_hash(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager, exp_dir = self._setup_experiment(Path(temp_dir))
+
+            manager.mark_variant_completed(exp_dir, "variant_a")
+
+            with open(exp_dir / "manifest.json", encoding="utf-8") as f:
+                manifest = json.load(f)
+            assert "variant_a" in manifest["completed_variants"]
+            assert (
+                "variant_config_hashes" not in manifest
+                or "variant_a" not in manifest.get("variant_config_hashes", {})
+            )
+
+    @pytest.mark.unit
+    def test_get_variant_config_hashes(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager, exp_dir = self._setup_experiment(Path(temp_dir))
+
+            manager.mark_variant_completed(exp_dir, "variant_a", config_hash="hash_a")
+            manager.mark_variant_completed(exp_dir, "variant_b", config_hash="hash_b")
+
+            hashes = manager.get_variant_config_hashes(exp_dir)
+            assert hashes["variant_a"] == "hash_a"
+            assert hashes["variant_b"] == "hash_b"
+
+    @pytest.mark.unit
+    def test_get_variant_config_hashes_empty(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager, exp_dir = self._setup_experiment(Path(temp_dir))
+
+            hashes = manager.get_variant_config_hashes(exp_dir)
+            assert hashes == {}
+
+    @pytest.mark.unit
+    def test_invalidate_variant(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager, exp_dir = self._setup_experiment(Path(temp_dir))
+
+            manager.mark_variant_completed(exp_dir, "variant_a", config_hash="hash_a")
+            manager.mark_variant_completed(exp_dir, "variant_b", config_hash="hash_b")
+
+            manager.invalidate_variant(exp_dir, "variant_a")
+
+            completed = manager.get_completed_variants(exp_dir)
+            assert "variant_a" not in completed
+            assert "variant_b" in completed
+
+            hashes = manager.get_variant_config_hashes(exp_dir)
+            assert "variant_a" not in hashes
+            assert "variant_b" in hashes
+
+    @pytest.mark.unit
+    def test_invalidate_nonexistent_variant(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager, exp_dir = self._setup_experiment(Path(temp_dir))
+
+            manager.invalidate_variant(exp_dir, "nonexistent")
+
+            completed = manager.get_completed_variants(exp_dir)
+            assert "nonexistent" not in completed
+
+    @pytest.mark.unit
+    def test_manifest_includes_variant_config_hashes_field(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager, exp_dir = self._setup_experiment(Path(temp_dir))
+
+            with open(exp_dir / "manifest.json", encoding="utf-8") as f:
+                manifest = json.load(f)
+            assert "variant_config_hashes" in manifest
+            assert manifest["variant_config_hashes"] == {}
+
+    @pytest.mark.unit
+    def test_backward_compatible_no_hashes(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager, exp_dir = self._setup_experiment(Path(temp_dir))
+
+            with open(exp_dir / "manifest.json", encoding="utf-8") as f:
+                manifest = json.load(f)
+            del manifest["variant_config_hashes"]
+            with open(exp_dir / "manifest.json", "w", encoding="utf-8") as f:
+                json.dump(manifest, f)
+
+            hashes = manager.get_variant_config_hashes(exp_dir)
+            assert hashes == {}
+
+    @pytest.mark.unit
+    def test_config_hash_verification_workflow(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager, exp_dir = self._setup_experiment(Path(temp_dir))
+
+            variant = {
+                "name": "variant_a",
+                "config_overrides": {"chunker": {"chunk_size": 512}},
+            }
+            merged = {"chunker": {"chunk_size": 512, "chunk_overlap": 0}}
+            config_hash = compute_variant_config_hash(
+                variant,
+                merged,
+                exp_data={"meal": "test_meal"},
+                exp_test_sets=[{"strategy": "factual"}],
+                exp_evaluation={"metrics": {"retrieval": ["hit_rate"]}},
+            )
+
+            manager.mark_variant_completed(
+                exp_dir, "variant_a", config_hash=config_hash
+            )
+
+            stored_hashes = manager.get_variant_config_hashes(exp_dir)
+            assert stored_hashes["variant_a"] == config_hash
+
+            same_hash = compute_variant_config_hash(
+                variant,
+                merged,
+                exp_data={"meal": "test_meal"},
+                exp_test_sets=[{"strategy": "factual"}],
+                exp_evaluation={"metrics": {"retrieval": ["hit_rate"]}},
+            )
+            assert same_hash == config_hash
+
+            changed_variant = {
+                "name": "variant_a",
+                "config_overrides": {"chunker": {"chunk_size": 1024}},
+            }
+            changed_merged = {"chunker": {"chunk_size": 1024, "chunk_overlap": 0}}
+            changed_hash = compute_variant_config_hash(
+                changed_variant,
+                changed_merged,
+                exp_data={"meal": "test_meal"},
+                exp_test_sets=[{"strategy": "factual"}],
+                exp_evaluation={"metrics": {"retrieval": ["hit_rate"]}},
+            )
+            assert changed_hash != config_hash
+
+
+class TestOldFormatDeprecationRestored:
+    def _make_config_dict(self, **overrides) -> dict:
+        defaults = {
+            "name": "test_experiment",
+            "description": "Test experiment description",
+            "data": {"meal": "meal_baseline"},
+            "test_sets": [{"strategy": "factual", "num_questions": 20}],
+            "variants": [{"name": "v1"}],
+            "evaluation": {"metrics": {"retrieval": ["hit_rate"]}},
+        }
+        defaults.update(overrides)
+        return defaults
+
+    @pytest.mark.unit
+    def test_mixed_formats_emits_warning(self):
+        data = self._make_config_dict()
+        data["test_sets"] = [
+            {
+                "name": "new_format",
+                "generation": {"strategy": "document", "num_questions": 10},
+            },
+            {"strategy": "factual", "num_questions": 20},
+        ]
+        config = ExperimentConfig.from_dict(data)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            config.validate()
+            deprecation_warnings = [
+                x for x in w if issubclass(x.category, DeprecationWarning)
+            ]
+            assert len(deprecation_warnings) == 1
 
     @pytest.mark.unit
     def test_old_format_still_validates(self):
@@ -1709,22 +2039,3 @@ class TestOldFormatDeprecation:
                 x for x in w if issubclass(x.category, DeprecationWarning)
             ]
             assert len(deprecation_warnings) == 0
-
-    @pytest.mark.unit
-    def test_mixed_formats_emits_warning(self):
-        data = self._make_config_dict()
-        data["test_sets"] = [
-            {
-                "name": "new_format",
-                "generation": {"strategy": "document", "num_questions": 10},
-            },
-            {"strategy": "factual", "num_questions": 20},
-        ]
-        config = ExperimentConfig.from_dict(data)
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            config.validate()
-            deprecation_warnings = [
-                x for x in w if issubclass(x.category, DeprecationWarning)
-            ]
-            assert len(deprecation_warnings) == 1

@@ -30,7 +30,7 @@ from src.experiment import (
 )
 from src.generator import Generator
 from src.hybrid_retriever import HybridRetriever
-from src.meal import create_artifact_cache
+from src.meal import compute_variant_config_hash, create_artifact_cache
 from src.pipeline import RAGPipeline
 from src.token_tracker import DetailedTokenUsage, TokenTracker
 from src.utils import get_llm_config, load_config, sanitize_name, setup_logger
@@ -230,6 +230,7 @@ def run_variant_evaluation(
                 variant_name=variant_name,
                 experiment_name=exp_config.name,
                 max_questions=max_questions,
+                profiler=profiler,
             )
             all_results.extend(results)
 
@@ -340,6 +341,7 @@ def run_experiment(
     use_llm_report: bool = False,
     system_config_path: str = "config.yaml",
     force_rerun: bool = False,
+    force_variant: list[str] | None = None,
     resume_dir: str | None = None,
 ) -> dict[str, Any]:
     """
@@ -349,6 +351,10 @@ def run_experiment(
     some variants have been completed, those variants are skipped and only
     the remaining ones are executed.  Use ``force_rerun`` to ignore checkpoints
     and re-run everything from scratch.
+
+    Use ``force_variant`` to selectively re-run specific variants by name,
+    even if they have completed checkpoints.  This is useful when you want to
+    re-run a single variant without affecting others.
 
     Use ``resume_dir`` to resume an interrupted experiment from an existing
     experiment directory.  When provided, the existing directory is reused
@@ -532,16 +538,43 @@ def run_experiment(
         experiment_tracker = TokenTracker()
 
         completed_variants: set[str] = set()
+        stored_hashes: dict[str, str] = {}
         if not force_rerun:
             completed_variants = set(exp_manager.get_completed_variants(exp_dir))
+            stored_hashes = exp_manager.get_variant_config_hashes(exp_dir)
             if completed_variants:
                 logger.info(
                     f"Checkpoint resume: {len(completed_variants)} variant(s) already completed: "
                     f"{sorted(completed_variants)}"
                 )
+                if stored_hashes:
+                    logger.info(
+                        f"Config hash verification enabled ({len(stored_hashes)} hash(es) stored)"
+                    )
+                else:
+                    logger.warning(
+                        "No config hashes found in manifest — variant reuse will NOT be "
+                        "verified. Re-run without --resume to generate hashes, or use "
+                        "--force-rerun to start fresh."
+                    )
         else:
             logger.info("Force rerun: ignoring checkpoints, re-running all variants")
             exp_manager.update_manifest_field(exp_dir, "completed_variants", [])
+            exp_manager.update_manifest_field(exp_dir, "variant_config_hashes", {})
+
+        if force_variant and not force_rerun:
+            for vname in force_variant:
+                if vname in completed_variants:
+                    logger.info(
+                        f"Force re-run variant '{vname}' (requested via --force-variant)"
+                    )
+                    exp_manager.invalidate_variant(exp_dir, vname)
+                    completed_variants.discard(vname)
+                else:
+                    logger.info(
+                        f"Force variant '{vname}' requested but it was not yet completed "
+                        f"— will run normally"
+                    )
 
         indexer_cache: dict[str, Any] = {}
 
@@ -549,9 +582,39 @@ def run_experiment(
             variant_name = variant.get("name", f"variant_{i}")
 
             if variant_name in completed_variants and not force_rerun:
-                logger.info(
-                    f"Skipping completed variant {i}/{len(exp_config.variants)}: {variant_name} (checkpoint)"
+                merged = merge_config(system_config, exp_config, variant)
+                current_hash = compute_variant_config_hash(
+                    variant=variant,
+                    merged_config=sanitize_config(merged),
+                    exp_data=exp_config.data,
+                    exp_test_sets=exp_config.test_sets,
+                    exp_evaluation=exp_config.evaluation,
                 )
+
+                stored_hash = stored_hashes.get(variant_name)
+                hash_match = stored_hash is not None and stored_hash == current_hash
+
+                if hash_match:
+                    logger.info(
+                        f"Skipping completed variant {i}/{len(exp_config.variants)}: "
+                        f"{variant_name} (checkpoint, hash={current_hash[:8]}… verified)"
+                    )
+                else:
+                    if stored_hash is None:
+                        logger.warning(
+                            f"Variant '{variant_name}' has no stored config hash — "
+                            f"cannot verify reuse. Re-running to be safe."
+                        )
+                    else:
+                        logger.warning(
+                            f"Variant '{variant_name}' config has changed "
+                            f"(stored={stored_hash[:8]}…, current={current_hash[:8]}…) — "
+                            f"invalidating and re-running"
+                        )
+                    exp_manager.invalidate_variant(exp_dir, variant_name)
+                    completed_variants.discard(variant_name)
+                    continue
+
                 existing_result = exp_manager.load_variant_result(exp_dir, variant_name)
                 if existing_result is not None:
                     all_variant_results.append(existing_result)
@@ -604,8 +667,19 @@ def run_experiment(
                     indexer_cache=indexer_cache,
                 )
 
+                merged = merge_config(system_config, exp_config, variant)
+                config_hash = compute_variant_config_hash(
+                    variant=variant,
+                    merged_config=sanitize_config(merged),
+                    exp_data=exp_config.data,
+                    exp_test_sets=exp_config.test_sets,
+                    exp_evaluation=exp_config.evaluation,
+                )
+
                 exp_manager.save_variant_result(exp_dir, variant_name, variant_result)
-                exp_manager.mark_variant_completed(exp_dir, variant_name)
+                exp_manager.mark_variant_completed(
+                    exp_dir, variant_name, config_hash=config_hash
+                )
                 all_variant_results.append(variant_result)
 
                 if "token_usage" in variant_result:

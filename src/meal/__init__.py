@@ -7,6 +7,7 @@ from src.meal.hashes import (
     compute_file_sha256,
     compute_index_key,
     compute_parser_config_hash,
+    compute_variant_config_hash,
     generate_collection_name,
 )
 from src.meal.manager import MealManager
@@ -32,6 +33,7 @@ __all__ = [
     "compute_file_sha256",
     "compute_index_key",
     "compute_parser_config_hash",
+    "compute_variant_config_hash",
     "create_artifact_cache",
     "generate_collection_name",
     "generate_timestamp_name",

@@ -127,6 +127,12 @@ Examples:
         help="Force re-run all variants, ignoring checkpoints from previous runs",
     )
     parser.add_argument(
+        "--force-variant",
+        nargs="+",
+        metavar="VARIANT",
+        help="Force re-run specific variant(s) by name, even if they have completed checkpoints",
+    )
+    parser.add_argument(
         "--resume",
         type=str,
         metavar="EXP_DIR",
@@ -195,6 +201,7 @@ Examples:
             use_llm_report=args.llm_report,
             system_config_path=args.system_config,
             force_rerun=args.force_rerun,
+            force_variant=args.force_variant,
             resume_dir=args.resume,
         )
         print(f"\nExperiment completed: {result['experiment_id']}")
