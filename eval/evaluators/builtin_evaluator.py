@@ -10,6 +10,7 @@ from typing import Any
 from loguru import logger
 
 from eval.evaluators.base import BaseEvaluator, EvaluationResult, EvaluationSample
+from eval.evaluators.error_handler import execute_metric_safely
 from eval.metrics import (
     calculate_answer_relevancy,
     calculate_chunk_hit_rate,
@@ -232,74 +233,62 @@ class BuiltinEvaluator(BaseEvaluator):
 
             if llm_config and contexts and expect_retrieval and expected_answer:
                 if "context_precision" in retrieval_metrics:
-                    try:
-                        cp_score = calculate_context_precision(
-                            question=question,
-                            expected_output=expected_answer,
-                            retrieval_context=contexts,
-                            api_key=llm_config["api_key"],
-                            base_url=llm_config["base_url"],
-                            model_name=llm_config["model_name"],
-                        )
-                        retrieval_results["context_precision"] = cp_score
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to calculate context_precision for {question_id}: {str(e)}"
-                        )
-                        retrieval_results["context_precision"] = None
+                    execute_metric_safely(
+                        "context_precision",
+                        calculate_context_precision,
+                        retrieval_results,
+                        question_id,
+                        question=question,
+                        expected_output=expected_answer,
+                        retrieval_context=contexts,
+                        api_key=llm_config["api_key"],
+                        base_url=llm_config["base_url"],
+                        model_name=llm_config["model_name"],
+                    )
 
                 if "context_recall" in retrieval_metrics:
-                    try:
-                        cr_score = calculate_context_recall(
-                            question=question,
-                            ground_truth=expected_answer,
-                            retrieval_context=contexts,
-                            api_key=llm_config["api_key"],
-                            base_url=llm_config["base_url"],
-                            model_name=llm_config["model_name"],
-                        )
-                        retrieval_results["context_recall"] = cr_score
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to calculate context_recall for {question_id}: {str(e)}"
-                        )
-                        retrieval_results["context_recall"] = None
+                    execute_metric_safely(
+                        "context_recall",
+                        calculate_context_recall,
+                        retrieval_results,
+                        question_id,
+                        question=question,
+                        ground_truth=expected_answer,
+                        retrieval_context=contexts,
+                        api_key=llm_config["api_key"],
+                        base_url=llm_config["base_url"],
+                        model_name=llm_config["model_name"],
+                    )
 
             if generation_metrics and llm_config:
                 if "faithfulness" in generation_metrics:
                     if expect_no_answer:
                         generation_results["faithfulness"] = None
                     else:
-                        try:
-                            faithfulness_score = calculate_faithfulness(
-                                answer=answer,
-                                contexts=contexts,
-                                api_key=llm_config["api_key"],
-                                base_url=llm_config["base_url"],
-                                model_name=llm_config["model_name"],
-                            )
-                            generation_results["faithfulness"] = faithfulness_score
-                        except Exception as e:
-                            logger.error(
-                                f"Failed to calculate faithfulness for {question_id}: {str(e)}"
-                            )
-                            generation_results["faithfulness"] = None
-
-                if "answer_relevancy" in generation_metrics:
-                    try:
-                        relevancy_score = calculate_answer_relevancy(
-                            question=question,
+                        execute_metric_safely(
+                            "faithfulness",
+                            calculate_faithfulness,
+                            generation_results,
+                            question_id,
                             answer=answer,
+                            contexts=contexts,
                             api_key=llm_config["api_key"],
                             base_url=llm_config["base_url"],
                             model_name=llm_config["model_name"],
                         )
-                        generation_results["answer_relevancy"] = relevancy_score
-                    except Exception as e:
-                        logger.error(
-                            f"Failed to calculate answer_relevancy for {question_id}: {str(e)}"
-                        )
-                        generation_results["answer_relevancy"] = None
+
+                if "answer_relevancy" in generation_metrics:
+                    execute_metric_safely(
+                        "answer_relevancy",
+                        calculate_answer_relevancy,
+                        generation_results,
+                        question_id,
+                        question=question,
+                        answer=answer,
+                        api_key=llm_config["api_key"],
+                        base_url=llm_config["base_url"],
+                        model_name=llm_config["model_name"],
+                    )
 
         except Exception as e:
             error = str(e)
