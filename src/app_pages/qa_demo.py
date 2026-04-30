@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any
 
 import streamlit as st
-import streamlit.components.v1 as components
 from loguru import logger
 
 from src.app_pages.pdf_server import PdfServer, get_or_create_pdf_server
@@ -436,7 +435,7 @@ def render_qa_demo():
                 _display_result(msg["result"], meal_config)
 
     if st.session_state.messages:
-        components.html(
+        st.html(
             """
 <style>
   #st-scroll-nav { position:fixed; z-index:9999; transition:all .3s ease; cursor:pointer;
@@ -448,32 +447,31 @@ def render_qa_demo():
   #st-scroll-nav.nav-top    { top:80px;  right:24px; }
 </style>
 <div id="st-scroll-nav" class="nav-bottom">↓</div>
-<script>{{
-  const doc = window.parent.document;
+<script>
+  const doc = document;
   const btn = doc.getElementById('st-scroll-nav');
   if (!btn) return;
   const main = doc.querySelector('.main') || doc.querySelector('[data-testid="stMainBlockContainer"]');
   const chatInput = doc.querySelector('[data-testid="stChatInput"]');
-  function isNearBottom() {{
+  function isNearBottom() {
     return main && (main.scrollHeight - main.scrollTop - main.clientHeight < 80);
-  }}
-  function updateBtn() {{
-    if (isNearBottom()) {{
+  }
+  function updateBtn() {
+    if (isNearBottom()) {
       btn.className = 'nav-top'; btn.textContent = '↑';
-      btn.onclick = () => main.scrollTo({{top:0, behavior:'smooth'}});
-    }} else {{
+      btn.onclick = () => main.scrollTo({top:0, behavior:'smooth'});
+    } else {
       btn.className = 'nav-bottom'; btn.textContent = '↓';
-      btn.onclick = () => {{
+      btn.onclick = () => {
         const target = chatInput || main;
-        target.scrollIntoView({{behavior:'smooth', block:'end'}});
-      }};
-    }}
-  }}
+        target.scrollIntoView({behavior:'smooth', block:'end'});
+      };
+    }
+  }
   if (main) main.addEventListener('scroll', updateBtn);
   updateBtn();
-}}</script>
-            """,
-            height=0,
+</script>
+            """
         )
 
     question = st.chat_input(
