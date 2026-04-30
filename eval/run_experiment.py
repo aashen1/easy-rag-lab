@@ -127,6 +127,12 @@ Examples:
         help="Force re-run all variants, ignoring checkpoints from previous runs",
     )
     parser.add_argument(
+        "--resume",
+        type=str,
+        metavar="EXP_DIR",
+        help="Resume an interrupted experiment from an existing experiment directory",
+    )
+    parser.add_argument(
         "--skip-hash-verification",
         action="store_true",
         help="Skip PDF SHA256 hash verification (faster but less secure)",
@@ -189,6 +195,7 @@ Examples:
             use_llm_report=args.llm_report,
             system_config_path=args.system_config,
             force_rerun=args.force_rerun,
+            resume_dir=args.resume,
         )
         print(f"\nExperiment completed: {result['experiment_id']}")
         print(f"Results saved to: {result['exp_dir']}")

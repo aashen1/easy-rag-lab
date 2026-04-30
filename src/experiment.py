@@ -919,6 +919,43 @@ class ExperimentManager:
         except (json.JSONDecodeError, OSError) as e:
             logger.error(f"Failed to update manifest field: {str(e)}")
 
+    def mark_resumed(self, exp_dir: Path) -> None:
+        """Record that the experiment was resumed in the manifest.
+
+        Appends a ``resumed_at`` timestamp and increments ``resume_count``
+        in the manifest file.  This makes it possible to distinguish a
+        fresh run from a resumed one when reviewing experiment history.
+
+        Args:
+            exp_dir: Path to the experiment directory.
+
+        Raises:
+            OSError: If file writing fails.
+        """
+        manifest_path = exp_dir / "manifest.json"
+        if not manifest_path.exists():
+            logger.warning(
+                f"Manifest file not found: {manifest_path}, skipping resume mark"
+            )
+            return
+
+        try:
+            from datetime import datetime
+
+            with open(manifest_path, encoding="utf-8") as f:
+                manifest = json.load(f)
+
+            resume_count = manifest.get("resume_count", 0) + 1
+            manifest["resume_count"] = resume_count
+            manifest["resumed_at"] = datetime.now().isoformat()
+
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+            logger.info(f"Marked experiment as resumed (count={resume_count})")
+        except (json.JSONDecodeError, OSError) as e:
+            logger.error(f"Failed to mark experiment as resumed: {str(e)}")
+
     def get_completed_variants(self, exp_dir: Path) -> list[str]:
         """
         Get list of completed variant names from the manifest.

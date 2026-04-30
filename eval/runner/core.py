@@ -326,6 +326,7 @@ def run_experiment(
     use_llm_report: bool = False,
     system_config_path: str = "config.yaml",
     force_rerun: bool = False,
+    resume_dir: str | None = None,
 ) -> dict[str, Any]:
     """
     Execute complete experiment workflow.
@@ -335,19 +336,24 @@ def run_experiment(
     the remaining ones are executed.  Use ``force_rerun`` to ignore checkpoints
     and re-run everything from scratch.
 
+    Use ``resume_dir`` to resume an interrupted experiment from an existing
+    experiment directory.  When provided, the existing directory is reused
+    instead of creating a new one, and the manifest records the resume event.
+
     Args:
         config_path: Path to experiment configuration YAML file.
         skip_preprocessing: If True, skip meal and test set creation if missing.
         use_llm_report: If True, use LLM to generate experiment report.
         system_config_path: Path to system configuration file.
         force_rerun: If True, ignore checkpoints and re-run all variants.
+        resume_dir: If provided, resume from this existing experiment directory.
 
     Returns:
         Dictionary containing complete experiment results.
 
     Raises:
         FileNotFoundError: If configuration files don't exist.
-        ValueError: If configuration is invalid.
+        ValueError: If configuration is invalid or resume_dir is invalid.
         Exception: If experiment execution fails.
     """
     logger.info(f"Loading experiment configuration from {config_path}")
@@ -362,7 +368,17 @@ def run_experiment(
     setup_logger(system_config)
 
     exp_manager = ExperimentManager(system_config)
-    exp_dir = exp_manager.create_experiment_dir(exp_config)
+
+    if resume_dir:
+        exp_dir = Path(resume_dir)
+        if not (exp_dir / "manifest.json").exists():
+            raise ValueError(
+                f"Not a valid experiment directory (missing manifest.json): {resume_dir}"
+            )
+        logger.info(f"Resuming experiment from existing directory: {exp_dir}")
+        exp_manager.mark_resumed(exp_dir)
+    else:
+        exp_dir = exp_manager.create_experiment_dir(exp_config)
 
     experiment_log_path = exp_dir / "experiment.log"
     logger.add(
@@ -486,13 +502,16 @@ def run_experiment(
             "environment": collect_environment_info(),
         }
 
-        exp_manager.save_snapshots(
-            exp_dir=exp_dir,
-            config=exp_config,
-            meal_snapshot=meal_snapshot,
-            test_set_snapshots=test_set_snapshots,
-            config_snapshot=config_snapshot,
-        )
+        if not resume_dir:
+            exp_manager.save_snapshots(
+                exp_dir=exp_dir,
+                config=exp_config,
+                meal_snapshot=meal_snapshot,
+                test_set_snapshots=test_set_snapshots,
+                config_snapshot=config_snapshot,
+            )
+        else:
+            logger.info("Resuming: skipping snapshot save (already exists)")
 
         logger.info("Step 4: Running variant evaluations...")
         all_variant_results = []
