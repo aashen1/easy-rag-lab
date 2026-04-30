@@ -506,6 +506,50 @@ def _collect_rag_samples_concurrent(
             return pipelines[idx]
 
     results_dict: dict[int, dict[str, Any]] = {}
+    _results_lock = threading.Lock()
+
+    def _on_future_done(fut: Any, real_idx: int) -> None:
+        try:
+            result = fut.result()
+        except Exception as e:
+            question_data = remaining_questions[real_idx - start_index]
+            question_id = question_data.get("id", f"q{real_idx + 1}")
+            logger.error(f"Concurrent query failed for {question_id}: {str(e)}")
+            result = {
+                "question_id": question_id,
+                "question": question_data.get("question", ""),
+                "answer": "",
+                "contexts": [],
+                "expected_sources": question_data.get("source_files", []),
+                "expected_answer": question_data.get("answer"),
+                "retrieved_sources": [],
+                "chunk_ids": [],
+                "expected_chunks": question_data.get("source_chunks", []),
+                "equivalence_groups": equivalence_groups,
+                "question_type": question_data.get("question_type", "factual"),
+                "time_seconds": 0,
+                "test_set": test_set_name,
+                "error": str(e),
+            }
+
+        with _results_lock:
+            results_dict[real_idx] = result
+            if checkpoint_path is not None:
+                sorted_samples = []
+                for k in sorted(results_dict.keys()):
+                    r = results_dict[k]
+                    if r.get("_skip"):
+                        continue
+                    r_copy = {kk: vv for kk, vv in r.items() if kk != "_skip"}
+                    sorted_samples.append(r_copy)
+                _save_question_checkpoint(
+                    checkpoint_path,
+                    variant_name,
+                    experiment_name,
+                    sorted_samples,
+                    len(questions),
+                    model_name=model_name,
+                )
 
     with ThreadPoolExecutor(max_workers=concurrent_workers) as executor:
         future_to_idx = {}
@@ -521,33 +565,13 @@ def _collect_rag_samples_concurrent(
                 test_set_name,
                 equivalence_groups,
             )
+            future.add_done_callback(
+                lambda fut, idx=real_idx: _on_future_done(fut, idx)
+            )
             future_to_idx[future] = real_idx
 
-        for future in as_completed(future_to_idx):
-            idx = future_to_idx[future]
-            try:
-                result = future.result()
-                results_dict[idx] = result
-            except Exception as e:
-                question_data = remaining_questions[idx - start_index]
-                question_id = question_data.get("id", f"q{idx + 1}")
-                logger.error(f"Concurrent query failed for {question_id}: {str(e)}")
-                results_dict[idx] = {
-                    "question_id": question_id,
-                    "question": question_data.get("question", ""),
-                    "answer": "",
-                    "contexts": [],
-                    "expected_sources": question_data.get("source_files", []),
-                    "expected_answer": question_data.get("answer"),
-                    "retrieved_sources": [],
-                    "chunk_ids": [],
-                    "expected_chunks": question_data.get("source_chunks", []),
-                    "equivalence_groups": equivalence_groups,
-                    "question_type": question_data.get("question_type", "factual"),
-                    "time_seconds": 0,
-                    "test_set": test_set_name,
-                    "error": str(e),
-                }
+        for _future in as_completed(future_to_idx):
+            pass
 
     samples = []
     for idx in sorted(results_dict.keys()):
@@ -556,16 +580,6 @@ def _collect_rag_samples_concurrent(
             continue
         result.pop("_skip", None)
         samples.append(result)
-
-        if checkpoint_path is not None:
-            _save_question_checkpoint(
-                checkpoint_path,
-                variant_name,
-                experiment_name,
-                samples,
-                len(questions),
-                model_name=model_name,
-            )
 
     for p in pipelines[1:]:
         with contextlib.suppress(Exception):
