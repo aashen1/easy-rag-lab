@@ -2,11 +2,48 @@
 
 <!-- status: active -->
 
-> 最后更新：2026-04-28
+> 最后更新：2026-05-01
 
 本文档记录项目的版本迭代历程，每个版本的关键决策、交付成果和经验教训。
 
-> 说明：因为一直在修LLM合成评测集的质量问题，一直拖着没有发版，东做做西做做积压了几百个commit，于是让LLM帮忙想了个“故事感”，一下子拆了五个版本出来，这个调调，只能说~~很装~~
+> 说明：因为一直在修LLM合成评测集的质量问题，一直拖着没有发版，东做做西做做积压了几百个commit，于是让LLM帮忙想了个"故事感"，一下子拆了五个版本出来，这个调子，只能说~~很装~~
+
+---
+
+## v0.1.15 (2026-05-01)
+
+### 版本主题
+
+实验加速
+
+### 叙事
+
+> v0.1.14 治好了骨架，这一版让骨架跑起来。
+>
+> 并发查询、断点续跑、线程安全——实验不再是单线程的漫长等待，而是可控的并行加速。Streamlit UI 也从"能看"升级为"能聊"，多轮对话和动态调参让探索更直觉。
+
+### 关键决策
+
+- 实验运行器引入并发查询/评测机制，通过 `clone_for_concurrency()` 共享只读组件、重建有状态组件
+- 问题级 checkpoint + 原子写入实现断点续跑，`--resume` CLI 支持中断恢复
+- Pipeline 引入 `config_overrides` + lazy loading，Streamlit 侧边栏可动态调参无需重启
+- 评测体系统一 error_handler 模块，MetricResolver 优雅过滤不可用后端
+- Streamlit UI 迁移至 `st.html`，废弃 `st.components.v1.html`
+
+### 交付成果
+
+- **实验运行器增强**：并发查询（`concurrent_queries`）、并发评测（`builtin_concurrent_workers`）、问题级 checkpoint 断点续跑、`--resume` CLI、原子写入、线程安全 TokenTracker、`RAGPipeline.clone_for_concurrency()`、indexer 缓存复用 + `VectorIndexer.reopen()`
+- **Streamlit UI 交互升级**：多轮对话历史、动态 config_overrides 侧边栏、lazy loading（BM25/Reranker/QueryRewriter）、浮动导航按钮、`st.html` 迁移
+- **评测体系增强**：recall@3/5/10 指标、MetricResolver 优雅过滤不可用后端、error_handler 统一模块、BuiltinEvaluator 配置修复
+- **Pipeline 重构**：`deep_merge` 提取到 utils.py、`top_k` 动态参数、BM25Retriever 签名统一、QueryRewriter auth 修复、dead code 清理
+- **代码健康**：docstring 补全、类型标注修正（`str | None`）、`sanitize_name()` 去重（6x→1x）、CLAUDE.md 精简（116→76 行）、trashbin-rule 强化
+
+### 版本验收
+
+- Git tag: `v0.1.15`
+- L1: lint + 1642 单元测试全绿
+- L2: 补充 `clone_for_concurrency()` 和 `VectorIndexer.reopen()`/`is_closed()` 单元测试
+- L3: smoke_quick.yaml 端到端冒烟通过
 
 ---
 
@@ -390,11 +427,11 @@ MVP RAG 基础链路
 
 ## 版本规划
 
-### v0.1.15（计划中）
+### v0.1.16（计划中）
 
 - 透明版完整实验报告（FEAT-010）
-- "花头"效果验证与对比报告
-- 指标得分上下限确认
+- Baseline 标定与"花头"效果验证
+- dev → main 合并准备
 
 ### v0.2.0（计划中）
 
