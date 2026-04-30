@@ -1,3 +1,4 @@
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -216,6 +217,7 @@ class TokenTracker:
 
     def __init__(self) -> None:
         self._records: list[TokenRecord] = []
+        self._lock = threading.Lock()
 
     def record(
         self,
@@ -239,7 +241,8 @@ class TokenTracker:
             timestamp=datetime.now().isoformat(),
             metadata=metadata,
         )
-        self._records.append(rec)
+        with self._lock:
+            self._records.append(rec)
         logger.debug(
             f"Token tracked: {category} | "
             f"in={usage.input_tokens} out={usage.output_tokens} "
@@ -455,7 +458,8 @@ class TokenTracker:
         Args:
             other: Another TokenTracker whose records to merge.
         """
-        self._records.extend(other._records)
+        with self._lock:
+            self._records.extend(other._records)
 
     @property
     def record_count(self) -> int:
