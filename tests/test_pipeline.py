@@ -1289,3 +1289,119 @@ class TestRAGPipeline:
 
             mock_qr_cls.assert_not_called()
             assert pipeline.query_rewriter is mock_existing_rw
+
+
+@pytest.mark.unit
+class TestCloneForConcurrency:
+    @patch("src.pipeline.Generator")
+    @patch("src.pipeline.Retriever")
+    @patch("src.pipeline.VectorIndexer")
+    @patch("src.pipeline.Embedder")
+    @patch("src.pipeline.get_llm_config")
+    @patch("src.pipeline.setup_logger")
+    @patch("src.pipeline.load_config")
+    def test_clone_shares_indexer_embedder_tracker(
+        self,
+        mock_load_config,
+        mock_setup_logger,
+        mock_get_llm_config,
+        mock_embedder,
+        mock_indexer,
+        mock_retriever,
+        mock_generator,
+    ):
+        mock_load_config.return_value = _make_config()
+        mock_get_llm_config.return_value = _make_llm_config()
+
+        pipeline = RAGPipeline(config="dummy.yaml")
+
+        clone = pipeline.clone_for_concurrency()
+
+        assert clone.indexer is pipeline.indexer
+        assert clone.embedder is pipeline.embedder
+        assert clone.token_tracker is pipeline.token_tracker
+        assert clone.profiler is pipeline.profiler
+
+    @patch("src.pipeline.Generator")
+    @patch("src.pipeline.Retriever")
+    @patch("src.pipeline.VectorIndexer")
+    @patch("src.pipeline.Embedder")
+    @patch("src.pipeline.get_llm_config")
+    @patch("src.pipeline.setup_logger")
+    @patch("src.pipeline.load_config")
+    def test_clone_creates_new_generator(
+        self,
+        mock_load_config,
+        mock_setup_logger,
+        mock_get_llm_config,
+        mock_embedder,
+        mock_indexer,
+        mock_retriever,
+        mock_generator,
+    ):
+        mock_load_config.return_value = _make_config()
+        mock_get_llm_config.return_value = _make_llm_config()
+
+        pipeline = RAGPipeline(config="dummy.yaml")
+
+        pipeline.clone_for_concurrency()
+
+        assert mock_generator.call_count == 2
+
+    @patch("src.pipeline.Generator")
+    @patch("src.pipeline.Retriever")
+    @patch("src.pipeline.VectorIndexer")
+    @patch("src.pipeline.Embedder")
+    @patch("src.pipeline.get_llm_config")
+    @patch("src.pipeline.setup_logger")
+    @patch("src.pipeline.load_config")
+    def test_clone_reranker_and_query_rewriter_are_none(
+        self,
+        mock_load_config,
+        mock_setup_logger,
+        mock_get_llm_config,
+        mock_embedder,
+        mock_indexer,
+        mock_retriever,
+        mock_generator,
+    ):
+        mock_load_config.return_value = _make_config()
+        mock_get_llm_config.return_value = _make_llm_config()
+
+        pipeline = RAGPipeline(config="dummy.yaml")
+        pipeline.reranker = MagicMock()
+        pipeline.query_rewriter = MagicMock()
+
+        clone = pipeline.clone_for_concurrency()
+
+        assert clone.reranker is None
+        assert clone.query_rewriter is None
+
+    @patch("src.pipeline.Generator")
+    @patch("src.pipeline.Retriever")
+    @patch("src.pipeline.VectorIndexer")
+    @patch("src.pipeline.Embedder")
+    @patch("src.pipeline.get_llm_config")
+    @patch("src.pipeline.setup_logger")
+    @patch("src.pipeline.load_config")
+    def test_clone_preserves_config_and_meal(
+        self,
+        mock_load_config,
+        mock_setup_logger,
+        mock_get_llm_config,
+        mock_embedder,
+        mock_indexer,
+        mock_retriever,
+        mock_generator,
+    ):
+        mock_load_config.return_value = _make_config()
+        mock_get_llm_config.return_value = _make_llm_config()
+
+        pipeline = RAGPipeline(config="dummy.yaml")
+        pipeline.meal_name = "test_meal"
+
+        clone = pipeline.clone_for_concurrency()
+
+        assert clone.config is pipeline.config
+        assert clone.meal_name == "test_meal"
+        assert clone.meal_config is pipeline.meal_config

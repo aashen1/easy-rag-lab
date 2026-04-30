@@ -295,6 +295,70 @@ class TestVectorIndexer:
         indexer.build_index(chunks_dir=str(chunks_dir), embedder=MagicMock())
         mock_qdrant_client.create_collection.assert_not_called()
 
+
+@pytest.mark.unit
+class TestVectorIndexerReopen:
+    @patch("src.indexer.QdrantClient")
+    def test_is_closed_false_initially(
+        self, mock_qdrant_class, mock_qdrant_client, temp_project_dir
+    ):
+        mock_qdrant_class.return_value = mock_qdrant_client
+        indexer = VectorIndexer(
+            persist_dir=str(temp_project_dir / "data" / "vector_store")
+        )
+        assert indexer.is_closed() is False
+
+    @patch("src.indexer.QdrantClient")
+    def test_is_closed_true_after_close(
+        self, mock_qdrant_class, mock_qdrant_client, temp_project_dir
+    ):
+        mock_qdrant_class.return_value = mock_qdrant_client
+        indexer = VectorIndexer(
+            persist_dir=str(temp_project_dir / "data" / "vector_store")
+        )
+        indexer.close()
+        assert indexer.is_closed() is True
+
+    @patch("src.indexer.QdrantClient")
+    def test_reopen_creates_new_client(
+        self, mock_qdrant_class, mock_qdrant_client, temp_project_dir
+    ):
+        mock_qdrant_class.return_value = mock_qdrant_client
+        indexer = VectorIndexer(
+            persist_dir=str(temp_project_dir / "data" / "vector_store")
+        )
+        indexer.close()
+        assert indexer.is_closed() is True
+
+        mock_new_client = MagicMock()
+        mock_qdrant_class.return_value = mock_new_client
+        indexer.reopen()
+
+        assert indexer.is_closed() is False
+        assert indexer.client is mock_new_client
+        mock_qdrant_class.assert_called_with(
+            path=str(temp_project_dir / "data" / "vector_store")
+        )
+
+    @patch("src.indexer.QdrantClient")
+    def test_reopen_noop_when_not_closed(
+        self, mock_qdrant_class, mock_qdrant_client, temp_project_dir
+    ):
+        mock_qdrant_class.return_value = mock_qdrant_client
+        indexer = VectorIndexer(
+            persist_dir=str(temp_project_dir / "data" / "vector_store")
+        )
+        original_client = indexer.client
+
+        indexer.reopen()
+
+        assert indexer.is_closed() is False
+        assert indexer.client is original_client
+        assert mock_qdrant_class.call_count == 1
+
+
+@pytest.mark.unit
+class TestVectorIndexerRemaining:
     @patch("src.indexer.QdrantClient")
     def test_build_index_source_filter_no_match(
         self, mock_qdrant_class, mock_qdrant_client, temp_project_dir
