@@ -26,13 +26,13 @@ name: "progressive_enhancement"
 description: "递进增强实验 - 从裸基线逐层叠加优化，观察每层边际收益"
 
 data:
-  meal: "meal_progressive_enhancement"
+  meal: "meal_shared_comparison"
   create_if_missing:
     sample_ratio: 0.2
     seed: 42
 
 test_sets:
-  - name: "progressive_eval"
+  - name: "shared_eval_65q"
     on_missing: "auto"
     generation:
       strategy: "hybrid"

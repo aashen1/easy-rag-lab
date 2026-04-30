@@ -47,6 +47,7 @@ class VectorIndexer:
 
             logger.info(f"Initializing Qdrant client at {self.persist_dir}")
             self.client = QdrantClient(path=str(self.persist_dir))
+            self._is_closed = False
 
             logger.success("Qdrant client initialized successfully")
 
@@ -294,8 +295,30 @@ class VectorIndexer:
         try:
             if hasattr(self, "client") and self.client is not None:
                 self.client.close()
+                self._is_closed = True
                 logger.info(
                     f"Qdrant client closed for collection: {self.collection_name}"
                 )
         except Exception as e:
             logger.warning(f"Error closing Qdrant client: {str(e)}")
+
+    def is_closed(self) -> bool:
+        """Check if the Qdrant client is closed.
+
+        Returns:
+            True if the client is closed, False otherwise.
+        """
+        return self._is_closed
+
+    def reopen(self) -> None:
+        """Reopen the Qdrant client if it was closed.
+
+        This is useful when reusing a cached indexer across multiple variants.
+        """
+        if self._is_closed:
+            logger.info(
+                f"Reopening Qdrant client for collection: {self.collection_name}"
+            )
+            self.client = QdrantClient(path=str(self.persist_dir))
+            self._is_closed = False
+            logger.success("Qdrant client reopened successfully")

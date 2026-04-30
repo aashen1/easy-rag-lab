@@ -41,7 +41,7 @@ from src.utils import get_llm_config, load_config, setup_logger
 class RAGPipeline:
     def __init__(
         self,
-        config_path: str = "config.yaml",
+        config: str | dict[str, Any] | None = None,
         llm_preset: str | None = None,
         meal_name: str | None = None,
         token_tracker: TokenTracker | None = None,
@@ -55,8 +55,10 @@ class RAGPipeline:
         of creating a new one.
 
         Args:
-            config_path: Path to the YAML configuration file. Defaults to
-                ``"config.yaml"``.
+            config: Configuration source. Can be:
+                - ``None``: Load from default ``"config.yaml"``
+                - ``str``: Path to a YAML configuration file
+                - ``dict``: Configuration dictionary (e.g., merged experiment config)
             llm_preset: Optional LLM preset name from config. When None, uses
                 the default preset.
             meal_name: Optional name of a pre-built Meal to load. When provided,
@@ -69,7 +71,15 @@ class RAGPipeline:
             ConfigurationError: If the config file is invalid or missing.
             Exception: If any component fails to initialize.
         """
-        self.config = load_config(config_path)
+        if config is None:
+            config = "config.yaml"
+
+        if isinstance(config, str):
+            self.config = load_config(config)
+        else:
+            self.config = config
+
+        self.llm_preset = llm_preset
         setup_logger(self.config)
         self.meal_name = meal_name
         self.meal_config = None
@@ -111,11 +121,7 @@ class RAGPipeline:
         else:
             self._chunks_dir = None
 
-        self.indexer = VectorIndexer(
-            persist_dir=vector_store_config["persist_dir"],
-            collection_name=collection_name,
-            distance=vector_store_config["distance"],
-        )
+        self.indexer: VectorIndexer | None = None
 
         self._setup_retrievers()
 
@@ -187,7 +193,7 @@ class RAGPipeline:
         self.query_rewriter: QueryRewriter | None = None
         rewrite_config = retrieval_config.get("query_rewrite", {})
         if rewrite_config.get("enabled", False):
-            llm_config = get_llm_config(self.config)
+            llm_config = get_llm_config(self.config, self.llm_preset)
             self.query_rewriter = QueryRewriter(
                 strategy=rewrite_config.get("strategy", "hyde"),
                 llm_model_name=llm_config["model_name"],
@@ -415,6 +421,55 @@ class RAGPipeline:
         if hasattr(self, "indexer") and self.indexer is not None:
             self.indexer.close()
             logger.info("RAGPipeline indexer closed")
+
+    def clone_for_concurrency(self) -> RAGPipeline:
+        """Create a lightweight clone for concurrent query execution.
+
+        Shares the indexer (Qdrant client, thread-safe for reads) and
+        embedder (stateless inference) with the original. Creates new
+        instances of components that hold per-call state (generator,
+        reranker, query_rewriter). The cloned pipeline must NOT call
+        ``close()`` — only the original owner should close the shared
+        indexer.
+
+        Returns:
+            A new RAGPipeline instance suitable for use in a separate thread.
+
+        Raises:
+            ConfigurationError: If the LLM config is missing or invalid.
+        """
+        clone = RAGPipeline.__new__(RAGPipeline)
+        clone.config = self.config
+        clone.meal_name = self.meal_name
+        clone.meal_config = self.meal_config
+        clone._chunks_dir = self._chunks_dir
+
+        clone.indexer = self.indexer
+        clone.embedder = self.embedder
+        clone.token_tracker = self.token_tracker
+        clone.profiler = self.profiler
+
+        clone._setup_retrievers()
+
+        llm_config = get_llm_config(self.config, self.llm_preset)
+        clone.generator = Generator(
+            model_name=llm_config["model_name"],
+            api_key=llm_config["api_key"],
+            base_url=llm_config["base_url"],
+            temperature=llm_config["temperature"],
+            max_tokens=llm_config["max_tokens"],
+            token_tracker=clone.token_tracker,
+            system_prompt=self.config.get("generation", {}).get("system_prompt"),
+            max_context_tokens=self.config.get("generation", {}).get(
+                "max_context_tokens"
+            ),
+        )
+
+        clone.reranker = None
+        clone.query_rewriter = None
+
+        logger.debug("Created lightweight pipeline clone for concurrent execution")
+        return clone
 
     def __enter__(self) -> RAGPipeline:
         return self
@@ -699,7 +754,7 @@ class RAGPipeline:
             return
 
         logger.info(f"Lazy-initializing query rewriter (strategy={strategy})...")
-        llm_config = get_llm_config(self.config)
+        llm_config = get_llm_config(self.config, self.llm_preset)
         rewrite_config = self.config.get("retrieval", {}).get("query_rewrite", {})
         self.query_rewriter = QueryRewriter(
             strategy=strategy,

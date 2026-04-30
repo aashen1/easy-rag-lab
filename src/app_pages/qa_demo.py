@@ -16,7 +16,7 @@ from src.utils import load_config
 
 @st.cache_resource
 def get_pipeline(meal_name: str | None) -> RAGPipeline:
-    return RAGPipeline(config_path="config.yaml", meal_name=meal_name)
+    return RAGPipeline(config="config.yaml", meal_name=meal_name)
 
 
 def _ensure_pdf_server() -> PdfServer:

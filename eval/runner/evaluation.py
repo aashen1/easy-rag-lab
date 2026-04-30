@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import contextlib
+import json
+import os
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
-from eval.evaluators.base import BaseEvaluator, EvaluationSample
+from eval.evaluators.base import BaseEvaluator, EvaluationResult, EvaluationSample
 from eval.evaluators.builtin_evaluator import BuiltinEvaluator
 from eval.evaluators.ragas_evaluator import RagasEvaluator
 from eval.metrics.metric_resolver import MetricResolver
@@ -13,7 +19,7 @@ from eval.runner.metrics import build_legacy_resolver, merge_result, namespace_r
 from src.exceptions import ConfigurationError
 from src.experiment import ExperimentConfig
 from src.pipeline import RAGPipeline
-from src.utils import get_llm_config
+from src.utils import get_llm_config, sanitize_name
 
 
 def create_evaluators(
@@ -47,19 +53,104 @@ def create_evaluators(
     return evaluators
 
 
+def _save_question_checkpoint(
+    checkpoint_path: Path,
+    variant_name: str,
+    experiment_name: str,
+    samples: list[dict[str, Any]],
+    total_questions: int,
+    model_name: str = "",
+) -> None:
+    """
+    Save question-level checkpoint for resume support.
+
+    Args:
+        checkpoint_path: Path to the checkpoint file.
+        variant_name: Name of the variant being evaluated.
+        experiment_name: Name of the experiment.
+        samples: List of collected samples so far.
+        total_questions: Total number of questions to process.
+        model_name: LLM model name used for generation (for change detection).
+    """
+    checkpoint_data = {
+        "variant_name": variant_name,
+        "experiment_name": experiment_name,
+        "model_name": model_name,
+        "completed_questions": len(samples),
+        "total_questions": total_questions,
+        "samples": samples,
+    }
+    tmp_path = checkpoint_path.with_suffix(".json.tmp")
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(checkpoint_data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, checkpoint_path)
+    except OSError as e:
+        logger.warning(f"Failed to save question checkpoint: {str(e)}")
+        with contextlib.suppress(OSError):
+            tmp_path.unlink()
+
+
+def _load_question_checkpoint(
+    checkpoint_path: Path,
+) -> list[dict[str, Any]] | None:
+    """
+    Load question-level checkpoint if available.
+
+    Args:
+        checkpoint_path: Path to the checkpoint file.
+
+    Returns:
+        List of previously collected samples, or None if no valid checkpoint.
+    """
+    if not checkpoint_path.exists():
+        return None
+
+    try:
+        with open(checkpoint_path, encoding="utf-8") as f:
+            data = json.load(f)
+        samples = data.get("samples", [])
+        if samples:
+            logger.info(
+                f"Loaded question checkpoint: {data.get('completed_questions', 0)}/"
+                f"{data.get('total_questions', '?')} questions already completed "
+                f"for variant '{data.get('variant_name', '?')}'"
+            )
+            return samples
+    except (json.JSONDecodeError, OSError) as e:
+        logger.warning(f"Failed to load question checkpoint: {str(e)}")
+
+    return None
+
+
 def collect_rag_samples(
     pipeline: RAGPipeline,
     test_set: dict[str, Any],
     equivalence_groups: dict[str, list[str]] | None = None,
+    checkpoint_dir: Path | None = None,
+    variant_name: str = "",
+    experiment_name: str = "",
+    model_name: str = "",
+    max_questions: int | None = None,
 ) -> list[dict[str, Any]]:
     """
     Run pipeline queries and collect raw samples for evaluation.
+
+    Supports question-level checkpointing: each completed question result is
+    appended to a checkpoint file so that if the process is interrupted, the
+    next run can resume from where it left off.
 
     Args:
         pipeline: Configured RAG pipeline.
         test_set: Test set dictionary with questions.
         equivalence_groups: Optional dict mapping group keys to lists of
             equivalent file paths for dedup normalization.
+        checkpoint_dir: Optional directory for saving question-level checkpoints.
+        variant_name: Name of the variant (for checkpoint file naming).
+        experiment_name: Name of the experiment (for checkpoint metadata).
+        model_name: LLM model name used for generation (for change detection).
+        max_questions: If set, only evaluate the first N questions (partial
+            evaluation for quick verification).
 
     Returns:
         List of sample dictionaries with query results.
@@ -72,20 +163,224 @@ def collect_rag_samples(
         q for q in questions if q.get("metadata", {}).get("review_status") != "rejected"
     ]
 
+    if max_questions is not None and max_questions < len(questions):
+        logger.info(
+            f"Partial evaluation: using first {max_questions}/{len(questions)} questions"
+        )
+        questions = questions[:max_questions]
+
     logger.info(
         f"Collecting results for test set '{test_set_name}' ({len(questions)} questions)..."
     )
 
-    samples = []
-    for i, question_data in enumerate(questions, 1):
-        question_id = question_data.get("id", f"q{i}")
+    concurrent_workers = _get_concurrent_workers(pipeline, len(questions))
+
+    checkpoint_path: Path | None = None
+    if checkpoint_dir is not None and variant_name:
+        checkpoint_dir.mkdir(parents=True, exist_ok=True)
+        safe_name = sanitize_name(variant_name)
+        checkpoint_path = checkpoint_dir / f"{safe_name}_checkpoint.json"
+
+    samples: list[dict[str, Any]] = []
+    start_index = 0
+
+    if checkpoint_path is not None:
+        existing = _load_question_checkpoint(checkpoint_path)
+        if existing is not None:
+            samples = existing
+            start_index = len(samples)
+            if start_index >= len(questions):
+                logger.info(
+                    f"All {len(questions)} questions already completed, using checkpoint"
+                )
+                return samples
+            logger.info(f"Resuming from question {start_index + 1}/{len(questions)}")
+
+    if concurrent_workers > 1 and start_index < len(questions):
+        samples = _collect_rag_samples_concurrent(
+            pipeline=pipeline,
+            questions=questions,
+            start_index=start_index,
+            test_set_name=test_set_name,
+            equivalence_groups=equivalence_groups,
+            concurrent_workers=concurrent_workers,
+            checkpoint_path=checkpoint_path,
+            variant_name=variant_name,
+            experiment_name=experiment_name,
+            model_name=model_name,
+        )
+    else:
+        samples = _collect_rag_samples_serial(
+            pipeline=pipeline,
+            questions=questions,
+            start_index=start_index,
+            test_set_name=test_set_name,
+            equivalence_groups=equivalence_groups,
+            checkpoint_path=checkpoint_path,
+            variant_name=variant_name,
+            experiment_name=experiment_name,
+            model_name=model_name,
+            existing_samples=samples,
+        )
+
+    return samples
+
+
+def _get_concurrent_workers(pipeline: RAGPipeline, remaining: int) -> int:
+    """
+    Determine the number of concurrent query workers.
+
+    Args:
+        pipeline: RAG pipeline instance.
+        remaining: Number of questions remaining to process.
+
+    Returns:
+        Number of workers (1 = serial, >1 = concurrent).
+    """
+    concurrent_cfg = pipeline.config.get("evaluation", {}).get("concurrent_queries", 1)
+    if concurrent_cfg < 1:
+        concurrent_cfg = 1
+    if remaining < 2:
+        return 1
+    return min(concurrent_cfg, remaining)
+
+
+def _query_single_question(
+    pipeline: RAGPipeline,
+    question_data: dict[str, Any],
+    question_idx: int,
+    total_questions: int,
+    test_set_name: str,
+    equivalence_groups: dict[str, list[str]] | None,
+) -> dict[str, Any]:
+    """
+    Query a single question against the pipeline.
+
+    Each call uses an independent pipeline instance, so no locking is needed.
+
+    Args:
+        pipeline: RAG pipeline instance (dedicated to this thread).
+        question_data: Question dictionary.
+        question_idx: Question index (0-based).
+        total_questions: Total number of questions.
+        test_set_name: Name of the test set.
+        equivalence_groups: Optional equivalence groups for dedup.
+
+    Returns:
+        Sample dictionary with query results.
+    """
+    question_id = question_data.get("id", f"q{question_idx + 1}")
+    question_text = question_data.get("question", "")
+
+    if not question_text:
+        logger.warning(f"Question {question_id} has no text, skipping")
+        return {
+            "question_id": question_id,
+            "question": "",
+            "_skip": True,
+        }
+
+    logger.info(
+        f"Processing question {question_idx + 1}/{total_questions}: {question_id}"
+    )
+
+    case_start_time = time.time()
+    try:
+        response = pipeline.query(question_text)
+        case_time = time.time() - case_start_time
+
+        sample = {
+            "question_id": question_id,
+            "question": question_text,
+            "answer": response.get("answer", ""),
+            "contexts": response.get("contexts", []),
+            "expected_sources": question_data.get("source_files", []),
+            "expected_answer": question_data.get("answer"),
+            "ground_truth_excerpt": question_data.get("ground_truth_excerpt"),
+            "retrieved_sources": response.get("sources", []),
+            "chunk_ids": response.get("chunk_ids", []),
+            "expected_chunks": question_data.get("source_chunks", []),
+            "equivalence_groups": equivalence_groups,
+            "question_type": question_data.get("question_type", "factual"),
+            "time_seconds": case_time,
+            "test_set": test_set_name,
+            "category": question_data.get("category"),
+            "difficulty": question_data.get("difficulty"),
+            "token_usage": response.get("token_usage"),
+            "expect_retrieval": question_data.get("expect_retrieval", True),
+            "expect_no_answer": question_data.get("expect_no_answer", False),
+        }
+
+        logger.success(f"Question {question_id}: collected result ({case_time:.2f}s)")
+        return sample
+
+    except Exception as e:
+        case_time = time.time() - case_start_time
+        logger.error(f"Question {question_id} failed: {str(e)}")
+        return {
+            "question_id": question_id,
+            "question": question_text,
+            "answer": "",
+            "contexts": [],
+            "expected_sources": question_data.get("source_files", []),
+            "expected_answer": question_data.get("answer"),
+            "ground_truth_excerpt": question_data.get("ground_truth_excerpt"),
+            "retrieved_sources": [],
+            "chunk_ids": [],
+            "expected_chunks": question_data.get("source_chunks", []),
+            "equivalence_groups": equivalence_groups,
+            "question_type": question_data.get("question_type", "factual"),
+            "expect_retrieval": question_data.get("expect_retrieval", True),
+            "expect_no_answer": question_data.get("expect_no_answer", False),
+            "time_seconds": case_time,
+            "test_set": test_set_name,
+            "category": question_data.get("category"),
+            "error": str(e),
+        }
+
+
+def _collect_rag_samples_serial(
+    pipeline: RAGPipeline,
+    questions: list[dict[str, Any]],
+    start_index: int,
+    test_set_name: str,
+    equivalence_groups: dict[str, list[str]] | None,
+    checkpoint_path: Path | None,
+    variant_name: str,
+    experiment_name: str,
+    model_name: str,
+    existing_samples: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """
+    Collect RAG samples serially (original behavior).
+
+    Args:
+        pipeline: RAG pipeline instance.
+        questions: List of question dictionaries.
+        start_index: Index to start from (for checkpoint resume).
+        test_set_name: Name of the test set.
+        equivalence_groups: Optional equivalence groups.
+        checkpoint_path: Optional checkpoint file path.
+        variant_name: Variant name for checkpoint.
+        experiment_name: Experiment name for checkpoint.
+        model_name: LLM model name for checkpoint.
+        existing_samples: Previously collected samples (from checkpoint).
+
+    Returns:
+        Complete list of sample dictionaries.
+    """
+    samples = list(existing_samples)
+
+    for i in range(start_index, len(questions)):
+        question_data = questions[i]
+        question_id = question_data.get("id", f"q{i + 1}")
         question_text = question_data.get("question", "")
 
         if not question_text:
             logger.warning(f"Question {question_id} has no text, skipping")
             continue
 
-        logger.info(f"Processing question {i}/{len(questions)}: {question_id}")
+        logger.info(f"Processing question {i + 1}/{len(questions)}: {question_id}")
 
         case_start_time = time.time()
         try:
@@ -144,7 +439,222 @@ def collect_rag_samples(
 
         samples.append(sample)
 
+        if checkpoint_path is not None:
+            _save_question_checkpoint(
+                checkpoint_path,
+                variant_name,
+                experiment_name,
+                samples,
+                len(questions),
+                model_name=model_name,
+            )
+
     return samples
+
+
+def _collect_rag_samples_concurrent(
+    pipeline: RAGPipeline,
+    questions: list[dict[str, Any]],
+    start_index: int,
+    test_set_name: str,
+    equivalence_groups: dict[str, list[str]] | None,
+    concurrent_workers: int,
+    checkpoint_path: Path | None,
+    variant_name: str,
+    experiment_name: str,
+    model_name: str,
+) -> list[dict[str, Any]]:
+    """
+    Collect RAG samples using concurrent query execution.
+
+    Creates independent pipeline clones for each worker. Each clone shares
+    the same vector indexer (thread-safe Qdrant client) but has its own
+    LLM generator, enabling true concurrent LLM API calls.
+
+    Args:
+        pipeline: RAG pipeline instance (used as template for clones).
+        questions: List of question dictionaries.
+        start_index: Index to start from (for checkpoint resume).
+        test_set_name: Name of the test set.
+        equivalence_groups: Optional equivalence groups.
+        concurrent_workers: Number of concurrent workers.
+        checkpoint_path: Optional checkpoint file path.
+        variant_name: Variant name for checkpoint.
+        experiment_name: Experiment name for checkpoint.
+        model_name: LLM model name for checkpoint.
+
+    Returns:
+        List of sample dictionaries with query results.
+    """
+    remaining_questions = questions[start_index:]
+    logger.info(
+        f"Concurrent query mode: {len(remaining_questions)} questions, "
+        f"{concurrent_workers} workers"
+    )
+
+    pipelines: list[RAGPipeline] = [pipeline]
+    for _ in range(concurrent_workers - 1):
+        pipelines.append(pipeline.clone_for_concurrency())
+
+    _pipeline_idx = [0]
+    _idx_lock = threading.Lock()
+
+    def assign_pipeline() -> RAGPipeline:
+        with _idx_lock:
+            idx = _pipeline_idx[0] % len(pipelines)
+            _pipeline_idx[0] += 1
+            return pipelines[idx]
+
+    results_dict: dict[int, dict[str, Any]] = {}
+    _results_lock = threading.Lock()
+
+    def _on_future_done(fut: Any, real_idx: int) -> None:
+        try:
+            result = fut.result()
+        except Exception as e:
+            question_data = remaining_questions[real_idx - start_index]
+            question_id = question_data.get("id", f"q{real_idx + 1}")
+            logger.error(f"Concurrent query failed for {question_id}: {str(e)}")
+            result = {
+                "question_id": question_id,
+                "question": question_data.get("question", ""),
+                "answer": "",
+                "contexts": [],
+                "expected_sources": question_data.get("source_files", []),
+                "expected_answer": question_data.get("answer"),
+                "retrieved_sources": [],
+                "chunk_ids": [],
+                "expected_chunks": question_data.get("source_chunks", []),
+                "equivalence_groups": equivalence_groups,
+                "question_type": question_data.get("question_type", "factual"),
+                "time_seconds": 0,
+                "test_set": test_set_name,
+                "error": str(e),
+            }
+
+        with _results_lock:
+            results_dict[real_idx] = result
+            if checkpoint_path is not None:
+                sorted_samples = []
+                for k in sorted(results_dict.keys()):
+                    r = results_dict[k]
+                    if r.get("_skip"):
+                        continue
+                    r_copy = {kk: vv for kk, vv in r.items() if kk != "_skip"}
+                    sorted_samples.append(r_copy)
+                _save_question_checkpoint(
+                    checkpoint_path,
+                    variant_name,
+                    experiment_name,
+                    sorted_samples,
+                    len(questions),
+                    model_name=model_name,
+                )
+
+    with ThreadPoolExecutor(max_workers=concurrent_workers) as executor:
+        future_to_idx = {}
+        for offset, question_data in enumerate(remaining_questions):
+            real_idx = start_index + offset
+            assigned = assign_pipeline()
+            future = executor.submit(
+                _query_single_question,
+                assigned,
+                question_data,
+                real_idx,
+                len(questions),
+                test_set_name,
+                equivalence_groups,
+            )
+            future.add_done_callback(
+                lambda fut, idx=real_idx: _on_future_done(fut, idx)
+            )
+            future_to_idx[future] = real_idx
+
+        for _future in as_completed(future_to_idx):
+            pass
+
+    samples = []
+    for idx in sorted(results_dict.keys()):
+        result = results_dict[idx]
+        if result.get("_skip"):
+            continue
+        result.pop("_skip", None)
+        samples.append(result)
+
+    for p in pipelines[1:]:
+        with contextlib.suppress(Exception):
+            p.close()
+
+    return samples
+
+
+def _format_eval_result(
+    sample: dict[str, Any],
+    eval_result: EvaluationResult,
+) -> dict[str, Any]:
+    """Format an EvaluationResult into the result dict used by evaluate_with_builtin.
+
+    Args:
+        sample: Original sample dictionary from collect_rag_samples.
+        eval_result: EvaluationResult from the builtin evaluator.
+
+    Returns:
+        Formatted result dictionary.
+    """
+    question_id = sample["question_id"]
+    raw_retrieval = eval_result.retrieval_metrics
+
+    doc_metrics: dict[str, Any] = {}
+    chunk_metrics: dict[str, Any] = {}
+    dedup_metrics: dict[str, Any] = {}
+    fpr_value = None
+
+    for k, v in raw_retrieval.items():
+        if k.startswith("chunk_"):
+            chunk_metrics[k.removeprefix("chunk_")] = v
+        elif k.startswith("dedup_"):
+            dedup_metrics[k.removeprefix("dedup_")] = v
+        elif k == "false_positive_rate":
+            fpr_value = v
+        else:
+            doc_metrics[k] = v
+
+    result: dict[str, Any] = {
+        "id": question_id,
+        "question": sample["question"],
+        "answer": sample["answer"],
+        "retrieval": doc_metrics,
+        "chunk_retrieval": chunk_metrics if chunk_metrics else None,
+        "dedup_retrieval": dedup_metrics if dedup_metrics else None,
+        "false_positive_rate": fpr_value,
+        "sources": sample.get("retrieved_sources", []),
+        "expected_sources": sample.get("expected_sources", []),
+        "time_seconds": sample.get("time_seconds", 0),
+        "test_set": sample.get("test_set", ""),
+        "category": sample.get("category"),
+        "difficulty": sample.get("difficulty"),
+        "question_type": sample.get("question_type"),
+        "expect_retrieval": sample.get("expect_retrieval", True),
+        "token_usage": sample.get("token_usage"),
+    }
+
+    if eval_result.generation_metrics:
+        result["generation"] = eval_result.generation_metrics
+
+    if eval_result.error:
+        result["error"] = eval_result.error
+
+    metric_parts = []
+    for k, v in eval_result.retrieval_metrics.items():
+        if v is not None:
+            metric_parts.append(f"{k.upper()}={v:.4f}")
+    for k, v in eval_result.generation_metrics.items():
+        if v is not None:
+            metric_parts.append(f"{k}={v:.4f}")
+    metric_str = ", ".join(metric_parts) if metric_parts else "no metrics"
+    logger.success(f"Question {question_id}: {metric_str}")
+
+    return result
 
 
 def evaluate_with_builtin(
@@ -157,6 +667,10 @@ def evaluate_with_builtin(
     """
     Evaluate samples using the builtin evaluator.
 
+    Uses evaluator.evaluate_batch() which supports concurrent generation
+    metric computation via ThreadPoolExecutor when generation metrics are
+    requested and builtin_concurrent_workers > 1 in config.
+
     Args:
         samples: List of sample dictionaries from collect_rag_samples.
         evaluator: BuiltinEvaluator instance.
@@ -167,12 +681,14 @@ def evaluate_with_builtin(
     Returns:
         List of evaluation result dictionaries.
     """
-    results = []
-    for sample in samples:
+    error_results: dict[int, dict[str, Any]] = {}
+    valid_entries: list[tuple[int, dict[str, Any], EvaluationSample]] = []
+
+    for idx, sample in enumerate(samples):
         question_id = sample["question_id"]
 
         if "error" in sample:
-            result = {
+            error_results[idx] = {
                 "id": question_id,
                 "question": sample["question"],
                 "answer": None,
@@ -182,89 +698,46 @@ def evaluate_with_builtin(
                 "test_set": sample.get("test_set", ""),
                 "category": sample.get("category"),
             }
-            results.append(result)
             continue
 
         expected_answer = sample.get("ground_truth_excerpt")
         if not expected_answer and sample.get("expect_retrieval", True):
             expected_answer = sample.get("expected_answer")
 
-        eval_result = evaluator.evaluate_single(
-            EvaluationSample(
-                question_id=question_id,
-                question=sample["question"],
-                answer=sample["answer"],
-                contexts=sample.get("contexts", []),
-                expected_sources=sample.get("expected_sources"),
-                expected_answer=expected_answer,
-                llm_config=llm_config,
-                retrieval_metrics=retrieval_metrics,
-                generation_metrics=generation_metrics,
-                chunk_ids=sample.get("chunk_ids"),
-                expected_chunks=sample.get("expected_chunks"),
-                equivalence_groups=sample.get("equivalence_groups"),
-                expect_retrieval=sample.get("expect_retrieval", True),
-                expect_no_answer=sample.get("expect_no_answer", False),
-                retrieved_sources=sample.get("retrieved_sources", []),
-                question_type=sample.get("question_type"),
-            )
+        eval_sample = EvaluationSample(
+            question_id=question_id,
+            question=sample["question"],
+            answer=sample["answer"],
+            contexts=sample.get("contexts", []),
+            expected_sources=sample.get("expected_sources"),
+            expected_answer=expected_answer,
+            llm_config=llm_config,
+            retrieval_metrics=retrieval_metrics,
+            generation_metrics=generation_metrics,
+            chunk_ids=sample.get("chunk_ids"),
+            expected_chunks=sample.get("expected_chunks"),
+            equivalence_groups=sample.get("equivalence_groups"),
+            expect_retrieval=sample.get("expect_retrieval", True),
+            expect_no_answer=sample.get("expect_no_answer", False),
+            retrieved_sources=sample.get("retrieved_sources", []),
+            question_type=sample.get("question_type"),
+        )
+        valid_entries.append((idx, sample, eval_sample))
+
+    if valid_entries:
+        eval_samples = [es for _, _, es in valid_entries]
+        batch_results = evaluator.evaluate_batch(
+            samples=eval_samples,
+            llm_config=llm_config,
+            retrieval_metrics=retrieval_metrics,
+            generation_metrics=generation_metrics,
         )
 
-        raw_retrieval = eval_result.retrieval_metrics
+        for entry, eval_result in zip(valid_entries, batch_results, strict=True):
+            idx, sample, _ = entry
+            error_results[idx] = _format_eval_result(sample, eval_result)
 
-        doc_metrics = {}
-        chunk_metrics = {}
-        dedup_metrics = {}
-        fpr_value = None
-
-        for k, v in raw_retrieval.items():
-            if k.startswith("chunk_"):
-                chunk_metrics[k.removeprefix("chunk_")] = v
-            elif k.startswith("dedup_"):
-                dedup_metrics[k.removeprefix("dedup_")] = v
-            elif k == "false_positive_rate":
-                fpr_value = v
-            else:
-                doc_metrics[k] = v
-
-        result = {
-            "id": question_id,
-            "question": sample["question"],
-            "answer": sample["answer"],
-            "retrieval": doc_metrics,
-            "chunk_retrieval": chunk_metrics if chunk_metrics else None,
-            "dedup_retrieval": dedup_metrics if dedup_metrics else None,
-            "false_positive_rate": fpr_value,
-            "sources": sample.get("retrieved_sources", []),
-            "expected_sources": sample.get("expected_sources", []),
-            "time_seconds": sample.get("time_seconds", 0),
-            "test_set": sample.get("test_set", ""),
-            "category": sample.get("category"),
-            "difficulty": sample.get("difficulty"),
-            "question_type": sample.get("question_type"),
-            "expect_retrieval": sample.get("expect_retrieval", True),
-            "token_usage": sample.get("token_usage"),
-        }
-
-        if eval_result.generation_metrics:
-            result["generation"] = eval_result.generation_metrics
-
-        if eval_result.error:
-            result["error"] = eval_result.error
-
-        metric_parts = []
-        for k, v in eval_result.retrieval_metrics.items():
-            if v is not None:
-                metric_parts.append(f"{k.upper()}={v:.4f}")
-        for k, v in eval_result.generation_metrics.items():
-            if v is not None:
-                metric_parts.append(f"{k}={v:.4f}")
-        metric_str = ", ".join(metric_parts) if metric_parts else "no metrics"
-        logger.success(f"Question {question_id}: {metric_str}")
-
-        results.append(result)
-
-    return results
+    return [error_results[i] for i in range(len(samples))]
 
 
 def evaluate_with_ragas(
@@ -395,6 +868,10 @@ def evaluate_test_set(
     exp_config: ExperimentConfig | None = None,
     system_config: dict[str, Any] | None = None,
     meal_info: dict[str, Any] | None = None,
+    checkpoint_dir: Path | None = None,
+    variant_name: str = "",
+    experiment_name: str = "",
+    max_questions: int | None = None,
 ) -> list[dict[str, Any]]:
     """
     Evaluate a single test set against the pipeline.
@@ -408,6 +885,10 @@ def evaluate_test_set(
         exp_config: Experiment configuration for backend selection.
         system_config: System configuration for evaluator creation.
         meal_info: Optional meal information containing equivalence_groups.
+        checkpoint_dir: Optional directory for question-level checkpoints.
+        variant_name: Name of the variant (for checkpoint file naming).
+        experiment_name: Name of the experiment (for checkpoint metadata).
+        max_questions: If set, only evaluate the first N questions.
 
     Returns:
         List of evaluation result dictionaries.
@@ -458,7 +939,14 @@ def evaluate_test_set(
 
     equivalence_groups = meal_info.get("equivalence_groups") if meal_info else None
     samples = collect_rag_samples(
-        pipeline, test_set, equivalence_groups=equivalence_groups
+        pipeline,
+        test_set,
+        equivalence_groups=equivalence_groups,
+        checkpoint_dir=checkpoint_dir,
+        variant_name=variant_name,
+        experiment_name=experiment_name,
+        model_name=llm_config.get("model_name", "") if llm_config else "",
+        max_questions=max_questions,
     )
 
     all_results: dict[str, dict[str, Any]] = {}

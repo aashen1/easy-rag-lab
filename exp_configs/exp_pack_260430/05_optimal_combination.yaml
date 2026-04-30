@@ -1,0 +1,209 @@
+# ============================================================================
+# 专题5：最优组合探索实验
+# ============================================================================
+# 核心问题：
+#   1. 最佳配置组合是什么？
+#   2. 组合优化的边际收益如何？
+#   3. 成本效益最优的配置是什么？
+#
+# 实验设计：
+#   - 基于前4个专题的发现，组合最佳配置
+#   - 递进式增加优化组件
+#   - 测试不同复杂度的配置
+#   - 使用100题大规模测试集
+#
+# 预期发现：
+#   - 组合优化应该有边际收益递减
+#   - 中等复杂度配置可能性价比最高
+#   - 全链路优化效果最好但成本也最高
+# ============================================================================
+
+name: "study_05_optimal_combination"
+description: "专题5 - 最优组合探索：递进增强与成本效益"
+
+data:
+  meal: "study_optimal"
+  create_if_missing:
+    sample_ratio: 0.2  # 更大规模
+    seed: 42
+
+test_sets:
+  - name: "optimal_100q"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 100  # 更大测试集
+      seed: 500
+
+variants:
+  # ===== L0: 裸基线 =====
+  - name: "L0_naive"
+    description: "L0裸基线: fixed/512/o0, vector, topk=5, 无优化"
+    config_overrides: {}
+
+  # ===== L1: 分块优化 =====
+  - name: "L1_overlap"
+    description: "L1分块优化: +overlap=64"
+    config_overrides:
+      chunker:
+        chunk_overlap: 64
+
+  - name: "L1_semantic"
+    description: "L1分块优化: 换用语义分块"
+    config_overrides:
+      chunker:
+        strategy: "semantic"
+        semantic:
+          similarity_threshold: 0.5
+
+  # ===== L2: 检索优化 =====
+  - name: "L2_hybrid"
+    description: "L2检索优化: +混合检索"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        hybrid:
+          fusion: "rrf"
+
+  - name: "L2_hybrid_overlap"
+    description: "L2检索优化: overlap+混合检索"
+    config_overrides:
+      chunker:
+        chunk_overlap: 64
+      retrieval:
+        method: "hybrid"
+        hybrid:
+          fusion: "rrf"
+
+  # ===== L3: 重排序优化 =====
+  - name: "L3_rerank"
+    description: "L3重排序优化: +Reranker"
+    config_overrides:
+      retrieval:
+        top_k: 10
+        reranker:
+          enabled: true
+          top_n: 3
+
+  - name: "L3_hybrid_rerank"
+    description: "L3重排序优化: 混合检索+Reranker"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 10
+        reranker:
+          enabled: true
+          top_n: 3
+
+  # ===== L4: 查询改写优化 =====
+  - name: "L4_hyde"
+    description: "L4查询改写优化: +HyDE"
+    config_overrides:
+      retrieval:
+        query_rewrite:
+          enabled: true
+          strategy: "hyde"
+
+  - name: "L4_hybrid_rerank_hyde"
+    description: "L4查询改写优化: 混合+重排+HyDE"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 10
+        reranker:
+          enabled: true
+          top_n: 3
+        query_rewrite:
+          enabled: true
+          strategy: "hyde"
+
+  # ===== L5: 全链路优化 =====
+  - name: "L5_full_overlap"
+    description: "L5全链路优化(overlap版): overlap+hybrid+rerank+hyde"
+    config_overrides:
+      chunker:
+        chunk_overlap: 64
+      retrieval:
+        method: "hybrid"
+        top_k: 10
+        reranker:
+          enabled: true
+          top_n: 3
+        query_rewrite:
+          enabled: true
+          strategy: "hyde"
+
+  - name: "L5_full_semantic"
+    description: "L5全链路优化(semantic版): semantic+hybrid+rerank+hyde"
+    config_overrides:
+      chunker:
+        strategy: "semantic"
+        semantic:
+          similarity_threshold: 0.5
+      retrieval:
+        method: "hybrid"
+        top_k: 10
+        reranker:
+          enabled: true
+          top_n: 3
+        query_rewrite:
+          enabled: true
+          strategy: "hyde"
+
+  # ===== 性价比配置 =====
+  - name: "cost_effective_1"
+    description: "性价比配置1: 仅overlap+hybrid（低成本）"
+    config_overrides:
+      chunker:
+        chunk_overlap: 64
+      retrieval:
+        method: "hybrid"
+
+  - name: "cost_effective_2"
+    description: "性价比配置2: overlap+hybrid+rerank（中等成本）"
+    config_overrides:
+      chunker:
+        chunk_overlap: 64
+      retrieval:
+        method: "hybrid"
+        top_k: 10
+        reranker:
+          enabled: true
+          top_n: 3
+
+  # ===== 特殊配置 =====
+  - name: "precision_focused"
+    description: "精准配置: 小块+混合+重排（追求高MRR）"
+    config_overrides:
+      chunker:
+        chunk_size: 256
+      retrieval:
+        method: "hybrid"
+        top_k: 10
+        reranker:
+          enabled: true
+          top_n: 3
+
+  - name: "recall_focused"
+    description: "召回配置: 大块+混合+Multi-Query（追求高Recall）"
+    config_overrides:
+      chunker:
+        chunk_size: 1024
+      retrieval:
+        method: "hybrid"
+        top_k: 15
+        query_rewrite:
+          enabled: true
+          strategy: "multi_query"
+          num_queries: 3
+
+evaluation:
+  backends: ["builtin"]
+  llm_preset: "default"
+  metrics_preset: "extended"
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
+
+llm:
+  question_generation: "default"
+  answering: "default"

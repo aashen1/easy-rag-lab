@@ -1,0 +1,170 @@
+# ============================================================================
+# 专题4：查询改写对比实验
+# ============================================================================
+# 核心问题：
+#   1. HyDE vs Multi-Query，哪个效果更好？
+#   2. 查询改写适用于什么场景？
+#   3. 查询改写的成本效益如何？
+#
+# 实验设计：
+#   - 对比HyDE和Multi-Query两种策略
+#   - 测试不同子查询数量
+#   - 测试查询改写与检索方式的组合
+#   - 使用50题中等规模测试集
+#
+# 预期发现：
+#   - HyDE可能在推理型问题上更好
+#   - Multi-Query可能在召回不足时更好
+#   - 查询改写会增加Token消耗
+# ============================================================================
+
+name: "study_04_query_rewrite"
+description: "专题4 - 查询改写对比：HyDE vs Multi-Query"
+
+data:
+  meal: "study_query_rewrite"
+  create_if_missing:
+    sample_ratio: 0.15
+    seed: 42
+
+test_sets:
+  - name: "query_rewrite_50q"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 50
+      seed: 400
+
+variants:
+  # ===== 基线：无查询改写 =====
+  - name: "no_rewrite_vector"
+    description: "基线: 纯向量检索，无查询改写"
+    config_overrides:
+      retrieval:
+        method: "vector"
+
+  - name: "no_rewrite_hybrid"
+    description: "基线: 混合检索，无查询改写"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+
+  # ===== HyDE策略 =====
+  - name: "hyde_vector"
+    description: "HyDE + 向量检索"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        query_rewrite:
+          enabled: true
+          strategy: "hyde"
+
+  - name: "hyde_hybrid"
+    description: "HyDE + 混合检索"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        query_rewrite:
+          enabled: true
+          strategy: "hyde"
+
+  - name: "hyde_rerank"
+    description: "HyDE + 重排序"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        top_k: 10
+        reranker:
+          enabled: true
+          top_n: 3
+        query_rewrite:
+          enabled: true
+          strategy: "hyde"
+
+  # ===== Multi-Query策略 =====
+  - name: "multi_query_2"
+    description: "Multi-Query: 2个子查询"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        query_rewrite:
+          enabled: true
+          strategy: "multi_query"
+          num_queries: 2
+
+  - name: "multi_query_3"
+    description: "Multi-Query: 3个子查询（标准）"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        query_rewrite:
+          enabled: true
+          strategy: "multi_query"
+          num_queries: 3
+
+  - name: "multi_query_5"
+    description: "Multi-Query: 5个子查询（激进）"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        query_rewrite:
+          enabled: true
+          strategy: "multi_query"
+          num_queries: 5
+
+  # ===== Multi-Query组合 =====
+  - name: "multi_query_hybrid"
+    description: "Multi-Query + 混合检索"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        query_rewrite:
+          enabled: true
+          strategy: "multi_query"
+          num_queries: 3
+
+  - name: "multi_query_rerank"
+    description: "Multi-Query + 重排序"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        top_k: 10
+        reranker:
+          enabled: true
+          top_n: 3
+        query_rewrite:
+          enabled: true
+          strategy: "multi_query"
+          num_queries: 3
+
+  # ===== 查询改写 + 分块策略 =====
+  - name: "hyde_small_chunk"
+    description: "HyDE + 小块(256)"
+    config_overrides:
+      chunker:
+        chunk_size: 256
+      retrieval:
+        query_rewrite:
+          enabled: true
+          strategy: "hyde"
+
+  - name: "hyde_large_chunk"
+    description: "HyDE + 大块(1024)"
+    config_overrides:
+      chunker:
+        chunk_size: 1024
+      retrieval:
+        query_rewrite:
+          enabled: true
+          strategy: "hyde"
+
+evaluation:
+  backends: ["builtin"]
+  llm_preset: "default"
+  metrics_preset: "extended"
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
+
+llm:
+  question_generation: "default"
+  answering: "default"

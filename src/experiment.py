@@ -9,7 +9,7 @@ import yaml
 from loguru import logger
 
 from src.exceptions import ConfigurationError
-from src.utils import deep_merge
+from src.utils import deep_merge, sanitize_name
 
 VALID_RETRIEVAL_METRICS = {
     "hit_rate",
@@ -522,8 +522,7 @@ class ExperimentManager:
         from datetime import datetime
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe_name = config.name.lower().replace(" ", "_").replace("-", "_")
-        safe_name = "".join(c for c in safe_name if c.isalnum() or c == "_")
+        safe_name = sanitize_name(config.name)
         return f"exp_{timestamp}_{safe_name}"
 
     def create_experiment_dir(self, config: ExperimentConfig) -> Path:
@@ -647,6 +646,7 @@ class ExperimentManager:
             "created_at": datetime.now().isoformat(),
             "status": "running",
             "variants": variant_names,
+            "completed_variants": [],
             "test_sets": test_set_strategies,
         }
 
@@ -853,6 +853,162 @@ class ExperimentManager:
             logger.error(f"Failed to update manifest status: {str(e)}")
             raise
 
+    def mark_variant_completed(self, exp_dir: Path, variant_name: str) -> None:
+        """
+        Mark a variant as completed in the manifest file.
+
+        Args:
+            exp_dir: Path to the experiment directory.
+            variant_name: Name of the completed variant.
+
+        Raises:
+            OSError: If file writing fails.
+        """
+        manifest_path = exp_dir / "manifest.json"
+        if not manifest_path.exists():
+            logger.warning(
+                f"Manifest file not found: {manifest_path}, skipping variant completion mark"
+            )
+            return
+
+        try:
+            with open(manifest_path, encoding="utf-8") as f:
+                manifest = json.load(f)
+
+            completed = manifest.get("completed_variants", [])
+            if variant_name not in completed:
+                completed.append(variant_name)
+                manifest["completed_variants"] = completed
+
+                with open(manifest_path, "w", encoding="utf-8") as f:
+                    json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+                logger.info(f"Marked variant '{variant_name}' as completed in manifest")
+        except (json.JSONDecodeError, OSError) as e:
+            logger.error(f"Failed to mark variant completed: {str(e)}")
+
+    def update_manifest_field(self, exp_dir: Path, field: str, value: Any) -> None:
+        """
+        Update a single field in the manifest file.
+
+        Args:
+            exp_dir: Path to the experiment directory.
+            field: Field name to update.
+            value: New value for the field.
+
+        Raises:
+            OSError: If file writing fails.
+        """
+        manifest_path = exp_dir / "manifest.json"
+        if not manifest_path.exists():
+            logger.warning(
+                f"Manifest file not found: {manifest_path}, skipping field update"
+            )
+            return
+
+        try:
+            with open(manifest_path, encoding="utf-8") as f:
+                manifest = json.load(f)
+
+            manifest[field] = value
+
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+            logger.info(f"Updated manifest field '{field}'")
+        except (json.JSONDecodeError, OSError) as e:
+            logger.error(f"Failed to update manifest field: {str(e)}")
+
+    def mark_resumed(self, exp_dir: Path) -> None:
+        """Record that the experiment was resumed in the manifest.
+
+        Appends a ``resumed_at`` timestamp and increments ``resume_count``
+        in the manifest file.  This makes it possible to distinguish a
+        fresh run from a resumed one when reviewing experiment history.
+
+        Args:
+            exp_dir: Path to the experiment directory.
+
+        Raises:
+            OSError: If file writing fails.
+        """
+        manifest_path = exp_dir / "manifest.json"
+        if not manifest_path.exists():
+            logger.warning(
+                f"Manifest file not found: {manifest_path}, skipping resume mark"
+            )
+            return
+
+        try:
+            from datetime import datetime
+
+            with open(manifest_path, encoding="utf-8") as f:
+                manifest = json.load(f)
+
+            resume_count = manifest.get("resume_count", 0) + 1
+            manifest["resume_count"] = resume_count
+            manifest["resumed_at"] = datetime.now().isoformat()
+
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+            logger.info(f"Marked experiment as resumed (count={resume_count})")
+        except (json.JSONDecodeError, OSError) as e:
+            logger.error(f"Failed to mark experiment as resumed: {str(e)}")
+
+    def get_completed_variants(self, exp_dir: Path) -> list[str]:
+        """
+        Get list of completed variant names from the manifest.
+
+        Args:
+            exp_dir: Path to the experiment directory.
+
+        Returns:
+            List of completed variant names.
+        """
+        manifest_path = exp_dir / "manifest.json"
+        if not manifest_path.exists():
+            return []
+
+        try:
+            with open(manifest_path, encoding="utf-8") as f:
+                manifest = json.load(f)
+            return manifest.get("completed_variants", [])
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"Failed to read manifest: {str(e)}")
+            return []
+
+    def load_variant_result(
+        self, exp_dir: Path, variant_name: str
+    ) -> dict[str, Any] | None:
+        """
+        Load a previously saved variant result.
+
+        Args:
+            exp_dir: Path to the experiment directory.
+            variant_name: Name of the variant.
+
+        Returns:
+            Variant result dictionary, or None if not found.
+        """
+        results_dir = exp_dir / "results"
+        safe_name = sanitize_name(variant_name)
+        result_path = results_dir / f"{safe_name}.json"
+
+        if not result_path.exists():
+            return None
+
+        try:
+            with open(result_path, encoding="utf-8") as f:
+                result = json.load(f)
+            logger.info(f"Loaded existing variant result: {variant_name}")
+            return result
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(
+                f"Failed to load variant result for '{variant_name}': {str(e)}"
+            )
+            return None
+
     def save_variant_result(
         self, exp_dir: Path, variant_name: str, result: dict[str, Any]
     ) -> Path:
@@ -873,8 +1029,7 @@ class ExperimentManager:
         results_dir = exp_dir / "results"
         results_dir.mkdir(exist_ok=True)
 
-        safe_name = variant_name.lower().replace(" ", "_").replace("-", "_")
-        safe_name = "".join(c for c in safe_name if c.isalnum() or c == "_")
+        safe_name = sanitize_name(variant_name)
         result_path = results_dir / f"{safe_name}.json"
 
         try:

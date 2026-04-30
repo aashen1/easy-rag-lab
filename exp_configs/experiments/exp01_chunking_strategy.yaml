@@ -1,0 +1,64 @@
+name: "exp01_chunking_strategy"
+description: "实验1：分块策略对比 - chunk_size/overlap/语义分块对检索与生成质量的影响"
+
+data:
+  meal: "all_meal"
+
+test_sets:
+  - name: "golden_150"
+    golden: true
+
+variants:
+  - name: "baseline_512_0"
+    description: "基线: chunk_size=512, overlap=0, fixed"
+    config_overrides:
+      chunker:
+        strategy: "fixed"
+        chunk_size: 512
+        chunk_overlap: 0
+
+  - name: "small_256_0"
+    description: "小块: chunk_size=256, overlap=0, fixed"
+    config_overrides:
+      chunker:
+        strategy: "fixed"
+        chunk_size: 256
+        chunk_overlap: 0
+
+  - name: "large_1024_0"
+    description: "大块: chunk_size=1024, overlap=0, fixed"
+    config_overrides:
+      chunker:
+        strategy: "fixed"
+        chunk_size: 1024
+        chunk_overlap: 0
+
+  - name: "overlap_512_64"
+    description: "重叠: chunk_size=512, overlap=64, fixed"
+    config_overrides:
+      chunker:
+        strategy: "fixed"
+        chunk_size: 512
+        chunk_overlap: 64
+
+  - name: "semantic_50"
+    description: "语义分块: similarity_threshold=0.5"
+    config_overrides:
+      chunker:
+        strategy: "semantic"
+        chunk_size: 512
+        semantic:
+          similarity_threshold: 0.5
+          breakpoint_percentile: null
+          min_chunk_size: 100
+
+evaluation:
+  backends: ["builtin"]
+  llm_preset: "default"
+  metrics_preset: "core"
+  resolution_strategy: "priority_fallback"
+  retrieval_granularity: "document"
+
+llm:
+  question_generation: "default"
+  answering: "default"

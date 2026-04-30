@@ -27,13 +27,13 @@ name: "interaction_effects"
 description: "交互效应实验 - 2×2因子设计，检测组件间的协同或抵消效应"
 
 data:
-  meal: "meal_interaction_effects"
+  meal: "meal_shared_comparison"
   create_if_missing:
     sample_ratio: 0.2
     seed: 42
 
 test_sets:
-  - name: "interaction_eval"
+  - name: "shared_eval_65q"
     on_missing: "auto"
     generation:
       strategy: "hybrid"

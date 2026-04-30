@@ -24,13 +24,13 @@ name: "ablation_retrieval"
 description: "消融实验A - 检索方式消融，从满配逐个关闭组件，评估各组件不可替代性"
 
 data:
-  meal: "meal_ablation_retrieval"
+  meal: "meal_shared_comparison"
   create_if_missing:
     sample_ratio: 0.2
     seed: 42
 
 test_sets:
-  - name: "ablation_retrieval_eval"
+  - name: "shared_eval_65q"
     on_missing: "auto"
     generation:
       strategy: "hybrid"

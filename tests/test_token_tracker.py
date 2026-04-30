@@ -542,3 +542,26 @@ class TestTokenTracker:
         assert "baseline" in summary
         assert summary["__none__"]["rag_qa"].input_tokens == 100
         assert summary["baseline"]["rag_qa"].input_tokens == 200
+
+    def test_concurrent_record_thread_safety(self):
+        import threading
+
+        tracker = TokenTracker()
+        num_threads = 10
+        records_per_thread = 100
+
+        def worker():
+            for _ in range(records_per_thread):
+                tracker.record(
+                    "rag_qa",
+                    "test-model",
+                    DetailedTokenUsage(input_tokens=10, output_tokens=5),
+                )
+
+        threads = [threading.Thread(target=worker) for _ in range(num_threads)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert tracker.record_count == num_threads * records_per_thread

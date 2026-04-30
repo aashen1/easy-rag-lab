@@ -317,11 +317,22 @@ class TestEdgeCases:
             resolver.resolve()
 
     @pytest.mark.unit
-    def test_invalid_backend_priority_raises_error(self, dual_evaluators):
-        with pytest.raises(ValueError, match="Backend.*not found"):
+    def test_invalid_backend_priority_filters_gracefully(self, dual_evaluators):
+        """Test that invalid backends are filtered out with a warning."""
+        resolver = MetricResolver(
+            evaluators=dual_evaluators,
+            backend_priority=["builtin", "ragas", "nonexistent"],
+            metrics_preset="core",
+        )
+        assert resolver.backend_priority == ["builtin", "ragas"]
+
+    @pytest.mark.unit
+    def test_omitted_backend_in_priority_raises_error(self, dual_evaluators):
+        """Test that error is raised when enabled backend is not in priority list."""
+        with pytest.raises(ValueError, match="enabled but not in backend_priority"):
             MetricResolver(
                 evaluators=dual_evaluators,
-                backend_priority=["builtin", "nonexistent"],
+                backend_priority=["ragas"],
                 metrics_preset="core",
             )
 

@@ -22,13 +22,13 @@ name: "ablation_chunking"
 description: "消融实验B - 分块策略消融，固定检索条件，纯粹评估分块策略影响"
 
 data:
-  meal: "meal_ablation_chunking"
+  meal: "meal_shared_comparison"
   create_if_missing:
     sample_ratio: 0.2
     seed: 42
 
 test_sets:
-  - name: "ablation_chunking_eval"
+  - name: "shared_eval_65q"
     on_missing: "auto"
     generation:
       strategy: "hybrid"

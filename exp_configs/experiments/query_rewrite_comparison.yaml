@@ -2,13 +2,13 @@ name: "query_rewrite_comparison"
 description: "查询改写对比实验 - 对比HyDE和Multi-Query两种查询改写策略对问答质量的影响"
 
 data:
-  meal: "meal_query_rewrite_comparison"
+  meal: "meal_shared_comparison"
   create_if_missing:
     sample_ratio: 0.2
     seed: 42
 
 test_sets:
-  - name: "query_rewrite_eval"
+  - name: "shared_eval_65q"
     on_missing: "auto"
     generation:
       strategy: "hybrid"

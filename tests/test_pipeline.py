@@ -59,7 +59,7 @@ class TestRAGPipeline:
         mock_load_config.return_value = _make_config()
         mock_get_llm_config.return_value = _make_llm_config()
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
 
         mock_embedder.assert_called_once_with(
             model_name="test-model", device="cpu", query_instruction=None
@@ -116,7 +116,7 @@ class TestRAGPipeline:
             mock_meal_mgr = mock_meal_mgr_cls.return_value
             mock_meal_mgr.load_meal.return_value = mock_meal_config
 
-            pipeline = RAGPipeline(config_path="dummy.yaml", meal_name="test_meal")
+            pipeline = RAGPipeline(config="dummy.yaml", meal_name="test_meal")
 
             mock_meal_mgr.load_meal.assert_called_once_with("test_meal")
 
@@ -166,7 +166,7 @@ class TestRAGPipeline:
         mock_generator_instance.generate.return_value = "Revenue was 100 billion."
         mock_generator_instance.last_token_usage = None
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
         result = pipeline.query("What is the revenue?")
 
         mock_retriever_instance.retrieve.assert_called_once_with(
@@ -206,7 +206,7 @@ class TestRAGPipeline:
         mock_load_config.return_value = _make_config()
         mock_get_llm_config.return_value = _make_llm_config()
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
 
         with pytest.raises(RetrievalError, match="Question must be a non-empty string"):
             pipeline.query("")
@@ -234,7 +234,7 @@ class TestRAGPipeline:
         mock_load_config.return_value = _make_config()
         mock_get_llm_config.return_value = _make_llm_config()
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
 
         assert pipeline.meal_name is None
 
@@ -286,7 +286,7 @@ class TestRAGPipeline:
         mock_load_config.return_value = _make_config()
         mock_get_llm_config.return_value = _make_llm_config()
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
         pipeline.close()
 
         mock_indexer.return_value.close.assert_called_once()
@@ -311,7 +311,7 @@ class TestRAGPipeline:
         mock_load_config.return_value = _make_config()
         mock_get_llm_config.return_value = _make_llm_config()
 
-        with RAGPipeline(config_path="dummy.yaml"):
+        with RAGPipeline(config="dummy.yaml"):
             pass
 
         mock_indexer.return_value.close.assert_called_once()
@@ -336,7 +336,7 @@ class TestRAGPipeline:
         mock_load_config.return_value = _make_config()
         mock_get_llm_config.return_value = _make_llm_config()
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
         old_indexer = pipeline.indexer
 
         mock_new_meal_config = MagicMock()
@@ -385,7 +385,7 @@ class TestRAGPipeline:
         mock_load_config.return_value = config
         mock_get_llm_config.return_value = _make_llm_config()
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
 
         with (
             patch("src.pipeline.parse_all_pdfs_unified") as mock_parse,
@@ -462,7 +462,7 @@ class TestRAGPipeline:
         mock_load_config.return_value = config
         mock_get_llm_config.return_value = _make_llm_config()
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
 
         with (
             patch("src.pipeline.parse_all_pdfs_unified") as mock_parse,
@@ -530,7 +530,7 @@ class TestRAGPipeline:
         mock_load_config.return_value = config
         mock_get_llm_config.return_value = _make_llm_config()
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
 
         parse_results = [
             {"output": "/tmp/parser_out/report_2023.pages.json", "status": "ok"},
@@ -612,7 +612,7 @@ class TestRAGPipeline:
         mock_load_config.return_value = config
         mock_get_llm_config.return_value = _make_llm_config()
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
 
         with (
             patch("src.pipeline.parse_all_pdfs_unified") as mock_parse,
@@ -682,7 +682,7 @@ class TestRAGPipeline:
         mock_generator_instance.generate.return_value = "Revenue was 100 billion."
         mock_generator_instance.last_token_usage = None
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
         result = pipeline.query(
             "What is the revenue?",
             config_overrides={"retrieval": {"top_k": 3}},
@@ -726,7 +726,7 @@ class TestRAGPipeline:
         mock_generator_instance.generate.return_value = "Revenue was 100 billion."
         mock_generator_instance.last_token_usage = None
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
         result = pipeline.query("What is the revenue?", config_overrides=None)
 
         assert result["question"] == "What is the revenue?"
@@ -768,7 +768,7 @@ class TestRAGPipeline:
         mock_generator_instance.generate.return_value = "Revenue was 100 billion."
         mock_generator_instance.last_token_usage = None
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
         assert pipeline.reranker is None
 
         with patch("src.pipeline.Reranker") as mock_reranker_cls:
@@ -830,7 +830,7 @@ class TestRAGPipeline:
         mock_generator_instance.generate.return_value = "Revenue was 100 billion."
         mock_generator_instance.last_token_usage = None
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
 
         with patch.object(pipeline, "_get_rewrite_strategy") as mock_get_rw:
             pipeline.query(
@@ -865,7 +865,7 @@ class TestRAGPipeline:
         mock_generator_instance.generate.return_value = "Revenue was 100 billion."
         mock_generator_instance.last_token_usage = None
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
 
         with (
             patch.object(pipeline, "_ensure_bm25_index") as mock_ensure_bm25,
@@ -925,7 +925,7 @@ class TestRAGPipeline:
         mock_generator_instance.generate.return_value = "Revenue was 100 billion."
         mock_generator_instance.last_token_usage = None
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
         original_top_k = pipeline.config["retrieval"]["top_k"]
 
         pipeline.query(
@@ -959,7 +959,7 @@ class TestRAGPipeline:
         mock_generator_instance.generate.return_value = "Revenue was 100 billion."
         mock_generator_instance.last_token_usage = None
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
 
         with (
             patch.object(pipeline, "_ensure_bm25_index") as mock_ensure_bm25,
@@ -1029,7 +1029,7 @@ class TestRAGPipeline:
         mock_generator_instance.generate.return_value = "Revenue was 100 billion."
         mock_generator_instance.last_token_usage = None
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
         assert pipeline.query_rewriter is None
 
         with patch.object(pipeline, "_ensure_query_rewriter") as mock_ensure_rw:
@@ -1064,7 +1064,7 @@ class TestRAGPipeline:
         mock_load_config.return_value = _make_config()
         mock_get_llm_config.return_value = _make_llm_config()
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
 
         mock_chunks_dir = MagicMock()
         mock_chunks_dir.exists.return_value = True
@@ -1100,7 +1100,7 @@ class TestRAGPipeline:
         mock_load_config.return_value = _make_config()
         mock_get_llm_config.return_value = _make_llm_config()
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
         pipeline._chunks_dir = None
 
         with (
@@ -1129,7 +1129,7 @@ class TestRAGPipeline:
         mock_load_config.return_value = _make_config()
         mock_get_llm_config.return_value = _make_llm_config()
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
         assert pipeline.reranker is None
 
         with patch("src.pipeline.Reranker") as mock_reranker_cls:
@@ -1159,7 +1159,7 @@ class TestRAGPipeline:
         mock_load_config.return_value = _make_config()
         mock_get_llm_config.return_value = _make_llm_config()
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
         existing_reranker = MagicMock()
         pipeline.reranker = existing_reranker
 
@@ -1189,7 +1189,7 @@ class TestRAGPipeline:
         mock_load_config.return_value = _make_config()
         mock_get_llm_config.return_value = _make_llm_config()
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
         assert pipeline.query_rewriter is None
 
         with patch("src.pipeline.QueryRewriter") as mock_qr_cls:
@@ -1221,7 +1221,7 @@ class TestRAGPipeline:
         mock_load_config.return_value = _make_config()
         mock_get_llm_config.return_value = _make_llm_config()
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
 
         mock_existing_rw = MagicMock()
         mock_existing_rw.strategy = "hyde"
@@ -1257,7 +1257,7 @@ class TestRAGPipeline:
         mock_load_config.return_value = _make_config()
         mock_get_llm_config.return_value = _make_llm_config()
 
-        pipeline = RAGPipeline(config_path="dummy.yaml")
+        pipeline = RAGPipeline(config="dummy.yaml")
 
         mock_existing_rw = MagicMock()
         mock_existing_rw.strategy = "hyde"

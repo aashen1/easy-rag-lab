@@ -241,7 +241,7 @@ def main() -> None:
 
     if args.build_index or args.rebuild:
         sampling_config = _build_sampling_config(args)
-        pipeline = RAGPipeline(config_path=args.config, llm_preset=args.llm_preset)
+        pipeline = RAGPipeline(config=args.config, llm_preset=args.llm_preset)
         pipeline.build_index(
             rebuild=args.rebuild,
             force_parse=args.force_parse,
@@ -251,7 +251,7 @@ def main() -> None:
 
     if args.meal:
         pipeline = RAGPipeline(
-            config_path=args.config, llm_preset=args.llm_preset, meal_name=args.meal
+            config=args.config, llm_preset=args.llm_preset, meal_name=args.meal
         )
 
         status, issues = meal_manager.check_meal_status(args.meal)
@@ -269,10 +269,10 @@ def main() -> None:
         else:
             _interactive_qa(pipeline, args.meal)
     elif args.interactive:
-        pipeline = RAGPipeline(config_path=args.config, llm_preset=args.llm_preset)
+        pipeline = RAGPipeline(config=args.config, llm_preset=args.llm_preset)
         _interactive_qa(pipeline)
     elif args.query:
-        pipeline = RAGPipeline(config_path=args.config, llm_preset=args.llm_preset)
+        pipeline = RAGPipeline(config=args.config, llm_preset=args.llm_preset)
         result = pipeline.query(args.query)
         _print_query_result(result)
 
