@@ -1,0 +1,130 @@
+# ============================================================================
+# 专题1：分块策略对比实验
+# ============================================================================
+# 核心问题：
+#   1. chunk_size多大最合适？
+#   2. overlap能带来多少提升？
+#   3. 语义分块 vs 固定分块哪个更好？
+#
+# 实验设计：
+#   - 固定其他变量（vector检索，topk=5，无rerank）
+#   - 只改变分块相关参数
+#   - 使用50题中等规模测试集
+#
+# 预期发现：
+#   - chunk_size=512可能是平衡点
+#   - overlap=64可能有边际收益
+#   - 语义分块在推理型问题上可能更好
+# ============================================================================
+
+name: "study_01_chunking_strategy"
+description: "专题1 - 分块策略对比：chunk_size/overlap/semantic"
+
+data:
+  meal: "study_chunking"
+  create_if_missing:
+    sample_ratio: 0.15  # 中等规模
+    seed: 42
+
+test_sets:
+  - name: "chunking_50q"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 50
+      seed: 100
+
+variants:
+  # ===== 基线：标准配置 =====
+  - name: "baseline_512"
+    description: "基线: chunk_size=512, overlap=0"
+    config_overrides: {}
+
+  # ===== chunk_size 对比 =====
+  - name: "small_256"
+    description: "小块: chunk_size=256, overlap=0"
+    config_overrides:
+      chunker:
+        chunk_size: 256
+
+  - name: "medium_768"
+    description: "中块: chunk_size=768, overlap=0"
+    config_overrides:
+      chunker:
+        chunk_size: 768
+
+  - name: "large_1024"
+    description: "大块: chunk_size=1024, overlap=0"
+    config_overrides:
+      chunker:
+        chunk_size: 1024
+
+  # ===== overlap 对比（基于512） =====
+  - name: "overlap_32"
+    description: "小重叠: chunk_size=512, overlap=32"
+    config_overrides:
+      chunker:
+        chunk_overlap: 32
+
+  - name: "overlap_64"
+    description: "中重叠: chunk_size=512, overlap=64"
+    config_overrides:
+      chunker:
+        chunk_overlap: 64
+
+  - name: "overlap_128"
+    description: "大重叠: chunk_size=512, overlap=128"
+    config_overrides:
+      chunker:
+        chunk_overlap: 128
+
+  # ===== 语义分块对比 =====
+  - name: "semantic_30"
+    description: "语义分块(宽松): threshold=0.3, 产生较少断点"
+    config_overrides:
+      chunker:
+        strategy: "semantic"
+        semantic:
+          similarity_threshold: 0.3
+
+  - name: "semantic_50"
+    description: "语义分块(平衡): threshold=0.5"
+    config_overrides:
+      chunker:
+        strategy: "semantic"
+        semantic:
+          similarity_threshold: 0.5
+
+  - name: "semantic_70"
+    description: "语义分块(严格): threshold=0.7, 产生较多断点"
+    config_overrides:
+      chunker:
+        strategy: "semantic"
+        semantic:
+          similarity_threshold: 0.7
+
+  # ===== 组合探索 =====
+  - name: "small_overlap"
+    description: "小块+重叠: chunk_size=256, overlap=64"
+    config_overrides:
+      chunker:
+        chunk_size: 256
+        chunk_overlap: 64
+
+  - name: "large_overlap"
+    description: "大块+重叠: chunk_size=1024, overlap=128"
+    config_overrides:
+      chunker:
+        chunk_size: 1024
+        chunk_overlap: 128
+
+evaluation:
+  backends: ["builtin"]
+  llm_preset: "default"
+  metrics_preset: "extended"  # 获取chunk-level指标
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
+
+llm:
+  question_generation: "default"
+  answering: "default"

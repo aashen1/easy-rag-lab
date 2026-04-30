@@ -1,0 +1,165 @@
+# ============================================================================
+# 专题2：检索方式对比实验
+# ============================================================================
+# 核心问题：
+#   1. 纯向量 vs 纯BM25 vs 混合检索，哪个更好？
+#   2. RRF融合 vs 加权融合，哪个更优？
+#   3. 混合检索的权重如何配置？
+#
+# 实验设计：
+#   - 固定分块参数（fixed/512/o0）
+#   - 只改变检索相关参数
+#   - 使用50题中等规模测试集
+#
+# 预期发现：
+#   - 混合检索应该优于单一检索
+#   - RRF可能比加权融合更稳定
+#   - vector_weight=0.7可能是最佳权重
+# ============================================================================
+
+name: "study_02_retrieval_method"
+description: "专题2 - 检索方式对比：vector/bm25/hybrid"
+
+data:
+  meal: "study_retrieval"
+  create_if_missing:
+    sample_ratio: 0.15
+    seed: 42
+
+test_sets:
+  - name: "retrieval_50q"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 50
+      seed: 200
+
+variants:
+  # ===== 单一检索方式 =====
+  - name: "vector_only"
+    description: "纯向量检索（基线）"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        top_k: 5
+
+  - name: "bm25_only"
+    description: "纯BM25检索"
+    config_overrides:
+      retrieval:
+        method: "bm25"
+        top_k: 5
+
+  # ===== 混合检索：RRF融合 =====
+  - name: "hybrid_rrf_60"
+    description: "混合检索(RRF): rrf_k=60（标准值）"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 5
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 60
+
+  - name: "hybrid_rrf_30"
+    description: "混合检索(RRF): rrf_k=30（更重视排名差异）"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 5
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 30
+
+  - name: "hybrid_rrf_100"
+    description: "混合检索(RRF): rrf_k=100（更平滑）"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 5
+        hybrid:
+          fusion: "rrf"
+          rrf_k: 100
+
+  # ===== 混合检索：加权融合 =====
+  - name: "hybrid_weighted_70_30"
+    description: "混合检索(加权): vector=0.7, bm25=0.3（偏向语义）"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 5
+        hybrid:
+          fusion: "weighted"
+          vector_weight: 0.7
+          bm25_weight: 0.3
+
+  - name: "hybrid_weighted_50_50"
+    description: "混合检索(加权): vector=0.5, bm25=0.5（均衡）"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 5
+        hybrid:
+          fusion: "weighted"
+          vector_weight: 0.5
+          bm25_weight: 0.5
+
+  - name: "hybrid_weighted_30_70"
+    description: "混合检索(加权): vector=0.3, bm25=0.7（偏向关键词）"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 5
+        hybrid:
+          fusion: "weighted"
+          vector_weight: 0.3
+          bm25_weight: 0.7
+
+  # ===== top_k 影响 =====
+  - name: "hybrid_topk_10"
+    description: "混合检索: top_k=10（更大召回）"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 10
+        hybrid:
+          fusion: "rrf"
+
+  - name: "hybrid_topk_3"
+    description: "混合检索: top_k=3（更精准）"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 3
+        hybrid:
+          fusion: "rrf"
+
+  # ===== BM25参数调优 =====
+  - name: "bm25_k1_12_b_75"
+    description: "BM25参数调优: k1=1.2（抑制词频）"
+    config_overrides:
+      retrieval:
+        method: "bm25"
+        bm25:
+          k1: 1.2
+          b: 0.75
+
+  - name: "bm25_k1_20_b_75"
+    description: "BM25参数调优: k1=2.0（放大词频）"
+    config_overrides:
+      retrieval:
+        method: "bm25"
+        bm25:
+          k1: 2.0
+          b: 0.75
+
+evaluation:
+  backends: ["builtin"]
+  llm_preset: "default"
+  metrics_preset: "extended"
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
+
+llm:
+  question_generation: "default"
+  answering: "default"

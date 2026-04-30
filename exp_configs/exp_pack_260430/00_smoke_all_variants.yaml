@@ -1,0 +1,197 @@
+# ============================================================================
+# 冒烟测试：所有变体快速验证
+# ============================================================================
+# 目的：用最小数据量快速验证所有配置的正确性
+# 数据：3题，约1分钟完成
+# 变体：20个，覆盖所有优化维度
+# ============================================================================
+
+name: "smoke_all_variants"
+description: "冒烟测试 - 3题验证所有20个变体配置"
+
+data:
+  meal: "smoke_tiny"
+  create_if_missing:
+    sample_ratio: 0.01  # 最小采样
+    seed: 42
+
+test_sets:
+  - name: "smoke_3q"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 3
+      seed: 42
+
+variants:
+  # ===== 基线 =====
+  - name: "baseline"
+    description: "基线: fixed/512/o0, vector, topk=5"
+    config_overrides: {}
+
+  # ===== 分块策略：chunk_size =====
+  - name: "chunk_256"
+    description: "小块: chunk_size=256"
+    config_overrides:
+      chunker:
+        chunk_size: 256
+
+  - name: "chunk_768"
+    description: "大块: chunk_size=768"
+    config_overrides:
+      chunker:
+        chunk_size: 768
+
+  - name: "chunk_1024"
+    description: "超大块: chunk_size=1024"
+    config_overrides:
+      chunker:
+        chunk_size: 1024
+
+  # ===== 分块策略：overlap =====
+  - name: "overlap_32"
+    description: "小重叠: overlap=32"
+    config_overrides:
+      chunker:
+        chunk_overlap: 32
+
+  - name: "overlap_64"
+    description: "中重叠: overlap=64"
+    config_overrides:
+      chunker:
+        chunk_overlap: 64
+
+  - name: "overlap_128"
+    description: "大重叠: overlap=128"
+    config_overrides:
+      chunker:
+        chunk_overlap: 128
+
+  # ===== 分块策略：semantic =====
+  - name: "semantic_30"
+    description: "语义分块: threshold=0.3"
+    config_overrides:
+      chunker:
+        strategy: "semantic"
+        semantic:
+          similarity_threshold: 0.3
+
+  - name: "semantic_50"
+    description: "语义分块: threshold=0.5"
+    config_overrides:
+      chunker:
+        strategy: "semantic"
+        semantic:
+          similarity_threshold: 0.5
+
+  - name: "semantic_70"
+    description: "语义分块: threshold=0.7"
+    config_overrides:
+      chunker:
+        strategy: "semantic"
+        semantic:
+          similarity_threshold: 0.7
+
+  # ===== 检索方式 =====
+  - name: "bm25"
+    description: "纯BM25检索"
+    config_overrides:
+      retrieval:
+        method: "bm25"
+
+  - name: "hybrid_rrf"
+    description: "混合检索(RRF)"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        hybrid:
+          fusion: "rrf"
+
+  - name: "hybrid_weighted_50"
+    description: "混合检索(加权50-50)"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        hybrid:
+          fusion: "weighted"
+          vector_weight: 0.5
+          bm25_weight: 0.5
+
+  # ===== 重排序 =====
+  - name: "rerank_top3"
+    description: "重排序: top_n=3"
+    config_overrides:
+      retrieval:
+        reranker:
+          enabled: true
+          top_n: 3
+
+  - name: "rerank_top5"
+    description: "重排序: top_n=5"
+    config_overrides:
+      retrieval:
+        top_k: 10
+        reranker:
+          enabled: true
+          top_n: 5
+
+  - name: "hybrid_rerank"
+    description: "混合检索+重排序"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        reranker:
+          enabled: true
+          top_n: 3
+
+  # ===== 查询改写 =====
+  - name: "hyde"
+    description: "HyDE查询改写"
+    config_overrides:
+      retrieval:
+        query_rewrite:
+          enabled: true
+          strategy: "hyde"
+
+  - name: "multi_query_3"
+    description: "Multi-Query(3个子查询)"
+    config_overrides:
+      retrieval:
+        query_rewrite:
+          enabled: true
+          strategy: "multi_query"
+          num_queries: 3
+
+  # ===== 组合优化 =====
+  - name: "combo_medium"
+    description: "中等优化: overlap+hybrid"
+    config_overrides:
+      chunker:
+        chunk_overlap: 64
+      retrieval:
+        method: "hybrid"
+
+  - name: "combo_full"
+    description: "全链路优化: overlap+hybrid+rerank+hyde"
+    config_overrides:
+      chunker:
+        chunk_overlap: 64
+      retrieval:
+        method: "hybrid"
+        reranker:
+          enabled: true
+          top_n: 3
+        query_rewrite:
+          enabled: true
+          strategy: "hyde"
+
+evaluation:
+  backends: ["builtin"]
+  llm_preset: "default"
+  metrics_preset: "core"  # 冒烟测试用核心指标即可
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
+
+llm:
+  question_generation: "default"
+  answering: "default"

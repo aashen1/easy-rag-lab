@@ -1,0 +1,176 @@
+# ============================================================================
+# 专题3：重排序效果验证实验
+# ============================================================================
+# 核心问题：
+#   1. Reranker能带来多少性能提升？
+#   2. top_n参数如何选择？
+#   3. Reranker与不同检索方式的交互效应？
+#
+# 实验设计：
+#   - 对比有无Reranker的效果
+#   - 测试不同top_n值
+#   - 测试Reranker与vector/bm25/hybrid的组合
+#   - 使用50题中等规模测试集
+#
+# 预期发现：
+#   - Reranker应该能显著提升MRR
+#   - top_n=3可能是最佳值
+#   - 在混合检索上效果可能更好
+# ============================================================================
+
+name: "study_03_reranker_effect"
+description: "专题3 - 重排序效果验证：Reranker的增量价值"
+
+data:
+  meal: "study_reranker"
+  create_if_missing:
+    sample_ratio: 0.15
+    seed: 42
+
+test_sets:
+  - name: "reranker_50q"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 50
+      seed: 300
+
+variants:
+  # ===== 基线：无重排序 =====
+  - name: "no_rerank_vector"
+    description: "基线: 纯向量检索，无重排序"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        top_k: 5
+
+  - name: "no_rerank_bm25"
+    description: "基线: 纯BM25检索，无重排序"
+    config_overrides:
+      retrieval:
+        method: "bm25"
+        top_k: 5
+
+  - name: "no_rerank_hybrid"
+    description: "基线: 混合检索，无重排序"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 5
+
+  # ===== 重排序：top_n参数 =====
+  - name: "rerank_top3"
+    description: "重排序: top_k=10, top_n=3（精选）"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        top_k: 10
+        reranker:
+          enabled: true
+          top_n: 3
+
+  - name: "rerank_top5"
+    description: "重排序: top_k=10, top_n=5（中等）"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        top_k: 10
+        reranker:
+          enabled: true
+          top_n: 5
+
+  - name: "rerank_top7"
+    description: "重排序: top_k=10, top_n=7（宽松）"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        top_k: 10
+        reranker:
+          enabled: true
+          top_n: 7
+
+  # ===== 重排序：与检索方式组合 =====
+  - name: "vector_rerank"
+    description: "向量检索+重排序"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        top_k: 10
+        reranker:
+          enabled: true
+          top_n: 3
+
+  - name: "bm25_rerank"
+    description: "BM25检索+重排序"
+    config_overrides:
+      retrieval:
+        method: "bm25"
+        top_k: 10
+        reranker:
+          enabled: true
+          top_n: 3
+
+  - name: "hybrid_rerank"
+    description: "混合检索+重排序（推荐组合）"
+    config_overrides:
+      retrieval:
+        method: "hybrid"
+        top_k: 10
+        reranker:
+          enabled: true
+          top_n: 3
+
+  # ===== 重排序：候选集大小影响 =====
+  - name: "rerank_candidate_5"
+    description: "重排序: top_k=5, top_n=3（小候选集）"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        top_k: 5
+        reranker:
+          enabled: true
+          top_n: 3
+
+  - name: "rerank_candidate_15"
+    description: "重排序: top_k=15, top_n=3（大候选集）"
+    config_overrides:
+      retrieval:
+        method: "vector"
+        top_k: 15
+        reranker:
+          enabled: true
+          top_n: 3
+
+  # ===== 重排序：与分块策略组合 =====
+  - name: "small_chunk_rerank"
+    description: "小块(256)+重排序"
+    config_overrides:
+      chunker:
+        chunk_size: 256
+      retrieval:
+        top_k: 10
+        reranker:
+          enabled: true
+          top_n: 3
+
+  - name: "large_chunk_rerank"
+    description: "大块(1024)+重排序"
+    config_overrides:
+      chunker:
+        chunk_size: 1024
+      retrieval:
+        top_k: 10
+        reranker:
+          enabled: true
+          top_n: 3
+
+evaluation:
+  backends: ["builtin"]
+  llm_preset: "default"
+  metrics_preset: "extended"
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
+
+llm:
+  question_generation: "default"
+  answering: "default"
