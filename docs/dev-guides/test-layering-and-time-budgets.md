@@ -118,16 +118,21 @@
 # pyproject.toml
 [tool.pytest.ini_options]
 markers = [
-    "integration: marks tests that call external APIs",
-    "slow: marks tests that take > 1s (IO, file parsing, etc.)",
+    "unit: marks tests as pure unit tests (no external dependencies)",
+    "integration: marks tests that touch external systems (Qdrant, LLM API, real PDF files)",
+    "slow: marks tests as slow (heavy imports like torch/ragas, or execution time >5s)",
 ]
 ```
 
 然后在测试中使用：
 
 ```python
+@pytest.mark.unit
+def test_parse_config():
+    ...
+
 @pytest.mark.slow
-def test_parse_large_pdf():
+def test_ragas_evaluator():
     ...
 
 @pytest.mark.integration
@@ -139,13 +144,13 @@ def test_query_real_llm():
 
 ```bash
 # Commit 级：只跑纯单元测试
-pytest tests/ -m "not integration and not slow"
+pixi run test-unit    # pytest tests/ -m "unit" -n auto
 
-# Push/PR 级：跑单元 + 轻量集成
-pytest tests/ -m "not integration"
+# Push/PR 级：跑单元 + 轻量集成（排除 slow 和 integration）
+pixi run test         # pytest tests/ -m "not integration and not slow" -n auto
 
 # Merge/CI 级：全量
-pytest tests/
+pixi run test-all     # pytest tests/ -n auto
 ```
 
 ### 5.2 耗时自动分类
@@ -184,26 +189,34 @@ pytest tests/ -m "not integration" -n auto
 | 阶段 | 实际内容 | 耗时 | 评价 |
 |------|---------|------|------|
 | pre-commit | ruff lint + format + 通用检查 | ~3-5s | ✅ 合理 |
-| post-merge | 全量 1338 个单元测试 | ~30s | ⚠️ 阶段正确但缺少中间层 |
+| 开发中 | `pixi run test-unit`（743 个 unit 测试，xdist 并行） | ~10s | ✅ 秒级反馈 |
+| post-merge | `pixi run test`（1735 个测试，排除 slow/integration，xdist 并行） | ~35s | ✅ 合理 |
+| 发版前 | `pixi run test-all`（全量 1771 个测试，xdist 并行） | ~60s | ✅ 可接受 |
 
-当前缺少 **commit 级的快速测试层** 和 **push/PR 级的中等测试层**。
+三层测试命令已实施，post-merge hook 使用 `pixi run test`（自动排除 integration 和 slow）。
 
-### 6.2 改进路线
+### 6.2 已实施的改进
 
 ```
-现状                              目标
+改进前                              改进后
 ──────────────────────────────────────────────────────────
-pre-commit: lint/format           pre-commit: lint/format + 纯单元测试 (< 10s)
-                                  pre-push:   单元 + 轻量集成 (< 3min)
-post-merge: 全量测试 (~30s)       post-merge: 全量测试 + xdist 并行 (~10s)
+pixi run test: 全量 ~60s            pixi run test-unit: ~10s（只跑 unit marker）
+                                    pixi run test: ~35s（排除 slow + integration）
+                                    pixi run test-all: ~60s（全量 + xdist 并行）
 ```
 
-具体步骤：
+已完成的步骤：
 
-1. **添加 `slow` marker**：给耗时 > 1s 的测试标记 `@pytest.mark.slow`
-2. **新增 `test-fast` 任务**：`pytest tests/ -m "not integration and not slow"`
-3. **pre-commit 加入快速测试**：`entry: pixi run test-fast`
-4. **post-merge 加 xdist 并行**：`pytest tests/ -m "not integration" -n auto`
+1. ✅ **统一 pytest 配置**：合并 pytest.ini 到 pyproject.toml，补全 unit/integration/slow 三个 marker
+2. ✅ **添加 `slow` marker**：给 ragas/torch 重导入测试标记 `@pytest.mark.slow`
+3. ✅ **新增 `test-unit` 任务**：`pixi run test-unit` → 只跑 unit marker，~10s
+4. ✅ **更新 `test` 任务**：排除 integration 和 slow，~35s
+5. ✅ **添加 pytest-xdist 并行**：所有任务默认 `-n auto`
+
+### 6.3 未来可选改进
+
+- **pre-commit 加入快速测试**：在 pre-commit 钩子中加入 `pixi run test-unit`（需评估是否影响 commit 体验）
+- **pre-push 钩子**：push 前自动跑 `pixi run test`
 
 ---
 

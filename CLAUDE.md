@@ -16,6 +16,16 @@
 
 Red/Green TDD 开发，每步附带 pytest 测试。测试文件与源文件对应（如 `src/parser.py` → `tests/test_parser.py`）。
 
+三层测试命令（均使用 pytest-xdist 并行）：
+
+| 命令 | 用途 | 预期耗时 |
+|------|------|---------|
+| `pixi run test-unit` | 只跑 `@pytest.mark.unit`，开发中秒级反馈 | ~10s |
+| `pixi run test` | 排除 `integration` 和 `slow`，post-merge 验证 | ~35s |
+| `pixi run test-all` | 全量测试，发版前验证 | ~60s |
+
+Marker 说明：`unit`（纯单元测试）、`integration`（外部系统）、`slow`（重导入如 ragas/torch）。详见 [docs/dev-guides/testing.md](docs/dev-guides/testing.md)。
+
 ### 代码质量
 
 - **日志**：使用 `loguru`，禁止 `print`

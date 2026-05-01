@@ -192,7 +192,7 @@ post-merge 钩子自动触发
 
 | 钩子 | 做什么 | 为什么需要 |
 |------|--------|-----------|
-| post-merge-test | 跑 pytest 单元测试（跳过 integration 测试） | 确认合并后的代码整体没闯祸 |
+| post-merge-test | 跑 pytest 标准测试（跳过 integration 和 slow 测试） | 确认合并后的代码整体没闯祸 |
 
 ### 日常使用
 
@@ -203,10 +203,13 @@ pixi run pre-commit-install
 # 手动运行所有钩子（不 commit 也能检查）
 pixi run pre-commit-run
 
-# 手动跑单元测试（跳过需要外部 API 的 integration 测试）
+# 手动跑纯单元测试（秒级反馈，开发中频繁使用）
+pixi run test-unit
+
+# 手动跑标准测试（跳过 integration 和 slow）
 pixi run test
 
-# 手动跑全部测试（包括 integration）
+# 手动跑全部测试（包括 integration 和 slow）
 pixi run test-all
 
 # 紧急跳过钩子（只在紧急情况使用！）

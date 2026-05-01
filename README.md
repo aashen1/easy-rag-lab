@@ -97,7 +97,10 @@ pixi run python main.py --build-index --sample-count 5
 # 运行实验
 pixi run exp baseline
 
-# 运行单元测试
+# 运行纯单元测试（秒级反馈）
+pixi run test-unit
+
+# 运行标准测试（排除 integration 和 slow）
 pixi run test
 
 # 代码检查与格式化

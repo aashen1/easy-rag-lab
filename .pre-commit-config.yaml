@@ -127,8 +127,9 @@ repos:
   # - pass_filenames: false → pytest 不需要接收文件名参数
   #
   # 【手动运行测试】
-  #   pixi run test          → 跑单元测试（跳过 integration）
-  #   pixi run test-all      → 跑全部测试（包括 integration）
+  #   pixi run test-unit    → 纯单元测试（秒级反馈，开发中频繁使用）
+  #   pixi run test          → 标准测试（跳过 integration 和 slow，~35s）
+  #   pixi run test-all      → 全量测试（包括 integration 和 slow，~60s）
   # ---------------------------------------------------------------------------
   - repo: local
     hooks:
