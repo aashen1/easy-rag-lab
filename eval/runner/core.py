@@ -36,6 +36,24 @@ from src.token_tracker import DetailedTokenUsage, TokenTracker
 from src.utils import get_llm_config, load_config, sanitize_name, setup_logger
 
 
+def _add_experiment_log_handler(exp_dir: Path) -> int:
+    """Add experiment log handler and return handler ID.
+
+    Args:
+        exp_dir: Path to the experiment directory.
+
+    Returns:
+        Handler ID for later removal.
+    """
+    experiment_log_path = exp_dir / "experiment.log"
+    return logger.add(
+        str(experiment_log_path),
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
+        level="INFO",
+        encoding="utf-8",
+    )
+
+
 def run_variant_evaluation(
     system_config: dict[str, Any],
     exp_config: ExperimentConfig,
@@ -399,13 +417,7 @@ def run_experiment(
     else:
         exp_dir = exp_manager.create_experiment_dir(exp_config)
 
-    experiment_log_path = exp_dir / "experiment.log"
-    logger.add(
-        str(experiment_log_path),
-        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
-        level="INFO",
-        encoding="utf-8",
-    )
+    exp_log_handler_id = _add_experiment_log_handler(exp_dir)
 
     logger.info(f"Experiment directory: {exp_dir}")
 
@@ -841,6 +853,8 @@ def run_experiment(
         exp_manager.update_manifest_status(exp_dir, "failed")
         logger.error(f"Experiment failed: {str(e)}")
         raise
+    finally:
+        logger.remove(exp_log_handler_id)
 
 
 def list_experiments(system_config_path: str = "config.yaml") -> None:
