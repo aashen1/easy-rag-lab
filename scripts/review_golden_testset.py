@@ -1,7 +1,10 @@
-"""Interactive review tool for golden test set questions.
+"""Interactive review tool for test set questions.
+
+DEPRECATED: Use `pixi run testset review` instead.
+This script will be removed in a future version.
 
 Provides a CLI-based interactive workflow for reviewing and editing
-golden test set questions one at a time. Supports approval, revision,
+test set questions one at a time. Supports approval, revision,
 rejection, and skip operations with automatic progress saving.
 
 Enhanced features:

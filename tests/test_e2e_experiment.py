@@ -8,7 +8,6 @@ from src.test_generation.validators import (
     calculate_quality_metrics,
     validate_question_quality,
 )
-from src.test_generator import TestSetGenerator
 
 
 @pytest.fixture
@@ -971,11 +970,6 @@ class TestDocumentLevelQuestionGenerationIntegration:
 
     @pytest.mark.unit
     def test_question_type_distribution_integration(self):
-        config = {
-            "test_generation": {"max_retries": 3},
-        }
-        generator = TestSetGenerator(config)
-
         distribution = {
             "single_fact": 0.30,
             "multi_fact": 0.25,
@@ -985,7 +979,9 @@ class TestDocumentLevelQuestionGenerationIntegration:
             "irrelevant": 0.05,
         }
 
-        result = generator._calculate_question_distribution(100, distribution)
+        from src.test_generation.distribution import calculate_question_distribution
+
+        result = calculate_question_distribution(100, distribution)
 
         total = sum(result.values())
         assert total == 100

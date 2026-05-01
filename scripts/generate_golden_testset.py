@@ -1,5 +1,8 @@
 """Golden test set generator CLI for RAG evaluation.
 
+DEPRECATED: Use `pixi run testset generate` instead.
+This script will be removed in a future version.
+
 Delegates to TestSetGenerator.generate_golden_testset().
 
 Usage:
