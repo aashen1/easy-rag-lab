@@ -1,6 +1,5 @@
 import hashlib
 import json
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -417,14 +416,14 @@ class TestLocateAnswerChunks:
 
         assert len(result) > 0
 
-    def test_locate_returns_empty_when_no_chunks_dir(self):
+    def test_locate_returns_empty_when_no_chunks_dir(self, tmp_path):
         with pytest.warns(
             DeprecationWarning, match="_locate_answer_chunks is deprecated"
         ):
             result = locate_answer_chunks(
                 answer="some answer",
                 source_path="reports/doc.md",
-                chunks_dir=Path(),
+                chunks_dir=tmp_path / "nonexistent_chunks_dir",
             )
 
         assert result == []
