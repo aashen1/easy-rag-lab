@@ -2,7 +2,6 @@ import random
 from dataclasses import dataclass
 from pathlib import Path
 
-import fitz
 from loguru import logger
 
 from src.exceptions import ConfigurationError, ParsingError
@@ -63,6 +62,8 @@ def count_pdf_pages(pdf_path: Path) -> int:
         Exception: If the PDF cannot be opened or read.
     """
     try:
+        import fitz
+
         with fitz.open(str(pdf_path)) as doc:
             return len(doc)
     except Exception as e:

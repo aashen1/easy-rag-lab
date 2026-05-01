@@ -61,22 +61,22 @@ class TestSamplingConfig:
 
 
 class TestCountPdfPages:
-    @patch("src.sampler.fitz")
-    def test_count_pages_success(self, mock_fitz):
+    @patch("fitz.open")
+    def test_count_pages_success(self, mock_fitz_open):
         mock_doc = MagicMock()
         mock_doc.__len__ = MagicMock(return_value=42)
         mock_doc.__enter__ = MagicMock(return_value=mock_doc)
         mock_doc.__exit__ = MagicMock(return_value=False)
-        mock_fitz.open.return_value = mock_doc
+        mock_fitz_open.return_value = mock_doc
 
         result = count_pdf_pages(Path("test.pdf"))
         assert result == 42
         mock_doc.__enter__.assert_called_once()
         mock_doc.__exit__.assert_called_once()
 
-    @patch("src.sampler.fitz")
-    def test_count_pages_failure(self, mock_fitz):
-        mock_fitz.open.side_effect = Exception("Cannot open file")
+    @patch("fitz.open")
+    def test_count_pages_failure(self, mock_fitz_open):
+        mock_fitz_open.side_effect = Exception("Cannot open file")
 
         with pytest.raises(ParsingError, match="Failed to count pages"):
             count_pdf_pages(Path("bad.pdf"))
