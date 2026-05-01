@@ -172,7 +172,13 @@ def render_pdf_preview() -> None:
 
 def _do_save_case(
     case_type: str, msg: dict[str, Any], meal_config: MealConfig | None
-) -> None:
+) -> bool:
+    saved = msg.get("saved_case_type")
+    if saved == case_type:
+        label = "Badcase" if case_type == CASE_TYPE_BAD else "Goodcase"
+        st.toast(f"已标记为 {label}，无需重复保存", icon="⚠️")
+        return False
+
     result = msg.get("result", {})
     config_overrides = msg.get("config_overrides", {})
     meal_name = msg.get("meal_name")
@@ -188,14 +194,17 @@ def _do_save_case(
             meal_config=meal_config,
             meal_name=meal_name,
         )
+        msg["saved_case_type"] = case_type
         label = "Badcase" if case_type == CASE_TYPE_BAD else "Goodcase"
         st.toast(
             f"{label} 已保存: {case_dir.name}",
             icon="🚨" if case_type == CASE_TYPE_BAD else "✅",
         )
+        return True
     except Exception as e:
         logger.error(f"Failed to save case: {e}")
         st.error(f"保存失败: {e}")
+        return False
 
 
 def _display_result(
@@ -257,22 +266,31 @@ def _display_result(
         col3.metric("总计", f"{tu['total_tokens']:,}")
 
     st.markdown("---")
+    saved_case_type = (
+        msg.get("saved_case_type")
+        if (msg := st.session_state.messages[msg_index])
+        else None
+    )
     col_bad, col_good = st.columns(2)
     with col_bad:
+        bad_label = "🚨 Badcase ✓" if saved_case_type == CASE_TYPE_BAD else "🚨 Badcase"
         if st.button(
-            "🚨 Badcase",
+            bad_label,
             key=f"badcase_{msg_index}",
             help="标记此回答为坏例，完整落盘以便复现",
+            disabled=saved_case_type == CASE_TYPE_BAD,
         ):
-            msg = st.session_state.messages[msg_index]
             _do_save_case(CASE_TYPE_BAD, msg, meal_config)
     with col_good:
+        good_label = (
+            "✅ Goodcase ✓" if saved_case_type == CASE_TYPE_GOOD else "✅ Goodcase"
+        )
         if st.button(
-            "✅ Goodcase",
+            good_label,
             key=f"goodcase_{msg_index}",
             help="标记此回答为好例，完整落盘用于回归测试",
+            disabled=saved_case_type == CASE_TYPE_GOOD,
         ):
-            msg = st.session_state.messages[msg_index]
             _do_save_case(CASE_TYPE_GOOD, msg, meal_config)
 
 
