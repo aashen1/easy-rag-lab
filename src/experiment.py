@@ -697,6 +697,8 @@ class ExperimentManager:
             "completed_variants": [],
             "variant_config_hashes": {},
             "test_sets": test_set_strategies,
+            "reuse_mode": config.reuse.mode if config.reuse.is_enabled() else None,
+            "reuse_history": [],
         }
 
     def load_experiment_result(self, exp_dir: Path) -> ExperimentResult:

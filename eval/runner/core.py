@@ -28,6 +28,11 @@ from src.experiment import (
     load_experiment_config,
     merge_config,
 )
+from src.experiment_reuse import (
+    CopyMigrateHandler,
+    InPlaceReuseHandler,
+    ReportReuseConfig,
+)
 from src.generator import Generator
 from src.hybrid_retriever import HybridRetriever
 from src.meal import compute_variant_config_hash, create_artifact_cache
@@ -360,6 +365,7 @@ def run_experiment(
     force_rerun: bool = False,
     force_variant: list[str] | None = None,
     resume_dir: str | None = None,
+    reuse_config: ReportReuseConfig | None = None,
 ) -> dict[str, Any]:
     """
     Execute complete experiment workflow.
@@ -377,6 +383,11 @@ def run_experiment(
     experiment directory.  When provided, the existing directory is reused
     instead of creating a new one, and the manifest records the resume event.
 
+    Use ``reuse_config`` to enable experiment report reuse.  Two modes are
+    supported: "in_place" (append variants to an existing experiment
+    directory) and "copy_migrate" (copy an existing experiment to a new
+    directory and add variants there).
+
     Args:
         config_path: Path to experiment configuration YAML file.
         skip_preprocessing: If True, skip meal and test set creation if missing.
@@ -384,6 +395,7 @@ def run_experiment(
         system_config_path: Path to system configuration file.
         force_rerun: If True, ignore checkpoints and re-run all variants.
         resume_dir: If provided, resume from this existing experiment directory.
+        reuse_config: If provided, enable experiment report reuse.
 
     Returns:
         Dictionary containing complete experiment results.
@@ -405,6 +417,15 @@ def run_experiment(
     setup_logger(system_config)
 
     exp_manager = ExperimentManager(system_config)
+
+    # Resolve reuse settings: CLI args take precedence over YAML config
+    effective_reuse = reuse_config or exp_config.reuse
+    if reuse_config and reuse_config.is_enabled():
+        effective_reuse = reuse_config
+        logger.info(f"Reuse mode from CLI: {effective_reuse.mode}")
+    elif exp_config.reuse.is_enabled():
+        effective_reuse = exp_config.reuse
+        logger.info(f"Reuse mode from YAML config: {effective_reuse.mode}")
 
     # Resolve resume settings: CLI args take precedence over YAML config
     effective_resume_dir = resume_dir
@@ -448,6 +469,115 @@ def run_experiment(
             )
         logger.info(f"Resuming experiment from existing directory: {exp_dir}")
         exp_manager.mark_resumed(exp_dir)
+    elif effective_reuse.is_in_place():
+        target_path = Path(effective_reuse.target_dir)
+        if not target_path.is_absolute():
+            exp_reports_dir = Path(
+                system_config.get("experiments", {}).get("dir", "data/exp_reports")
+            )
+            candidate = exp_reports_dir / effective_reuse.target_dir
+            if candidate.exists():
+                target_path = candidate
+            else:
+                candidate = Path(effective_reuse.target_dir)
+                if candidate.exists():
+                    target_path = candidate
+
+        in_place_handler = InPlaceReuseHandler(
+            target_dir=target_path,
+            backup_before_append=effective_reuse.backup_before_append,
+        )
+        target_manifest = in_place_handler.validate_target_dir()
+
+        backup_snapshot_path = None
+        if effective_reuse.backup_before_append:
+            snapshot = in_place_handler.create_full_snapshot()
+            if snapshot:
+                backup_snapshot_path = str(snapshot)
+
+        stored_hashes = exp_manager.get_variant_config_hashes(target_path)
+        incremental_plan = in_place_handler.compute_incremental_updates(
+            new_variants=exp_config.variants,
+            manifest=target_manifest,
+            stored_hashes=stored_hashes,
+        )
+
+        if incremental_plan.has_conflicts:
+            conflicting = [
+                v.get("name", "unnamed") for v in incremental_plan.to_confirm
+            ]
+            logger.warning(
+                f"Conflicting variants detected: {conflicting}. "
+                f"Use --force-variant to override, or remove conflicting variants from config."
+            )
+            for v in incremental_plan.to_confirm:
+                vname = v.get("name", "unnamed")
+                logger.warning(
+                    f"  Variant '{vname}' exists with different config — will be re-run"
+                )
+            effective_force_variant = list(
+                set((effective_force_variant or []) + conflicting)
+            )
+
+        exp_dir = target_path
+        logger.info(f"In-place reuse mode: appending to {exp_dir}")
+
+        in_place_handler.record_reuse_history(
+            action="in_place_start",
+            backup_snapshot=backup_snapshot_path,
+            details={
+                "new_variants": [
+                    v.get("name", "unnamed") for v in incremental_plan.to_run
+                ],
+                "reuse_variants": [
+                    v.get("name", "unnamed") for v in incremental_plan.to_reuse
+                ],
+                "conflict_variants": [
+                    v.get("name", "unnamed") for v in incremental_plan.to_confirm
+                ],
+            },
+        )
+
+        for v in incremental_plan.to_run:
+            in_place_handler.append_variant_to_manifest(v.get("name", "unnamed"))
+    elif effective_reuse.is_copy_migrate():
+        source_path = Path(effective_reuse.source_dir)
+        if not source_path.is_absolute():
+            exp_reports_dir = Path(
+                system_config.get("experiments", {}).get("dir", "data/exp_reports")
+            )
+            candidate = exp_reports_dir / effective_reuse.source_dir
+            if candidate.exists():
+                source_path = candidate
+            else:
+                candidate = Path(effective_reuse.source_dir)
+                if candidate.exists():
+                    source_path = candidate
+
+        migrate_handler = CopyMigrateHandler(
+            source_dir=source_path,
+            exp_dir=Path("placeholder"),
+        )
+
+        source_manifest = migrate_handler.validate_source_dir()
+        source_exp_id = source_manifest.get("experiment_id", source_path.name)
+
+        new_exp_dir = exp_manager.create_experiment_dir(exp_config)
+        migrate_handler = CopyMigrateHandler(
+            source_dir=source_path,
+            exp_dir=new_exp_dir,
+        )
+
+        migrate_handler.copy_experiment()
+
+        new_exp_id = new_exp_dir.name
+        migrate_handler.update_identifiers(new_exp_id, source_exp_id)
+        migrate_handler.verify_migration()
+
+        exp_dir = new_exp_dir
+        logger.info(
+            f"Copy-migrate reuse mode: migrated {source_exp_id} -> {new_exp_id}"
+        )
     else:
         exp_dir = exp_manager.create_experiment_dir(exp_config)
 
@@ -566,13 +696,19 @@ def run_experiment(
             "environment": collect_environment_info(),
         }
 
-        if not effective_resume_dir:
+        if not effective_resume_dir and not effective_reuse.is_enabled():
             exp_manager.save_snapshots(
                 exp_dir=exp_dir,
                 config=exp_config,
                 meal_snapshot=meal_snapshot,
                 test_set_snapshots=test_set_snapshots,
                 config_snapshot=config_snapshot,
+            )
+        elif effective_reuse.is_in_place():
+            logger.info("In-place reuse: skipping snapshot save (already exists)")
+        elif effective_reuse.is_copy_migrate():
+            logger.info(
+                "Copy-migrate reuse: skipping snapshot save (migrated from source)"
             )
         else:
             logger.info("Resuming: skipping snapshot save (already exists)")
