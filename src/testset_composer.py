@@ -7,6 +7,8 @@ from loguru import logger
 
 
 class TestSetComposer:
+    __test__ = False
+
     def __init__(self, manager=None, config: dict[str, Any] | None = None) -> None:
         self.manager = manager
         self.config = config or {}
