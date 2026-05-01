@@ -508,30 +508,30 @@ def render_qa_demo():
 </style>
 <div id="st-scroll-nav" class="nav-bottom">↓</div>
 <script>
-  const doc = document;
-  const btn = doc.getElementById('st-scroll-nav');
-  if (!btn) return;
-  const main = doc.querySelector('.main') || doc.querySelector('[data-testid="stMainBlockContainer"]');
-  const chatInput = doc.querySelector('[data-testid="stChatInput"]');
-  function isNearBottom() {
-    return main && (main.scrollHeight - main.scrollTop - main.clientHeight < 80);
-  }
-  function updateBtn() {
-    if (isNearBottom()) {
-      btn.className = 'nav-top'; btn.textContent = '↑';
-      btn.onclick = () => main.scrollTo({top:0, behavior:'smooth'});
-    } else {
-      btn.className = 'nav-bottom'; btn.textContent = '↓';
-      btn.onclick = () => {
-        const target = chatInput || main;
-        target.scrollIntoView({behavior:'smooth', block:'end'});
-      };
+  const btn = document.getElementById('st-scroll-nav');
+  if (btn) {
+    const chatInput = document.querySelector('[data-testid="stChatInput"]');
+    function isNearBottom() {
+      return (window.innerHeight + window.scrollY) >= (document.body.scrollHeight - 80);
     }
+    function updateBtn() {
+      if (isNearBottom()) {
+        btn.className = 'nav-top'; btn.textContent = '↑';
+        btn.onclick = () => window.scrollTo({top:0, behavior:'smooth'});
+      } else {
+        btn.className = 'nav-bottom'; btn.textContent = '↓';
+        btn.onclick = () => {
+          if (chatInput) { chatInput.scrollIntoView({behavior:'smooth', block:'end'}); }
+          else { window.scrollTo({top:document.body.scrollHeight, behavior:'smooth'}); }
+        };
+      }
+    }
+    window.addEventListener('scroll', updateBtn);
+    updateBtn();
   }
-  if (main) main.addEventListener('scroll', updateBtn);
-  updateBtn();
 </script>
-            """
+            """,
+            unsafe_allow_javascript=True,
         )
 
     question = st.chat_input(
