@@ -38,6 +38,10 @@ from eval.runner import (  # noqa: E402
     show_experiment_info,
     verify_experiment_assets,
 )
+from src.experiment_reuse import (  # noqa: E402
+    InPlaceReuseHandler,
+    ReportReuseConfig,
+)
 
 
 def main():
@@ -69,6 +73,18 @@ Examples:
 
   # Reproduce experiment without hash verification
   pixi run python eval/run_experiment.py --reproduce data/exp_reports/exp_20250416_120000_baseline --skip-verification
+
+  # In-place reuse: append new variants to existing experiment
+  pixi run python eval/run_experiment.py --config exp.yaml --reuse in-place --target-dir data/exp_reports/exp_20260501_120000
+
+  # Copy-migrate reuse: copy existing experiment and add variants
+  pixi run python eval/run_experiment.py --config exp.yaml --reuse copy-migrate --source-dir data/exp_reports/exp_20260501_120000
+
+  # List backup snapshots for an experiment
+  pixi run python eval/run_experiment.py --list-backups exp_20260501_120000
+
+  # Restore from a backup snapshot
+  pixi run python eval/run_experiment.py --restore-backup exp_20260501_120000 --snapshot 20260502_140000
         """,
     )
 
@@ -161,6 +177,49 @@ Examples:
         metavar="PATH",
         help="Path to save the comparison report (implies --save-report)",
     )
+    parser.add_argument(
+        "--reuse",
+        type=str,
+        choices=["in-place", "copy-migrate"],
+        help="Experiment report reuse mode: 'in-place' appends to an existing "
+        "experiment directory, 'copy-migrate' copies an existing experiment "
+        "to a new directory",
+    )
+    parser.add_argument(
+        "--target-dir",
+        type=str,
+        metavar="PATH",
+        help="Target experiment directory for in-place reuse mode",
+    )
+    parser.add_argument(
+        "--source-dir",
+        type=str,
+        metavar="PATH",
+        help="Source experiment directory for copy-migrate reuse mode",
+    )
+    parser.add_argument(
+        "--no-backup",
+        action="store_true",
+        help="Disable backup snapshot before appending (in-place mode only)",
+    )
+    parser.add_argument(
+        "--list-backups",
+        type=str,
+        metavar="EXP_ID",
+        help="List all backup snapshots for an experiment",
+    )
+    parser.add_argument(
+        "--restore-backup",
+        type=str,
+        metavar="EXP_ID",
+        help="Restore experiment directory from a backup snapshot",
+    )
+    parser.add_argument(
+        "--snapshot",
+        type=str,
+        metavar="TIMESTAMP",
+        help="Backup snapshot timestamp to restore (used with --restore-backup)",
+    )
 
     args = parser.parse_args()
 
@@ -168,6 +227,10 @@ Examples:
         list_experiments(args.system_config)
     elif args.info:
         show_experiment_info(args.info, args.system_config)
+    elif args.list_backups:
+        _handle_list_backups(args)
+    elif args.restore_backup:
+        _handle_restore_backup(args)
     elif args.compare:
         save_report = args.save_report or args.report_path is not None
         compare_experiments(
@@ -195,6 +258,7 @@ Examples:
             print(f"\nError: {str(e)}")
             sys.exit(1)
     elif args.config:
+        reuse_config = _build_reuse_config(args)
         result = run_experiment(
             config_path=args.config,
             skip_preprocessing=args.skip_preprocessing,
@@ -203,6 +267,7 @@ Examples:
             force_rerun=args.force_rerun,
             force_variant=args.force_variant,
             resume_dir=args.resume,
+            reuse_config=reuse_config,
         )
         print(f"\nExperiment completed: {result['experiment_id']}")
         print(f"Results saved to: {result['exp_dir']}")
@@ -213,3 +278,104 @@ Examples:
 
 if __name__ == "__main__":
     main()
+
+
+def _build_reuse_config(args: argparse.Namespace) -> ReportReuseConfig | None:
+    """Build a ReportReuseConfig from CLI arguments.
+
+    Args:
+        args: Parsed CLI arguments.
+
+    Returns:
+        ReportReuseConfig if reuse mode is specified, None otherwise.
+    """
+    if not args.reuse:
+        return None
+
+    mode = args.reuse.replace("-", "_")
+    return ReportReuseConfig(
+        mode=mode,
+        target_dir=args.target_dir,
+        source_dir=args.source_dir,
+        backup_before_append=not args.no_backup,
+    )
+
+
+def _handle_list_backups(args: argparse.Namespace) -> None:
+    """Handle --list-backups CLI command.
+
+    Args:
+        args: Parsed CLI arguments.
+    """
+    from src.utils import load_config
+
+    system_config = load_config(args.system_config)
+    exp_dir = Path(system_config.get("experiments", {}).get("dir", "data/exp_reports"))
+    target_dir = exp_dir / args.list_backups
+
+    if not target_dir.exists():
+        candidate = Path(args.list_backups)
+        if candidate.exists():
+            target_dir = candidate
+        else:
+            print(f"Experiment directory not found: {args.list_backups}")
+            sys.exit(1)
+
+    handler = InPlaceReuseHandler(target_dir=target_dir)
+    snapshots = handler.list_snapshots()
+
+    if not snapshots:
+        print(f"No backup snapshots found for: {target_dir.name}")
+        return
+
+    print(f"\nBackup snapshots for {target_dir.name}:")
+    print("=" * 60)
+    for snap in snapshots:
+        print(f"  Timestamp: {snap['timestamp']}")
+        print(f"  Path:      {snap['path']}")
+        print(f"  Created:   {snap['created_at']}")
+        print()
+    print("=" * 60)
+
+
+def _handle_restore_backup(args: argparse.Namespace) -> None:
+    """Handle --restore-backup CLI command.
+
+    Args:
+        args: Parsed CLI arguments.
+    """
+    from src.utils import load_config
+
+    if not args.snapshot:
+        print("Error: --snapshot is required when using --restore-backup")
+        sys.exit(1)
+
+    system_config = load_config(args.system_config)
+    exp_dir = Path(system_config.get("experiments", {}).get("dir", "data/exp_reports"))
+    target_dir = exp_dir / args.restore_backup
+
+    if not target_dir.exists():
+        candidate = Path(args.restore_backup)
+        if candidate.exists():
+            target_dir = candidate
+        else:
+            print(f"Experiment directory not found: {args.restore_backup}")
+            sys.exit(1)
+
+    handler = InPlaceReuseHandler(target_dir=target_dir)
+
+    print(f"Restoring experiment from snapshot: {args.snapshot}")
+    print(f"Target directory: {target_dir}")
+    print("\nWARNING: This will overwrite current experiment data!")
+
+    try:
+        confirm = input("Proceed? [y/N]: ").strip().lower()
+        if confirm != "y":
+            print("Restore cancelled.")
+            return
+
+        handler.restore_snapshot(args.snapshot)
+        print(f"\nExperiment restored successfully from snapshot: {args.snapshot}")
+    except Exception as e:
+        print(f"\nError: {str(e)}")
+        sys.exit(1)
