@@ -22,6 +22,9 @@ cmd = "pre-commit install && pre-commit install --hook-type post-merge"
 [tasks.pre-commit-run]
 cmd = "pre-commit run --all-files"
 
+[tasks.test-ui]
+cmd = "pytest tests/test_app_smoke.py -m \"unit\" --tb=short -q --durations=5"
+
 [tasks.test-unit]
 cmd = "pytest tests/ -m \"unit\" --tb=short -q --durations=5 -n auto"
 
