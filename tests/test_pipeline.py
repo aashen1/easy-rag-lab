@@ -44,12 +44,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_init_without_meal(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -90,12 +88,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_init_with_meal(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -127,12 +123,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_query_full_flow(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -185,12 +179,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_query_invalid_input(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -213,12 +205,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_use_meal_switch(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -265,12 +255,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_close_calls_indexer_close(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -290,12 +278,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_close_calls_indexer_close_when_indexer_exists(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -316,12 +302,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_context_manager_calls_close(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -341,12 +325,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_use_meal_closes_old_indexer(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -377,12 +359,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_build_index_passes_parser_options(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -455,12 +435,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_build_index_parser_options_none_when_missing(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -522,12 +500,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_build_index_page_aware_chunking(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -604,12 +580,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_build_index_regular_chunking_when_no_page_chunks(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -675,12 +649,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_query_with_config_overrides_top_k(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -719,12 +691,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_query_with_config_overrides_none_is_noop(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -760,12 +730,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_query_with_config_overrides_reranker_enabled(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -818,12 +786,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_query_with_config_overrides_disables_rewrite(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -867,12 +833,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_query_with_config_overrides_bm25_method(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -918,12 +882,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_query_with_config_overrides_does_not_mutate_base_config(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -961,12 +923,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_query_with_config_overrides_hybrid_method(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -1022,12 +982,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_query_with_config_overrides_query_rewrite_enabled(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -1070,12 +1028,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_ensure_bm25_index_lazy_loads(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -1106,12 +1062,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_ensure_bm25_index_raises_when_no_chunks_dir(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -1135,12 +1089,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_ensure_reranker_lazy_loads(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -1165,12 +1117,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_ensure_reranker_noop_when_already_loaded(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -1195,12 +1145,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_ensure_query_rewriter_lazy_loads(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -1227,12 +1175,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_ensure_query_rewriter_reinitializes_on_strategy_change(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -1263,12 +1209,10 @@ class TestRAGPipeline:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_ensure_query_rewriter_noop_when_same_strategy(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -1298,12 +1242,10 @@ class TestCloneForConcurrency:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_clone_shares_indexer_embedder_tracker(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -1327,12 +1269,10 @@ class TestCloneForConcurrency:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_clone_creates_new_generator(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -1353,12 +1293,10 @@ class TestCloneForConcurrency:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_clone_reranker_and_query_rewriter_are_none(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
@@ -1382,12 +1320,10 @@ class TestCloneForConcurrency:
     @patch("src.pipeline.VectorIndexer")
     @patch("src.pipeline.Embedder")
     @patch("src.pipeline.get_llm_config")
-    @patch("src.pipeline.setup_logger")
     @patch("src.pipeline.load_config")
     def test_clone_preserves_config_and_meal(
         self,
         mock_load_config,
-        mock_setup_logger,
         mock_get_llm_config,
         mock_embedder,
         mock_indexer,
