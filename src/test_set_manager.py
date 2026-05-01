@@ -48,6 +48,10 @@ class TestSetMetadata:
     audit_log: list[dict[str, Any]] = field(default_factory=list)
     suppress_warnings: bool = False
     composition: dict[str, Any] = field(default_factory=dict)
+    quality_status: str = "draft"
+    review_progress: dict[str, int] = field(default_factory=dict)
+    portable: bool = False
+    data_coverage: str = "partial"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -65,6 +69,10 @@ class TestSetMetadata:
             audit_log=data.get("audit_log", []),
             suppress_warnings=data.get("suppress_warnings", False),
             composition=data.get("composition", {}),
+            quality_status=data.get("quality_status", "draft"),
+            review_progress=data.get("review_progress", {}),
+            portable=data.get("portable", False),
+            data_coverage=data.get("data_coverage", "partial"),
         )
 
 
@@ -72,6 +80,7 @@ class TestSetManager:
     __test__ = False
 
     GOLDEN_TESTSET_DIR = "data/golden_testset"
+    PORTABLE_TESTSET_DIR = "data/test_sets"
 
     def __init__(self, config: dict[str, Any]):
         """Initialize the TestSetManager with application configuration.
@@ -96,12 +105,57 @@ class TestSetManager:
         data_dir = self.config.get("data_dir", "data")
         return Path(data_dir) / "golden_testset"
 
+    def _get_portable_testset_dir(self) -> Path:
+        data_dir = self.config.get("data_dir", "data")
+        return Path(data_dir) / "test_sets"
+
+    def load_portable_testset(self, name: str) -> dict[str, Any]:
+        portable_dir = self._get_portable_testset_dir()
+        file_path = portable_dir / f"{name}.json"
+
+        if not file_path.exists():
+            raise TestSetError(f"Portable test set '{name}' not found at {file_path}")
+
+        try:
+            with open(file_path, encoding="utf-8") as f:
+                data = json.load(f)
+            logger.info(f"Loaded portable test set '{name}' from {file_path}")
+            migrated = self._migrate_test_set(data)
+            return self.cleaner.filter_rejected_questions(migrated)
+        except json.JSONDecodeError as e:
+            raise TestSetError(
+                f"Failed to parse portable test set '{name}': {str(e)}"
+            ) from e
+        except Exception as e:
+            raise TestSetError(
+                f"Failed to load portable test set '{name}': {str(e)}"
+            ) from e
+
+    def save_portable_testset(self, test_set_data: dict[str, Any]) -> Path:
+        portable_dir = self._get_portable_testset_dir()
+        ensure_dir(str(portable_dir))
+
+        test_set_name = test_set_data["metadata"]["name"]
+        file_path = portable_dir / f"{test_set_name}.json"
+
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(test_set_data, f, ensure_ascii=False, indent=2)
+            logger.info(f"Saved portable test set '{test_set_name}' to {file_path}")
+            return file_path
+        except Exception as e:
+            logger.error(
+                f"Failed to save portable test set '{test_set_name}': {str(e)}"
+            )
+            raise
+
     def load_golden_testset(self, name: str = "golden_150") -> dict[str, Any]:
-        """Load a golden test set from the fixed golden_testset directory.
+        """Load a golden test set from the portable or golden_testset directory.
 
         Golden test sets are project-level assets that are not tied to
-        any specific meal. They are stored in data/golden_testset/ and
-        have user_defined=True with invalid_policy="immutable".
+        any specific meal. This method first checks the portable directory
+        (data/test_sets/), then falls back to the golden directory
+        (data/golden_testset/) for backward compatibility.
 
         Args:
             name: Name of the golden test set (without .json extension).
@@ -110,14 +164,23 @@ class TestSetManager:
             Parsed golden test set dictionary.
 
         Raises:
-            FileNotFoundError: If the golden test set file does not exist.
-            TestSetError: If the file cannot be loaded or parsed.
+            TestSetError: If the golden test set file is not found in either directory.
         """
+        try:
+            return self.load_portable_testset(name)
+        except TestSetError:
+            logger.debug(
+                f"Portable test set '{name}' not found, falling back to golden directory"
+            )
+
         golden_dir = self._get_golden_testset_dir()
         file_path = golden_dir / f"{name}.json"
 
         if not file_path.exists():
-            raise TestSetError(f"Golden test set '{name}' not found at {file_path}")
+            raise TestSetError(
+                f"Golden test set '{name}' not found at {file_path} "
+                f"or in portable directory"
+            )
 
         try:
             with open(file_path, encoding="utf-8") as f:
@@ -252,8 +315,19 @@ class TestSetManager:
             Test set dictionary in new format with 'metadata' key.
         """
         if "metadata" in test_set_data:
+            metadata = test_set_data["metadata"]
+            metadata.setdefault("quality_status", "draft")
+            metadata.setdefault("review_progress", {})
+            metadata.setdefault("portable", False)
+            metadata.setdefault("data_coverage", "partial")
+            user_defined = metadata.get("user_defined", False)
+            if user_defined and metadata.get("quality_status") == "draft":
+                metadata["quality_status"] = "approved"
+                metadata["data_coverage"] = "full"
+                metadata["portable"] = True
             return test_set_data
 
+        user_defined = test_set_data.get("user_defined", False)
         return {
             "metadata": {
                 "name": test_set_data.get("name", "unknown"),
@@ -261,11 +335,15 @@ class TestSetManager:
                 "created_at": test_set_data.get("created_at", ""),
                 "updated_at": test_set_data.get("created_at", ""),
                 "generation": test_set_data.get("generation_config", {}),
-                "user_defined": False,
-                "invalid_policy": None,
-                "audit_log": [],
-                "suppress_warnings": False,
-                "composition": {},
+                "user_defined": user_defined,
+                "invalid_policy": test_set_data.get("invalid_policy"),
+                "audit_log": test_set_data.get("audit_log", []),
+                "suppress_warnings": test_set_data.get("suppress_warnings", False),
+                "composition": test_set_data.get("composition", {}),
+                "quality_status": "approved" if user_defined else "draft",
+                "review_progress": test_set_data.get("review_progress", {}),
+                "portable": bool(user_defined),
+                "data_coverage": "full" if user_defined else "partial",
             },
             "quality_metrics": test_set_data.get("quality_metrics", {}),
             "questions": test_set_data.get("questions", []),
@@ -600,8 +678,11 @@ class TestSetManager:
                     )
 
                 user_defined = test_set_data["metadata"].get("user_defined", False)
+                quality_status = test_set_data["metadata"].get(
+                    "quality_status", "draft"
+                )
 
-                if user_defined:
+                if user_defined or quality_status in ("approved", "auto_approved"):
                     return self.cleaner.clean_user_test_set(
                         test_set_data,
                         meal_config,
@@ -841,6 +922,10 @@ class TestSetManager:
                 "audit_log": [audit_entry],
                 "suppress_warnings": False,
                 "composition": composition,
+                "quality_status": "draft",
+                "review_progress": {},
+                "portable": False,
+                "data_coverage": "partial",
             },
             "quality_metrics": {},
             "questions": final_questions,

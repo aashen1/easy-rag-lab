@@ -37,6 +37,8 @@ cmd = "python main.py --interactive"
 [tasks.issue]
 cmd = "python -m src.issue.cli"
 
+[tasks.testset]
+cmd = "python -m src.testset_cli"
 
 [tasks.web]
 cmd = "streamlit run src/app.py --server.port 8501"
