@@ -123,9 +123,6 @@ def run_variant_evaluation(
             profiler=profiler,
         )
 
-        if profiler:
-            profiler.begin_stage("S3")
-
         from src.meal import compute_chunker_config_hash
 
         chunker_hash = compute_chunker_config_hash(merged_config.get("chunker", {}))
@@ -151,15 +148,17 @@ def run_variant_evaluation(
                     if not cached_indexer.is_closed():
                         cached_indexer.close()
             indexer = prepare_index_for_variant(
-                merged_config, meal_config, variant_name, force_index=force_index
+                merged_config,
+                meal_config,
+                variant_name,
+                force_index=force_index,
+                profiler=profiler,
             )
             if indexer_cache is not None and not force_index:
                 indexer_cache[chunker_hash] = indexer
             indexer_from_cache = False
 
         pipeline.indexer = indexer
-        if profiler:
-            profiler.end_stage()
 
         pipeline._setup_retrievers()
 
@@ -447,32 +446,31 @@ def run_experiment(
             logger.info(f"Force overwrite enabled for: {stages}")
 
         logger.info("Step 1: Preparing meal...")
-        with profiler.profile_stage("S1", {"meal_name": exp_config.data.get("meal")}):
-            meal_info = prepare_meal(
-                system_config,
-                exp_config,
-                skip_preprocessing,
-                force_meal=force_meal,
-                force_parse=force_parsed,
-                force_chunk=force_chunk,
-            )
+        meal_info = prepare_meal(
+            system_config,
+            exp_config,
+            skip_preprocessing,
+            force_meal=force_meal,
+            force_parse=force_parsed,
+            force_chunk=force_chunk,
+            profiler=profiler,
+        )
 
         test_generation_tracker = TokenTracker()
 
         logger.info("Step 2: Preparing variant chunks...")
         first_chunks_dir = None
-        with profiler.profile_stage("S2"):
-            for i, variant in enumerate(exp_config.variants, 1):
-                variant_name = variant.get("name", f"variant_{i}")
-                merged_config = merge_config(system_config, exp_config, variant)
-                chunks_dir = prepare_variant_chunks(
-                    merged_config,
-                    meal_info["config"],
-                    variant_name,
-                    force_chunk=force_chunk,
-                )
-                if first_chunks_dir is None:
-                    first_chunks_dir = chunks_dir
+        for i, variant in enumerate(exp_config.variants, 1):
+            variant_name = variant.get("name", f"variant_{i}")
+            merged_config = merge_config(system_config, exp_config, variant)
+            chunks_dir = prepare_variant_chunks(
+                merged_config,
+                meal_info["config"],
+                variant_name,
+                force_chunk=force_chunk,
+            )
+            if first_chunks_dir is None:
+                first_chunks_dir = chunks_dir
 
         logger.info("Step 3: Preparing test sets...")
         with profiler.profile_stage("S5"):

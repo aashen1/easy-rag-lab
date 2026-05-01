@@ -36,6 +36,7 @@ def prepare_meal(
     force_meal: bool = False,
     force_parse: bool = False,
     force_chunk: bool = False,
+    profiler: Any | None = None,
 ) -> dict[str, Any]:
     """
     Prepare meal for experiment.
@@ -50,6 +51,7 @@ def prepare_meal(
         force_meal: If True, delete existing meal and recreate from scratch.
         force_parse: If True, re-parse PDFs even if cached parsed artifacts exist.
         force_chunk: If True, re-chunk documents even if cached chunk artifacts exist.
+        profiler: Optional PipelineProfiler for stage tracking.
 
     Returns:
         Dictionary containing meal configuration and status.
@@ -58,7 +60,7 @@ def prepare_meal(
         FileNotFoundError: If meal doesn't exist and create_if_missing is not configured.
         ValueError: If meal creation fails.
     """
-    meal_manager = MealManager(system_config)
+    meal_manager = MealManager(system_config, profiler=profiler)
     meal_name = exp_config.data.get("meal")
 
     if not meal_name:
@@ -468,6 +470,7 @@ def prepare_index_for_variant(
     meal_config: MealConfig,
     variant_name: str,
     force_index: bool = False,
+    profiler: Any | None = None,
 ) -> VectorIndexer:
     """
     Prepare or retrieve index for a variant.
@@ -480,6 +483,7 @@ def prepare_index_for_variant(
         meal_config: Meal configuration object.
         variant_name: Name of the variant.
         force_index: If True, delete existing index and rebuild from scratch.
+        profiler: Optional PipelineProfiler for stage tracking.
 
     Returns:
         Configured VectorIndexer instance.
@@ -554,6 +558,7 @@ def prepare_index_for_variant(
             embedding_config=embedding_config,
             vector_store_config=vector_store_config,
             collection_name=collection_name,
+            profiler=profiler,
         )
 
         logger.success(f"Index built for variant '{variant_name}'")

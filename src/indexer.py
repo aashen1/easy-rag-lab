@@ -181,6 +181,7 @@ class VectorIndexer:
         batch_size: int = 32,
         rebuild: bool = False,
         source_filter: set | None = None,
+        profiler: Any | None = None,
     ) -> None:
         """Load JSONL chunk files, embed their texts, and index them into Qdrant.
 
@@ -196,6 +197,7 @@ class VectorIndexer:
             source_filter: Optional set of relative file paths; only JSONL
                 files whose path relative to ``chunks_dir`` is in this set
                 will be processed.
+            profiler: Optional PipelineProfiler for stage tracking.
 
         Raises:
             FileNotFoundError: If ``chunks_dir`` does not exist.
@@ -248,13 +250,22 @@ class VectorIndexer:
         logger.info(f"Total chunks to index: {len(all_chunks)}")
 
         texts = [chunk["text"] for chunk in all_chunks]
-        embeddings = embedder.embed_texts(texts, batch_size=batch_size)
 
+        if profiler:
+            profiler.begin_stage("S3")
+        embeddings = embedder.embed_texts(texts, batch_size=batch_size)
+        if profiler:
+            profiler.end_stage()
+
+        if profiler:
+            profiler.begin_stage("S4")
         self.create_collection(
             vector_size=embedder.get_embedding_dimension(), recreate=rebuild
         )
 
         self.index_chunks(all_chunks, embeddings, batch_size=100)
+        if profiler:
+            profiler.end_stage()
 
     def get_collection_info(self) -> dict[str, Any] | None:
         """Retrieve metadata about the current Qdrant collection.
