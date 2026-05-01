@@ -35,6 +35,12 @@ class TestBM25Retriever:
             },
         ]
 
+    @pytest.fixture(scope="class")
+    def indexed_retriever(self):
+        retriever = BM25Retriever()
+        retriever.build_index(self._make_test_chunks())
+        return retriever
+
     def test_build_index(self):
         retriever = BM25Retriever()
         chunks = self._make_test_chunks()
@@ -53,23 +59,16 @@ class TestBM25Retriever:
         with pytest.raises(IndexingError, match="BM25 index not built"):
             retriever.retrieve("test query")
 
-    def test_retrieve_empty_query_raises(self):
-        retriever = BM25Retriever()
-        retriever.build_index(self._make_test_chunks())
+    def test_retrieve_empty_query_raises(self, indexed_retriever):
         with pytest.raises(RetrievalError, match="Query must be a non-empty string"):
-            retriever.retrieve("")
+            indexed_retriever.retrieve("")
 
-    def test_retrieve_non_string_query_raises(self):
-        retriever = BM25Retriever()
-        retriever.build_index(self._make_test_chunks())
+    def test_retrieve_non_string_query_raises(self, indexed_retriever):
         with pytest.raises(RetrievalError, match="Query must be a non-empty string"):
-            retriever.retrieve(123)
+            indexed_retriever.retrieve(123)
 
-    def test_retrieve_returns_results(self):
-        retriever = BM25Retriever()
-        retriever.build_index(self._make_test_chunks())
-
-        results = retriever.retrieve("茅台营业收入", top_k=2)
+    def test_retrieve_returns_results(self, indexed_retriever):
+        results = indexed_retriever.retrieve("茅台营业收入", top_k=2)
 
         assert len(results) <= 2
         assert all("chunk_id" in r for r in results)
@@ -78,27 +77,18 @@ class TestBM25Retriever:
         assert all("score" in r for r in results)
         assert all(r["score"] > 0 for r in results)
 
-    def test_retrieve_relevance_ranking(self):
-        retriever = BM25Retriever()
-        retriever.build_index(self._make_test_chunks())
-
-        results = retriever.retrieve("茅台营业收入", top_k=3)
+    def test_retrieve_relevance_ranking(self, indexed_retriever):
+        results = indexed_retriever.retrieve("茅台营业收入", top_k=3)
 
         assert len(results) >= 1
         assert results[0]["chunk_id"] == "doc1::chunk::000"
 
-    def test_retrieve_top_k_limits_results(self):
-        retriever = BM25Retriever()
-        retriever.build_index(self._make_test_chunks())
-
-        results = retriever.retrieve("白酒", top_k=1)
+    def test_retrieve_top_k_limits_results(self, indexed_retriever):
+        results = indexed_retriever.retrieve("白酒", top_k=1)
         assert len(results) == 1
 
-    def test_retrieve_no_matching_tokens_returns_empty(self):
-        retriever = BM25Retriever()
-        retriever.build_index(self._make_test_chunks())
-
-        results = retriever.retrieve("量子计算机", top_k=5)
+    def test_retrieve_no_matching_tokens_returns_empty(self, indexed_retriever):
+        results = indexed_retriever.retrieve("量子计算机", top_k=5)
         assert len(results) == 0
 
     def test_tokenize_chinese_text(self):
