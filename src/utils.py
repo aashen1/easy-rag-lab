@@ -12,6 +12,8 @@ from src.exceptions import ConfigurationError
 
 load_dotenv()
 
+_logger_configured = False
+
 
 def load_config(config_path: str = "config.yaml") -> dict[str, Any]:
     """Load YAML configuration file and return its contents as a dictionary.
@@ -80,6 +82,11 @@ def setup_logger(config: dict[str, Any], force: bool = False) -> None:
     Returns:
         None
     """
+    global _logger_configured
+
+    if _logger_configured and not force:
+        return
+
     log_config = config.get("logging", {})
     log_dir = Path(log_config.get("log_dir", "logs"))
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -111,6 +118,7 @@ def setup_logger(config: dict[str, Any], force: bool = False) -> None:
         encoding="utf-8",
     )
 
+    _logger_configured = True
     logger.info("Logger initialized")
 
 
