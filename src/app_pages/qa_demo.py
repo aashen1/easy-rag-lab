@@ -190,8 +190,9 @@ def _display_result(result: dict[str, Any], meal_config: MealConfig | None):
                         "📄预览",
                         key=f"src_preview_{i}",
                         help="预览此来源 PDF 文件",
+                        on_click=_open_pdf_preview,
+                        args=(pdf_path, Path(pdf_path).name),
                     ):
-                        _open_pdf_preview(pdf_path, Path(pdf_path).name)
                         st.toast("📄 已打开 PDF 预览，请点击「PDF 预览」标签页查看")
         else:
             st.info("无来源文档")
@@ -283,8 +284,9 @@ def _render_meal_files(meal_config: MealConfig | None) -> None:
                         "📄",
                         key=f"meal_file_preview_{mf.path}",
                         help=f"预览 {file_name}",
+                        on_click=_open_pdf_preview,
+                        args=(full_path, file_name),
                     ):
-                        _open_pdf_preview(full_path, file_name)
                         st.toast("📄 已打开 PDF 预览，请点击「PDF 预览」标签页查看")
                 else:
                     st.caption("缺失")
