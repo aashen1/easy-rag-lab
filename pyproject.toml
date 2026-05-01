@@ -140,5 +140,10 @@ indent-style = "space"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
-    "integration: marks tests that call external APIs (deselect with '-m \"not integration\"')",
+    "unit: marks tests as pure unit tests (no external dependencies)",
+    "integration: marks tests that touch external systems (Qdrant, LLM API, real PDF files)",
+    "slow: marks tests as slow (heavy imports like torch/ragas, or execution time >5s)",
 ]
+addopts = "--basetemp=.pytest_tmp"
+tmp_path_retention_count = 0
+tmp_path_retention_policy = "failed"
