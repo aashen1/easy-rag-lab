@@ -1894,3 +1894,109 @@ def test_is_full_parsed_valid_with_failed_inventory(tmp_path):
     }
     cache.save_manifest(data_id, manifest_no_failed)
     assert cache.is_full_parsed_valid("abc12345") is True
+
+
+def test_is_full_parsed_valid_with_page_chunks(tmp_path):
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    artifacts_dir = tmp_path / "artifacts"
+
+    cache = ArtifactCache(artifacts_dir=artifacts_dir, raw_dir=raw_dir)
+
+    pdf_file = raw_dir / "test.pdf"
+    pdf_file.write_bytes(b"%PDF-1.4 fake content")
+    sha = compute_file_sha256(pdf_file)
+
+    data_id = compute_data_id([MealFile(path="test.pdf", sha256=sha, size_bytes=100)])
+
+    parsed_dir = cache.get_parsed_dir(data_id, "abc12345")
+    parsed_dir.mkdir(parents=True)
+
+    (parsed_dir / "test.pages.json").write_text(
+        '[{"page_number": 1, "text": "content"}]', encoding="utf-8"
+    )
+
+    manifest = {"pdf_inventory": {"test.pdf": sha}}
+    cache.save_manifest(data_id, manifest)
+
+    assert cache.is_full_parsed_valid("abc12345", use_page_chunks=True) is True
+    assert cache.is_full_parsed_valid("abc12345", use_page_chunks=False) is False
+
+    (parsed_dir / "test.md").write_text("content", encoding="utf-8")
+    assert cache.is_full_parsed_valid("abc12345", use_page_chunks=False) is True
+
+
+def test_parsed_exists_with_page_chunks(tmp_path):
+    artifacts_dir = tmp_path
+    cache = ArtifactCache(artifacts_dir=artifacts_dir, raw_dir=None)
+    data_id = "pagechk" + "0" * 57
+
+    parsed_dir = cache.get_parsed_dir(data_id)
+    parsed_dir.mkdir(parents=True)
+    (parsed_dir / "test.pages.json").write_text("[]", encoding="utf-8")
+
+    assert (
+        cache.parsed_exists(data_id, ["test.pages.json"], use_page_chunks=True) is True
+    )
+    assert (
+        cache.parsed_exists(data_id, ["test.pages.json"], use_page_chunks=False)
+        is False
+    )
+    assert cache.parsed_exists(data_id, ["test.md"], use_page_chunks=False) is False
+
+
+def test_reuse_full_parsed_returns_missing(tmp_path):
+    from src.meal.manager import MealManager
+
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    artifacts_dir = tmp_path / "artifacts"
+    artifacts_dir.mkdir()
+    meals_dir = tmp_path / "meals"
+    meals_dir.mkdir()
+
+    pdf_a = raw_dir / "a.pdf"
+    pdf_a.write_bytes(b"%PDF-a")
+    pdf_b = raw_dir / "b.pdf"
+    pdf_b.write_bytes(b"%PDF-b")
+
+    sha_a = compute_file_sha256(pdf_a)
+    sha_b = compute_file_sha256(pdf_b)
+
+    full_data_id = compute_data_id(
+        [
+            MealFile(path="a.pdf", sha256=sha_a, size_bytes=10),
+            MealFile(path="b.pdf", sha256=sha_b, size_bytes=10),
+        ]
+    )
+
+    parser_hash = "test1234"
+    full_parsed_dir = artifacts_dir / full_data_id[:16] / f"parsed_{parser_hash}"
+    full_parsed_dir.mkdir(parents=True)
+    (full_parsed_dir / "a.pages.json").write_text("[]", encoding="utf-8")
+
+    config = {
+        "parser": {"input_dir": str(raw_dir), "algorithm": "pymupdf4llm"},
+        "chunker": {"chunk_size": 512, "chunk_overlap": 0},
+        "embedding": {"model_name": "test"},
+        "meals": {"dir": str(meals_dir)},
+        "artifacts": {"dir": str(artifacts_dir)},
+        "vector_store": {"type": "qdrant", "persist_dir": str(tmp_path / "vs")},
+    }
+    manager = MealManager(config)
+
+    meal_files = [
+        MealFile(path="a.pdf", sha256=sha_a, size_bytes=10),
+        MealFile(path="b.pdf", sha256=sha_b, size_bytes=10),
+    ]
+    meal_parsed_dir = artifacts_dir / "meal_test" / "parsed_test1234"
+    meal_parsed_dir.mkdir(parents=True)
+
+    missing = manager._reuse_full_parsed(
+        meal_files, full_parsed_dir, meal_parsed_dir, use_page_chunks=True
+    )
+
+    assert len(missing) == 1
+    assert missing[0].path == "b.pdf"
+    assert (meal_parsed_dir / "a.pages.json").exists()
+    assert not (meal_parsed_dir / "b.pages.json").exists()

@@ -163,24 +163,29 @@ class ArtifactCache:
         expected_files: list[str],
         parser_hash: str | None = None,
         manifest: dict[str, Any] | None = None,
+        use_page_chunks: bool = False,
     ) -> bool:
         """Check whether parsed artifacts exist and contain all expected files.
 
         Args:
             data_id: Data identifier string.
-            expected_files: List of expected markdown file names.
+            expected_files: List of expected file names (e.g. ``report.md``
+                or ``report.pages.json``).
             parser_hash: Short hash of the parser configuration.
             manifest: Optional manifest dict for SHA-256 validation. If provided,
                 source files are validated against pdf_inventory.
+            use_page_chunks: If True, scan for ``.pages.json`` files instead
+                of ``.md`` files.
 
         Returns:
-            True if the parsed directory exists and contains all expected .md files.
+            True if the parsed directory exists and contains all expected files.
             When manifest is provided, also validates source file SHA-256 hashes.
         """
         parsed_dir = self.get_parsed_dir(data_id, parser_hash)
         if not parsed_dir.exists():
             return False
-        existing = set(p.name for p in parsed_dir.rglob("*.md"))
+        ext = "*.pages.json" if use_page_chunks else "*.md"
+        existing = set(p.name for p in parsed_dir.rglob(ext))
         if not set(expected_files).issubset(existing):
             return False
         if (
@@ -335,7 +340,9 @@ class ArtifactCache:
         full_data_id = self._compute_full_data_id()
         return self.load_manifest(full_data_id)
 
-    def is_full_parsed_valid(self, parser_hash: str) -> bool:
+    def is_full_parsed_valid(
+        self, parser_hash: str, use_page_chunks: bool = False
+    ) -> bool:
         """Check if full-mode parsed artifacts are valid and cache can be reused.
 
         Validates that:
@@ -347,6 +354,8 @@ class ArtifactCache:
 
         Args:
             parser_hash: Short hash of the parser configuration.
+            use_page_chunks: If True, expect ``.pages.json`` output files;
+                otherwise expect ``.md`` files.
 
         Returns:
             True if all validations pass, False otherwise.
@@ -368,6 +377,7 @@ class ArtifactCache:
                 )
                 return False
 
+            suffix = ".pages.json" if use_page_chunks else ".md"
             pdf_inventory = manifest["pdf_inventory"]
             for rel_path, expected_sha in pdf_inventory.items():
                 pdf_path = self.raw_dir / rel_path
@@ -376,10 +386,7 @@ class ArtifactCache:
                 if compute_file_sha256(pdf_path) != expected_sha:
                     return False
 
-                if rel_path.endswith(".pages.json"):
-                    parsed_file = parsed_dir / Path(rel_path).with_suffix(".pages.json")
-                else:
-                    parsed_file = parsed_dir / Path(rel_path).with_suffix(".md")
+                parsed_file = parsed_dir / Path(rel_path).with_suffix(suffix)
                 if not parsed_file.exists():
                     return False
 

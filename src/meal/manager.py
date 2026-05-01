@@ -391,7 +391,9 @@ class MealManager:
         full_parsed_dir = None
         if not force_parse:
             try:
-                if self.cache.is_full_parsed_valid(parser_hash):
+                if self.cache.is_full_parsed_valid(
+                    parser_hash, use_page_chunks=use_page_chunks
+                ):
                     full_parsed_dir = self.cache.get_full_parsed_dir(parser_hash)
                     logger.info(
                         f"Found full parsed artifacts, reusing for meal '{name}'"
@@ -400,14 +402,21 @@ class MealManager:
                 logger.debug(f"Full parsed check failed: {str(e)}")
 
         if full_parsed_dir is not None:
-            self._reuse_full_parsed(
+            missing_files = self._reuse_full_parsed(
                 meal_files, full_parsed_dir, parsed_dir, use_page_chunks
             )
-            cache_hit_parse = True
-            reuse_parsed = True
-            pdfs_to_parse = []
+            if missing_files:
+                pdfs_to_parse = [self.raw_dir / f.path for f in missing_files]
+                reuse_parsed = False
+                logger.warning(
+                    f"Will parse {len(pdfs_to_parse)} missing files separately"
+                )
+            else:
+                pdfs_to_parse = []
+                reuse_parsed = True
+            cache_hit_parse = not bool(missing_files)
         elif not force_parse and self.cache.parsed_exists(
-            data_id, expected_md_names, parser_hash
+            data_id, expected_md_names, parser_hash, use_page_chunks=use_page_chunks
         ):
             logger.info(f"Cache HIT: Parsed artifacts exist for data_id={data_id[:12]}")
             cache_hit_parse = True
@@ -1263,7 +1272,7 @@ class MealManager:
         full_parsed_dir: Path,
         meal_parsed_dir: Path,
         use_page_chunks: bool,
-    ) -> None:
+    ) -> list[MealFile]:
         """Copy relevant parsed files from full-mode artifacts to meal artifacts.
 
         Only copies files that belong to this meal (subset of full raw_dir).
@@ -1273,8 +1282,13 @@ class MealManager:
             full_parsed_dir: Source directory with full-mode parsed results.
             meal_parsed_dir: Destination directory for this meal's artifacts.
             use_page_chunks: Whether to look for .pages.json or .md files.
+
+        Returns:
+            List of MealFile objects whose parsed files were not found in
+            full_parsed_dir and need to be parsed separately.
         """
         copied = 0
+        missing: list[MealFile] = []
         for meal_file in meal_files:
             if use_page_chunks:
                 src_name = Path(meal_file.path).with_suffix(".pages.json")
@@ -1288,6 +1302,7 @@ class MealManager:
                 logger.warning(
                     f"Full parsed file not found: {src}, will parse separately"
                 )
+                missing.append(meal_file)
                 continue
 
             dst.parent.mkdir(parents=True, exist_ok=True)
@@ -1296,7 +1311,9 @@ class MealManager:
                 copied += 1
             except Exception as e:
                 logger.error(f"Failed to copy {src} to {dst}: {str(e)}")
+                missing.append(meal_file)
 
         logger.info(
             f"Reused {copied}/{len(meal_files)} parsed files from full-mode cache"
         )
+        return missing
