@@ -1,0 +1,28 @@
+name: "exploration_sampled_20pct"
+description: "探索实验C - 20%采样数据,与全量对比验证抽样影响"
+
+data:
+  meal: "meal_exploration_20pct"
+  create_if_missing:
+    sample_ratio: 0.2
+    seed: 42
+
+test_sets:
+  - name: "golden_smoke_12q"
+    golden: true
+
+variants:
+  - name: "baseline_sampled"
+    description: "20%采样基线: chunk_size=512, overlap=0, fixed, vector only"
+    config_overrides: {}
+
+evaluation:
+  backends: ["builtin"]
+  llm_preset: "default"
+  metrics_preset: "core"
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
+
+llm:
+  question_generation: "default"
+  answering: "default"
