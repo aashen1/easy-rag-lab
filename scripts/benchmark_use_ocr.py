@@ -24,8 +24,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import pymupdf4llm
 from loguru import logger
 
-logger.remove()
-
 SAMPLING_MODE = "meal"
 
 PYMUPDF4LLM_OPTIONS = {
