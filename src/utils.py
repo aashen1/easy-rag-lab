@@ -66,13 +66,16 @@ def _resolve_data_paths(config: dict[str, Any], data_dir: str) -> dict[str, Any]
     return config
 
 
-def setup_logger(config: dict[str, Any]) -> None:
+def setup_logger(config: dict[str, Any], force: bool = False) -> None:
     """Configure loguru logger with console and file sinks based on config.
 
     Args:
         config: Application configuration dictionary. Expected to contain
             a "logging" key with optional sub-keys: log_dir, level, format,
             rotation, and retention.
+        force: If True, remove all existing handlers before setup.
+               If False, only add handlers if not already configured.
+               Default is False to preserve existing handlers (e.g., experiment.log).
 
     Returns:
         None
@@ -89,7 +92,8 @@ def setup_logger(config: dict[str, Any]) -> None:
     rotation = log_config.get("rotation", "10 MB")
     retention = log_config.get("retention", "7 days")
 
-    logger.remove()
+    if force:
+        logger.remove()
 
     logger.add(
         sink=lambda msg: sys.stdout.write(msg),
