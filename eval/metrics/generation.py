@@ -138,7 +138,7 @@ def extract_statements(
 
         json_match = re.search(r"\{[\s\S]*\}", response_text)
         if json_match:
-            result = json.loads(json_match.group())
+            result = json.loads(json_match.group(), strict=False)
             return result.get("statements", [])
 
         logger.warning(f"Could not parse JSON from response: {response_text[:100]}")
@@ -225,7 +225,7 @@ def verify_statements(
 
         json_match = re.search(r"\{[\s\S]*\}", response_text)
         if json_match:
-            result = json.loads(json_match.group())
+            result = json.loads(json_match.group(), strict=False)
             return result.get("verdict", [])
 
         logger.warning(f"Could not parse JSON from response: {response_text[:100]}")
@@ -379,12 +379,12 @@ def parse_relevancy_response(response_text: str) -> dict[str, Any]:
     json_match = re.search(r"\{[^{}]*\}", response_text, re.DOTALL)
     if json_match:
         try:
-            return json.loads(json_match.group())
+            return json.loads(json_match.group(), strict=False)
         except json.JSONDecodeError:
             pass
 
     try:
-        return json.loads(response_text)
+        return json.loads(response_text, strict=False)
     except json.JSONDecodeError as e:
         raise EvaluationError(f"Failed to parse LLM response as JSON: {e}") from e
 

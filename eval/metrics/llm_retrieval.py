@@ -98,7 +98,7 @@ def judge_context_relevance(
 
         json_match = re.search(r"\{[\s\S]*\}", response_text)
         if json_match:
-            result = json.loads(json_match.group())
+            result = json.loads(json_match.group(), strict=False)
             verdict = result.get("verdict", "否")
             return verdict.strip() == "是"
 
@@ -263,7 +263,7 @@ def can_infer_from_context(
 
         json_match = re.search(r"\{[\s\S]*\}", response_text)
         if json_match:
-            result = json.loads(json_match.group())
+            result = json.loads(json_match.group(), strict=False)
             verdict = result.get("verdict", "否")
             return verdict.strip() == "是"
 
