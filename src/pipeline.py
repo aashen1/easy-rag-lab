@@ -35,7 +35,7 @@ from src.retriever import Retriever
 from src.sampler import SamplingConfig, determine_sample
 from src.semantic_chunker import process_parsed_files_semantic
 from src.token_tracker import TokenTracker
-from src.utils import get_llm_config, load_config, setup_logger
+from src.utils import get_llm_config, load_config
 
 
 class RAGPipeline:
@@ -80,7 +80,6 @@ class RAGPipeline:
             self.config = config
 
         self.llm_preset = llm_preset
-        setup_logger(self.config)
         self.meal_name = meal_name
         self.meal_config = None
         self._chunks_dir: Path | None = None
