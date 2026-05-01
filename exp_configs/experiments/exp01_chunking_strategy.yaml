@@ -3,6 +3,9 @@ description: "实验1：分块策略对比 - chunk_size/overlap/语义分块对�
 
 data:
   meal: "all_meal"
+  create_if_missing:
+    sample_ratio: 1.0
+    seed: 42
 
 test_sets:
   - name: "golden_150"

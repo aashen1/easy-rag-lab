@@ -36,6 +36,24 @@ from src.token_tracker import DetailedTokenUsage, TokenTracker
 from src.utils import get_llm_config, load_config, sanitize_name, setup_logger
 
 
+def _add_experiment_log_handler(exp_dir: Path) -> int:
+    """Add experiment log handler and return handler ID.
+
+    Args:
+        exp_dir: Path to the experiment directory.
+
+    Returns:
+        Handler ID for later removal.
+    """
+    experiment_log_path = exp_dir / "experiment.log"
+    return logger.add(
+        str(experiment_log_path),
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
+        level="INFO",
+        encoding="utf-8",
+    )
+
+
 def run_variant_evaluation(
     system_config: dict[str, Any],
     exp_config: ExperimentConfig,
@@ -123,9 +141,6 @@ def run_variant_evaluation(
             profiler=profiler,
         )
 
-        if profiler:
-            profiler.begin_stage("S3")
-
         from src.meal import compute_chunker_config_hash
 
         chunker_hash = compute_chunker_config_hash(merged_config.get("chunker", {}))
@@ -151,15 +166,17 @@ def run_variant_evaluation(
                     if not cached_indexer.is_closed():
                         cached_indexer.close()
             indexer = prepare_index_for_variant(
-                merged_config, meal_config, variant_name, force_index=force_index
+                merged_config,
+                meal_config,
+                variant_name,
+                force_index=force_index,
+                profiler=profiler,
             )
             if indexer_cache is not None and not force_index:
                 indexer_cache[chunker_hash] = indexer
             indexer_from_cache = False
 
         pipeline.indexer = indexer
-        if profiler:
-            profiler.end_stage()
 
         pipeline._setup_retrievers()
 
@@ -400,13 +417,7 @@ def run_experiment(
     else:
         exp_dir = exp_manager.create_experiment_dir(exp_config)
 
-    experiment_log_path = exp_dir / "experiment.log"
-    logger.add(
-        str(experiment_log_path),
-        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
-        level="INFO",
-        encoding="utf-8",
-    )
+    exp_log_handler_id = _add_experiment_log_handler(exp_dir)
 
     logger.info(f"Experiment directory: {exp_dir}")
 
@@ -447,32 +458,31 @@ def run_experiment(
             logger.info(f"Force overwrite enabled for: {stages}")
 
         logger.info("Step 1: Preparing meal...")
-        with profiler.profile_stage("S1", {"meal_name": exp_config.data.get("meal")}):
-            meal_info = prepare_meal(
-                system_config,
-                exp_config,
-                skip_preprocessing,
-                force_meal=force_meal,
-                force_parse=force_parsed,
-                force_chunk=force_chunk,
-            )
+        meal_info = prepare_meal(
+            system_config,
+            exp_config,
+            skip_preprocessing,
+            force_meal=force_meal,
+            force_parse=force_parsed,
+            force_chunk=force_chunk,
+            profiler=profiler,
+        )
 
         test_generation_tracker = TokenTracker()
 
         logger.info("Step 2: Preparing variant chunks...")
         first_chunks_dir = None
-        with profiler.profile_stage("S2"):
-            for i, variant in enumerate(exp_config.variants, 1):
-                variant_name = variant.get("name", f"variant_{i}")
-                merged_config = merge_config(system_config, exp_config, variant)
-                chunks_dir = prepare_variant_chunks(
-                    merged_config,
-                    meal_info["config"],
-                    variant_name,
-                    force_chunk=force_chunk,
-                )
-                if first_chunks_dir is None:
-                    first_chunks_dir = chunks_dir
+        for i, variant in enumerate(exp_config.variants, 1):
+            variant_name = variant.get("name", f"variant_{i}")
+            merged_config = merge_config(system_config, exp_config, variant)
+            chunks_dir = prepare_variant_chunks(
+                merged_config,
+                meal_info["config"],
+                variant_name,
+                force_chunk=force_chunk,
+            )
+            if first_chunks_dir is None:
+                first_chunks_dir = chunks_dir
 
         logger.info("Step 3: Preparing test sets...")
         with profiler.profile_stage("S5"):
@@ -843,6 +853,8 @@ def run_experiment(
         exp_manager.update_manifest_status(exp_dir, "failed")
         logger.error(f"Experiment failed: {str(e)}")
         raise
+    finally:
+        logger.remove(exp_log_handler_id)
 
 
 def list_experiments(system_config_path: str = "config.yaml") -> None:

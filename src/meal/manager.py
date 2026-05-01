@@ -35,14 +35,20 @@ if TYPE_CHECKING:
 
 
 class MealManager:
-    def __init__(self, config: dict[str, Any]):
+    def __init__(
+        self,
+        config: dict[str, Any],
+        profiler: Any | None = None,
+    ):
         """Initialize the MealManager with application configuration.
 
         Args:
             config: Application configuration dictionary containing 'meals',
                 'parser', 'chunker', 'artifacts', and 'vector_store' sections.
+            profiler: Optional PipelineProfiler for stage tracking.
         """
         self.config = config
+        self.profiler = profiler
         meals_config = config.get("meals", {})
         self.meals_dir = Path(meals_config.get("dir", "data/meals"))
         self.collection_prefix = meals_config.get("collection_prefix", "m_")
@@ -117,6 +123,7 @@ class MealManager:
         meal_name: str,
         meal_dir: Path | None = None,
         force_chunk: bool = False,
+        profiler: Any | None = None,
     ) -> MealConfig:
         """Execute the shared parse-chunk-index-stats-manifest-config-save pipeline.
 
@@ -147,6 +154,7 @@ class MealManager:
             meal_dir: If provided, use this directory instead of creating a new
                 one (used by repair_meal in-place mode).
             force_chunk: If True, force re-chunking even if chunks exist.
+            profiler: Optional PipelineProfiler for stage tracking.
 
         Returns:
             MealConfig object for the created/rebuilt meal.
@@ -184,9 +192,15 @@ class MealManager:
                             f"Failed to copy chunk file {chunk_file}: {str(e)}"
                         )
 
+        if profiler:
+            profiler.begin_stage("S1")
         if not reuse_parsed and pdfs_to_parse:
             self._parse_pdfs_with_registry(parser_config, pdfs_to_parse, parsed_dir)
+        if profiler:
+            profiler.end_stage()
 
+        if profiler:
+            profiler.begin_stage("S2")
         build_chunks_if_needed(
             parsed_dir,
             chunks_dir,
@@ -194,12 +208,15 @@ class MealManager:
             model_name=embedding_config.get("model_name"),
             force=force_chunk,
         )
+        if profiler:
+            profiler.end_stage()
 
         build_index_from_chunks(
             chunks_dir=chunks_dir,
             embedding_config=embedding_config,
             vector_store_config=self.config.get("vector_store", {}),
             collection_name=collection_name,
+            profiler=profiler,
         )
 
         total_chunks = 0
@@ -277,6 +294,7 @@ class MealManager:
         seed: int | None = None,
         force_parse: bool = False,
         force_chunk: bool = False,
+        profiler: Any | None = None,
     ) -> MealConfig:
         """Create a new meal by sampling PDFs, parsing, chunking, and indexing.
 
@@ -286,6 +304,7 @@ class MealManager:
             seed: Random seed for reproducible sampling. If None, a random seed is used.
             force_parse: If True, re-parse PDFs even if cached parsed artifacts exist.
             force_chunk: If True, re-chunk documents even if cached chunk artifacts exist.
+            profiler: Optional PipelineProfiler for stage tracking.
 
         Returns:
             MealConfig object for the newly created meal.
@@ -438,6 +457,7 @@ class MealManager:
             stats_extras=stats_extras,
             meal_name=name,
             force_chunk=force_chunk,
+            profiler=profiler or self.profiler,
         )
 
         cache_status = []

@@ -88,6 +88,7 @@ def build_index_from_chunks(
     embedding_config: dict[str, Any],
     vector_store_config: dict[str, Any],
     collection_name: str,
+    profiler: Any | None = None,
 ) -> VectorIndexer:
     """
     Build vector index from chunks directory.
@@ -97,6 +98,7 @@ def build_index_from_chunks(
         embedding_config: Embedding configuration dictionary.
         vector_store_config: Vector store configuration dictionary.
         collection_name: Name of the collection to create/use.
+        profiler: Optional PipelineProfiler for stage tracking.
 
     Returns:
         Configured VectorIndexer instance with index built.
@@ -127,6 +129,7 @@ def build_index_from_chunks(
         batch_size=embedding_config.get("batch_size", 32),
         rebuild=True,
         source_filter=source_filter_jsonl,
+        profiler=profiler,
     )
 
     return indexer
