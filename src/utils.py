@@ -13,6 +13,7 @@ from src.exceptions import ConfigurationError
 load_dotenv()
 
 _logger_configured = False
+_config_cache: dict[str, dict[str, Any]] = {}
 
 
 def load_config(config_path: str = "config.yaml") -> dict[str, Any]:
@@ -22,6 +23,9 @@ def load_config(config_path: str = "config.yaml") -> dict[str, Any]:
     that start with ``"data/"`` are rewritten to be relative to that
     directory.  This allows users to point the entire data tree at a
     different location (e.g. a separate drive) without using symlinks.
+
+    The result is cached by config_path so repeated calls (e.g. from
+    Streamlit reruns) return the same dict without re-reading the file.
 
     Args:
         config_path: Path to the YAML configuration file. Defaults to "config.yaml".
@@ -35,6 +39,10 @@ def load_config(config_path: str = "config.yaml") -> dict[str, Any]:
     """
     if config_path is None:
         config_path = "config.yaml"
+
+    if config_path in _config_cache:
+        return _config_cache[config_path]
+
     with open(config_path, encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
@@ -42,6 +50,7 @@ def load_config(config_path: str = "config.yaml") -> dict[str, Any]:
     if data_dir != "data":
         config = _resolve_data_paths(config, data_dir)
 
+    _config_cache[config_path] = config
     logger.info(f"Configuration loaded from {config_path}")
     return config
 
