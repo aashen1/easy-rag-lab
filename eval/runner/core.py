@@ -28,6 +28,11 @@ from src.experiment import (
     load_experiment_config,
     merge_config,
 )
+from src.experiment_reuse import (
+    CopyMigrateHandler,
+    InPlaceReuseHandler,
+    ReportReuseConfig,
+)
 from src.generator import Generator
 from src.hybrid_retriever import HybridRetriever
 from src.meal import compute_variant_config_hash, create_artifact_cache
@@ -360,6 +365,7 @@ def run_experiment(
     force_rerun: bool = False,
     force_variant: list[str] | None = None,
     resume_dir: str | None = None,
+    reuse_config: ReportReuseConfig | None = None,
 ) -> dict[str, Any]:
     """
     Execute complete experiment workflow.
@@ -377,6 +383,11 @@ def run_experiment(
     experiment directory.  When provided, the existing directory is reused
     instead of creating a new one, and the manifest records the resume event.
 
+    Use ``reuse_config`` to enable experiment report reuse.  Two modes are
+    supported: "in_place" (append variants to an existing experiment
+    directory) and "copy_migrate" (copy an existing experiment to a new
+    directory and add variants there).
+
     Args:
         config_path: Path to experiment configuration YAML file.
         skip_preprocessing: If True, skip meal and test set creation if missing.
@@ -384,6 +395,7 @@ def run_experiment(
         system_config_path: Path to system configuration file.
         force_rerun: If True, ignore checkpoints and re-run all variants.
         resume_dir: If provided, resume from this existing experiment directory.
+        reuse_config: If provided, enable experiment report reuse.
 
     Returns:
         Dictionary containing complete experiment results.
@@ -406,14 +418,166 @@ def run_experiment(
 
     exp_manager = ExperimentManager(system_config)
 
-    if resume_dir:
-        exp_dir = Path(resume_dir)
+    # Resolve reuse settings: CLI args take precedence over YAML config
+    effective_reuse = reuse_config or exp_config.reuse
+    if reuse_config and reuse_config.is_enabled():
+        effective_reuse = reuse_config
+        logger.info(f"Reuse mode from CLI: {effective_reuse.mode}")
+    elif exp_config.reuse.is_enabled():
+        effective_reuse = exp_config.reuse
+        logger.info(f"Reuse mode from YAML config: {effective_reuse.mode}")
+
+    # Resolve resume settings: CLI args take precedence over YAML config
+    effective_resume_dir = resume_dir
+    effective_force_rerun = force_rerun
+    effective_force_variant = force_variant
+
+    if exp_config.resume.is_enabled() and not resume_dir:
+        resume_from = exp_config.resume.from_exp
+        if resume_from:
+            # Resolve path: if not absolute, treat as exp_id or relative path
+            resume_path = Path(resume_from)
+            if not resume_path.is_absolute():
+                # Try as exp_id first
+                exp_reports_dir = Path(
+                    system_config.get("experiments", {}).get("dir", "data/exp_reports")
+                )
+                candidate = exp_reports_dir / resume_from
+                if candidate.exists():
+                    resume_path = candidate
+                else:
+                    # Try as relative path from project root
+                    candidate = Path(resume_from)
+                    if candidate.exists():
+                        resume_path = candidate
+            effective_resume_dir = str(resume_path)
+            logger.info(f"Resume from YAML config: {effective_resume_dir}")
+
+    if exp_config.resume.force_rerun and not force_rerun:
+        effective_force_rerun = True
+        logger.info("force_rerun from YAML config: True")
+
+    if exp_config.resume.force_variants and not force_variant:
+        effective_force_variant = exp_config.resume.force_variants
+        logger.info(f"force_variants from YAML config: {effective_force_variant}")
+
+    if effective_resume_dir:
+        exp_dir = Path(effective_resume_dir)
         if not (exp_dir / "manifest.json").exists():
             raise ValueError(
-                f"Not a valid experiment directory (missing manifest.json): {resume_dir}"
+                f"Not a valid experiment directory (missing manifest.json): {effective_resume_dir}"
             )
         logger.info(f"Resuming experiment from existing directory: {exp_dir}")
         exp_manager.mark_resumed(exp_dir)
+    elif effective_reuse.is_in_place():
+        target_path = Path(effective_reuse.target_dir)
+        if not target_path.is_absolute():
+            exp_reports_dir = Path(
+                system_config.get("experiments", {}).get("dir", "data/exp_reports")
+            )
+            candidate = exp_reports_dir / effective_reuse.target_dir
+            if candidate.exists():
+                target_path = candidate
+            else:
+                candidate = Path(effective_reuse.target_dir)
+                if candidate.exists():
+                    target_path = candidate
+
+        in_place_handler = InPlaceReuseHandler(
+            target_dir=target_path,
+            backup_before_append=effective_reuse.backup_before_append,
+        )
+        target_manifest = in_place_handler.validate_target_dir()
+
+        backup_snapshot_path = None
+        if effective_reuse.backup_before_append:
+            snapshot = in_place_handler.create_full_snapshot()
+            if snapshot:
+                backup_snapshot_path = str(snapshot)
+
+        stored_hashes = exp_manager.get_variant_config_hashes(target_path)
+        incremental_plan = in_place_handler.compute_incremental_updates(
+            new_variants=exp_config.variants,
+            manifest=target_manifest,
+            stored_hashes=stored_hashes,
+        )
+
+        if incremental_plan.has_conflicts:
+            conflicting = [
+                v.get("name", "unnamed") for v in incremental_plan.to_confirm
+            ]
+            logger.warning(
+                f"Conflicting variants detected: {conflicting}. "
+                f"Use --force-variant to override, or remove conflicting variants from config."
+            )
+            for v in incremental_plan.to_confirm:
+                vname = v.get("name", "unnamed")
+                logger.warning(
+                    f"  Variant '{vname}' exists with different config — will be re-run"
+                )
+            effective_force_variant = list(
+                set((effective_force_variant or []) + conflicting)
+            )
+
+        exp_dir = target_path
+        logger.info(f"In-place reuse mode: appending to {exp_dir}")
+
+        in_place_handler.record_reuse_history(
+            action="in_place_start",
+            backup_snapshot=backup_snapshot_path,
+            details={
+                "new_variants": [
+                    v.get("name", "unnamed") for v in incremental_plan.to_run
+                ],
+                "reuse_variants": [
+                    v.get("name", "unnamed") for v in incremental_plan.to_reuse
+                ],
+                "conflict_variants": [
+                    v.get("name", "unnamed") for v in incremental_plan.to_confirm
+                ],
+            },
+        )
+
+        for v in incremental_plan.to_run:
+            in_place_handler.append_variant_to_manifest(v.get("name", "unnamed"))
+    elif effective_reuse.is_copy_migrate():
+        source_path = Path(effective_reuse.source_dir)
+        if not source_path.is_absolute():
+            exp_reports_dir = Path(
+                system_config.get("experiments", {}).get("dir", "data/exp_reports")
+            )
+            candidate = exp_reports_dir / effective_reuse.source_dir
+            if candidate.exists():
+                source_path = candidate
+            else:
+                candidate = Path(effective_reuse.source_dir)
+                if candidate.exists():
+                    source_path = candidate
+
+        migrate_handler = CopyMigrateHandler(
+            source_dir=source_path,
+            exp_dir=Path("placeholder"),
+        )
+
+        source_manifest = migrate_handler.validate_source_dir()
+        source_exp_id = source_manifest.get("experiment_id", source_path.name)
+
+        new_exp_dir = exp_manager.create_experiment_dir(exp_config)
+        migrate_handler = CopyMigrateHandler(
+            source_dir=source_path,
+            exp_dir=new_exp_dir,
+        )
+
+        migrate_handler.copy_experiment()
+
+        new_exp_id = new_exp_dir.name
+        migrate_handler.update_identifiers(new_exp_id, source_exp_id)
+        migrate_handler.verify_migration()
+
+        exp_dir = new_exp_dir
+        logger.info(
+            f"Copy-migrate reuse mode: migrated {source_exp_id} -> {new_exp_id}"
+        )
     else:
         exp_dir = exp_manager.create_experiment_dir(exp_config)
 
@@ -532,13 +696,19 @@ def run_experiment(
             "environment": collect_environment_info(),
         }
 
-        if not resume_dir:
+        if not effective_resume_dir and not effective_reuse.is_enabled():
             exp_manager.save_snapshots(
                 exp_dir=exp_dir,
                 config=exp_config,
                 meal_snapshot=meal_snapshot,
                 test_set_snapshots=test_set_snapshots,
                 config_snapshot=config_snapshot,
+            )
+        elif effective_reuse.is_in_place():
+            logger.info("In-place reuse: skipping snapshot save (already exists)")
+        elif effective_reuse.is_copy_migrate():
+            logger.info(
+                "Copy-migrate reuse: skipping snapshot save (migrated from source)"
             )
         else:
             logger.info("Resuming: skipping snapshot save (already exists)")
@@ -549,7 +719,7 @@ def run_experiment(
 
         completed_variants: set[str] = set()
         stored_hashes: dict[str, str] = {}
-        if not force_rerun:
+        if not effective_force_rerun:
             completed_variants = set(exp_manager.get_completed_variants(exp_dir))
             stored_hashes = exp_manager.get_variant_config_hashes(exp_dir)
             if completed_variants:
@@ -572,8 +742,8 @@ def run_experiment(
             exp_manager.update_manifest_field(exp_dir, "completed_variants", [])
             exp_manager.update_manifest_field(exp_dir, "variant_config_hashes", {})
 
-        if force_variant and not force_rerun:
-            for vname in force_variant:
+        if effective_force_variant and not effective_force_rerun:
+            for vname in effective_force_variant:
                 if vname in completed_variants:
                     logger.info(
                         f"Force re-run variant '{vname}' (requested via --force-variant)"
@@ -591,7 +761,7 @@ def run_experiment(
         for i, variant in enumerate(exp_config.variants, 1):
             variant_name = variant.get("name", f"variant_{i}")
 
-            if variant_name in completed_variants and not force_rerun:
+            if variant_name in completed_variants and not effective_force_rerun:
                 merged = merge_config(system_config, exp_config, variant)
                 current_hash = compute_variant_config_hash(
                     variant=variant,
@@ -609,6 +779,42 @@ def run_experiment(
                         f"Skipping completed variant {i}/{len(exp_config.variants)}: "
                         f"{variant_name} (checkpoint, hash={current_hash[:8]}… verified)"
                     )
+                    existing_result = exp_manager.load_variant_result(
+                        exp_dir, variant_name
+                    )
+                    if existing_result is not None:
+                        all_variant_results.append(existing_result)
+                        if "token_usage" in existing_result:
+                            variant_tracker = TokenTracker()
+                            for rec_data in existing_result["token_usage"].get(
+                                "records", []
+                            ):
+                                usage = DetailedTokenUsage(
+                                    input_tokens=rec_data["usage"]["input_tokens"],
+                                    output_tokens=rec_data["usage"]["output_tokens"],
+                                    system_prompt_tokens=rec_data["usage"].get(
+                                        "system_prompt_tokens", 0
+                                    ),
+                                    contexts_tokens=rec_data["usage"].get(
+                                        "contexts_tokens", 0
+                                    ),
+                                    query_tokens=rec_data["usage"].get(
+                                        "query_tokens", 0
+                                    ),
+                                )
+                                variant_tracker.record(
+                                    category=rec_data["category"],
+                                    model_name=rec_data["model_name"],
+                                    usage=usage,
+                                    variant_name=variant_name,
+                                )
+                            experiment_tracker.merge(variant_tracker)
+                        continue
+                    else:
+                        logger.warning(
+                            f"Variant '{variant_name}' marked completed but result file not found, re-running"
+                        )
+                        completed_variants.discard(variant_name)
                 else:
                     if stored_hash is None:
                         logger.warning(
@@ -623,41 +829,6 @@ def run_experiment(
                         )
                     exp_manager.invalidate_variant(exp_dir, variant_name)
                     completed_variants.discard(variant_name)
-                    continue
-
-                existing_result = exp_manager.load_variant_result(exp_dir, variant_name)
-                if existing_result is not None:
-                    all_variant_results.append(existing_result)
-                    if "token_usage" in existing_result:
-                        variant_tracker = TokenTracker()
-                        for rec_data in existing_result["token_usage"].get(
-                            "records", []
-                        ):
-                            usage = DetailedTokenUsage(
-                                input_tokens=rec_data["usage"]["input_tokens"],
-                                output_tokens=rec_data["usage"]["output_tokens"],
-                                system_prompt_tokens=rec_data["usage"].get(
-                                    "system_prompt_tokens", 0
-                                ),
-                                contexts_tokens=rec_data["usage"].get(
-                                    "contexts_tokens", 0
-                                ),
-                                query_tokens=rec_data["usage"].get("query_tokens", 0),
-                            )
-                            variant_tracker.record(
-                                category=rec_data["category"],
-                                model_name=rec_data["model_name"],
-                                usage=usage,
-                                variant_name=variant_name,
-                            )
-                        experiment_tracker.merge(variant_tracker)
-                else:
-                    logger.warning(
-                        f"Variant '{variant_name}' marked completed but result file not found, re-running"
-                    )
-                    completed_variants.discard(variant_name)
-
-                continue
 
             logger.info(
                 f"Evaluating variant {i}/{len(exp_config.variants)}: {variant_name}"

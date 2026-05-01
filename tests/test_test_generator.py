@@ -1,6 +1,5 @@
 import hashlib
 import json
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,6 +10,10 @@ from src.test_generation.chunk_locator import (
     locate_chunks_by_quote,
     locate_source_chunks,
     verify_quote_in_segment,
+)
+from src.test_generation.distribution import (
+    calculate_question_distribution,
+    distribute_questions_across_docs,
 )
 from src.test_generation.document_loader import (
     load_full_documents,
@@ -417,14 +420,14 @@ class TestLocateAnswerChunks:
 
         assert len(result) > 0
 
-    def test_locate_returns_empty_when_no_chunks_dir(self):
+    def test_locate_returns_empty_when_no_chunks_dir(self, tmp_path):
         with pytest.warns(
             DeprecationWarning, match="_locate_answer_chunks is deprecated"
         ):
             result = locate_answer_chunks(
                 answer="some answer",
                 source_path="reports/doc.md",
-                chunks_dir=Path(),
+                chunks_dir=tmp_path / "nonexistent_chunks_dir",
             )
 
         assert result == []
@@ -502,13 +505,13 @@ class TestCalculateQuestionDistribution:
             "missing": 0.10,
             "irrelevant": 0.05,
         }
-        result = self.generator._calculate_question_distribution(20, distribution)
+        result = calculate_question_distribution(20, distribution)
         total = sum(result.values())
         assert total == 20
 
     def test_distribution_single_type(self):
         distribution = {"single_fact": 1.0}
-        result = self.generator._calculate_question_distribution(10, distribution)
+        result = calculate_question_distribution(10, distribution)
         assert result["single_fact"] == 10
 
     def test_distribution_rounding(self):
@@ -517,7 +520,7 @@ class TestCalculateQuestionDistribution:
             "type_b": 0.33,
             "type_c": 0.34,
         }
-        result = self.generator._calculate_question_distribution(10, distribution)
+        result = calculate_question_distribution(10, distribution)
         total = sum(result.values())
         assert total == 10
 
@@ -527,14 +530,12 @@ class TestCalculateQuestionDistribution:
             "multi_fact": 0.25,
             "reasoning": 0.15,
         }
-        result = self.generator._calculate_question_distribution(2, distribution)
+        result = calculate_question_distribution(2, distribution)
         total = sum(result.values())
         assert total == 2
 
     def test_distribution_default_distribution(self):
-        result = self.generator._calculate_question_distribution(
-            20, self.generator.TYPE_DISTRIBUTION
-        )
+        result = calculate_question_distribution(20, self.generator.TYPE_DISTRIBUTION)
         total = sum(result.values())
         assert total == 20
         assert result["single_fact"] == 5
@@ -549,7 +550,7 @@ class TestCalculateQuestionDistribution:
             "irrelevant": 0.10,
             "adversarial": 0.07,
         }
-        result = self.generator._calculate_question_distribution(6, distribution)
+        result = calculate_question_distribution(6, distribution)
         total = sum(result.values())
         assert total == 6
         assert result["adversarial"] <= 2, (
@@ -569,7 +570,7 @@ class TestCalculateQuestionDistribution:
             "missing": 0.10,
             "irrelevant": 0.05,
         }
-        result = self.generator._calculate_question_distribution(100, distribution)
+        result = calculate_question_distribution(100, distribution)
         total = sum(result.values())
         assert total == 100
         assert result["single_fact"] == 30
@@ -585,7 +586,7 @@ class TestCalculateQuestionDistribution:
             "type_b": 0.30,
             "type_c": 0.20,
         }
-        result = self.generator._calculate_question_distribution(1, distribution)
+        result = calculate_question_distribution(1, distribution)
         total = sum(result.values())
         assert total == 1
         non_zero = [k for k, v in result.items() if v > 0]
@@ -597,7 +598,7 @@ class TestCalculateQuestionDistribution:
             "multi_fact": 0.50,
             "adversarial": 0.00,
         }
-        result = self.generator._calculate_question_distribution(10, distribution)
+        result = calculate_question_distribution(10, distribution)
         total = sum(result.values())
         assert total == 10
         assert result["adversarial"] == 0
@@ -605,12 +606,12 @@ class TestCalculateQuestionDistribution:
         assert result["multi_fact"] == 5
 
     def test_distribution_empty_distribution(self):
-        result = self.generator._calculate_question_distribution(10, {})
+        result = calculate_question_distribution(10, {})
         assert result == {}
 
     def test_distribution_zero_questions(self):
         distribution = {"single_fact": 0.50, "multi_fact": 0.50}
-        result = self.generator._calculate_question_distribution(0, distribution)
+        result = calculate_question_distribution(0, distribution)
         assert result == {}
 
 
@@ -990,27 +991,21 @@ class TestDistributeQuestionsAcrossDocs:
             "irrelevant": 4,
         }
         doc_names = ["doc_a", "doc_b", "doc_c"]
-        result = self.generator._distribute_questions_across_docs(
-            type_counts, doc_names
-        )
+        result = distribute_questions_across_docs(type_counts, doc_names)
         total = sum(len(v) for v in result.values())
         assert total == 50
 
     def test_no_questions_per_doc_multiplier(self):
         type_counts = {"single_fact": 15, "multi_fact": 12}
         doc_names = [f"doc_{i}" for i in range(35)]
-        result = self.generator._distribute_questions_across_docs(
-            type_counts, doc_names
-        )
+        result = distribute_questions_across_docs(type_counts, doc_names)
         total = sum(len(v) for v in result.values())
         assert total == 27
 
     def test_single_document_gets_all_questions(self):
         type_counts = {"single_fact": 10, "multi_fact": 5}
         doc_names = ["only_doc"]
-        result = self.generator._distribute_questions_across_docs(
-            type_counts, doc_names
-        )
+        result = distribute_questions_across_docs(type_counts, doc_names)
         assert len(result["only_doc"]) == 15
         total = sum(len(v) for v in result.values())
         assert total == 15
@@ -1018,18 +1013,14 @@ class TestDistributeQuestionsAcrossDocs:
     def test_round_robin_distribution(self):
         type_counts = {"type_a": 3, "type_b": 3}
         doc_names = ["doc_1", "doc_2"]
-        result = self.generator._distribute_questions_across_docs(
-            type_counts, doc_names
-        )
+        result = distribute_questions_across_docs(type_counts, doc_names)
         assert len(result["doc_1"]) == 3
         assert len(result["doc_2"]) == 3
 
     def test_more_docs_than_questions(self):
         type_counts = {"single_fact": 2}
         doc_names = ["doc_a", "doc_b", "doc_c", "doc_d"]
-        result = self.generator._distribute_questions_across_docs(
-            type_counts, doc_names
-        )
+        result = distribute_questions_across_docs(type_counts, doc_names)
         total = sum(len(v) for v in result.values())
         assert total == 2
         non_empty = [name for name, types in result.items() if types]
@@ -1045,9 +1036,7 @@ class TestDistributeQuestionsAcrossDocs:
             "irrelevant": 4,
         }
         doc_names = [f"doc_{i}" for i in range(5)]
-        result = self.generator._distribute_questions_across_docs(
-            type_counts, doc_names
-        )
+        result = distribute_questions_across_docs(type_counts, doc_names)
         all_types = []
         for types in result.values():
             all_types.extend(types)
@@ -1539,6 +1528,10 @@ class TestSupplementDocumentBasedQuestions:
                     "api_key": "test",
                     "base_url": "http://test",
                 },
+            ),
+            patch(
+                "src.test_generation.supplement.resolve_chunks_dir",
+                return_value=tmp_path / "no_chunks",
             ),
             pytest.warns(
                 DeprecationWarning, match="_locate_answer_chunks is deprecated"
@@ -2503,6 +2496,10 @@ class TestQuestionDeduplication:
                     "base_url": "http://test",
                 },
             ),
+            patch(
+                "src.test_generation.supplement.resolve_chunks_dir",
+                return_value=tmp_path / "no_chunks",
+            ),
             pytest.warns(
                 DeprecationWarning, match="_locate_answer_chunks is deprecated"
             ),
@@ -2600,6 +2597,10 @@ class TestQuestionDeduplication:
                     "api_key": "test",
                     "base_url": "http://test",
                 },
+            ),
+            patch(
+                "src.test_generation.supplement.resolve_chunks_dir",
+                return_value=tmp_path / "no_chunks",
             ),
             pytest.warns(
                 DeprecationWarning, match="_locate_answer_chunks is deprecated"

@@ -224,14 +224,14 @@ pixi run python eval/run_experiment.py --config <config> --resume <exp_dir> --fo
 ## 测试命令
 
 ```bash
-# 运行所有测试
-pixi run pytest tests/ -v
+# 纯单元测试（秒级反馈，开发中频繁使用）
+pixi run test-unit
 
-# 运行单元测试（快速）
-pixi run pytest tests/ -m "not integration" -v
+# 标准测试（排除 integration 和 slow，~35s）
+pixi run test
 
-# 运行集成测试
-pixi run pytest tests/ -m "integration" -v
+# 全量测试（包括 integration 和 slow，~60s）
+pixi run test-all
 
 # 运行特定模块测试
 pixi run pytest tests/test_parser.py -v

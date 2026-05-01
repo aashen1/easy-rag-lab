@@ -9,6 +9,7 @@ import yaml
 from loguru import logger
 
 from src.exceptions import ConfigurationError
+from src.experiment_reuse import ReportReuseConfig
 from src.utils import deep_merge, sanitize_name
 
 VALID_RETRIEVAL_METRICS = {
@@ -85,6 +86,47 @@ VALID_FORCE_OVERWRITE_STAGES = {"parsed", "chunk", "vector", "testset", "meal"}
 
 
 @dataclass
+class ResumeConfig:
+    """Resume configuration for experiment.
+
+    Args:
+        from_exp: Experiment directory to resume from. Can be:
+            - Full path: "data/exp_reports/exp_20260501_120000"
+            - Directory name: "exp_20260501_120000" (auto-resolved in exp_reports dir)
+            - Empty string or None: start fresh (default)
+        force_rerun: If True, ignore all checkpoints and re-run all variants.
+        force_variants: List of variant names to force re-run, even if completed.
+
+    Returns:
+        ResumeConfig instance.
+    """
+
+    from_exp: str | None = None
+    force_rerun: bool = False
+    force_variants: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "from": self.from_exp,
+            "force_rerun": self.force_rerun,
+            "force_variants": self.force_variants,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> "ResumeConfig":
+        if data is None:
+            return cls()
+        return cls(
+            from_exp=data.get("from") or data.get("from_exp"),
+            force_rerun=data.get("force_rerun", False),
+            force_variants=data.get("force_variants", []),
+        )
+
+    def is_enabled(self) -> bool:
+        return bool(self.from_exp)
+
+
+@dataclass
 class ExperimentConfig:
     """
     Experiment configuration.
@@ -117,6 +159,8 @@ class ExperimentConfig:
     evaluation: dict[str, Any]
     llm: dict[str, Any] = field(default_factory=dict)
     force_overwrite: list[str] | str = field(default_factory=list)
+    resume: ResumeConfig = field(default_factory=ResumeConfig)
+    reuse: ReportReuseConfig = field(default_factory=ReportReuseConfig)
 
     def should_force(self, stage: str) -> bool:
         """Check whether a given pipeline stage should force-overwrite its cache.
@@ -147,6 +191,8 @@ class ExperimentConfig:
             "evaluation": self.evaluation,
             "llm": self.llm,
             "force_overwrite": self.force_overwrite,
+            "resume": self.resume.to_dict(),
+            "reuse": self.reuse.to_dict(),
         }
 
     @classmethod
@@ -184,6 +230,8 @@ class ExperimentConfig:
             evaluation=data["evaluation"],
             llm=data.get("llm", {}),
             force_overwrite=data.get("force_overwrite", []),
+            resume=ResumeConfig.from_dict(data.get("resume")),
+            reuse=ReportReuseConfig.from_dict(data.get("reuse")),
         )
 
     @property
@@ -649,6 +697,8 @@ class ExperimentManager:
             "completed_variants": [],
             "variant_config_hashes": {},
             "test_sets": test_set_strategies,
+            "reuse_mode": config.reuse.mode if config.reuse.is_enabled() else None,
+            "reuse_history": [],
         }
 
     def load_experiment_result(self, exp_dir: Path) -> ExperimentResult:

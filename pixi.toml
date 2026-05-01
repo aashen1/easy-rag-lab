@@ -22,11 +22,14 @@ cmd = "pre-commit install && pre-commit install --hook-type post-merge"
 [tasks.pre-commit-run]
 cmd = "pre-commit run --all-files"
 
+[tasks.test-unit]
+cmd = "pytest tests/ -m \"unit\" --tb=short -q --durations=5 -n auto"
+
 [tasks.test]
-cmd = "pytest tests/ -m \"not integration\" --tb=short -q --durations=10"
+cmd = "pytest tests/ -m \"not integration and not slow\" --tb=short -q --durations=10 -n auto"
 
 [tasks.test-all]
-cmd = "pytest tests/ --tb=short -q --durations=10"
+cmd = "pytest tests/ --tb=short -q --durations=10 -n auto"
 
 [tasks.interactive]
 cmd = "python main.py --interactive"
@@ -34,6 +37,8 @@ cmd = "python main.py --interactive"
 [tasks.issue]
 cmd = "python -m src.issue.cli"
 
+[tasks.testset]
+cmd = "python -m src.testset_cli"
 
 [tasks.web]
 cmd = "streamlit run src/app.py --server.port 8501"
@@ -120,6 +125,7 @@ qdrant-client = ">=1.17.1, <2" # Qdrant vector DB client
 # Evaluation & Testing
 # ==============================
 pytest = ">=9.0.3, <10" # Testing framework
+pytest-xdist = ">=3.6.1, <4" # Parallel test execution
 ragas = ">=0.4.3, <0.5" # RAG evaluation
 langchain-anthropic = ">=1.4.0, <2"
 langchain-community = ">=0.4.1, <0.5"

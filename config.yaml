@@ -169,6 +169,11 @@ experiments:
     enabled: true  # 是否启用性能分析（设为 false 可完全禁用，零性能开销）
     monitor_interval: 0.5  # 资源监控采样间隔（秒）
     generate_charts: true  # 是否生成可视化图表
+  reuse:
+    mode: "none"  # 实验报告复用模式：none / in_place / copy_migrate
+    # target_dir: null  # in_place 模式的目标实验目录
+    # source_dir: null  # copy_migrate 模式的来源实验目录
+    backup_before_append: true  # in_place 专用：增补前创建完整快照备份
 
 # ============================================================
 # 数据管理配置

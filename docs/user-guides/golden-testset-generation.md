@@ -1,6 +1,10 @@
 # Golden Testset 生成操作指南
 
-<!-- status: active -->
+<!-- status: deprecated -->
+
+> ⚠️ **本指南已废弃**。请参阅新版统一指南：[测试集系统完整指南](test-system.md)。
+>
+> 旧的 `scripts/generate_golden_testset.py` 已由 `pixi run testset generate` 替代。
 
 > 创建日期：2026-04-25
 > 最后更新：2026-04-26

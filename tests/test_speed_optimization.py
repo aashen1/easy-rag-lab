@@ -9,42 +9,37 @@ from eval.runner.metrics import (
 )
 
 
+@pytest.mark.slow
 class TestRagasParallelConfig:
     def test_ragas_run_config_max_workers(self):
-        try:
-            from ragas import RunConfig
+        pytest.importorskip("ragas")
+        from ragas import RunConfig
 
-            config = RunConfig(max_workers=5, timeout=60, max_retries=3)
-            assert config.max_workers == 5
-        except ImportError:
-            pytest.skip("ragas not installed")
+        config = RunConfig(max_workers=5, timeout=60, max_retries=3)
+        assert config.max_workers == 5
 
     def test_ragas_evaluator_build_run_config(self):
-        try:
-            from eval.evaluators.ragas_evaluator import RagasEvaluator
+        pytest.importorskip("ragas")
+        from eval.evaluators.ragas_evaluator import RagasEvaluator
 
-            evaluator = RagasEvaluator(
-                config={
-                    "ragas": {"run_config": {"max_workers": 10}},
-                    "embedding": {"model_name": "test"},
-                }
-            )
-            run_config = evaluator._build_run_config()
-            if run_config is not None:
-                assert run_config.max_workers == 10
-        except ImportError:
-            pytest.skip("ragas not installed")
+        evaluator = RagasEvaluator(
+            config={
+                "ragas": {"run_config": {"max_workers": 10}},
+                "embedding": {"model_name": "test"},
+            }
+        )
+        run_config = evaluator._build_run_config()
+        if run_config is not None:
+            assert run_config.max_workers == 10
 
     def test_ragas_evaluator_default_max_workers(self):
-        try:
-            from eval.evaluators.ragas_evaluator import RagasEvaluator
+        pytest.importorskip("ragas")
+        from eval.evaluators.ragas_evaluator import RagasEvaluator
 
-            evaluator = RagasEvaluator(config={"embedding": {"model_name": "test"}})
-            run_config = evaluator._build_run_config()
-            if run_config is not None:
-                assert run_config.max_workers == 5
-        except ImportError:
-            pytest.skip("ragas not installed")
+        evaluator = RagasEvaluator(config={"embedding": {"model_name": "test"}})
+        run_config = evaluator._build_run_config()
+        if run_config is not None:
+            assert run_config.max_workers == 5
 
 
 class TestIndexerCacheIntegration:

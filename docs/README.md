@@ -28,9 +28,10 @@
 - [Token 追踪](user-guides/token-tracking.md)
 - [Issue 管理系统](user-guides/issue-system.md)
 - [RAG 泛超参数使用指南](user-guides/hyperparameter-guide.md)
-- [测试集管理](user-guides/test-set-management.md)
-- [Golden Testset 生成](user-guides/golden-testset-generation.md)
-- [Golden Test 审查](user-guides/golden-test-review.md)
+- [测试集系统完整指南](user-guides/test-system.md) ← 新版统一指南
+- [测试集管理](user-guides/test-set-management.md) <!-- status: deprecated, see test-system.md -->
+- [Golden Testset 生成](user-guides/golden-testset-generation.md) <!-- status: deprecated, see test-system.md -->
+- [Golden Test 审查](user-guides/golden-test-review.md) <!-- status: deprecated, see test-system.md -->
 
 ### 🔧 开发者通道
 
@@ -45,6 +46,7 @@
 7. [Ruff 使用指南](dev-guides/ruff-usage-guide.md) — Ruff 实操手册
 8. [发版节奏](dev-guides/release-cadence.md) — 版本节奏与流程
 9. [测试分层与时间预算](dev-guides/test-layering-and-time-budgets.md) — 测试架构
+10. [测试集兼容性契约](dev-guides/test-set-compatibility.md) — 字段级兼容约定
 
 ### 🏛️ 项目博物馆
 
@@ -82,9 +84,10 @@ docs/
 │   ├── token-tracking.md
 │   ├── issue-system.md
 │   ├── hyperparameter-guide.md
-│   ├── test-set-management.md
-│   ├── golden-testset-generation.md
-│   └── golden-test-review.md
+│   ├── test-system.md            # 测试集系统完整指南（统一版）
+│   ├── test-set-management.md     # (deprecated)
+│   ├── golden-testset-generation.md # (deprecated)
+│   └── golden-test-review.md      # (deprecated)
 │
 ├── dev-guides/                  # 🔧 开发者指南
 │   ├── architecture.md

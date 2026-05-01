@@ -11,6 +11,7 @@ from src.experiment import (
     VALID_RETRIEVAL_METRICS,
     is_new_format,
 )
+from src.experiment_reuse import VALID_REUSE_MODES
 
 
 class ExperimentConfigSchema(BaseModel):
@@ -37,6 +38,7 @@ class ExperimentConfigSchema(BaseModel):
         self._validate_evaluation(errors)
         self._validate_retrieval_granularity(errors)
         self._validate_force_overwrite(errors)
+        self._validate_reuse(errors)
 
         return self
 
@@ -304,3 +306,27 @@ class ExperimentConfigSchema(BaseModel):
                         f"Invalid force_overwrite stages: {invalid_stages}. "
                         f"Valid options: {sorted(VALID_FORCE_OVERWRITE_STAGES)}"
                     )
+
+    def _validate_reuse(self, errors: list[str]) -> None:
+        reuse = getattr(self, "reuse", None)
+        if reuse is None:
+            return
+
+        if not isinstance(reuse, dict):
+            errors.append("reuse configuration must be a dictionary")
+            return
+
+        mode = reuse.get("mode", "none")
+        if mode not in VALID_REUSE_MODES:
+            errors.append(
+                f"Invalid reuse mode: '{mode}'. "
+                f"Valid options: {sorted(VALID_REUSE_MODES)}"
+            )
+
+        if mode == "in_place" and not reuse.get("target_dir"):
+            errors.append("In-place reuse mode requires 'target_dir' to be specified")
+
+        if mode == "copy_migrate" and not reuse.get("source_dir"):
+            errors.append(
+                "Copy-migrate reuse mode requires 'source_dir' to be specified"
+            )

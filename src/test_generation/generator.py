@@ -11,6 +11,10 @@ from src.exceptions import TestSetError
 from src.generator import Generator
 from src.meal import MealManager
 from src.test_generation.chunk_locator import locate_source_chunks
+from src.test_generation.distribution import (
+    calculate_question_distribution,
+    distribute_questions_across_docs,
+)
 from src.test_generation.document_loader import (
     load_document_chunks,
     load_document_pages,
@@ -449,12 +453,10 @@ class TestSetGenerator:
 
         doc_pages_map = load_document_pages(self.config, meal_config)
 
-        type_counts = self._calculate_question_distribution(
-            num_questions, type_distribution
-        )
+        type_counts = calculate_question_distribution(num_questions, type_distribution)
         logger.info(f"Question type distribution: {type_counts}")
 
-        doc_question_plans = self._distribute_questions_across_docs(
+        doc_question_plans = distribute_questions_across_docs(
             type_counts, list(document_contents.keys())
         )
         num_docs = len(document_contents)
@@ -764,12 +766,10 @@ class TestSetGenerator:
         else:
             filtered_contents = document_contents
 
-        type_counts = self._calculate_question_distribution(
-            num_questions, type_distribution
-        )
+        type_counts = calculate_question_distribution(num_questions, type_distribution)
         logger.info(f"Golden type distribution: {type_counts}")
 
-        doc_question_plans = self._distribute_questions_across_docs(
+        doc_question_plans = distribute_questions_across_docs(
             type_counts, list(filtered_contents.keys()), seed=seed
         )
 
@@ -1452,81 +1452,3 @@ class TestSetGenerator:
 
         seen_questions.add(question_text)
         return True
-
-    def _calculate_question_distribution(
-        self,
-        num_questions: int,
-        type_distribution: dict[str, float],
-    ) -> dict[str, int]:
-        """Calculate the number of questions for each type using largest remainder method.
-
-        Args:
-            num_questions: Total number of questions to generate.
-            type_distribution: Dictionary mapping type names to proportions.
-
-        Returns:
-            Dictionary mapping type names to question counts.
-        """
-        if not type_distribution or num_questions <= 0:
-            return {}
-
-        total_proportion = sum(type_distribution.values())
-        if total_proportion <= 0:
-            n_types = len(type_distribution)
-            return {t: num_questions // n_types for t in type_distribution}
-
-        type_counts = {}
-        allocated = 0
-        remainders = []
-
-        for q_type, proportion in type_distribution.items():
-            normalized = proportion / total_proportion * num_questions
-            floor_count = int(normalized)
-            remainder = normalized - floor_count
-            type_counts[q_type] = floor_count
-            allocated += floor_count
-            remainders.append((q_type, remainder))
-
-        remainders.sort(key=lambda x: x[1], reverse=True)
-
-        idx = 0
-        while allocated < num_questions:
-            q_type = remainders[idx % len(remainders)][0]
-            type_counts[q_type] += 1
-            allocated += 1
-            idx += 1
-
-        return type_counts
-
-    def _distribute_questions_across_docs(
-        self,
-        type_counts: dict[str, int],
-        doc_names: list[str],
-        seed: int | None = None,
-    ) -> dict[str, list[str]]:
-        """Distribute question types across documents using round-robin.
-
-        Args:
-            type_counts: Dictionary mapping question type names to counts.
-            doc_names: List of document names to distribute across.
-            seed: Random seed for shuffling doc_names. If None, no shuffle.
-
-        Returns:
-            Dictionary mapping document names to their assigned question types.
-        """
-        shuffled_names = list(doc_names)
-        if seed is not None:
-            rng = random.Random(seed)
-            rng.shuffle(shuffled_names)
-
-        question_plan = []
-        for q_type, count in type_counts.items():
-            question_plan.extend([q_type] * count)
-
-        num_docs = len(shuffled_names)
-        doc_question_plans: dict[str, list[str]] = {name: [] for name in shuffled_names}
-        for i, q_type in enumerate(question_plan):
-            doc_name = shuffled_names[i % num_docs]
-            doc_question_plans[doc_name].append(q_type)
-
-        return doc_question_plans

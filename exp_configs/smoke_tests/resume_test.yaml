@@ -1,0 +1,45 @@
+name: "resume_test"
+description: "测试 resume 功能的小规模实验"
+
+# 测试 resume 功能：从已有实验恢复
+resume:
+  from: "exp_20260501_122627_resume_test"
+  force_rerun: false
+  force_variants: ["variant_a"]
+
+data:
+  meal: "resume_test_meal"
+  create_if_missing:
+    sample_ratio: 0.02
+    seed: 42
+
+test_sets:
+  - name: "resume_test_set"
+    on_missing: "auto"
+    generation:
+      strategy: "document"
+      num_questions: 3
+
+variants:
+  - name: "variant_a"
+    description: "测试变体 A - chunk_size=512"
+    config_overrides:
+      chunker:
+        chunk_size: 512
+        chunk_overlap: 0
+
+  - name: "variant_b"
+    description: "测试变体 B - chunk_size=256"
+    config_overrides:
+      chunker:
+        chunk_size: 256
+        chunk_overlap: 0
+
+evaluation:
+  backends: ["builtin"]
+  llm_preset: "default"
+  metrics_preset: "core"
+
+llm:
+  question_generation: "default"
+  answering: "default"

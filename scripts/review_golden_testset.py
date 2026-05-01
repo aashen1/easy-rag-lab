@@ -1,7 +1,10 @@
-"""Interactive review tool for golden test set questions.
+"""Interactive review tool for test set questions.
+
+DEPRECATED: Use `pixi run testset review` instead.
+This script will be removed in a future version.
 
 Provides a CLI-based interactive workflow for reviewing and editing
-golden test set questions one at a time. Supports approval, revision,
+test set questions one at a time. Supports approval, revision,
 rejection, and skip operations with automatic progress saving.
 
 Enhanced features:
@@ -54,6 +57,7 @@ REVIEW_STATUS_APPROVED = "approved"
 REVIEW_STATUS_NEEDS_REVISION = "needs_revision"
 REVIEW_STATUS_REJECTED = "rejected"
 REVIEW_STATUS_PENDING = "pending"
+REVIEW_STATUS_AUTO_APPROVED = "auto_approved"
 
 SEPARATOR = "=" * 80
 THIN_SEP = "-" * 80
@@ -631,7 +635,7 @@ def run_review(
         1
         for q in questions
         if q.get("metadata", {}).get("review_status")
-        in (REVIEW_STATUS_APPROVED, "auto_approved")
+        in (REVIEW_STATUS_APPROVED, REVIEW_STATUS_AUTO_APPROVED)
     )
     rejected = sum(
         1
@@ -668,7 +672,7 @@ def run_review(
             continue
         if review_status == REVIEW_STATUS_REJECTED:
             continue
-        if review_status == "auto_approved" and not include_auto_approved:
+        if review_status == REVIEW_STATUS_AUTO_APPROVED and not include_auto_approved:
             continue
 
         display_question(
@@ -712,6 +716,31 @@ def run_review(
     testset["questions"] = questions
     testset["metadata"]["updated_at"] = datetime.now().isoformat()
 
+    final_approved_count = sum(
+        1
+        for q in questions
+        if q.get("metadata", {}).get("review_status")
+        in (REVIEW_STATUS_APPROVED, REVIEW_STATUS_AUTO_APPROVED)
+    )
+    final_rejected_count = sum(
+        1
+        for q in questions
+        if q.get("metadata", {}).get("review_status") == REVIEW_STATUS_REJECTED
+    )
+    final_pending_count = total - final_approved_count - final_rejected_count
+
+    testset["metadata"]["review_progress"] = {
+        "total": total,
+        "approved": final_approved_count,
+        "rejected": final_rejected_count,
+        "pending": final_pending_count,
+    }
+
+    if final_pending_count == 0:
+        testset["metadata"]["quality_status"] = "human_reviewed"
+    else:
+        testset["metadata"].setdefault("quality_status", "ai_reviewed")
+
     session_duration = time.time() - session_start
 
     audit_entry = {
@@ -734,7 +763,7 @@ def run_review(
         1
         for q in questions
         if q.get("metadata", {}).get("review_status")
-        in (REVIEW_STATUS_APPROVED, "auto_approved")
+        in (REVIEW_STATUS_APPROVED, REVIEW_STATUS_AUTO_APPROVED)
     )
     final_rejected = sum(
         1
@@ -815,6 +844,7 @@ def run_ai_review(
         create_backup(input_path)
         testset["questions"] = questions
         testset["metadata"]["updated_at"] = datetime.now().isoformat()
+        testset["metadata"].setdefault("quality_status", "ai_reviewed")
         audit_entry = {
             "event": "ai_review",
             "timestamp": datetime.now().isoformat(),
@@ -888,11 +918,11 @@ def run_tiered_review(
                 if current_status not in (
                     REVIEW_STATUS_APPROVED,
                     REVIEW_STATUS_REJECTED,
-                    "auto_approved",
+                    REVIEW_STATUS_AUTO_APPROVED,
                 ):
                     q.setdefault("metadata", {})
                     q["metadata"]["reviewed"] = True
-                    q["metadata"]["review_status"] = "auto_approved"
+                    q["metadata"]["review_status"] = REVIEW_STATUS_AUTO_APPROVED
                     q["metadata"]["reviewed_at"] = datetime.now().isoformat()
                     q["metadata"]["review_notes"] = (
                         f"ai_tier_a: auto-approved (score={ai.get('overall_score', '?')})"
@@ -912,6 +942,7 @@ def run_tiered_review(
         "auto_approved_tier_a": auto_approve_tier_a,
     }
     testset["metadata"].setdefault("audit_log", []).append(audit_entry)
+    testset["metadata"].setdefault("quality_status", "ai_reviewed")
     save_testset(testset, input_path)
 
     tier_bc_questions = [
@@ -923,7 +954,7 @@ def run_tiered_review(
         not in (
             REVIEW_STATUS_APPROVED,
             REVIEW_STATUS_REJECTED,
-            "auto_approved",
+            REVIEW_STATUS_AUTO_APPROVED,
         )
     ]
 
@@ -994,13 +1025,12 @@ def run_tiered_review(
         "session_duration_sec": round(session_duration, 1),
     }
     testset["metadata"].setdefault("audit_log", []).append(audit_entry)
-    save_testset(testset, input_path)
 
     final_approved = sum(
         1
         for q in questions
         if q.get("metadata", {}).get("review_status")
-        in (REVIEW_STATUS_APPROVED, "auto_approved")
+        in (REVIEW_STATUS_APPROVED, REVIEW_STATUS_AUTO_APPROVED)
     )
     final_rejected = sum(
         1
@@ -1008,6 +1038,17 @@ def run_tiered_review(
         if q.get("metadata", {}).get("review_status") == REVIEW_STATUS_REJECTED
     )
     final_pending = len(questions) - final_approved - final_rejected
+
+    testset["metadata"]["review_progress"] = {
+        "total": len(questions),
+        "approved": final_approved,
+        "rejected": final_rejected,
+        "pending": final_pending,
+    }
+    if final_pending == 0:
+        testset["metadata"]["quality_status"] = "human_reviewed"
+
+    save_testset(testset, input_path)
 
     print(f"\n{SEPARATOR}")
     print("  Tiered Review Complete")
@@ -1250,8 +1291,8 @@ def main():
     )
     parser.add_argument(
         "--input",
-        default="data/golden_testset/golden_150.json",
-        help="Path to golden test set JSON file",
+        required=True,
+        help="Path to test set JSON file",
     )
     parser.add_argument(
         "--start-from",
@@ -1355,7 +1396,7 @@ def main():
                 not in (
                     REVIEW_STATUS_APPROVED,
                     REVIEW_STATUS_REJECTED,
-                    "auto_approved",
+                    REVIEW_STATUS_AUTO_APPROVED,
                 )
             ]
             questions_with_scores.sort(

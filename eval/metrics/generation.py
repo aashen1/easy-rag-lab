@@ -1,9 +1,13 @@
+from __future__ import annotations
+
 import json
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from anthropic import Anthropic
 from loguru import logger
+
+if TYPE_CHECKING:
+    from anthropic import Anthropic
 
 from eval.metrics.utils import (
     DEFAULT_EVAL_BASE_CONFIG,

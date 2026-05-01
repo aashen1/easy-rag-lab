@@ -1,10 +1,8 @@
 # 测试运行指南
 
-<!-- status: needs-update -->
+<!-- status: up-to-date -->
 
-> ⚠️ **文档状态**：本文档缺少 pytest-xdist 并行化测试的说明（INV-019 已评估可行）。此外，测试数量已从 "356 个" 增长到约 1089 个单元测试，文档中的统计数据需要更新。
-
-> 最后更新: 2026-04-18
+> 最后更新: 2026-05-02
 
 本文档介绍如何运行和管理项目测试。
 
@@ -12,31 +10,33 @@
 
 ## 概述
 
-项目使用 pytest 作为测试框架，包含以下测试类型：
-- **单元测试**：测试单一模块的行为
-- **组件集成测试**：测试多组件协作
-- **集成测试**：测试真实环境下的端到端行为
+项目使用 pytest 作为测试框架，测试通过三层 marker 分层，并使用 pytest-xdist 并行加速：
+
+- **单元测试**（`@pytest.mark.unit`）：单一模块，mock 所有依赖
+- **慢速测试**（`@pytest.mark.slow`）：涉及重导入（ragas/torch）的测试
+- **集成测试**（`@pytest.mark.integration`）：触及外部系统（Qdrant、LLM API、真实 PDF）
 
 ---
 
 ## 快速开始
 
-### 运行所有测试
+### 三层测试命令
+
+| 命令 | 跑什么 | 排除什么 | 预期耗时 |
+|------|--------|---------|---------|
+| `pixi run test-unit` | `@pytest.mark.unit` | integration + slow + 无标记 | ~10s |
+| `pixi run test` | 排除 integration 和 slow | integration + slow | ~35s |
+| `pixi run test-all` | 全量 | 无 | ~60s |
 
 ```bash
-pixi run pytest tests/ -v
-```
+# 开发中快速反馈（只跑 unit marker）
+pixi run test-unit
 
-### 运行单元测试（快速）
+# 功能完成后验证（排除 integration 和 slow）
+pixi run test
 
-```bash
-pixi run pytest tests/ -m "not integration" -v
-```
-
-### 运行集成测试
-
-```bash
-pixi run pytest tests/ -m "integration" -v
+# 发版前全量验证
+pixi run test-all
 ```
 
 ---
@@ -44,18 +44,26 @@ pixi run pytest tests/ -m "integration" -v
 ## 按 Marker 过滤
 
 ```bash
-# 仅运行单元测试
+# 仅运行 unit 标记的测试
 pixi run pytest tests/ -m "unit" -v
 
-# 排除集成测试
-pixi run pytest tests/ -m "not integration" -v
+# 排除 integration 和 slow
+pixi run pytest tests/ -m "not integration and not slow" -v
 
 # 仅运行集成测试（需运行环境 + API key）
 pixi run pytest tests/ -m "integration" -v
 
-# 运行慢速测试
+# 仅运行慢速测试（ragas/torch 相关）
 pixi run pytest tests/ -m "slow" -v
 ```
+
+### Marker 定义
+
+| Marker | 含义 | 典型场景 |
+|--------|------|---------|
+| `unit` | 纯单元测试，无外部依赖 | mock 测试、参数校验、数据转换 |
+| `slow` | 重导入或耗时 >5s 的测试 | ragas/torch 加载、大文件解析 |
+| `integration` | 触及外部系统 | Qdrant、LLM API、真实 PDF |
 
 ---
 
@@ -70,6 +78,20 @@ pixi run pytest tests/test_metrics.py tests/test_experiment.py -v
 
 # 仅运行回归测试
 pixi run pytest tests/test_regression.py -v
+```
+
+---
+
+## 并行化
+
+所有 pixi 任务默认使用 `-n auto`（pytest-xdist），自动按 CPU 核心数并行执行。如需串行调试：
+
+```bash
+# 串行运行（方便调试）
+pixi run pytest tests/ -m "unit" -v -n 0
+
+# 指定并行进程数
+pixi run pytest tests/ -m "unit" -v -n 4
 ```
 
 ---
@@ -114,16 +136,19 @@ pixi run pytest tests/ --cov=src --cov=eval --cov-report=html -v
 │  Layer 3: Integration Tests（集成测试）               │
 │  触及外部系统：Qdrant、LLM API、真实 PDF              │
 │  Marker: @pytest.mark.integration                   │
+│  命令: pixi run test-all                            │
 └─────────────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────────────┐
-│  Layer 2: Component Integration（组件集成测试）        │
-│  多组件协作，mock 外部依赖                            │
-│  Marker: @pytest.mark.unit                          │
+│  Layer 2: Standard Tests（标准测试）                  │
+│  多组件协作，mock 外部依赖，排除重导入                  │
+│  Marker: not integration and not slow               │
+│  命令: pixi run test                                │
 └─────────────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────────────┐
-│  Layer 1: Unit Tests（单元测试）                      │
+│  Layer 1: Unit Tests（纯单元测试）                    │
 │  单一模块，mock 所有依赖                             │
 │  Marker: @pytest.mark.unit                          │
+│  命令: pixi run test-unit                           │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -133,10 +158,11 @@ pixi run pytest tests/ --cov=src --cov=eval --cov-report=html -v
 
 | 场景 | 推荐命令 |
 |------|---------|
-| 日常开发 | `pixi run pytest tests/ -m "not integration" -v` |
-| 新功能开发 | `pixi run pytest tests/test_<module>.py -v` |
-| 版本发布 | `pixi run pytest tests/ -v` |
-| CI 环境 | `pixi run pytest tests/ -m "not integration" -v` |
+| 开发中频繁运行 | `pixi run test-unit` |
+| 功能完成后验证 | `pixi run test` |
+| 新功能开发（单模块） | `pixi run pytest tests/test_<module>.py -v` |
+| post-merge 验证 | `pixi run test`（自动触发） |
+| 版本发布 | `pixi run test-all` |
 
 ---
 
@@ -150,9 +176,14 @@ A: 集成测试需要设置环境变量 `RUN_INTEGRATION_TESTS=true` 并配置 A
 
 A: 使用 `pixi run pytest tests/test_file.py::TestClass::test_method -v`
 
+### Q: 什么时候用 test-unit vs test？
+
+A: 开发中写完一个函数/类后用 `test-unit` 快速验证；完成一个功能模块后用 `test` 做更全面的检查。post-merge hook 自动跑 `test`。
+
 ---
 
 ## 相关文档
 
-- [系统架构](architecture.md)
-- [CLI 参考](../user-guides/cli-reference.md)
+- [测试分层与耗时预算](test-layering-and-time-budgets.md) — 分层原则与耗时预算
+- [Lint 与 pre-commit 入门](lint-and-precommit.md) — 钩子配置详解
+- [CLI 参考](../user-guides/cli-reference.md) — 命令行参考
