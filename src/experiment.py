@@ -9,6 +9,7 @@ import yaml
 from loguru import logger
 
 from src.exceptions import ConfigurationError
+from src.experiment_reuse import ReportReuseConfig
 from src.utils import deep_merge, sanitize_name
 
 VALID_RETRIEVAL_METRICS = {
@@ -159,6 +160,7 @@ class ExperimentConfig:
     llm: dict[str, Any] = field(default_factory=dict)
     force_overwrite: list[str] | str = field(default_factory=list)
     resume: ResumeConfig = field(default_factory=ResumeConfig)
+    reuse: ReportReuseConfig = field(default_factory=ReportReuseConfig)
 
     def should_force(self, stage: str) -> bool:
         """Check whether a given pipeline stage should force-overwrite its cache.
@@ -190,6 +192,7 @@ class ExperimentConfig:
             "llm": self.llm,
             "force_overwrite": self.force_overwrite,
             "resume": self.resume.to_dict(),
+            "reuse": self.reuse.to_dict(),
         }
 
     @classmethod
@@ -228,6 +231,7 @@ class ExperimentConfig:
             llm=data.get("llm", {}),
             force_overwrite=data.get("force_overwrite", []),
             resume=ResumeConfig.from_dict(data.get("resume")),
+            reuse=ReportReuseConfig.from_dict(data.get("reuse")),
         )
 
     @property

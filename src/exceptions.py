@@ -51,3 +51,25 @@ class EvaluationError(RAGPipelineError):
     """Raised when evaluation computation fails."""
 
     pass
+
+
+class ReuseError(RAGPipelineError):
+    """Raised when experiment report reuse operations fail."""
+
+    pass
+
+
+class FingerprintMismatchError(ReuseError):
+    """Raised when experiment fingerprints do not match during copy-migrate."""
+
+    def __init__(self, message: str, diff: dict[str, tuple[str, str]] | None = None):
+        super().__init__(message)
+        self.diff = diff
+
+
+class ConflictDetectedError(ReuseError):
+    """Raised when variant name conflicts are detected during reuse."""
+
+    def __init__(self, message: str, conflicting_variants: list[str] | None = None):
+        super().__init__(message)
+        self.conflicting_variants = conflicting_variants or []
