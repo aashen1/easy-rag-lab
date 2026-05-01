@@ -22,8 +22,11 @@ cmd = "pre-commit install && pre-commit install --hook-type post-merge"
 [tasks.pre-commit-run]
 cmd = "pre-commit run --all-files"
 
+[tasks.test-unit]
+cmd = "pytest tests/ -m \"unit\" --tb=short -q --durations=5"
+
 [tasks.test]
-cmd = "pytest tests/ -m \"not integration\" --tb=short -q --durations=10"
+cmd = "pytest tests/ -m \"not integration and not slow\" --tb=short -q --durations=10"
 
 [tasks.test-all]
 cmd = "pytest tests/ --tb=short -q --durations=10"
