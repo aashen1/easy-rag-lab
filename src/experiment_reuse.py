@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
 from loguru import logger
+
+from src.exceptions import ReuseError
 
 VALID_REUSE_MODES = {"in_place", "copy_migrate", "none"}
 
@@ -425,3 +429,499 @@ class IncrementalPlan:
     @property
     def has_conflicts(self) -> bool:
         return len(self.to_confirm) > 0
+
+
+class InPlaceReuseHandler:
+    """Handler for in-place experiment report reuse mode.
+
+    In-place mode appends new variant results to an existing experiment
+    directory.  If backup_before_append is enabled, a full snapshot of the
+    target directory is created before any modifications.
+
+    Args:
+        target_dir: Path to the target experiment directory.
+        backup_before_append: Whether to create a full snapshot backup
+            before appending new variants.
+
+    Returns:
+        InPlaceReuseHandler instance.
+    """
+
+    def __init__(self, target_dir: Path, backup_before_append: bool = True):
+        self._target_dir = target_dir
+        self._backup_before_append = backup_before_append
+
+    @property
+    def target_dir(self) -> Path:
+        return self._target_dir
+
+    @property
+    def backup_root(self) -> Path:
+        """Path to the backup root directory (sibling of target_dir)."""
+        return self._target_dir.parent / f"{self._target_dir.name}_backup"
+
+    def validate_target_dir(self) -> dict[str, Any]:
+        """Validate that the target directory is a valid experiment directory.
+
+        Returns:
+            Manifest dictionary from the target directory.
+
+        Raises:
+            ReuseError: If the target directory is invalid.
+        """
+        if not self._target_dir.exists():
+            raise ReuseError(f"Target directory does not exist: {self._target_dir}")
+
+        if not self._target_dir.is_dir():
+            raise ReuseError(f"Target path is not a directory: {self._target_dir}")
+
+        manifest_path = self._target_dir / "manifest.json"
+        if not manifest_path.exists():
+            raise ReuseError(
+                f"Target directory has no manifest.json: {self._target_dir}"
+            )
+
+        try:
+            with open(manifest_path, encoding="utf-8") as f:
+                manifest = json.load(f)
+        except json.JSONDecodeError as e:
+            raise ReuseError(f"Invalid manifest.json in target dir: {str(e)}") from e
+
+        logger.info(f"Target directory validated: {self._target_dir}")
+        return manifest
+
+    def create_full_snapshot(self) -> Path | None:
+        """Create a full snapshot backup of the target experiment directory.
+
+        The snapshot is a complete recursive copy of the target directory,
+        stored in a sibling directory named ``{target_name}_backup/{timestamp}/``.
+
+        Returns:
+            Path to the created snapshot directory, or None if backup is
+            disabled.
+
+        Raises:
+            ReuseError: If snapshot creation fails.
+        """
+        if not self._backup_before_append:
+            logger.info("Backup before append is disabled, skipping snapshot")
+            return None
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        snapshot_dir = self.backup_root / timestamp
+
+        if snapshot_dir.exists():
+            suffix = 1
+            while (self.backup_root / f"{timestamp}_{suffix}").exists():
+                suffix += 1
+            snapshot_dir = self.backup_root / f"{timestamp}_{suffix}"
+
+        try:
+            shutil.copytree(
+                self._target_dir,
+                snapshot_dir,
+                ignore=shutil.ignore_patterns("_backup"),
+            )
+            logger.info(f"Full snapshot created: {snapshot_dir}")
+            return snapshot_dir
+        except OSError as e:
+            raise ReuseError(f"Failed to create snapshot backup: {str(e)}") from e
+
+    def restore_snapshot(self, snapshot_timestamp: str) -> None:
+        """Restore the target directory from a backup snapshot.
+
+        Args:
+            snapshot_timestamp: Timestamp of the snapshot to restore
+                (format: YYYYMMDD_HHMMSS or YYYYMMDD_HHMMSS_N).
+
+        Raises:
+            ReuseError: If the snapshot does not exist or restoration fails.
+        """
+        snapshot_dir = self.backup_root / snapshot_timestamp
+        if not snapshot_dir.exists():
+            raise ReuseError(f"Snapshot not found: {snapshot_dir}")
+
+        try:
+            for item in self._target_dir.iterdir():
+                if item.name == f"{self._target_dir.name}_backup":
+                    continue
+                if item.is_dir():
+                    shutil.rmtree(item)
+                else:
+                    item.unlink()
+
+            for item in snapshot_dir.iterdir():
+                if item.is_dir():
+                    shutil.copytree(item, self._target_dir / item.name)
+                else:
+                    shutil.copy2(item, self._target_dir / item.name)
+
+            logger.info(
+                f"Restored experiment from snapshot: {snapshot_timestamp} -> {self._target_dir}"
+            )
+        except OSError as e:
+            raise ReuseError(f"Failed to restore snapshot: {str(e)}") from e
+
+    def list_snapshots(self) -> list[dict[str, Any]]:
+        """List all available backup snapshots.
+
+        Returns:
+            List of dicts with keys: timestamp, path, created_at (mtime).
+        """
+        snapshots: list[dict[str, Any]] = []
+
+        if not self.backup_root.exists():
+            return snapshots
+
+        for snapshot_dir in sorted(self.backup_root.iterdir()):
+            if not snapshot_dir.is_dir():
+                continue
+            stat = snapshot_dir.stat()
+            snapshots.append(
+                {
+                    "timestamp": snapshot_dir.name,
+                    "path": str(snapshot_dir),
+                    "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                }
+            )
+
+        return snapshots
+
+    def compute_incremental_updates(
+        self,
+        new_variants: list[dict[str, Any]],
+        manifest: dict[str, Any],
+        stored_hashes: dict[str, str],
+        compute_variant_hash_fn: Any = None,
+    ) -> IncrementalPlan:
+        """Compute an incremental update plan for new variants.
+
+        Args:
+            new_variants: List of variant configurations from the new
+                experiment config.
+            manifest: Manifest dictionary from the target experiment.
+            stored_hashes: Mapping of variant name -> config hash from
+                the target experiment's manifest.
+            compute_variant_hash_fn: Optional callable to compute variant
+                config hashes.  If not provided, a simple name-based
+                comparison is used.
+
+        Returns:
+            IncrementalPlan with to_run, to_reuse, and to_confirm lists.
+        """
+        completed_variants = set(manifest.get("completed_variants", []))
+        all_existing_variants = set(manifest.get("variants", []))
+
+        to_run: list[dict[str, Any]] = []
+        to_reuse: list[dict[str, Any]] = []
+        to_confirm: list[dict[str, Any]] = []
+
+        for variant in new_variants:
+            variant_name = variant.get("name", "unnamed")
+
+            if variant_name not in all_existing_variants:
+                to_run.append(variant)
+                logger.info(f"New variant to run: {variant_name}")
+            elif variant_name in completed_variants:
+                if compute_variant_hash_fn and variant_name in stored_hashes:
+                    current_hash = compute_variant_hash_fn(variant)
+                    stored_hash = stored_hashes.get(variant_name)
+                    if current_hash == stored_hash:
+                        to_reuse.append(variant)
+                        logger.info(
+                            f"Existing variant to reuse (hash match): {variant_name}"
+                        )
+                    else:
+                        to_confirm.append(variant)
+                        logger.warning(
+                            f"Existing variant with config change (hash mismatch): "
+                            f"{variant_name} (stored={stored_hash[:8]}..., "
+                            f"current={current_hash[:8]}...)"
+                        )
+                else:
+                    to_reuse.append(variant)
+                    logger.info(
+                        f"Existing variant to reuse (no hash verification): {variant_name}"
+                    )
+            else:
+                to_run.append(variant)
+                logger.info(f"Existing but incomplete variant to run: {variant_name}")
+
+        return IncrementalPlan(
+            to_run=to_run,
+            to_reuse=to_reuse,
+            to_confirm=to_confirm,
+        )
+
+    def record_reuse_history(
+        self,
+        action: str,
+        variant: str | None = None,
+        backup_snapshot: str | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        """Record a reuse operation in the manifest's reuse_history.
+
+        Args:
+            action: Type of action performed.
+            variant: Name of the variant involved (if applicable).
+            backup_snapshot: Path to the backup snapshot created (if any).
+            details: Additional details about the operation.
+
+        Raises:
+            ReuseError: If updating the manifest fails.
+        """
+        manifest_path = self._target_dir / "manifest.json"
+        if not manifest_path.exists():
+            logger.warning("Manifest not found, skipping reuse history record")
+            return
+
+        try:
+            with open(manifest_path, encoding="utf-8") as f:
+                manifest = json.load(f)
+
+            entry = ReuseHistoryEntry(
+                timestamp=datetime.now().isoformat(),
+                action=action,
+                variant=variant,
+                backup_snapshot=backup_snapshot,
+                details=details or {},
+            )
+
+            history = manifest.get("reuse_history", [])
+            history.append(entry.to_dict())
+            manifest["reuse_history"] = history
+
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+            logger.info(f"Recorded reuse history: {action}")
+        except (json.JSONDecodeError, OSError) as e:
+            raise ReuseError(f"Failed to record reuse history: {str(e)}") from e
+
+    def append_variant_to_manifest(
+        self, variant_name: str, config_hash: str | None = None
+    ) -> None:
+        """Add a new variant to the manifest's variants list.
+
+        Args:
+            variant_name: Name of the variant to add.
+            config_hash: Optional config hash for the variant.
+
+        Raises:
+            ReuseError: If updating the manifest fails.
+        """
+        manifest_path = self._target_dir / "manifest.json"
+        if not manifest_path.exists():
+            raise ReuseError("Manifest not found")
+
+        try:
+            with open(manifest_path, encoding="utf-8") as f:
+                manifest = json.load(f)
+
+            variants = manifest.get("variants", [])
+            if variant_name not in variants:
+                variants.append(variant_name)
+                manifest["variants"] = variants
+
+            if config_hash is not None:
+                hashes = manifest.get("variant_config_hashes", {})
+                hashes[variant_name] = config_hash
+                manifest["variant_config_hashes"] = hashes
+
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+            logger.info(f"Appended variant '{variant_name}' to manifest")
+        except (json.JSONDecodeError, OSError) as e:
+            raise ReuseError(f"Failed to append variant to manifest: {str(e)}") from e
+
+
+class CopyMigrateHandler:
+    """Handler for copy-migrate experiment report reuse mode.
+
+    Copy-migrate mode copies an existing experiment's complete directory
+    structure to a new location, then optionally runs additional variants.
+    The original experiment is never modified.
+
+    Args:
+        source_dir: Path to the source experiment directory.
+        exp_dir: Path to the new experiment directory (will be created).
+
+    Returns:
+        CopyMigrateHandler instance.
+    """
+
+    def __init__(self, source_dir: Path, exp_dir: Path):
+        self._source_dir = source_dir
+        self._exp_dir = exp_dir
+
+    @property
+    def source_dir(self) -> Path:
+        return self._source_dir
+
+    @property
+    def exp_dir(self) -> Path:
+        return self._exp_dir
+
+    def validate_source_dir(self) -> dict[str, Any]:
+        """Validate that the source directory is a valid experiment directory.
+
+        Returns:
+            Manifest dictionary from the source directory.
+
+        Raises:
+            ReuseError: If the source directory is invalid.
+        """
+        if not self._source_dir.exists():
+            raise ReuseError(f"Source directory does not exist: {self._source_dir}")
+
+        if not self._source_dir.is_dir():
+            raise ReuseError(f"Source path is not a directory: {self._source_dir}")
+
+        manifest_path = self._source_dir / "manifest.json"
+        if not manifest_path.exists():
+            raise ReuseError(
+                f"Source directory has no manifest.json: {self._source_dir}"
+            )
+
+        config_snapshot_path = self._source_dir / "config_snapshot.yaml"
+        if not config_snapshot_path.exists():
+            raise ReuseError(
+                f"Source directory has no config_snapshot.yaml: {self._source_dir}"
+            )
+
+        try:
+            with open(manifest_path, encoding="utf-8") as f:
+                manifest = json.load(f)
+        except json.JSONDecodeError as e:
+            raise ReuseError(f"Invalid manifest.json in source dir: {str(e)}") from e
+
+        results_dir = self._source_dir / "results"
+        if not results_dir.exists() or not any(results_dir.glob("*.json")):
+            logger.warning(
+                f"Source experiment has no variant results: {self._source_dir}"
+            )
+
+        logger.info(f"Source directory validated: {self._source_dir}")
+        return manifest
+
+    def copy_experiment(self) -> None:
+        """Copy the complete source experiment directory to the new location.
+
+        Raises:
+            ReuseError: If the copy operation fails.
+        """
+        if self._exp_dir.exists():
+            raise ReuseError(
+                f"Target experiment directory already exists: {self._exp_dir}"
+            )
+
+        try:
+            shutil.copytree(self._source_dir, self._exp_dir)
+            logger.info(f"Copied experiment: {self._source_dir} -> {self._exp_dir}")
+        except OSError as e:
+            raise ReuseError(f"Failed to copy experiment: {str(e)}") from e
+
+    def update_identifiers(self, new_experiment_id: str, source_exp_id: str) -> None:
+        """Update experiment identifiers in the copied directory.
+
+        Generates a new experiment_id with current timestamp, updates the
+        manifest, and records the migration source.
+
+        Args:
+            new_experiment_id: New experiment ID for the migrated experiment.
+            source_exp_id: Original experiment ID (recorded as migrated_from).
+
+        Raises:
+            ReuseError: If updating identifiers fails.
+        """
+        manifest_path = self._exp_dir / "manifest.json"
+        if not manifest_path.exists():
+            raise ReuseError("Manifest not found in migrated experiment")
+
+        try:
+            with open(manifest_path, encoding="utf-8") as f:
+                manifest = json.load(f)
+
+            manifest["experiment_id"] = new_experiment_id
+            manifest["created_at"] = datetime.now().isoformat()
+            manifest["migrated_from"] = {
+                "experiment_id": source_exp_id,
+                "path": str(self._source_dir),
+                "migrated_at": datetime.now().isoformat(),
+            }
+            manifest["reuse_mode"] = "copy_migrate"
+            manifest["completed_variants"] = []
+            manifest["variant_config_hashes"] = {}
+
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(manifest, f, ensure_ascii=False, indent=2)
+
+            logger.info(f"Updated identifiers: {new_experiment_id}")
+        except (json.JSONDecodeError, OSError) as e:
+            raise ReuseError(f"Failed to update identifiers: {str(e)}") from e
+
+    def verify_migration(self) -> bool:
+        """Verify that the migration was successful.
+
+        Checks that all required files and directories exist in the
+        migrated experiment directory.
+
+        Returns:
+            True if verification passes.
+
+        Raises:
+            ReuseError: If verification fails.
+        """
+        required_files = ["manifest.json", "config_snapshot.yaml", "meal_snapshot.json"]
+        for fname in required_files:
+            fpath = self._exp_dir / fname
+            if not fpath.exists():
+                raise ReuseError(f"Missing required file after migration: {fname}")
+
+        required_dirs = ["results", "test_sets"]
+        for dname in required_dirs:
+            dpath = self._exp_dir / dname
+            if not dpath.exists():
+                raise ReuseError(f"Missing required directory after migration: {dname}")
+
+        source_results = set(
+            f.name for f in (self._source_dir / "results").glob("*.json")
+        )
+        migrated_results = set(
+            f.name for f in (self._exp_dir / "results").glob("*.json")
+        )
+
+        missing = source_results - migrated_results
+        if missing:
+            raise ReuseError(f"Missing result files after migration: {sorted(missing)}")
+
+        logger.info("Migration verification passed")
+        return True
+
+    def compute_fingerprint_diff(
+        self,
+        source_fingerprint: ExperimentFingerprint,
+        target_fingerprint: ExperimentFingerprint,
+    ) -> dict[str, tuple[str, str]]:
+        """Compute fingerprint differences and warn about mismatches.
+
+        Args:
+            source_fingerprint: Fingerprint of the source experiment.
+            target_fingerprint: Fingerprint of the target (new) experiment.
+
+        Returns:
+            Dict of field name -> (source_value, target_value) for differences.
+        """
+        diff = source_fingerprint.diff(target_fingerprint)
+        if diff:
+            logger.warning(
+                f"Fingerprint mismatch between source and target experiments: "
+                f"{list(diff.keys())}"
+            )
+            for field_name, (src_val, tgt_val) in diff.items():
+                logger.warning(f"  {field_name}: {src_val} -> {tgt_val}")
+        else:
+            logger.info("Fingerprints match between source and target experiments")
+        return diff
