@@ -358,6 +358,7 @@ class TestBuiltinEvaluator:
                 expected_answer="The revenue was $1 million in 2023.",
                 llm_config=llm_config,
                 retrieval_metrics=["context_precision", "context_recall"],
+                generation_metrics=[],
             )
         )
 
@@ -390,6 +391,7 @@ class TestBuiltinEvaluator:
                 expect_retrieval=True,
                 llm_config=llm_config,
                 retrieval_metrics=["context_precision"],
+                generation_metrics=[],
             )
         )
 
@@ -551,6 +553,7 @@ class TestBuiltinEvaluator:
                 retrieved_sources=["doc1.pdf", "doc2.pdf"],
                 llm_config=llm_config,
                 retrieval_metrics=["context_precision", "context_recall"],
+                generation_metrics=[],
             )
         )
 
