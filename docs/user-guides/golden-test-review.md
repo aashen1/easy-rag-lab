@@ -1,6 +1,10 @@
 # Golden Testset 交互式审核工具指南
 
-<!-- status: active -->
+<!-- status: deprecated -->
+
+> ⚠️ **本指南已废弃**。请参阅新版统一指南：[测试集系统完整指南](test-system.md)。
+>
+> 旧的 `scripts/review_golden_testset.py` 已由 `pixi run testset review` 替代。
 
 > 创建日期：2026-04-27
 > 最后更新：2026-04-27

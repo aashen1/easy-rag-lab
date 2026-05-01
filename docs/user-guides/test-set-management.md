@@ -1,6 +1,11 @@
-# TestSet 独立管理系统实现
+# 测试集管理操作指南
 
-<!-- status: completed -->
+<!-- status: deprecated -->
+
+> ⚠️ **本指南已废弃**。请参阅新版统一指南：[测试集系统完整指南](test-system.md)。
+>
+> `pixi run testset <子命令>` 替代了本文档中描述的大部分操作。
+
 
 > 完成日期：2026-04-20
 > 版本：v0.1.8
