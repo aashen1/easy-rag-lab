@@ -406,11 +406,45 @@ def run_experiment(
 
     exp_manager = ExperimentManager(system_config)
 
-    if resume_dir:
-        exp_dir = Path(resume_dir)
+    # Resolve resume settings: CLI args take precedence over YAML config
+    effective_resume_dir = resume_dir
+    effective_force_rerun = force_rerun
+    effective_force_variant = force_variant
+
+    if exp_config.resume.is_enabled() and not resume_dir:
+        resume_from = exp_config.resume.from_exp
+        if resume_from:
+            # Resolve path: if not absolute, treat as exp_id or relative path
+            resume_path = Path(resume_from)
+            if not resume_path.is_absolute():
+                # Try as exp_id first
+                exp_reports_dir = Path(
+                    system_config.get("experiments", {}).get("dir", "data/exp_reports")
+                )
+                candidate = exp_reports_dir / resume_from
+                if candidate.exists():
+                    resume_path = candidate
+                else:
+                    # Try as relative path from project root
+                    candidate = Path(resume_from)
+                    if candidate.exists():
+                        resume_path = candidate
+            effective_resume_dir = str(resume_path)
+            logger.info(f"Resume from YAML config: {effective_resume_dir}")
+
+    if exp_config.resume.force_rerun and not force_rerun:
+        effective_force_rerun = True
+        logger.info("force_rerun from YAML config: True")
+
+    if exp_config.resume.force_variants and not force_variant:
+        effective_force_variant = exp_config.resume.force_variants
+        logger.info(f"force_variants from YAML config: {effective_force_variant}")
+
+    if effective_resume_dir:
+        exp_dir = Path(effective_resume_dir)
         if not (exp_dir / "manifest.json").exists():
             raise ValueError(
-                f"Not a valid experiment directory (missing manifest.json): {resume_dir}"
+                f"Not a valid experiment directory (missing manifest.json): {effective_resume_dir}"
             )
         logger.info(f"Resuming experiment from existing directory: {exp_dir}")
         exp_manager.mark_resumed(exp_dir)
@@ -532,7 +566,7 @@ def run_experiment(
             "environment": collect_environment_info(),
         }
 
-        if not resume_dir:
+        if not effective_resume_dir:
             exp_manager.save_snapshots(
                 exp_dir=exp_dir,
                 config=exp_config,
@@ -549,7 +583,7 @@ def run_experiment(
 
         completed_variants: set[str] = set()
         stored_hashes: dict[str, str] = {}
-        if not force_rerun:
+        if not effective_force_rerun:
             completed_variants = set(exp_manager.get_completed_variants(exp_dir))
             stored_hashes = exp_manager.get_variant_config_hashes(exp_dir)
             if completed_variants:
@@ -572,8 +606,8 @@ def run_experiment(
             exp_manager.update_manifest_field(exp_dir, "completed_variants", [])
             exp_manager.update_manifest_field(exp_dir, "variant_config_hashes", {})
 
-        if force_variant and not force_rerun:
-            for vname in force_variant:
+        if effective_force_variant and not effective_force_rerun:
+            for vname in effective_force_variant:
                 if vname in completed_variants:
                     logger.info(
                         f"Force re-run variant '{vname}' (requested via --force-variant)"
@@ -591,7 +625,7 @@ def run_experiment(
         for i, variant in enumerate(exp_config.variants, 1):
             variant_name = variant.get("name", f"variant_{i}")
 
-            if variant_name in completed_variants and not force_rerun:
+            if variant_name in completed_variants and not effective_force_rerun:
                 merged = merge_config(system_config, exp_config, variant)
                 current_hash = compute_variant_config_hash(
                     variant=variant,
@@ -609,6 +643,42 @@ def run_experiment(
                         f"Skipping completed variant {i}/{len(exp_config.variants)}: "
                         f"{variant_name} (checkpoint, hash={current_hash[:8]}… verified)"
                     )
+                    existing_result = exp_manager.load_variant_result(
+                        exp_dir, variant_name
+                    )
+                    if existing_result is not None:
+                        all_variant_results.append(existing_result)
+                        if "token_usage" in existing_result:
+                            variant_tracker = TokenTracker()
+                            for rec_data in existing_result["token_usage"].get(
+                                "records", []
+                            ):
+                                usage = DetailedTokenUsage(
+                                    input_tokens=rec_data["usage"]["input_tokens"],
+                                    output_tokens=rec_data["usage"]["output_tokens"],
+                                    system_prompt_tokens=rec_data["usage"].get(
+                                        "system_prompt_tokens", 0
+                                    ),
+                                    contexts_tokens=rec_data["usage"].get(
+                                        "contexts_tokens", 0
+                                    ),
+                                    query_tokens=rec_data["usage"].get(
+                                        "query_tokens", 0
+                                    ),
+                                )
+                                variant_tracker.record(
+                                    category=rec_data["category"],
+                                    model_name=rec_data["model_name"],
+                                    usage=usage,
+                                    variant_name=variant_name,
+                                )
+                            experiment_tracker.merge(variant_tracker)
+                        continue
+                    else:
+                        logger.warning(
+                            f"Variant '{variant_name}' marked completed but result file not found, re-running"
+                        )
+                        completed_variants.discard(variant_name)
                 else:
                     if stored_hash is None:
                         logger.warning(
@@ -623,41 +693,6 @@ def run_experiment(
                         )
                     exp_manager.invalidate_variant(exp_dir, variant_name)
                     completed_variants.discard(variant_name)
-                    continue
-
-                existing_result = exp_manager.load_variant_result(exp_dir, variant_name)
-                if existing_result is not None:
-                    all_variant_results.append(existing_result)
-                    if "token_usage" in existing_result:
-                        variant_tracker = TokenTracker()
-                        for rec_data in existing_result["token_usage"].get(
-                            "records", []
-                        ):
-                            usage = DetailedTokenUsage(
-                                input_tokens=rec_data["usage"]["input_tokens"],
-                                output_tokens=rec_data["usage"]["output_tokens"],
-                                system_prompt_tokens=rec_data["usage"].get(
-                                    "system_prompt_tokens", 0
-                                ),
-                                contexts_tokens=rec_data["usage"].get(
-                                    "contexts_tokens", 0
-                                ),
-                                query_tokens=rec_data["usage"].get("query_tokens", 0),
-                            )
-                            variant_tracker.record(
-                                category=rec_data["category"],
-                                model_name=rec_data["model_name"],
-                                usage=usage,
-                                variant_name=variant_name,
-                            )
-                        experiment_tracker.merge(variant_tracker)
-                else:
-                    logger.warning(
-                        f"Variant '{variant_name}' marked completed but result file not found, re-running"
-                    )
-                    completed_variants.discard(variant_name)
-
-                continue
 
             logger.info(
                 f"Evaluating variant {i}/{len(exp_config.variants)}: {variant_name}"
