@@ -1539,6 +1539,10 @@ class TestSupplementDocumentBasedQuestions:
                     "base_url": "http://test",
                 },
             ),
+            patch(
+                "src.test_generation.supplement.resolve_chunks_dir",
+                return_value=tmp_path / "no_chunks",
+            ),
             pytest.warns(
                 DeprecationWarning, match="_locate_answer_chunks is deprecated"
             ),
@@ -2502,6 +2506,10 @@ class TestQuestionDeduplication:
                     "base_url": "http://test",
                 },
             ),
+            patch(
+                "src.test_generation.supplement.resolve_chunks_dir",
+                return_value=tmp_path / "no_chunks",
+            ),
             pytest.warns(
                 DeprecationWarning, match="_locate_answer_chunks is deprecated"
             ),
@@ -2599,6 +2607,10 @@ class TestQuestionDeduplication:
                     "api_key": "test",
                     "base_url": "http://test",
                 },
+            ),
+            patch(
+                "src.test_generation.supplement.resolve_chunks_dir",
+                return_value=tmp_path / "no_chunks",
             ),
             pytest.warns(
                 DeprecationWarning, match="_locate_answer_chunks is deprecated"
