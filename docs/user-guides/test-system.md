@@ -156,7 +156,7 @@ AI 预审会给每道题打一个 tier：
 # 审核所有题
 pixi run testset review --input data/my_meal/test_sets/hybrid_n30.json
 
-# 只审质量状态为 draft 的题（跳过审过的）
+# 只审尚未审核的题（跳过已 approved/rejected/auto_approved 的题）
 pixi run testset review --input data/my_meal/test_sets/hybrid_n60.json --only-new
 
 # 从第 15 题开始（断点续审）

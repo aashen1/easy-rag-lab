@@ -6,6 +6,7 @@ import sys
 from src.testset_cli.approve import run_approve
 from src.testset_cli.compose import run_compose
 from src.testset_cli.enrich import run_enrich
+from src.testset_cli.generate import run_generate
 from src.testset_cli.migrate import run_migrate
 from src.testset_cli.review import run_review
 
@@ -16,6 +17,29 @@ def build_parser() -> argparse.ArgumentParser:
         description="Test set pipeline management CLI",
     )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    generate_parser = subparsers.add_parser(
+        "generate", help="Generate new test set questions"
+    )
+    generate_parser.add_argument(
+        "--meal", required=True, help="Meal name to generate questions for"
+    )
+    generate_parser.add_argument(
+        "--strategy",
+        default="hybrid",
+        choices=["factual", "boundary", "multi_hop", "document", "hybrid", "golden"],
+        help="Generation strategy (default: hybrid)",
+    )
+    generate_parser.add_argument(
+        "--num", type=int, default=None, help="Number of questions to generate"
+    )
+    generate_parser.add_argument("--name", default=None, help="Output test set name")
+    generate_parser.add_argument(
+        "--llm-preset", default="default", help="LLM preset name"
+    )
+    generate_parser.add_argument(
+        "--seed", type=int, default=None, help="Random seed for reproducibility"
+    )
 
     migrate_parser = subparsers.add_parser(
         "migrate", help="Migrate golden test sets to portable directory"
@@ -59,7 +83,7 @@ def build_parser() -> argparse.ArgumentParser:
     review_parser.add_argument(
         "--only-new",
         action="store_true",
-        help="Only review questions with quality_status='draft'",
+        help="Only review questions not yet reviewed (review_status=pending)",
     )
     review_parser.add_argument(
         "--no-pdf", action="store_true", help="Disable PDF viewer integration"
@@ -137,7 +161,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    if args.command == "migrate":
+    if args.command == "generate":
+        return run_generate(args)
+    elif args.command == "migrate":
         return run_migrate(args)
     elif args.command == "enrich":
         return run_enrich(args)
