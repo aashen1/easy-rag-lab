@@ -180,6 +180,50 @@ class TestTableToMarkdown:
         assert "| 1 |  |  |" in lines[2]
         assert "| 2 | 3 |  |" in lines[3]
 
+    def test_sparse_rows_filtered(self, enhancer: PdfPlumberEnhancer) -> None:
+        data = [
+            ["", "", "", "Header Noise"],
+            ["Code", "Name", "Price", "PE"],
+            ["600519", "Moutai", "1413", "19.7"],
+            ["000858", "Wuliangye", "103", "14.1"],
+        ]
+        result = enhancer._table_to_markdown(data)
+        assert "Header Noise" not in result
+        assert "| Code | Name | Price | PE |" in result
+        assert "| 600519 | Moutai | 1413 | 19.7 |" in result
+
+    def test_sparse_rows_not_filtered_for_small_tables(
+        self, enhancer: PdfPlumberEnhancer
+    ) -> None:
+        data = [
+            ["A", "B"],
+            ["", "X"],
+        ]
+        result = enhancer._table_to_markdown(data)
+        assert "|  | X |" in result
+
+    def test_sparse_rows_fallback_when_all_sparse(
+        self, enhancer: PdfPlumberEnhancer
+    ) -> None:
+        data = [
+            ["", "", "", "X"],
+            ["A", "", "", ""],
+            ["", "B", "", ""],
+        ]
+        result = enhancer._table_to_markdown(data)
+        assert result != ""
+
+    def test_dense_rows_preserved(self, enhancer: PdfPlumberEnhancer) -> None:
+        data = [
+            ["A", "B", "C", "D"],
+            ["1", "2", "3", "4"],
+            ["5", "6", "", "8"],
+        ]
+        result = enhancer._table_to_markdown(data)
+        assert "| A | B | C | D |" in result
+        assert "| 1 | 2 | 3 | 4 |" in result
+        assert "| 5 | 6 |  | 8 |" in result
+
 
 class TestBlocksToMarkdown:
     def test_text_blocks(self, fitz_parser: FitzParser) -> None:

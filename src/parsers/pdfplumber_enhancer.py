@@ -228,7 +228,10 @@ class PdfPlumberEnhancer(TableEnhancer):
         """Convert pdfplumber table data to Markdown format.
 
         Filters out degenerate rows where all cells are empty or contain
-        only whitespace.
+        only whitespace, as well as sparse rows where more than half the
+        cells are empty.  Sparse rows typically arise when pdfplumber's
+        text strategy captures page headers, footers, or section titles
+        as part of the table bounding box.
 
         Args:
             table_data: 2D list from pdfplumber extract(), may contain None.
@@ -261,10 +264,21 @@ class PdfPlumberEnhancer(TableEnhancer):
         if not non_degenerate:
             return ""
 
+        dense_rows = non_degenerate
+        if col_count >= 4:
+            dense_rows = [
+                row
+                for row in non_degenerate
+                if sum(1 for cell in row if cell.strip()) > col_count / 2
+            ]
+
+        if not dense_rows:
+            dense_rows = non_degenerate
+
         lines: list[str] = []
-        lines.append("| " + " | ".join(non_degenerate[0]) + " |")
+        lines.append("| " + " | ".join(dense_rows[0]) + " |")
         lines.append("|" + "|".join(["---"] * col_count) + "|")
-        for row in non_degenerate[1:]:
+        for row in dense_rows[1:]:
             lines.append("| " + " | ".join(row) + " |")
 
         return "\n".join(lines)
