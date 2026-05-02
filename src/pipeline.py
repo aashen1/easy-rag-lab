@@ -275,10 +275,13 @@ class RAGPipeline:
                 continue
         data_id = compute_data_id(meal_files)
 
+        algorithm = parser_config.get("algorithm", "pymupdf4llm")
+        parser_options = parser_config.get(algorithm, {})
+
         parser_hash = compute_parser_config_hash(
             {
-                "algorithm": parser_config.get("algorithm", "pymupdf4llm"),
-                "options": parser_config.get("pymupdf4llm", {}),
+                "algorithm": algorithm,
+                "options": parser_options,
             }
         )
         parsed_dir = cache.get_parsed_dir(data_id, parser_hash)
@@ -287,8 +290,9 @@ class RAGPipeline:
         parse_results = parse_all_pdfs_unified(
             input_dir=parser_config["input_dir"],
             artifacts_dir=str(cache.artifacts_dir),
+            algorithm=algorithm,
             force=force_parse,
-            parser_options=parser_config.get("pymupdf4llm"),
+            parser_options=parser_options,
         )
 
         source_filter_md = None
@@ -300,7 +304,6 @@ class RAGPipeline:
                     source_filter_md.add(output_path.relative_to(parsed_dir).as_posix())
             logger.info(f"Source filter for chunker: {len(source_filter_md)} files")
 
-        parser_options = parser_config.get("pymupdf4llm", {})
         use_page_chunks = bool(parser_options.get("page_chunks", False))
 
         chunker_hash = compute_chunker_config_hash(
