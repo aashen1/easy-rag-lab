@@ -199,6 +199,7 @@ experiments:
 meals:
   dir: "data/meals"
   collection_prefix: "m_"
+  default_name: "all"
 
 # Artifacts 存储配置
 artifacts:
