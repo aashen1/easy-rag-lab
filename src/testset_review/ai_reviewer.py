@@ -8,6 +8,7 @@ from typing import Any
 
 from loguru import logger
 
+from src.llm_retry import call_with_retry
 from src.utils import create_llm_client, get_llm_config
 
 REVIEW_PROMPT_TEMPLATE = """你是一个金融研报问答系统的质量审核专家。请评估以下问答对的质量。
@@ -65,7 +66,8 @@ class AIReviewer:
         return self._client
 
     def _call_llm(self, prompt: str) -> str:
-        response = self.client.messages.create(
+        response = call_with_retry(
+            self.client.messages.create,
             model=self.llm_config["model_name"],
             max_tokens=self.llm_config["max_tokens"],
             temperature=self.llm_config["temperature"],

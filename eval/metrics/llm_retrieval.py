@@ -9,6 +9,7 @@ from eval.metrics.utils import (
     create_llm_client,
     get_eval_config,
 )
+from src.llm_retry import call_with_retry
 
 DEFAULT_EVAL_CONFIG = {
     **DEFAULT_EVAL_BASE_CONFIG,
@@ -87,7 +88,8 @@ def judge_context_relevance(
     )
 
     try:
-        message = client.messages.create(
+        message = call_with_retry(
+            client.messages.create,
             model=model_name,
             max_tokens=256,
             temperature=0.0,
@@ -252,7 +254,8 @@ def can_infer_from_context(
     )
 
     try:
-        message = client.messages.create(
+        message = call_with_retry(
+            client.messages.create,
             model=model_name,
             max_tokens=64,
             temperature=0.0,

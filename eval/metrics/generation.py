@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 
+from src.llm_retry import call_with_retry
+
 if TYPE_CHECKING:
     from anthropic import Anthropic
 
@@ -131,7 +133,8 @@ def extract_statements(
     prompt = FAITHFULNESS_STATEMENT_PROMPT.format(answer=answer)
 
     try:
-        message = client.messages.create(
+        message = call_with_retry(
+            client.messages.create,
             model=model_name,
             max_tokens=max_tokens,
             temperature=temperature,
@@ -218,7 +221,8 @@ def verify_statements(
     )
 
     try:
-        message = client.messages.create(
+        message = call_with_retry(
+            client.messages.create,
             model=model_name,
             max_tokens=max_tokens,
             temperature=temperature,
@@ -470,7 +474,8 @@ def calculate_answer_relevancy(
 
         logger.info(f"Evaluating answer relevancy for question: {question[:50]}...")
 
-        message = client.messages.create(
+        message = call_with_retry(
+            client.messages.create,
             model=model_name,
             max_tokens=max_tokens,
             temperature=temperature,
