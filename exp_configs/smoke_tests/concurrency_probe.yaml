@@ -1,0 +1,38 @@
+name: "concurrency_probe"
+description: "并发探测 - 5题快速实验，验证并发加速效果"
+
+data:
+  meal: "concurrency_probe"
+  create_if_missing:
+    sample_ratio: 0.03
+    seed: 42
+
+test_sets:
+  - name: "concurrency_probe_test"
+    on_missing: "auto"
+    generation:
+      strategy: "hybrid"
+      num_questions: 5
+
+variants:
+  - name: "baseline"
+    description: "基线配置 - 验证并发行为"
+    config_overrides:
+      evaluation:
+        concurrent_queries: 10
+        builtin_concurrent_workers: 10
+      test_generation:
+        concurrent_generation: 5
+
+evaluation:
+  backends: ["builtin"]
+  llm_preset: "default"
+  metrics_preset: "core"
+  resolution_strategy: "priority_fallback"
+  backend_priority: ["builtin", "ragas"]
+
+llm:
+  question_generation: "default"
+  answering: "default"
+
+force_overwrite: ["testset"]
