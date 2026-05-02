@@ -20,17 +20,17 @@ echo "Archiving .trae/documents to $ARCHIVE_DIR ..."
 for f in "$TRAE_DOCS"/*.md; do
     [ -e "$f" ] || continue
     BASENAME=$(basename "$f")
-    
+
     if [ "$BASENAME" = "plan-fix-independent-issues.md" ]; then
         echo "  SKIP: $BASENAME (active plan)"
         continue
     fi
-    
+
     if [ -f "$ARCHIVE_DIR/$BASENAME" ]; then
         echo "  SKIP: $BASENAME (already archived)"
         continue
     fi
-    
+
     cp "$f" "$ARCHIVE_DIR/$BASENAME"
     echo "  ARCHIVED: $BASENAME"
     COUNT=$((COUNT + 1))
