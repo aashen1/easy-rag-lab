@@ -377,6 +377,7 @@ class TestRAGPipeline:
         config["parser"] = {
             "input_dir": "/tmp/parser_in",
             "output_dir": "/tmp/parser_out",
+            "algorithm": "pymupdf4llm",
             "pymupdf4llm": {"page_chunks": True, "table_strategy": "text"},
         }
         config["chunker"] = {
@@ -420,6 +421,7 @@ class TestRAGPipeline:
         mock_parse.assert_called_once_with(
             input_dir="/tmp/parser_in",
             artifacts_dir=str(Path("data/artifacts")),
+            algorithm="pymupdf4llm",
             force=False,
             parser_options={"page_chunks": True, "table_strategy": "text"},
         )
@@ -495,8 +497,9 @@ class TestRAGPipeline:
         mock_parse.assert_called_once_with(
             input_dir="/tmp/parser_in",
             artifacts_dir=str(Path("data/artifacts")),
+            algorithm="pymupdf4llm",
             force=False,
-            parser_options=None,
+            parser_options={},
         )
 
     @patch("src.pipeline.Generator")

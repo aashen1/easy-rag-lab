@@ -348,6 +348,10 @@ class FitzPdfPlumberParser(BaseParser):
     def _table_to_markdown(self, table_data: list[list[str | None]]) -> str:
         """Convert pdfplumber table data to Markdown format.
 
+        Filters out degenerate rows where all cells are empty or contain
+        only whitespace. This is common with pdfplumber's text strategy
+        which may detect extra empty rows.
+
         Args:
             table_data: 2D list from pdfplumber extract(), may contain None.
 
@@ -374,10 +378,15 @@ class FitzPdfPlumberParser(BaseParser):
             while len(row) < col_count:
                 row.append("")
 
+        non_degenerate = [row for row in cleaned if any(cell.strip() for cell in row)]
+
+        if not non_degenerate:
+            return ""
+
         lines = []
-        lines.append("| " + " | ".join(cleaned[0]) + " |")
+        lines.append("| " + " | ".join(non_degenerate[0]) + " |")
         lines.append("|" + "|".join(["---"] * col_count) + "|")
-        for row in cleaned[1:]:
+        for row in non_degenerate[1:]:
             lines.append("| " + " | ".join(row) + " |")
 
         return "\n".join(lines)

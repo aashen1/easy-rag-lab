@@ -71,6 +71,10 @@ def compute_parser_config_hash(parser_config: dict) -> str:
             import pymupdf
 
             relevant["_version_hint"] = pymupdf.__version__
+        elif algorithm == "fitz_pdfplumber":
+            import pdfplumber
+
+            relevant["_version_hint"] = pdfplumber.__version__
     except (ImportError, AttributeError):
         relevant["_version_hint"] = "unknown"
 

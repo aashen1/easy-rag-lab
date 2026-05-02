@@ -82,12 +82,15 @@ parser:
     show_progress: true        # Show parsing progress
     clean_degenerate_tables: true  # Remove empty markdown table rows (|||||) from parser output
   fitz_pdfplumber:
+    page_chunks: true          # Enable page-level output for page-aware chunking
     header_filter: true
     footer_filter: true
     header_zone_ratio: 0.10
     footer_zone_ratio: 0.10
-    table_strategy: "lines"
+    table_strategy: "text"     # text strategy handles tables without explicit grid lines (common in financial reports)
     table_settings:
+      vertical_strategy: "text"
+      horizontal_strategy: "text"
       snap_tolerance: 5
       join_tolerance: 5
       edge_min_length: 10
