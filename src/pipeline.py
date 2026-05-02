@@ -117,10 +117,15 @@ class RAGPipeline:
             self._chunks_dir = cache.get_chunks_dir(
                 self.meal_config.data_id, chunker_hash
             )
+
+            self.indexer = VectorIndexer(
+                persist_dir=vector_store_config["persist_dir"],
+                collection_name=collection_name,
+                distance=vector_store_config["distance"],
+            )
         else:
             self._chunks_dir = None
-
-        self.indexer: VectorIndexer | None = None
+            self.indexer: VectorIndexer | None = None
 
         self._setup_retrievers()
 

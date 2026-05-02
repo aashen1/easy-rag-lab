@@ -8,6 +8,7 @@ import streamlit as st
 from loguru import logger
 
 from src.app_pages.pdf_server import PdfServer, get_or_create_pdf_server
+from src.case_collector import CASE_TYPE_BAD, CASE_TYPE_GOOD, list_cases, save_case
 from src.meal import MealConfig, MealManager
 from src.pipeline import RAGPipeline
 from src.sampler import SamplingConfig, count_pdf_pages
@@ -169,7 +170,46 @@ def render_pdf_preview() -> None:
     )
 
 
-def _display_result(result: dict[str, Any], meal_config: MealConfig | None):
+def _do_save_case(
+    case_type: str, msg: dict[str, Any], meal_config: MealConfig | None
+) -> bool:
+    saved = msg.get("saved_case_type")
+    if saved == case_type:
+        label = "Badcase" if case_type == CASE_TYPE_BAD else "Goodcase"
+        st.toast(f"已标记为 {label}，无需重复保存", icon="⚠️")
+        return False
+
+    result = msg.get("result", {})
+    config_overrides = msg.get("config_overrides", {})
+    meal_name = msg.get("meal_name")
+    question = result.get("question", "")
+    try:
+        base_config = load_config()
+        case_dir = save_case(
+            case_type=case_type,
+            question=question,
+            result=result,
+            config_overrides=config_overrides,
+            base_config=base_config,
+            meal_config=meal_config,
+            meal_name=meal_name,
+        )
+        msg["saved_case_type"] = case_type
+        label = "Badcase" if case_type == CASE_TYPE_BAD else "Goodcase"
+        st.toast(
+            f"{label} 已保存: {case_dir.name}",
+            icon="🚨" if case_type == CASE_TYPE_BAD else "✅",
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Failed to save case: {e}")
+        st.error(f"保存失败: {e}")
+        return False
+
+
+def _display_result(
+    result: dict[str, Any], meal_config: MealConfig | None, msg_index: int = 0
+):
     st.markdown("### 🤖 答案")
     st.success(result["answer"])
 
@@ -188,10 +228,11 @@ def _display_result(result: dict[str, Any], meal_config: MealConfig | None):
                     pdf_path = _source_to_pdf_path(src, meal_config)
                     if pdf_path and st.button(
                         "📄预览",
-                        key=f"src_preview_{i}",
+                        key=f"src_preview_{msg_index}_{i}",
                         help="预览此来源 PDF 文件",
+                        on_click=_open_pdf_preview,
+                        args=(pdf_path, Path(pdf_path).name),
                     ):
-                        _open_pdf_preview(pdf_path, Path(pdf_path).name)
                         st.toast("📄 已打开 PDF 预览，请点击「PDF 预览」标签页查看")
         else:
             st.info("无来源文档")
@@ -223,6 +264,34 @@ def _display_result(result: dict[str, Any], meal_config: MealConfig | None):
         col1.metric("输入", f"{tu['input_tokens']:,}")
         col2.metric("输出", f"{tu['output_tokens']:,}")
         col3.metric("总计", f"{tu['total_tokens']:,}")
+
+    st.markdown("---")
+    saved_case_type = (
+        msg.get("saved_case_type")
+        if (msg := st.session_state.messages[msg_index])
+        else None
+    )
+    col_bad, col_good = st.columns(2)
+    with col_bad:
+        bad_label = "🚨 Badcase ✓" if saved_case_type == CASE_TYPE_BAD else "🚨 Badcase"
+        if st.button(
+            bad_label,
+            key=f"badcase_{msg_index}",
+            help="标记此回答为坏例，完整落盘以便复现",
+            disabled=saved_case_type == CASE_TYPE_BAD,
+        ):
+            _do_save_case(CASE_TYPE_BAD, msg, meal_config)
+    with col_good:
+        good_label = (
+            "✅ Goodcase ✓" if saved_case_type == CASE_TYPE_GOOD else "✅ Goodcase"
+        )
+        if st.button(
+            good_label,
+            key=f"goodcase_{msg_index}",
+            help="标记此回答为好例，完整落盘用于回归测试",
+            disabled=saved_case_type == CASE_TYPE_GOOD,
+        ):
+            _do_save_case(CASE_TYPE_GOOD, msg, meal_config)
 
 
 def _init_session_state():
@@ -283,8 +352,9 @@ def _render_meal_files(meal_config: MealConfig | None) -> None:
                         "📄",
                         key=f"meal_file_preview_{mf.path}",
                         help=f"预览 {file_name}",
+                        on_click=_open_pdf_preview,
+                        args=(full_path, file_name),
                     ):
-                        _open_pdf_preview(full_path, file_name)
                         st.toast("📄 已打开 PDF 预览，请点击「PDF 预览」标签页查看")
                 else:
                     st.caption("缺失")
@@ -418,6 +488,14 @@ def render_qa_demo():
                 }[x],
             )
 
+        st.markdown("---")
+        try:
+            bad_count = len(list_cases(case_type=CASE_TYPE_BAD))
+            good_count = len(list_cases(case_type=CASE_TYPE_GOOD))
+            st.caption(f"🚨 Badcase: {bad_count}  |  ✅ Goodcase: {good_count}")
+        except Exception:
+            pass
+
     if st.button("🗑️ 清空对话", key="clear_btn"):
         st.session_state.messages = []
         st.session_state.query_error = None
@@ -427,12 +505,12 @@ def render_qa_demo():
         st.error(f"查询失败: {st.session_state.query_error}")
         st.session_state.query_error = None
 
-    for msg in st.session_state.messages:
+    for msg_index, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
             if msg["role"] == "user":
                 st.write(msg["content"])
             else:
-                _display_result(msg["result"], meal_config)
+                _display_result(msg["result"], meal_config, msg_index=msg_index)
 
     if st.session_state.messages:
         st.html(
@@ -448,30 +526,30 @@ def render_qa_demo():
 </style>
 <div id="st-scroll-nav" class="nav-bottom">↓</div>
 <script>
-  const doc = document;
-  const btn = doc.getElementById('st-scroll-nav');
-  if (!btn) return;
-  const main = doc.querySelector('.main') || doc.querySelector('[data-testid="stMainBlockContainer"]');
-  const chatInput = doc.querySelector('[data-testid="stChatInput"]');
-  function isNearBottom() {
-    return main && (main.scrollHeight - main.scrollTop - main.clientHeight < 80);
-  }
-  function updateBtn() {
-    if (isNearBottom()) {
-      btn.className = 'nav-top'; btn.textContent = '↑';
-      btn.onclick = () => main.scrollTo({top:0, behavior:'smooth'});
-    } else {
-      btn.className = 'nav-bottom'; btn.textContent = '↓';
-      btn.onclick = () => {
-        const target = chatInput || main;
-        target.scrollIntoView({behavior:'smooth', block:'end'});
-      };
+  const btn = document.getElementById('st-scroll-nav');
+  if (btn) {
+    const chatInput = document.querySelector('[data-testid="stChatInput"]');
+    function isNearBottom() {
+      return (window.innerHeight + window.scrollY) >= (document.body.scrollHeight - 80);
     }
+    function updateBtn() {
+      if (isNearBottom()) {
+        btn.className = 'nav-top'; btn.textContent = '↑';
+        btn.onclick = () => window.scrollTo({top:0, behavior:'smooth'});
+      } else {
+        btn.className = 'nav-bottom'; btn.textContent = '↓';
+        btn.onclick = () => {
+          if (chatInput) { chatInput.scrollIntoView({behavior:'smooth', block:'end'}); }
+          else { window.scrollTo({top:document.body.scrollHeight, behavior:'smooth'}); }
+        };
+      }
+    }
+    window.addEventListener('scroll', updateBtn);
+    updateBtn();
   }
-  if (main) main.addEventListener('scroll', updateBtn);
-  updateBtn();
 </script>
-            """
+            """,
+            unsafe_allow_javascript=True,
         )
 
     question = st.chat_input(
@@ -500,7 +578,12 @@ def render_qa_demo():
                 pipeline = get_pipeline(meal_name)
                 result = pipeline.query(question, config_overrides=config_overrides)
                 st.session_state.messages.append(
-                    {"role": "assistant", "result": result}
+                    {
+                        "role": "assistant",
+                        "result": result,
+                        "config_overrides": config_overrides,
+                        "meal_name": meal_name,
+                    }
                 )
             except Exception as e:
                 logger.error(f"Query failed: {e}")

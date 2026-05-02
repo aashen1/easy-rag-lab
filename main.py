@@ -4,6 +4,7 @@ from typing import Any
 
 from loguru import logger
 
+from src.case_collector import CASE_TYPE_BAD, CASE_TYPE_GOOD, save_case
 from src.exceptions import ConfigurationError
 from src.meal import MealManager, MealStatus, validate_meal_name
 from src.pipeline import RAGPipeline
@@ -757,7 +758,8 @@ def _interactive_qa(pipeline: RAGPipeline, meal_name: str | None = None) -> None
 
     Continuously prompts for questions and displays answers until
     the user types 'quit' or 'exit'. Tracks and displays token usage
-    on exit.
+    on exit. Supports ``/badcase`` and ``/goodcase`` commands to save
+    the last query result for reproducibility.
 
     Args:
         pipeline: RAGPipeline instance for query execution.
@@ -775,7 +777,11 @@ def _interactive_qa(pipeline: RAGPipeline, meal_name: str | None = None) -> None
     else:
         print("⚠️  数据库为空，请先构建索引：pixi run python main.py --build-index")
 
-    print("输入 'quit' 或 'exit' 退出\n")
+    print("输入 'quit' 或 'exit' 退出")
+    print("输入 '/badcase' 或 '/goodcase' 保存最近一次查询\n")
+
+    last_result: dict[str, Any] | None = None
+    last_config_overrides: dict[str, Any] | None = None
 
     while True:
         try:
@@ -797,8 +803,37 @@ def _interactive_qa(pipeline: RAGPipeline, meal_name: str | None = None) -> None
             print("👋 再见！\n")
             break
 
+        if question.lower() in ("/badcase", "/goodcase"):
+            if last_result is None:
+                print("⚠️  还没有查询记录，请先提问\n")
+                continue
+            case_type = (
+                CASE_TYPE_BAD if question.lower() == "/badcase" else CASE_TYPE_GOOD
+            )
+            try:
+                base_config = load_config()
+                meal_config = getattr(pipeline, "meal_config", None)
+                case_dir = save_case(
+                    case_type=case_type,
+                    question=last_result.get("question", ""),
+                    result=last_result,
+                    config_overrides=last_config_overrides or {},
+                    base_config=base_config,
+                    meal_config=meal_config,
+                    meal_name=meal_name,
+                )
+                icon = "🚨" if case_type == CASE_TYPE_BAD else "✅"
+                label = "Badcase" if case_type == CASE_TYPE_BAD else "Goodcase"
+                print(f"{icon} {label} 已保存: {case_dir.name}\n")
+            except Exception as e:
+                logger.error(f"Failed to save case: {e}")
+                print(f"❌ 保存失败: {e}\n")
+            continue
+
         try:
             result = pipeline.query(question)
+            last_result = result
+            last_config_overrides = None
             print(f"\n🤖 Assistant: {result['answer']}\n")
 
             if "token_usage" in result and result["token_usage"]:
