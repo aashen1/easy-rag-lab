@@ -181,7 +181,12 @@ def run_variant_evaluation(
                 indexer_cache[chunker_hash] = indexer
             indexer_from_cache = False
 
+        old_indexer = pipeline.indexer
         pipeline.indexer = indexer
+
+        if old_indexer is not None and old_indexer is not indexer:
+            with contextlib.suppress(Exception):
+                old_indexer.close()
 
         pipeline._setup_retrievers()
 
