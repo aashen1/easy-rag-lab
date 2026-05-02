@@ -196,14 +196,10 @@ class PdfPlumberEnhancer(TableEnhancer):
 
                 page = pdf.pages[page_idx]
                 settings = dict(self._table_settings)
-                settings.setdefault(
-                    "vertical_strategy",
-                    self._vertical_strategy or self._strategy,
-                )
-                settings.setdefault(
-                    "horizontal_strategy",
-                    self._horizontal_strategy or self._strategy,
-                )
+                v_strategy = self._vertical_strategy or self._strategy
+                h_strategy = self._horizontal_strategy or self._strategy
+                settings["vertical_strategy"] = v_strategy
+                settings["horizontal_strategy"] = h_strategy
 
                 plumber_tables = page.find_tables(table_settings=settings)
 
