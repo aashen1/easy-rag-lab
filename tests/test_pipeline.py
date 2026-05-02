@@ -113,10 +113,14 @@ class TestRAGPipeline:
 
             mock_meal_mgr.load_meal.assert_called_once_with("test_meal")
 
-        mock_indexer.assert_not_called()
+        mock_indexer.assert_called_once_with(
+            persist_dir="/tmp/vs",
+            collection_name="meal_col_123",
+            distance="Cosine",
+        )
         assert pipeline.meal_name == "test_meal"
         assert pipeline.meal_config is mock_meal_config
-        assert pipeline.indexer is None
+        assert pipeline.indexer is mock_indexer.return_value
 
     @patch("src.pipeline.Generator")
     @patch("src.pipeline.Retriever")
