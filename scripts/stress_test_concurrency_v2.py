@@ -15,12 +15,14 @@ Environment: LLM_API_KEY, LLM_BASE_URL, LLM_MODEL_ID (from .env)
 """
 
 import argparse
-import contextlib
 import json
 import os
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from dotenv import load_dotenv
 from loguru import logger
@@ -55,7 +57,7 @@ def _run_query_phase(
     pipeline: RAGPipeline,
     questions: list[dict],
     concurrency: int,
-) -> dict:
+) -> tuple[dict, list[dict]]:
     wall_start = time.monotonic()
     results = []
     errors = []
@@ -90,7 +92,7 @@ def _run_query_phase(
             i, q = futures[future]
             try:
                 result = future.result()
-                results.append({"id": i, "ok": True, "result": result})
+                results.append({"id": i, "ok": True, "result": result, "question": q})
             except Exception as e:
                 err_str = str(e)
                 is_rate_limit = any(
@@ -105,10 +107,10 @@ def _run_query_phase(
     wall_elapsed = time.monotonic() - wall_start
 
     for p in pipelines[1:]:
-        with contextlib.suppress(Exception):
-            p.close()
+        p.indexer = None
+        p.embedder = None
 
-    return {
+    stats = {
         "concurrency": concurrency,
         "num_questions": len(questions),
         "wall_time": wall_elapsed,
@@ -117,6 +119,29 @@ def _run_query_phase(
         "rate_limit_errors": rate_limit_count,
         "other_errors": len(errors) - rate_limit_count,
     }
+
+    samples = []
+    for r in results:
+        res = r["result"]
+        q_data = r["question"]
+        samples.append(
+            {
+                "question_id": q_data.get("id", f"q{r['id'] + 1}"),
+                "question": q_data.get("question", ""),
+                "answer": res.get("answer", ""),
+                "contexts": res.get("contexts", []),
+                "expected_sources": q_data.get("source_files", []),
+                "expected_answer": q_data.get("answer"),
+                "retrieved_sources": res.get("sources", []),
+                "chunk_ids": res.get("chunk_ids", []),
+                "expected_chunks": q_data.get("source_chunks", []),
+                "question_type": q_data.get("question_type", "factual"),
+                "expect_retrieval": q_data.get("expect_retrieval", True),
+                "expect_no_answer": q_data.get("expect_no_answer", False),
+            }
+        )
+
+    return stats, samples
 
 
 def _run_eval_phase(
@@ -318,8 +343,8 @@ def main():
         pipeline = _build_pipeline(args.meal, concurrent_queries=1)
 
         def run_query(concurrency: int) -> dict:
-            p = _build_pipeline(args.meal, concurrent_queries=1)
-            return _run_query_phase(p, questions, concurrency)
+            stats, _ = _run_query_phase(pipeline, questions, concurrency)
+            return stats
 
         query_result = _binary_search_phase(
             "Query (pipeline.query)",
@@ -328,48 +353,21 @@ def main():
             hi=args.hi,
         )
 
-        pipeline.close()
-
         if query_result["safe_max"] > 0:
             best_cq = query_result["safe_max"]
             logger.info(
                 f"Collecting samples at best concurrency={best_cq} for eval phase..."
             )
-            p = _build_pipeline(args.meal, concurrent_queries=1)
-            samples_for_eval = _run_query_phase(p, questions, best_cq)
-            p.close()
+            _, samples_for_eval = _run_query_phase(pipeline, questions, best_cq)
+
+        pipeline.close()
 
     if args.phase in ("eval", "both"):
         if samples_for_eval is None and args.phase == "eval":
             logger.info("Running serial query to collect samples for eval phase...")
-            p = _build_pipeline(args.meal, concurrent_queries=1)
-            raw = _run_query_phase(p, questions, 1)
-            p.close()
-            samples_for_eval = raw
-
-        if isinstance(samples_for_eval, dict):
-            sample_list = []
-            for r in samples_for_eval.get("results", []):
-                if r.get("ok") and "result" in r:
-                    res = r["result"]
-                    q_data = questions[r["id"]]
-                    sample_list.append(
-                        {
-                            "question_id": q_data.get("id", f"q{r['id'] + 1}"),
-                            "question": q_data.get("question", ""),
-                            "answer": res.get("answer", ""),
-                            "contexts": res.get("contexts", []),
-                            "expected_sources": q_data.get("source_files", []),
-                            "expected_answer": q_data.get("answer"),
-                            "retrieved_sources": res.get("sources", []),
-                            "chunk_ids": res.get("chunk_ids", []),
-                            "expected_chunks": q_data.get("source_chunks", []),
-                            "question_type": q_data.get("question_type", "factual"),
-                            "expect_retrieval": q_data.get("expect_retrieval", True),
-                            "expect_no_answer": q_data.get("expect_no_answer", False),
-                        }
-                    )
-            samples_for_eval = sample_list
+            pipeline = _build_pipeline(args.meal, concurrent_queries=1)
+            _, samples_for_eval = _run_query_phase(pipeline, questions, 1)
+            pipeline.close()
 
         if not samples_for_eval:
             logger.error("No samples available for eval phase")
