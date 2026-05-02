@@ -34,6 +34,41 @@ class ParseResult:
     metadata: dict = field(default_factory=dict)
 
 
+class TableEnhancer(ABC):
+    """Abstract base class for table enhancement modules.
+
+    A TableEnhancer receives the ParseResult from a primary parser,
+    detects table regions, re-extracts tables using a specialized
+    library, and replaces the original tables with improved versions.
+    """
+
+    @property
+    @abstractmethod
+    def name(self) -> str:
+        """Return the unique identifier of this enhancer.
+
+        Returns:
+            Enhancer name string used for registration and lookup.
+        """
+
+    @abstractmethod
+    def enhance(self, pdf_path: str, result: ParseResult) -> ParseResult:
+        """Enhance table regions in a parsed result.
+
+        Args:
+            pdf_path: Path to the original PDF file (the enhancer may
+                need to re-access the raw PDF for table extraction).
+            result: ParseResult from the primary parser.
+
+        Returns:
+            ParseResult with enhanced table regions.
+
+        Raises:
+            FileNotFoundError: If the PDF file does not exist.
+            Exception: If enhancement fails for any other reason.
+        """
+
+
 class BaseParser(ABC):
     """Abstract base class for all PDF parsers.
 
