@@ -62,7 +62,8 @@ def parse_pymupdf4llm_legacy(table_strategy: str = "lines_strict") -> str:
         for page_data in result:
             if isinstance(page_data, dict):
                 metadata = page_data.get("metadata", {})
-                if metadata.get("page_number") == TARGET_PAGE:
+                pn = metadata.get("page_number") or metadata.get("page")
+                if pn == TARGET_PAGE:
                     return page_data.get("text", "")
             elif isinstance(page_data, str):
                 pass
