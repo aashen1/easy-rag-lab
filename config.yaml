@@ -261,13 +261,19 @@ evaluation:
     embeddings_backend: "local"     # 使用本地 BGE 或 "openai"
     max_tokens: 8192               # RAGAS 评测需要更大的 max_tokens（默认 LLM 的 1024 不够）
     run_config:
-      max_workers: 5
+      max_workers: 10
       timeout: 180                # RAGAS 评测可能需要更长时间
       max_retries: 3
 
-  # 并发配置
-  concurrent_queries: 5             # 问题查询并发度（1=串行，3-5=并发，受 API rate limit 约束）
-  builtin_concurrent_workers: 8    # builtin 生成指标并发计算线程数
+  # 并发配置（基于 stress_test_concurrency_v2.py 实测：API safe_max=21）
+  concurrent_queries: 10            # 问题查询并发度（1=串行，实测 safe_max=21，取保守值）
+  builtin_concurrent_workers: 10   # builtin 生成指标并发计算线程数（实测 safe_max=21，取保守值）
+
+# LLM API 重试配置
+llm_retry:
+  max_retries: 5                   # 429/overload 最大重试次数
+  base_delay: 1.0                  # 首次重试等待秒数
+  max_delay: 60.0                  # 最大等待秒数
 
 # ============================================================
 # 测试与日志配置
@@ -283,6 +289,7 @@ test_generation:
   max_tokens: 1024
   supplement_max_tokens: 1024
   initial_max_tokens: 512
+  concurrent_generation: 5           # 测试集生成并发度（1=串行，实测 API safe_max=21）
 
   validation:
     check_proper_nouns: false

@@ -5,6 +5,7 @@ from loguru import logger
 
 from src.exceptions import GenerationError
 from src.llm_client import create_anthropic_client
+from src.llm_retry import call_with_retry
 from src.token_tracker import (
     DetailedTokenUsage,
     TokenTracker,
@@ -252,7 +253,8 @@ class Generator:
                 max_tokens if max_tokens is not None else self.max_tokens
             )
 
-            message = self.client.messages.create(
+            message = call_with_retry(
+                self.client.messages.create,
                 model=self.model_name,
                 max_tokens=effective_max_tokens,
                 temperature=self.temperature,

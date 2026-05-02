@@ -150,6 +150,12 @@ def run_variant_evaluation(
 
         chunker_hash = compute_chunker_config_hash(merged_config.get("chunker", {}))
 
+        old_indexer = pipeline.indexer
+        if old_indexer is not None:
+            with contextlib.suppress(Exception):
+                old_indexer.close()
+            pipeline.indexer = None
+
         if (
             indexer_cache is not None
             and chunker_hash in indexer_cache

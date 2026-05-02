@@ -5,6 +5,7 @@ from loguru import logger
 
 from src.exceptions import ConfigurationError, GenerationError
 from src.llm_client import create_anthropic_client
+from src.llm_retry import call_with_retry
 from src.token_tracker import DetailedTokenUsage, TokenTracker
 
 
@@ -205,7 +206,8 @@ class QueryRewriter:
         try:
             client = self._get_client()
 
-            message = client.messages.create(
+            message = call_with_retry(
+                client.messages.create,
                 model=self.llm_model_name,
                 max_tokens=self.llm_max_tokens,
                 temperature=self.llm_temperature,

@@ -7,6 +7,7 @@ from eval.reporter.models import ReportExperimentResult
 from eval.reporter.template_single import TemplateSingleReporter
 from eval.reporter.template_variant import TemplateVariantReporter
 from src.exceptions import EvaluationError
+from src.llm_retry import call_with_retry
 from src.utils import get_env_var
 
 DEFAULT_REPORT_CONFIG = {
@@ -150,7 +151,8 @@ class LLMReporter:
         report_cfg = DEFAULT_REPORT_CONFIG
         resolved_model_name = self.llm_model_name or get_env_var("LLM_MODEL_ID")
         try:
-            message = self._llm_client.messages.create(
+            message = call_with_retry(
+                self._llm_client.messages.create,
                 model=resolved_model_name,
                 max_tokens=report_cfg["max_tokens"],
                 temperature=report_cfg["temperature"],
