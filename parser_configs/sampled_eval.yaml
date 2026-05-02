@@ -1,0 +1,118 @@
+name: "sampled_eval"
+description: "抽样评测 — 7个PDF覆盖年报和研报，3-5%采样率"
+
+pipelines:
+  - name: "pymupdf4llm_pure"
+    primary:
+      algorithm: "pymupdf4llm"
+      config:
+        page_chunks: true
+        header: false
+        footer: false
+        force_text: true
+        ignore_code: true
+        use_ocr: true
+        ocr_language: "chi_sim+eng"
+        clean_degenerate_tables: true
+    table_enhancer: null
+
+  - name: "pymupdf4llm_pdfplumber_lines"
+    primary:
+      algorithm: "pymupdf4llm"
+      config:
+        page_chunks: true
+        header: false
+        footer: false
+        force_text: true
+        ignore_code: true
+        use_ocr: true
+        ocr_language: "chi_sim+eng"
+        clean_degenerate_tables: true
+    table_enhancer:
+      algorithm: "pdfplumber"
+      config:
+        strategy: "lines"
+        quality_filter:
+          min_columns: 3
+          max_empty_ratio: 0.5
+          min_data_rows: 2
+        replace_policy: "better_wins"
+
+  - name: "pymupdf4llm_pdfplumber_text"
+    primary:
+      algorithm: "pymupdf4llm"
+      config:
+        page_chunks: true
+        header: false
+        footer: false
+        force_text: true
+        ignore_code: true
+        use_ocr: true
+        ocr_language: "chi_sim+eng"
+        clean_degenerate_tables: true
+    table_enhancer:
+      algorithm: "pdfplumber"
+      config:
+        strategy: "text"
+        quality_filter:
+          min_columns: 3
+          max_empty_ratio: 0.5
+          min_data_rows: 2
+        replace_policy: "better_wins"
+
+  - name: "fitz_pure"
+    primary:
+      algorithm: "fitz"
+      config:
+        header_filter: true
+        footer_filter: true
+        column_detection: true
+        heading_detection: true
+    table_enhancer: null
+
+  - name: "fitz_pdfplumber_lines"
+    primary:
+      algorithm: "fitz"
+      config:
+        header_filter: true
+        footer_filter: true
+        column_detection: true
+        heading_detection: true
+    table_enhancer:
+      algorithm: "pdfplumber"
+      config:
+        strategy: "lines"
+        quality_filter:
+          min_columns: 3
+          max_empty_ratio: 0.5
+          min_data_rows: 2
+        replace_policy: "better_wins"
+
+  - name: "fitz_pdfplumber_text"
+    primary:
+      algorithm: "fitz"
+      config:
+        header_filter: true
+        footer_filter: true
+        column_detection: true
+        heading_detection: true
+    table_enhancer:
+      algorithm: "pdfplumber"
+      config:
+        strategy: "text"
+        quality_filter:
+          min_columns: 3
+          max_empty_ratio: 0.5
+          min_data_rows: 2
+        replace_policy: "better_wins"
+
+test_pdfs:
+  - "data/raw/annual_reports/2024/贵州茅台/贵州茅台2024年年度报告摘要.pdf"
+  - "data/raw/annual_reports/2023/比亚迪/2023年年度报告摘要.pdf"
+  - "data/raw/annual_reports/2023/恒瑞医药/恒瑞医药2023年年度报告摘要.pdf"
+  - "data/raw/research_reports/2026年中国白酒行业信用观察.pdf"
+  - "data/raw/research_reports/2026年光伏行业分析.pdf"
+  - "data/raw/research_reports/半导体行业3月份月报：AI算力驱动上游代工增长，GTC大会发布Vera Rubin AI计算平台.pdf"
+  - "data/raw/research_reports/2026年3月银行理财市场月报：银行理财大事记：理财监管评级新规落地，资管能力多元升级加速.pdf"
+
+output_dir: "data/parser_reports"
