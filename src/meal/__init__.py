@@ -10,7 +10,7 @@ from src.meal.hashes import (
     compute_variant_config_hash,
     generate_collection_name,
 )
-from src.meal.manager import MealManager
+from src.meal.manager import DEFAULT_MEAL_NAME, MealManager
 from src.meal.models import MealConfig, MealFile, MealStatus
 from src.meal.utils import (
     _infer_equivalence_groups,
@@ -19,6 +19,7 @@ from src.meal.utils import (
 )
 
 __all__ = [
+    "DEFAULT_MEAL_NAME",
     "ArtifactCache",
     "MealConfig",
     "MealFile",
