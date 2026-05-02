@@ -78,6 +78,12 @@ class PdfPlumberEnhancer(TableEnhancer):
         tables with pdfplumber and replaces the originals when the
         pdfplumber version is of sufficient quality.
 
+        For pages without any markdown tables, pdfplumber is still
+        invoked to extract tables and append them to the page text.
+        This ensures that primary parsers which do not produce markdown
+        tables (e.g. FitzParser) still benefit from pdfplumber's
+        table extraction capability.
+
         Args:
             pdf_path: Path to the original PDF file.
             result: ParseResult from the primary parser.
@@ -95,15 +101,22 @@ class PdfPlumberEnhancer(TableEnhancer):
             page_idx = page.page_number - 1
             spans = self._find_md_table_spans(page.text)
 
-            if not spans:
-                enhanced_pages.append(page)
-                continue
-
             plumber_tables = self._extract_tables(pdf_path, page_idx)
             plumber_tables = self._filter_low_quality(plumber_tables)
 
             if not plumber_tables:
                 enhanced_pages.append(page)
+                continue
+
+            if not spans:
+                new_text = self._append_tables(page.text, plumber_tables)
+                enhanced_pages.append(
+                    ParsedPage(
+                        page_number=page.page_number,
+                        text=new_text,
+                        metadata=deepcopy(page.metadata),
+                    )
+                )
                 continue
 
             new_text = self._replace_tables(page.text, plumber_tables)
@@ -289,6 +302,30 @@ class PdfPlumberEnhancer(TableEnhancer):
                 continue
             result.append(md)
         return result
+
+    @staticmethod
+    def _append_tables(text: str, plumber_tables: list[str]) -> str:
+        """Append pdfplumber-extracted tables to page text.
+
+        Used when the primary parser did not produce any markdown
+        tables.  The extracted tables are appended at the end of
+        the page text so that no existing content is lost.
+
+        Args:
+            text: Original page text (without markdown tables).
+            plumber_tables: List of pdfplumber-extracted markdown tables.
+
+        Returns:
+            Text with tables appended.
+        """
+        if not plumber_tables:
+            return text
+
+        table_block = "\n\n".join(plumber_tables)
+
+        if text.strip():
+            return f"{text.rstrip()}\n\n{table_block}\n"
+        return f"{table_block}\n"
 
     def _replace_tables(self, text: str, plumber_tables: list[str]) -> str:
         """Replace markdown tables in text with pdfplumber versions.

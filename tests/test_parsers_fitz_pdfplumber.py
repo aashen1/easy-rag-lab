@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.exceptions import ParsingError
+from src.parsers.base import ParsedPage, ParseResult
 from src.parsers.fitz_parser import FitzParser, _TextBlock
 from src.parsers.fitz_pdfplumber_parser import FitzPdfPlumberParser
 from src.parsers.pdfplumber_enhancer import PdfPlumberEnhancer
@@ -295,3 +296,103 @@ class TestParseFileErrors:
         with pytest.raises(ParsingError) as exc_info:
             parser.parse(str(txt_file))
         assert "File is not a PDF" in str(exc_info.value)
+
+
+@pytest.mark.unit
+class TestAppendTables:
+    def test_append_to_existing_text(self, enhancer: PdfPlumberEnhancer) -> None:
+        text = "Some paragraph text."
+        tables = ["| A | B |\n|---|---|\n| 1 | 2 |"]
+        result = enhancer._append_tables(text, tables)
+        assert result.startswith("Some paragraph text.")
+        assert "| A | B |" in result
+        assert "| 1 | 2 |" in result
+
+    def test_append_multiple_tables(self, enhancer: PdfPlumberEnhancer) -> None:
+        text = "Body text"
+        tables = [
+            "| A | B |\n|---|---|\n| 1 | 2 |",
+            "| X | Y |\n|---|---|\n| 3 | 4 |",
+        ]
+        result = enhancer._append_tables(text, tables)
+        assert "| A | B |" in result
+        assert "| X | Y |" in result
+
+    def test_append_to_empty_text(self, enhancer: PdfPlumberEnhancer) -> None:
+        tables = ["| A | B |\n|---|---|\n| 1 | 2 |"]
+        result = enhancer._append_tables("", tables)
+        assert result.startswith("| A | B |")
+
+    def test_append_no_tables(self, enhancer: PdfPlumberEnhancer) -> None:
+        result = enhancer._append_tables("Some text", [])
+        assert result == "Some text"
+
+
+@pytest.mark.unit
+class TestEnhanceAppendMode:
+    def test_enhance_appends_tables_when_no_md_tables(
+        self, enhancer: PdfPlumberEnhancer
+    ) -> None:
+        page_text = "This page has no markdown tables."
+        result = ParseResult(
+            pages=[ParsedPage(page_number=1, text=page_text, metadata={})],
+            metadata={"parser": "fitz"},
+        )
+
+        original_extract = enhancer._extract_tables
+        enhancer._extract_tables = lambda pdf_path, page_idx: [
+            "| Col1 | Col2 | Col3 |\n|---|---|---|\n| a | b | c |\n| d | e | f |"
+        ]
+
+        try:
+            enhanced = enhancer.enhance("dummy.pdf", result)
+        finally:
+            enhancer._extract_tables = original_extract
+
+        assert len(enhanced.pages) == 1
+        enhanced_text = enhanced.pages[0].text
+        assert "This page has no markdown tables." in enhanced_text
+        assert "| Col1 | Col2 | Col3 |" in enhanced_text
+        assert "| a | b | c |" in enhanced_text
+
+    def test_enhance_no_change_when_no_plumber_tables(
+        self, enhancer: PdfPlumberEnhancer
+    ) -> None:
+        page_text = "No tables here."
+        result = ParseResult(
+            pages=[ParsedPage(page_number=1, text=page_text, metadata={})],
+            metadata={"parser": "fitz"},
+        )
+
+        original_extract = enhancer._extract_tables
+        enhancer._extract_tables = lambda pdf_path, page_idx: []
+
+        try:
+            enhanced = enhancer.enhance("dummy.pdf", result)
+        finally:
+            enhancer._extract_tables = original_extract
+
+        assert enhanced.pages[0].text == page_text
+
+    def test_enhance_replaces_existing_md_tables(
+        self, enhancer: PdfPlumberEnhancer
+    ) -> None:
+        page_text = "Text before\n\n| A | B |\n|---|---|\n| 1 | 2 |\n\nText after"
+        result = ParseResult(
+            pages=[ParsedPage(page_number=1, text=page_text, metadata={})],
+            metadata={"parser": "pymupdf4llm"},
+        )
+
+        original_extract = enhancer._extract_tables
+        enhancer._extract_tables = lambda pdf_path, page_idx: [
+            "| A | B |\n|---|---|\n| x | y |\n| 1 | 2 |"
+        ]
+
+        try:
+            enhanced = enhancer.enhance("dummy.pdf", result)
+        finally:
+            enhancer._extract_tables = original_extract
+
+        enhanced_text = enhanced.pages[0].text
+        assert "Text before" in enhanced_text
+        assert "Text after" in enhanced_text
