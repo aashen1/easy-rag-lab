@@ -1,4 +1,4 @@
-from src.parsers.base import BaseParser, ParsedPage, ParseResult
+from src.parsers.base import BaseParser, ParsedPage, ParseResult, TableEnhancer
 from src.parsers.registry import ParserRegistry
 
 __all__ = [
@@ -6,4 +6,5 @@ __all__ = [
     "ParseResult",
     "ParsedPage",
     "ParserRegistry",
+    "TableEnhancer",
 ]

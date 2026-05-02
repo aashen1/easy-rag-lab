@@ -975,6 +975,113 @@ class TestMealManager:
         result = manager.find_full_dataset_meal()
         assert result is None
 
+    def test_get_or_create_full_meal_returns_existing(self, temp_dirs):
+        manager = MealManager(temp_dirs)
+        full_data_id = manager.cache._compute_full_data_id()
+        meal_config = self._make_meal_config(name="all", data_id=full_data_id)
+        self._save_meal(manager, meal_config)
+
+        result = manager.get_or_create_full_meal()
+        assert result is not None
+        assert result.name == "all"
+        assert result.data_id == full_data_id
+
+    def test_get_or_create_full_meal_returns_existing_different_name(self, temp_dirs):
+        manager = MealManager(temp_dirs)
+        full_data_id = manager.cache._compute_full_data_id()
+        meal_config = self._make_meal_config(name="full_dataset", data_id=full_data_id)
+        self._save_meal(manager, meal_config)
+
+        result = manager.get_or_create_full_meal()
+        assert result is not None
+        assert result.name == "full_dataset"
+
+    def test_get_or_create_full_meal_uses_config_default_name(self, tmp_path):
+        from unittest.mock import patch
+
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        meals_dir = tmp_path / "meals"
+        meals_dir.mkdir()
+        artifacts_dir = tmp_path / "artifacts"
+        artifacts_dir.mkdir()
+        parsed_dir = tmp_path / "parsed"
+        parsed_dir.mkdir()
+        chunks_dir = tmp_path / "chunks"
+        chunks_dir.mkdir()
+        vector_dir = tmp_path / "vector_store"
+        vector_dir.mkdir()
+
+        pdf_dir = raw_dir / "reports"
+        pdf_dir.mkdir()
+        (pdf_dir / "report_0.pdf").write_bytes(b"fake pdf content 0")
+
+        config = {
+            "parser": {"input_dir": str(raw_dir)},
+            "chunker": {"chunk_size": 512, "chunk_overlap": 0},
+            "embedding": {
+                "model_name": "BAAI/bge-large-zh-v1.5",
+                "device": "cpu",
+                "batch_size": 32,
+            },
+            "vector_store": {
+                "persist_dir": str(vector_dir),
+                "collection_name": "test",
+                "distance": "Cosine",
+            },
+            "meals": {
+                "dir": str(meals_dir),
+                "collection_prefix": "m_",
+                "default_name": "my_default",
+            },
+            "artifacts": {"dir": str(artifacts_dir)},
+        }
+
+        manager = MealManager(config)
+
+        with patch.object(manager, "create_meal") as mock_create:
+            from src.meal.models import MealConfig as MC
+
+            mock_create.return_value = MC(
+                data_id="d3a711e6" * 8,
+                name="my_default",
+                created_at="2026-05-03T00:00:00",
+                sampling_config={"mode": "ratio", "value": 1.0},
+                collection_name="m_d3a711e6",
+                pdf_files=[],
+                config_snapshot={},
+                config_hashes={"chunker": "abc12345"},
+                stats={"total_pdfs": 1, "total_pages": 0, "total_chunks": 0},
+            )
+            result = manager.get_or_create_full_meal()
+            assert result is not None
+            mock_create.assert_called_once()
+            call_kwargs = mock_create.call_args
+            assert (
+                call_kwargs.kwargs.get("name") == "my_default"
+                or call_kwargs[1].get("name") == "my_default"
+            )
+
+    def test_get_or_create_full_meal_no_pdfs(self, tmp_path):
+        raw_dir = tmp_path / "raw"
+        raw_dir.mkdir()
+        meals_dir = tmp_path / "meals"
+        meals_dir.mkdir()
+        artifacts_dir = tmp_path / "artifacts"
+        artifacts_dir.mkdir()
+
+        config = {
+            "parser": {"input_dir": str(raw_dir)},
+            "meals": {"dir": str(meals_dir)},
+            "artifacts": {"dir": str(artifacts_dir)},
+        }
+        manager = MealManager(config)
+
+        from src.exceptions import MealError
+
+        with pytest.raises(MealError):
+            manager.get_or_create_full_meal()
+
 
 class TestBuildChunksIfNeeded:
     def test_build_chunks_if_needed_pages_json(self, tmp_path):

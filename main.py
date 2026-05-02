@@ -242,23 +242,35 @@ def main() -> None:
 
     if args.build_index or args.rebuild:
         sampling_config = _build_sampling_config(args)
-        pipeline = RAGPipeline(config=args.config, llm_preset=args.llm_preset)
-        pipeline.build_index(
-            rebuild=args.rebuild,
-            force_parse=args.force_parse,
-            sampling_config=sampling_config,
-        )
-        logger.info("Index built successfully")
+        if sampling_config is not None:
+            pipeline = RAGPipeline(config=args.config, llm_preset=args.llm_preset)
+            pipeline.build_index(
+                rebuild=args.rebuild,
+                force_parse=args.force_parse,
+                sampling_config=sampling_config,
+            )
+            logger.info("Index built successfully (sampled, not linked to a meal)")
+        else:
+            resolved_meal = _resolve_meal_name(meal_manager, args)
+            if resolved_meal:
+                _handle_rebuild_meal(meal_manager, resolved_meal, args)
+                logger.info("Index built successfully via meal system")
+            else:
+                logger.error("No PDFs found and no meal available. Cannot build index.")
+                sys.exit(1)
 
-    if args.meal:
+    needs_meal = args.query or args.interactive
+    resolved_meal = _resolve_meal_name(meal_manager, args) if needs_meal else None
+
+    if resolved_meal:
         pipeline = RAGPipeline(
-            config=args.config, llm_preset=args.llm_preset, meal_name=args.meal
+            config=args.config, llm_preset=args.llm_preset, meal_name=resolved_meal
         )
 
-        status, issues = meal_manager.check_meal_status(args.meal)
+        status, issues = meal_manager.check_meal_status(resolved_meal)
         if status != MealStatus.AVAILABLE:
             logger.warning(
-                f"Meal '{args.meal}' status: {status.value}. "
+                f"Meal '{resolved_meal}' status: {status.value}. "
                 "Some PDFs may be missing or changed."
             )
             for issue in issues:
@@ -267,15 +279,13 @@ def main() -> None:
         if args.query:
             result = pipeline.query(args.query)
             _print_query_result(result)
-        else:
-            _interactive_qa(pipeline, args.meal)
-    elif args.interactive:
-        pipeline = RAGPipeline(config=args.config, llm_preset=args.llm_preset)
-        _interactive_qa(pipeline)
-    elif args.query:
-        pipeline = RAGPipeline(config=args.config, llm_preset=args.llm_preset)
-        result = pipeline.query(args.query)
-        _print_query_result(result)
+        elif args.interactive:
+            _interactive_qa(pipeline, resolved_meal)
+    elif needs_meal:
+        logger.error(
+            "No meal available. Create one with --create-meal or add PDFs to data/raw/."
+        )
+        sys.exit(1)
 
 
 def _build_sampling_config(args: argparse.Namespace) -> SamplingConfig | None:
@@ -310,6 +320,60 @@ def _build_sampling_config(args: argparse.Namespace) -> SamplingConfig | None:
         mode, value = active_modes[0]
         sampling_config = SamplingConfig(mode=mode, value=value)
     return sampling_config
+
+
+def _resolve_meal_name(
+    meal_manager: MealManager, args: argparse.Namespace
+) -> str | None:
+    """Resolve the meal name to use for query/interactive/build-index.
+
+    Priority:
+      1. Explicit --meal argument
+      2. Auto-resolve to the default full-dataset meal (get_or_create_full_meal)
+
+    Args:
+        meal_manager: MealManager instance for meal operations.
+        args: Parsed command-line arguments.
+
+    Returns:
+        Meal name string, or None if no meal can be resolved.
+    """
+    if args.meal:
+        return args.meal
+
+    try:
+        meal = meal_manager.get_or_create_full_meal()
+        logger.info(f"No --meal specified, auto-resolved to meal '{meal.name}'")
+        return meal.name
+    except Exception as e:
+        logger.error(f"Failed to auto-resolve default meal: {e}")
+        return None
+
+
+def _handle_rebuild_meal(
+    meal_manager: MealManager, meal_name: str, args: argparse.Namespace
+) -> None:
+    """Rebuild a meal's index through the meal system.
+
+    If --rebuild is specified, deletes and recreates the meal.
+    Otherwise, ensures the meal exists and is up-to-date.
+
+    Args:
+        meal_manager: MealManager instance for meal operations.
+        meal_name: Name of the meal to rebuild or ensure.
+        args: Parsed command-line arguments.
+    """
+    if args.rebuild and meal_manager.meal_exists(meal_name):
+        logger.info(f"Rebuilding meal '{meal_name}' from scratch...")
+        meal_manager.delete_meal(meal_name)
+
+    if not meal_manager.meal_exists(meal_name):
+        meal_manager.get_or_create_full_meal(
+            name=meal_name,
+            force_parse=args.force_parse,
+        )
+    else:
+        logger.info(f"Meal '{meal_name}' already exists, index is ready")
 
 
 def _handle_meal_info(meal_manager: MealManager, name: str) -> None:
@@ -775,7 +839,9 @@ def _interactive_qa(pipeline: RAGPipeline, meal_name: str | None = None) -> None
         chunks_count = collection_info.get("points_count", 0)
         print(f"📝 数据库中已有 {chunks_count} 个文档片段")
     else:
-        print("⚠️  数据库为空，请先构建索引：pixi run python main.py --build-index")
+        print(
+            "⚠️  数据库为空，请先构建索引：pixi run python main.py --build-index --meal <name>"
+        )
 
     print("输入 'quit' 或 'exit' 退出")
     print("输入 '/badcase' 或 '/goodcase' 保存最近一次查询\n")

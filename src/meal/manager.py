@@ -34,6 +34,9 @@ if TYPE_CHECKING:
     pass
 
 
+DEFAULT_MEAL_NAME = "all"
+
+
 class MealManager:
     def __init__(
         self,
@@ -67,14 +70,29 @@ class MealManager:
         embedding_config = self.config.get("embedding", {})
         retrieval_config = self.config.get("retrieval", {})
 
-        config_snapshot = {
-            "parser": {
+        if "primary" in parser_config:
+            parser_section = {
+                "primary": parser_config.get("primary", "pymupdf4llm"),
+                "enhancer": parser_config.get("table_enhancer"),
+                "input_dir": parser_config.get("input_dir", "data/raw"),
+                "primary_config": parser_config.get(
+                    parser_config.get("primary", "pymupdf4llm"), {}
+                ),
+                "enhancer_config": parser_config.get(
+                    parser_config.get("table_enhancer", ""), {}
+                ),
+            }
+        else:
+            parser_section = {
                 "algorithm": parser_config.get("algorithm", "pymupdf4llm"),
                 "input_dir": parser_config.get("input_dir", "data/raw"),
                 "options": parser_config.get(
                     parser_config.get("algorithm", "pymupdf4llm"), {}
                 ),
-            },
+            }
+
+        config_snapshot = {
+            "parser": parser_section,
             "chunker": {
                 "chunk_size": chunker_config.get("chunk_size", 512),
                 "chunk_overlap": chunker_config.get("chunk_overlap", 0),
@@ -551,6 +569,68 @@ class MealManager:
             f"— create a meal with sampling=1.0 first"
         )
         return None
+
+    def get_or_create_full_meal(
+        self,
+        name: str | None = None,
+        force_parse: bool = False,
+        force_chunk: bool = False,
+        profiler: Any | None = None,
+    ) -> MealConfig:
+        """Get or create the default full-dataset meal.
+
+        If a meal already exists whose data_id matches all PDFs in raw_dir,
+        returns it directly. Otherwise, creates a new full-dataset meal
+        using ``SamplingConfig(mode="ratio", value=1.0)``.
+
+        The meal name is determined by: ``name`` argument >
+        ``config["meals"]["default_name"]`` > ``DEFAULT_MEAL_NAME`` ("all").
+
+        Args:
+            name: Desired meal name. If None, uses the configured default.
+            force_parse: If True, re-parse PDFs even if cached artifacts exist.
+            force_chunk: If True, re-chunk documents even if cached artifacts exist.
+            profiler: Optional PipelineProfiler for stage tracking.
+
+        Returns:
+            MealConfig for the existing or newly created full-dataset meal.
+
+        Raises:
+            MealError: If no PDFs are found or meal creation fails.
+        """
+        existing = self.find_full_dataset_meal()
+        if existing is not None:
+            logger.info(
+                f"Full-dataset meal '{existing.name}' already exists "
+                f"(data_id={existing.data_id[:12]}...)"
+            )
+            return existing
+
+        meal_name = name or self.config.get("meals", {}).get(
+            "default_name", DEFAULT_MEAL_NAME
+        )
+
+        if self.meal_exists(meal_name):
+            logger.info(
+                f"Meal '{meal_name}' exists but is not a full-dataset meal, "
+                f"generating a timestamp name instead"
+            )
+            meal_name = None
+
+        sampling_config = SamplingConfig(mode="ratio", value=1.0)
+
+        logger.info(
+            f"No full-dataset meal found, auto-creating meal '{meal_name or '(auto-named)'}' "
+            f"with all PDFs in {self.raw_dir}"
+        )
+
+        return self.create_meal(
+            name=meal_name,
+            sampling_config=sampling_config,
+            force_parse=force_parse,
+            force_chunk=force_chunk,
+            profiler=profiler,
+        )
 
     def list_meals(self) -> list[MealConfig]:
         """List all available meals by scanning the meals directory.
@@ -1224,10 +1304,20 @@ class MealManager:
         """
         from src.parsers.registry import ParserRegistry
 
-        algorithm = parser_config.get("algorithm", "pymupdf4llm")
-        parser_options = parser_config.get(algorithm, {})
-        parser = ParserRegistry.get(algorithm, parser_options)
-        use_page_chunks = bool(parser_options.get("page_chunks", False))
+        if "primary" in parser_config:
+            primary = parser_config.get("primary", "pymupdf4llm")
+            enhancer = parser_config.get("table_enhancer")
+            primary_config = parser_config.get(primary, {})
+            enhancer_config = parser_config.get(enhancer or "", {})
+            parser = ParserRegistry.get_composite(
+                primary, enhancer, primary_config, enhancer_config
+            )
+            use_page_chunks = bool(primary_config.get("page_chunks", False))
+        else:
+            algorithm = parser_config.get("algorithm", "pymupdf4llm")
+            parser_options = parser_config.get(algorithm, {})
+            parser = ParserRegistry.get(algorithm, parser_options)
+            use_page_chunks = bool(parser_options.get("page_chunks", False))
 
         for pdf_file in pdf_files:
             try:

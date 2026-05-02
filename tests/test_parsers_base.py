@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from src.exceptions import ParsingError
-from src.parsers.base import BaseParser, ParsedPage, ParseResult
+from src.parsers.base import BaseParser, ParsedPage, ParseResult, TableEnhancer
 from src.parsers.registry import ParserRegistry
 
 
@@ -70,3 +70,44 @@ class TestParserRegistry:
     def test_register_non_subclass_raises_type_error(self) -> None:
         with pytest.raises(ParsingError):
             ParserRegistry.register("bad", object)
+
+
+@pytest.mark.unit
+class TestTableEnhancer:
+    def test_cannot_instantiate_abstract_class(self) -> None:
+        with pytest.raises(TypeError):
+            TableEnhancer()
+
+    def test_concrete_subclass_can_be_instantiated(self) -> None:
+        class StubEnhancer(TableEnhancer):
+            @property
+            def name(self) -> str:
+                return "stub"
+
+            def enhance(self, pdf_path: str, result: ParseResult) -> ParseResult:
+                return result
+
+        enhancer = StubEnhancer()
+        assert enhancer.name == "stub"
+
+    def test_enhance_receives_correct_arguments(self) -> None:
+        received: dict = {}
+
+        class SpyEnhancer(TableEnhancer):
+            @property
+            def name(self) -> str:
+                return "spy"
+
+            def enhance(self, pdf_path: str, result: ParseResult) -> ParseResult:
+                received["pdf_path"] = pdf_path
+                received["result"] = result
+                return result
+
+        enhancer = SpyEnhancer()
+        sample_result = ParseResult(
+            pages=[ParsedPage(page_number=1, text="table")],
+            metadata={"key": "val"},
+        )
+        enhancer.enhance("/tmp/test.pdf", sample_result)
+        assert received["pdf_path"] == "/tmp/test.pdf"
+        assert received["result"] is sample_result

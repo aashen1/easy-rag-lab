@@ -68,41 +68,54 @@ llm_presets:
 # The parser.output_dir and chunker.input_dir/output_dir fields are no longer used for I/O.
 parser:
   input_dir: "data/raw"
-  algorithm: "pymupdf4llm"
+  primary: "pymupdf4llm"           # 主力解析器: pymupdf4llm / fitz
+  table_enhancer: "pdfplumber"     # 表格补强: pdfplumber / null
+
+  # pymupdf4llm 参数
   pymupdf4llm:
     header: false
     footer: false
-    page_separators: false     # Redundant when page_chunks=True; Layout mode auto-handles page breaks
-    write_images: false        # Layout mode auto-classifies images; this controls not writing image files
-    page_chunks: true          # Enable page-level output for page-aware chunking
-    force_text: true           # Preserve text overlaid on charts (financial reports)
-    ignore_code: true          # Avoid financial data tables being marked as code blocks
-    use_ocr: true              # Keep OCR fallback for scanned pages
-    ocr_language: "chi_sim+eng"  # Chinese + English OCR support
-    show_progress: true        # Show parsing progress
-    clean_degenerate_tables: true  # Remove empty markdown table rows (|||||) from parser output
-  fitz_pdfplumber:
-    page_chunks: true          # Enable page-level output for page-aware chunking
+    page_separators: false
+    write_images: false
+    page_chunks: true
+    force_text: true
+    ignore_code: true
+    use_ocr: false
+    ocr_language: "chi_sim+eng"
+    show_progress: true
+    clean_degenerate_tables: true
+
+  # fitz 参数
+  fitz:
     header_filter: true
     footer_filter: true
     header_zone_ratio: 0.10
     footer_zone_ratio: 0.10
-    table_strategy: "text"     # text strategy handles tables without explicit grid lines (common in financial reports)
-    table_settings:
-      vertical_strategy: "text"
-      horizontal_strategy: "text"
-      snap_tolerance: 5
-      join_tolerance: 5
-      edge_min_length: 10
-      intersection_x_tolerance: 5
-      intersection_y_tolerance: 5
     column_detection: true
+    heading_detection: true
     noise_patterns:
       - "请务必阅读.{0,20}声明"
       - "^\\s*\\d+\\s*$"
       - "^\\s*\\d+\\s*/\\s*\\d+\\s*$"
       - "(?:内部资料|机密|仅供参考).{0,30}$"
       - "^(?:www\\.|http).+$"
+
+  # pdfplumber 表格补强参数（table_enhancer: "pdfplumber" 时生效）
+  pdfplumber:
+    strategy: "text"
+    vertical_strategy: "text"
+    horizontal_strategy: "text"
+    table_settings:
+      snap_tolerance: 5
+      join_tolerance: 5
+      edge_min_length: 10
+      intersection_x_tolerance: 5
+      intersection_y_tolerance: 5
+    quality_filter:
+      min_columns: 3
+      max_empty_ratio: 0.5
+      min_data_rows: 2
+    replace_policy: "better_wins"
 
 # 分块配置
 # NOTE: Chunk I/O paths are managed by the artifact system (data/artifacts/{data_id}/chunks_{hash}/).
@@ -186,6 +199,7 @@ experiments:
 meals:
   dir: "data/meals"
   collection_prefix: "m_"
+  default_name: "all"
 
 # Artifacts 存储配置
 artifacts:

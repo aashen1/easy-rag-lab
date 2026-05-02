@@ -1,0 +1,112 @@
+name: "parser_baseline"
+description: "解析器基线对比 — 6 种典型组合"
+
+pipelines:
+  - name: "pymupdf4llm_pure"
+    primary:
+      algorithm: "pymupdf4llm"
+      config:
+        page_chunks: true
+        header: false
+        footer: false
+        force_text: true
+        ignore_code: true
+        use_ocr: true
+        ocr_language: "chi_sim+eng"
+        clean_degenerate_tables: true
+    table_enhancer: null
+
+  - name: "pymupdf4llm_pdfplumber_lines"
+    primary:
+      algorithm: "pymupdf4llm"
+      config:
+        page_chunks: true
+        header: false
+        footer: false
+        force_text: true
+        ignore_code: true
+        use_ocr: true
+        ocr_language: "chi_sim+eng"
+        clean_degenerate_tables: true
+    table_enhancer:
+      algorithm: "pdfplumber"
+      config:
+        strategy: "lines"
+        quality_filter:
+          min_columns: 3
+          max_empty_ratio: 0.5
+          min_data_rows: 2
+        replace_policy: "better_wins"
+
+  - name: "pymupdf4llm_pdfplumber_text"
+    primary:
+      algorithm: "pymupdf4llm"
+      config:
+        page_chunks: true
+        header: false
+        footer: false
+        force_text: true
+        ignore_code: true
+        use_ocr: true
+        ocr_language: "chi_sim+eng"
+        clean_degenerate_tables: true
+    table_enhancer:
+      algorithm: "pdfplumber"
+      config:
+        strategy: "text"
+        quality_filter:
+          min_columns: 3
+          max_empty_ratio: 0.5
+          min_data_rows: 2
+        replace_policy: "better_wins"
+
+  - name: "fitz_pure"
+    primary:
+      algorithm: "fitz"
+      config:
+        header_filter: true
+        footer_filter: true
+        column_detection: true
+        heading_detection: true
+    table_enhancer: null
+
+  - name: "fitz_pdfplumber_lines"
+    primary:
+      algorithm: "fitz"
+      config:
+        header_filter: true
+        footer_filter: true
+        column_detection: true
+        heading_detection: true
+    table_enhancer:
+      algorithm: "pdfplumber"
+      config:
+        strategy: "lines"
+        quality_filter:
+          min_columns: 3
+          max_empty_ratio: 0.5
+          min_data_rows: 2
+        replace_policy: "better_wins"
+
+  - name: "fitz_pdfplumber_text"
+    primary:
+      algorithm: "fitz"
+      config:
+        header_filter: true
+        footer_filter: true
+        column_detection: true
+        heading_detection: true
+    table_enhancer:
+      algorithm: "pdfplumber"
+      config:
+        strategy: "text"
+        quality_filter:
+          min_columns: 3
+          max_empty_ratio: 0.5
+          min_data_rows: 2
+        replace_policy: "better_wins"
+
+test_pdfs:
+  - "data/raw/research_reports/食品饮料行业ETF周报：茅台C端改革持续进行.pdf"
+
+output_dir: "data/parser_reports"
