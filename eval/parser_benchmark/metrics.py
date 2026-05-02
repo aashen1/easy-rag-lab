@@ -13,11 +13,11 @@ class PageMetrics:
     char_count: int
     word_count: int
     table_count: int
+    heading_count: int
+    markdown_valid: bool
     table_rows: list[int] = field(default_factory=list)
     table_cols: list[int] = field(default_factory=list)
     table_empty_ratios: list[float] = field(default_factory=list)
-    heading_count: int
-    markdown_valid: bool
 
 
 @dataclass
