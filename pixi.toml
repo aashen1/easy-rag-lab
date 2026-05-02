@@ -58,6 +58,18 @@ depends-on = [
   ]}
 ]
 
+[tasks._run-parser-bench]
+args = ["config"]
+cmd = "python eval/run_parser_benchmark.py --config {{ config }}"
+
+[tasks.parser-bench]
+args = ["name"]
+depends-on = [
+  { task = "_run-parser-bench", args = [
+    "parser_configs/{{ name if '.yaml' in name else name + '.yaml' }}"
+  ]}
+]
+
 # # same as above
 # [tasks.exp]
 # args = ["config"]

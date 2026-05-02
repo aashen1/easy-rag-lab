@@ -6,8 +6,10 @@ from pathlib import Path
 from loguru import logger
 
 
-class TestCaseManager:
+class TestCaseManager:  # noqa: N801
     """Manages test PDF files and their ground truth annotations."""
+
+    __test__ = False
 
     def __init__(self, test_cases_dir: str | Path | None = None):
         """Initialize with optional test cases directory.
