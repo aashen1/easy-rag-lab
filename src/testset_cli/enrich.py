@@ -52,7 +52,7 @@ def run_enrich(args) -> int:
         logger.info(f"Auto-approved {tier_a_count} Tier A questions")
 
     test_set["metadata"]["updated_at"] = datetime.now().isoformat()
-    test_set["metadata"].setdefault("quality_status", "ai_reviewed")
+    test_set["metadata"]["quality_status"] = "ai_reviewed"
 
     with open(input_path, "w", encoding="utf-8") as f:
         json.dump(test_set, f, ensure_ascii=False, indent=2)

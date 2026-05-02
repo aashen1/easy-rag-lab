@@ -44,6 +44,89 @@ from src.experiment_reuse import (  # noqa: E402
 )
 
 
+def _build_reuse_config(args: argparse.Namespace) -> ReportReuseConfig | None:
+    if not args.reuse:
+        return None
+
+    mode = args.reuse.replace("-", "_")
+    return ReportReuseConfig(
+        mode=mode,
+        target_dir=args.target_dir,
+        source_dir=args.source_dir,
+        backup_before_append=not args.no_backup,
+    )
+
+
+def _handle_list_backups(args: argparse.Namespace) -> None:
+    from src.utils import load_config
+
+    system_config = load_config(args.system_config)
+    exp_dir = Path(system_config.get("experiments", {}).get("dir", "data/exp_reports"))
+    target_dir = exp_dir / args.list_backups
+
+    if not target_dir.exists():
+        candidate = Path(args.list_backups)
+        if candidate.exists():
+            target_dir = candidate
+        else:
+            print(f"Experiment directory not found: {args.list_backups}")
+            sys.exit(1)
+
+    handler = InPlaceReuseHandler(target_dir=target_dir)
+    snapshots = handler.list_snapshots()
+
+    if not snapshots:
+        print(f"No backup snapshots found for: {target_dir.name}")
+        return
+
+    print(f"\nBackup snapshots for {target_dir.name}:")
+    print("=" * 60)
+    for snap in snapshots:
+        print(f"  Timestamp: {snap['timestamp']}")
+        print(f"  Path:      {snap['path']}")
+        print(f"  Created:   {snap['created_at']}")
+        print()
+    print("=" * 60)
+
+
+def _handle_restore_backup(args: argparse.Namespace) -> None:
+    from src.utils import load_config
+
+    if not args.snapshot:
+        print("Error: --snapshot is required when using --restore-backup")
+        sys.exit(1)
+
+    system_config = load_config(args.system_config)
+    exp_dir = Path(system_config.get("experiments", {}).get("dir", "data/exp_reports"))
+    target_dir = exp_dir / args.restore_backup
+
+    if not target_dir.exists():
+        candidate = Path(args.restore_backup)
+        if candidate.exists():
+            target_dir = candidate
+        else:
+            print(f"Experiment directory not found: {args.restore_backup}")
+            sys.exit(1)
+
+    handler = InPlaceReuseHandler(target_dir=target_dir)
+
+    print(f"Restoring experiment from snapshot: {args.snapshot}")
+    print(f"Target directory: {target_dir}")
+    print("\nWARNING: This will overwrite current experiment data!")
+
+    try:
+        confirm = input("Proceed? [y/N]: ").strip().lower()
+        if confirm != "y":
+            print("Restore cancelled.")
+            return
+
+        handler.restore_snapshot(args.snapshot)
+        print(f"\nExperiment restored successfully from snapshot: {args.snapshot}")
+    except Exception as e:
+        print(f"\nError: {str(e)}")
+        sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="RAG Experiment Runner",
@@ -278,104 +361,3 @@ Examples:
 
 if __name__ == "__main__":
     main()
-
-
-def _build_reuse_config(args: argparse.Namespace) -> ReportReuseConfig | None:
-    """Build a ReportReuseConfig from CLI arguments.
-
-    Args:
-        args: Parsed CLI arguments.
-
-    Returns:
-        ReportReuseConfig if reuse mode is specified, None otherwise.
-    """
-    if not args.reuse:
-        return None
-
-    mode = args.reuse.replace("-", "_")
-    return ReportReuseConfig(
-        mode=mode,
-        target_dir=args.target_dir,
-        source_dir=args.source_dir,
-        backup_before_append=not args.no_backup,
-    )
-
-
-def _handle_list_backups(args: argparse.Namespace) -> None:
-    """Handle --list-backups CLI command.
-
-    Args:
-        args: Parsed CLI arguments.
-    """
-    from src.utils import load_config
-
-    system_config = load_config(args.system_config)
-    exp_dir = Path(system_config.get("experiments", {}).get("dir", "data/exp_reports"))
-    target_dir = exp_dir / args.list_backups
-
-    if not target_dir.exists():
-        candidate = Path(args.list_backups)
-        if candidate.exists():
-            target_dir = candidate
-        else:
-            print(f"Experiment directory not found: {args.list_backups}")
-            sys.exit(1)
-
-    handler = InPlaceReuseHandler(target_dir=target_dir)
-    snapshots = handler.list_snapshots()
-
-    if not snapshots:
-        print(f"No backup snapshots found for: {target_dir.name}")
-        return
-
-    print(f"\nBackup snapshots for {target_dir.name}:")
-    print("=" * 60)
-    for snap in snapshots:
-        print(f"  Timestamp: {snap['timestamp']}")
-        print(f"  Path:      {snap['path']}")
-        print(f"  Created:   {snap['created_at']}")
-        print()
-    print("=" * 60)
-
-
-def _handle_restore_backup(args: argparse.Namespace) -> None:
-    """Handle --restore-backup CLI command.
-
-    Args:
-        args: Parsed CLI arguments.
-    """
-    from src.utils import load_config
-
-    if not args.snapshot:
-        print("Error: --snapshot is required when using --restore-backup")
-        sys.exit(1)
-
-    system_config = load_config(args.system_config)
-    exp_dir = Path(system_config.get("experiments", {}).get("dir", "data/exp_reports"))
-    target_dir = exp_dir / args.restore_backup
-
-    if not target_dir.exists():
-        candidate = Path(args.restore_backup)
-        if candidate.exists():
-            target_dir = candidate
-        else:
-            print(f"Experiment directory not found: {args.restore_backup}")
-            sys.exit(1)
-
-    handler = InPlaceReuseHandler(target_dir=target_dir)
-
-    print(f"Restoring experiment from snapshot: {args.snapshot}")
-    print(f"Target directory: {target_dir}")
-    print("\nWARNING: This will overwrite current experiment data!")
-
-    try:
-        confirm = input("Proceed? [y/N]: ").strip().lower()
-        if confirm != "y":
-            print("Restore cancelled.")
-            return
-
-        handler.restore_snapshot(args.snapshot)
-        print(f"\nExperiment restored successfully from snapshot: {args.snapshot}")
-    except Exception as e:
-        print(f"\nError: {str(e)}")
-        sys.exit(1)

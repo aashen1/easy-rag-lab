@@ -122,7 +122,7 @@ def parse_all_pdfs_unified(
         cache_valid = (
             manifest is not None
             and "pdf_inventory" in manifest
-            and cache.is_full_parsed_valid(parser_hash)
+            and cache.is_full_parsed_valid(parser_hash, use_page_chunks=use_page_chunks)
         )
     else:
         cache_valid = False

@@ -1,5 +1,6 @@
 ---
-alwaysApply: true
+alwaysApply: false
+description: 编写streamlit相关代码时
 scene: streamlit
 ---
 # Streamlit API Migration Rules
