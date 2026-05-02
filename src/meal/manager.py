@@ -67,14 +67,29 @@ class MealManager:
         embedding_config = self.config.get("embedding", {})
         retrieval_config = self.config.get("retrieval", {})
 
-        config_snapshot = {
-            "parser": {
+        if "primary" in parser_config:
+            parser_section = {
+                "primary": parser_config.get("primary", "pymupdf4llm"),
+                "enhancer": parser_config.get("table_enhancer"),
+                "input_dir": parser_config.get("input_dir", "data/raw"),
+                "primary_config": parser_config.get(
+                    parser_config.get("primary", "pymupdf4llm"), {}
+                ),
+                "enhancer_config": parser_config.get(
+                    parser_config.get("table_enhancer", ""), {}
+                ),
+            }
+        else:
+            parser_section = {
                 "algorithm": parser_config.get("algorithm", "pymupdf4llm"),
                 "input_dir": parser_config.get("input_dir", "data/raw"),
                 "options": parser_config.get(
                     parser_config.get("algorithm", "pymupdf4llm"), {}
                 ),
-            },
+            }
+
+        config_snapshot = {
+            "parser": parser_section,
             "chunker": {
                 "chunk_size": chunker_config.get("chunk_size", 512),
                 "chunk_overlap": chunker_config.get("chunk_overlap", 0),
@@ -1224,10 +1239,20 @@ class MealManager:
         """
         from src.parsers.registry import ParserRegistry
 
-        algorithm = parser_config.get("algorithm", "pymupdf4llm")
-        parser_options = parser_config.get(algorithm, {})
-        parser = ParserRegistry.get(algorithm, parser_options)
-        use_page_chunks = bool(parser_options.get("page_chunks", False))
+        if "primary" in parser_config:
+            primary = parser_config.get("primary", "pymupdf4llm")
+            enhancer = parser_config.get("table_enhancer")
+            primary_config = parser_config.get(primary, {})
+            enhancer_config = parser_config.get(enhancer or "", {})
+            parser = ParserRegistry.get_composite(
+                primary, enhancer, primary_config, enhancer_config
+            )
+            use_page_chunks = bool(primary_config.get("page_chunks", False))
+        else:
+            algorithm = parser_config.get("algorithm", "pymupdf4llm")
+            parser_options = parser_config.get(algorithm, {})
+            parser = ParserRegistry.get(algorithm, parser_options)
+            use_page_chunks = bool(parser_options.get("page_chunks", False))
 
         for pdf_file in pdf_files:
             try:

@@ -47,36 +47,56 @@ def compute_data_id(pdf_files: list[MealFile]) -> str:
     return hashlib.sha256(combined.encode()).hexdigest()
 
 
+def _version_hint_for(name: str) -> str:
+    try:
+        if name == "pymupdf4llm":
+            import pymupdf4llm
+
+            return pymupdf4llm.__version__
+        elif name == "pymupdf":
+            import pymupdf
+
+            return pymupdf.__version__
+        elif name in ("fitz_pdfplumber", "pdfplumber"):
+            import pdfplumber
+
+            return pdfplumber.__version__
+        elif name == "fitz":
+            import pymupdf
+
+            return pymupdf.__version__
+    except (ImportError, AttributeError):
+        pass
+    return "unknown"
+
+
 def compute_parser_config_hash(parser_config: dict) -> str:
     """Compute a short hash of the parser configuration.
 
     Args:
-        parser_config: Parser configuration dictionary. Expected to contain
-            ``algorithm`` and ``options`` keys as built by
-            ``_build_config_snapshot_and_hashes``.
+        parser_config: Parser configuration dictionary. Supports both the
+            legacy format (``algorithm`` + ``options`` keys) and the new
+            composite format (``primary`` + ``enhancer`` +
+            ``primary_config`` + ``enhancer_config`` keys).
 
     Returns:
         First 8 characters of the SHA-256 hex digest.
     """
-    algorithm = parser_config.get("algorithm", "pymupdf4llm")
-    options = parser_config.get("options", {})
-    relevant = {"algorithm": algorithm, "options": options}
-
-    try:
-        if algorithm == "pymupdf4llm":
-            import pymupdf4llm
-
-            relevant["_version_hint"] = pymupdf4llm.__version__
-        elif algorithm == "pymupdf":
-            import pymupdf
-
-            relevant["_version_hint"] = pymupdf.__version__
-        elif algorithm == "fitz_pdfplumber":
-            import pdfplumber
-
-            relevant["_version_hint"] = pdfplumber.__version__
-    except (ImportError, AttributeError):
-        relevant["_version_hint"] = "unknown"
+    if "primary" in parser_config:
+        relevant = {
+            "primary": parser_config.get("primary", "pymupdf4llm"),
+            "enhancer": parser_config.get("enhancer"),
+            "primary_config": parser_config.get("primary_config", {}),
+            "enhancer_config": parser_config.get("enhancer_config", {}),
+        }
+        relevant["_primary_version"] = _version_hint_for(relevant["primary"])
+        if relevant["enhancer"]:
+            relevant["_enhancer_version"] = _version_hint_for(relevant["enhancer"])
+    else:
+        algorithm = parser_config.get("algorithm", "pymupdf4llm")
+        options = parser_config.get("options", {})
+        relevant = {"algorithm": algorithm, "options": options}
+        relevant["_version_hint"] = _version_hint_for(algorithm)
 
     return hashlib.sha256(json.dumps(relevant, sort_keys=True).encode()).hexdigest()[:8]
 
