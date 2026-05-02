@@ -440,3 +440,160 @@ class TestEnhanceAppendMode:
         enhanced_text = enhanced.pages[0].text
         assert "Text before" in enhanced_text
         assert "Text after" in enhanced_text
+
+
+@pytest.mark.unit
+class TestCountTableQuality:
+    def test_merged_ratio_with_br_tags(self, enhancer: PdfPlumberEnhancer) -> None:
+        md = "| A<br>B | C |\n|---|---|\n| 1 | 2 |"
+        _, _, _, _, merged_ratio = enhancer._count_table_quality(md)
+        assert merged_ratio > 0
+
+    def test_merged_ratio_zero_without_br(self, enhancer: PdfPlumberEnhancer) -> None:
+        md = "| A | B |\n|---|---|\n| 1 | 2 |"
+        _, _, _, _, merged_ratio = enhancer._count_table_quality(md)
+        assert merged_ratio == 0.0
+
+    def test_empty_table_returns_zero_merged(
+        self, enhancer: PdfPlumberEnhancer
+    ) -> None:
+        result = enhancer._count_table_quality("")
+        assert result == (0, 0, 0, 1.0, 0.0)
+
+    def test_multiple_br_cells(self, enhancer: PdfPlumberEnhancer) -> None:
+        md = "| X<br>Y | A<br>B | C |\n|---|---|---|\n| 1 | 2 | 3 |"
+        _, _, _, _, merged_ratio = enhancer._count_table_quality(md)
+        assert merged_ratio == pytest.approx(1 / 3)
+
+
+@pytest.mark.unit
+class TestIsBetterQuality:
+    def test_orig_merged_plumber_clean_plumber_wins(
+        self, enhancer: PdfPlumberEnhancer
+    ) -> None:
+        orig = "| A<br>B | C |\n|---|---|\n| 1 | 2 |"
+        plumber = "| A | B | C |\n|---|---|---|\n| 1 | 2 | 3 |"
+        assert enhancer._is_better_quality(orig, plumber) is True
+
+    def test_plumber_merged_orig_clean_orig_wins(
+        self, enhancer: PdfPlumberEnhancer
+    ) -> None:
+        orig = "| A | B | C |\n|---|---|---|\n| 1 | 2 | 3 |"
+        plumber = "| X<br>Y | B | C |\n|---|---|---|\n| 1 | 2 | 3 |"
+        assert enhancer._is_better_quality(orig, plumber) is False
+
+    def test_both_merged_default_plumber(self, enhancer: PdfPlumberEnhancer) -> None:
+        orig = "| A<br>B | C |\n|---|---|\n| 1 | 2 |"
+        plumber = "| X<br>Y | C |\n|---|---|\n| 1 | 2 |"
+        assert enhancer._is_better_quality(orig, plumber) is True
+
+    def test_empty_ratio_significant_plumber_wins(
+        self, enhancer: PdfPlumberEnhancer
+    ) -> None:
+        orig = "| A | B | C | D |\n|---|---|---|---|\n| 1 |  |  | 4 |"
+        plumber = "| A | B | C | D |\n|---|---|---|---|\n| 1 | 2 | 3 | 4 |"
+        assert enhancer._is_better_quality(orig, plumber) is True
+
+    def test_empty_ratio_significant_orig_wins(
+        self, enhancer: PdfPlumberEnhancer
+    ) -> None:
+        orig = "| A | B | C | D |\n|---|---|---|---|\n| 1 | 2 | 3 | 4 |"
+        plumber = "| A | B | C | D |\n|---|---|---|---|\n| 1 |  |  | 4 |"
+        assert enhancer._is_better_quality(orig, plumber) is False
+
+    def test_row_count_significant_plumber_wins(
+        self, enhancer: PdfPlumberEnhancer
+    ) -> None:
+        orig = "| A | B |\n|---|---|\n| 1 | 2 |"
+        plumber = "| A | B |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\n| 5 | 6 |"
+        assert enhancer._is_better_quality(orig, plumber) is True
+
+    def test_row_count_significant_orig_wins(
+        self, enhancer: PdfPlumberEnhancer
+    ) -> None:
+        orig = "| A | B |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\n| 5 | 6 |"
+        plumber = "| A | B |\n|---|---|\n| 1 | 2 |"
+        assert enhancer._is_better_quality(orig, plumber) is False
+
+    def test_similar_quality_defaults_to_plumber(
+        self, enhancer: PdfPlumberEnhancer
+    ) -> None:
+        orig = "| A | B | C |\n|---|---|---|\n| 1 | 2 | 3 |"
+        plumber = "| X | Y | Z |\n|---|---|---|\n| 4 | 5 | 6 |"
+        assert enhancer._is_better_quality(orig, plumber) is True
+
+    def test_row_count_not_significant_defaults_to_plumber(
+        self, enhancer: PdfPlumberEnhancer
+    ) -> None:
+        orig = "| A | B | C |\n|---|---|---|\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |\n| 7 | 8 | 9 |\n| 10 | 11 | 12 |"
+        plumber = (
+            "| A | B | C |\n|---|---|---|\n| x | y | z |\n| p | q | r |\n| s | t | u |"
+        )
+        assert enhancer._is_better_quality(orig, plumber) is True
+
+
+@pytest.mark.unit
+class TestNoDuplicateTables:
+    def test_replace_tables_no_duplicate(self, enhancer: PdfPlumberEnhancer) -> None:
+        page_text = "Before\n\n| A | B |\n|---|---|\n| 1 | 2 |\n\nAfter"
+        result = ParseResult(
+            pages=[ParsedPage(page_number=1, text=page_text, metadata={})],
+            metadata={"parser": "pymupdf4llm"},
+        )
+
+        orig_extract = enhancer._extract_tables
+        enhancer._extract_tables = lambda pdf_path, page_idx: [
+            "| A | B |\n|---|---|\n| x | y |"
+        ]
+
+        try:
+            enhanced = enhancer.enhance("dummy.pdf", result)
+        finally:
+            enhancer._extract_tables = orig_extract
+
+        text = enhanced.pages[0].text
+        assert text.count("|---|---|") == 1
+
+    def test_append_tables_no_duplicate(self, enhancer: PdfPlumberEnhancer) -> None:
+        page_text = "No tables here."
+        result = ParseResult(
+            pages=[ParsedPage(page_number=1, text=page_text, metadata={})],
+            metadata={"parser": "fitz"},
+        )
+
+        orig_extract = enhancer._extract_tables
+        enhancer._extract_tables = lambda pdf_path, page_idx: [
+            "| A | B | C |\n|---|---|---|\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |"
+        ]
+
+        try:
+            enhanced = enhancer.enhance("dummy.pdf", result)
+        finally:
+            enhancer._extract_tables = orig_extract
+
+        text = enhanced.pages[0].text
+        assert text.count("|---|---|---|") == 1
+
+    def test_better_wins_replaces_low_quality_orig(
+        self, enhancer: PdfPlumberEnhancer
+    ) -> None:
+        orig_table = "| A<br>B | C | D |\n|---|---|---|\n| 1 | 2 | 3 |"
+        page_text = f"Before\n\n{orig_table}\n\nAfter"
+        result = ParseResult(
+            pages=[ParsedPage(page_number=1, text=page_text, metadata={})],
+            metadata={"parser": "pymupdf4llm"},
+        )
+
+        orig_extract = enhancer._extract_tables
+        enhancer._extract_tables = lambda pdf_path, page_idx: [
+            "| A | B | C | D |\n|---|---|---|---|\n| 1 | 2 | 3 | 4 |\n| 5 | 6 | 7 | 8 |"
+        ]
+
+        try:
+            enhanced = enhancer.enhance("dummy.pdf", result)
+        finally:
+            enhancer._extract_tables = orig_extract
+
+        text = enhanced.pages[0].text
+        assert "A<br>B" not in text
+        assert "| A | B | C | D |" in text

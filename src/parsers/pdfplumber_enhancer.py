@@ -294,7 +294,9 @@ class PdfPlumberEnhancer(TableEnhancer):
         """
         result: list[str] = []
         for md in tables:
-            rows, cols, data_rows, empty_ratio = self._count_table_quality(md)
+            rows, cols, data_rows, empty_ratio, merged_ratio = (
+                self._count_table_quality(md)
+            )
             if cols < self._min_columns:
                 logger.debug(
                     f"Filtered table: cols={cols} < min_columns={self._min_columns}"
@@ -342,8 +344,8 @@ class PdfPlumberEnhancer(TableEnhancer):
 
         The replacement strategy depends on ``replace_policy``:
         - "better_wins": Replace each original table with the
-          corresponding pdfplumber table only if the pdfplumber version
-          has more data rows.
+          corresponding pdfplumber table when the pdfplumber version
+          is deemed higher quality by ``_is_better_quality``.
         - "always_replace": Replace each original table with the
           corresponding pdfplumber table unconditionally.
         - "never_replace": Never replace (effectively a no-op).
@@ -384,9 +386,9 @@ class PdfPlumberEnhancer(TableEnhancer):
                 if self._replace_policy == "always_replace":
                     should_replace = True
                 elif self._replace_policy == "better_wins":
-                    orig_quality = self._count_table_quality(original_tables[span_idx])
-                    plumber_quality = self._count_table_quality(plumber_md)
-                    should_replace = plumber_quality[2] > orig_quality[2]
+                    should_replace = self._is_better_quality(
+                        original_tables[span_idx], plumber_md
+                    )
 
                 if should_replace:
                     result_parts.append(plumber_md)
@@ -405,18 +407,62 @@ class PdfPlumberEnhancer(TableEnhancer):
 
         return "".join(result_parts)
 
+    def _is_better_quality(self, orig_md: str, plumber_md: str) -> bool:
+        """Determine whether the plumber table is better than the original.
+
+        Comparison priority:
+        1. Merged cells: if the original has ``<br>`` tags (merged
+           cells) and plumber does not, plumber wins; and vice versa.
+        2. Empty cell ratio: if the difference exceeds 15 percentage
+           points, the one with the lower ratio wins.
+        3. Data row count: if the difference exceeds 30%, the one
+           with more rows wins.
+        4. Default: when quality is hard to judge, prefer the
+           plumber (enhancement) result.
+
+        Args:
+            orig_md: Original markdown table string.
+            plumber_md: Pdfplumber-extracted markdown table string.
+
+        Returns:
+            True if the plumber version should replace the original.
+        """
+        orig_q = self._count_table_quality(orig_md)
+        plumber_q = self._count_table_quality(plumber_md)
+
+        if orig_q[4] > 0 and plumber_q[4] == 0:
+            return True
+
+        if plumber_q[4] > 0 and orig_q[4] == 0:
+            return False
+
+        if abs(orig_q[3] - plumber_q[3]) > 0.15:
+            return plumber_q[3] < orig_q[3]
+
+        if orig_q[2] > 0 and plumber_q[2] > 0:
+            row_diff = abs(plumber_q[2] - orig_q[2]) / max(orig_q[2], plumber_q[2])
+            if row_diff > 0.3:
+                return plumber_q[2] > orig_q[2]
+
+        return True
+
     @staticmethod
-    def _count_table_quality(md_table: str) -> tuple[int, int, int, float]:
+    def _count_table_quality(
+        md_table: str,
+    ) -> tuple[int, int, int, float, float]:
         """Compute quality metrics for a markdown table.
 
         Args:
             md_table: Markdown table string.
 
         Returns:
-            Tuple of (total_rows, col_count, data_rows, empty_ratio)
-            where *data_rows* excludes the header and separator rows,
-            and *empty_ratio* is the fraction of empty cells across
-            all rows (including header).
+            Tuple of (total_rows, col_count, data_rows, empty_ratio,
+            merged_ratio) where *data_rows* excludes the header and
+            separator rows, *empty_ratio* is the fraction of empty
+            cells across all rows (including header), and
+            *merged_ratio* is the fraction of cells containing
+            ``<br>`` tags (indicating merged cells from the primary
+            parser).
         """
         lines = md_table.strip().split("\n")
         data_lines = [
@@ -428,23 +474,28 @@ class PdfPlumberEnhancer(TableEnhancer):
 
         total_rows = len(data_lines)
         if total_rows == 0:
-            return (0, 0, 0, 1.0)
+            return (0, 0, 0, 1.0, 0.0)
 
         col_count = max(len(line.strip().split("|")) - 2 for line in data_lines)
         if col_count <= 0:
             col_count = len(data_lines[0].strip().split("|")) - 2
         if col_count <= 0:
-            return (total_rows, 0, 0, 1.0)
+            return (total_rows, 0, 0, 1.0, 0.0)
 
         total_cells = total_rows * col_count
         empty_cells = 0
+        merged_cells = 0
         for line in data_lines:
             cells = line.strip().split("|")[1:-1]
             for cell in cells:
-                if not cell.strip():
+                stripped = cell.strip()
+                if not stripped:
                     empty_cells += 1
+                elif "<br>" in stripped:
+                    merged_cells += 1
 
         empty_ratio = empty_cells / total_cells if total_cells > 0 else 1.0
+        merged_ratio = merged_cells / total_cells if total_cells > 0 else 0.0
         data_rows = max(0, total_rows - 1)
 
-        return (total_rows, col_count, data_rows, empty_ratio)
+        return (total_rows, col_count, data_rows, empty_ratio, merged_ratio)
