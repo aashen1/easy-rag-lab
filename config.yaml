@@ -69,7 +69,7 @@ llm_presets:
 parser:
   input_dir: "data/raw"
   primary: "pymupdf4llm"           # 主力解析器: pymupdf4llm / fitz
-  table_enhancer: null             # 表格补强: pdfplumber / null
+  table_enhancer: "pdfplumber"     # 表格补强: pdfplumber / null
 
   # pymupdf4llm 参数
   pymupdf4llm:
@@ -80,7 +80,7 @@ parser:
     page_chunks: true
     force_text: true
     ignore_code: true
-    use_ocr: true
+    use_ocr: false
     ocr_language: "chi_sim+eng"
     show_progress: true
     clean_degenerate_tables: true
