@@ -541,11 +541,21 @@ class MealManager:
                 equivalents.append(meal)
         return equivalents
 
-    def find_full_dataset_meal(self) -> MealConfig | None:
+    def find_full_dataset_meal(
+        self, require_config_match: bool = True
+    ) -> MealConfig | None:
         """Find the meal that contains all PDFs in raw_dir.
 
         Computes the full data_id from raw_dir via ArtifactCache, then
-        searches all meals for one with a matching data_id.
+        searches all meals for one with a matching data_id.  When
+        ``require_config_match`` is True (default), only returns a meal
+        whose ``config_hashes`` also match the current pipeline
+        configuration — this ensures that a parser / chunker / embedding
+        config change does not silently reuse stale artifacts.
+
+        Args:
+            require_config_match: If True, also verify that the meal's
+                config_hashes match the current configuration.
 
         Returns:
             MealConfig if a matching meal is found, None otherwise.
@@ -557,16 +567,34 @@ class MealManager:
             return None
 
         equivalents = self.find_equivalent_meals(full_data_id)
-        if equivalents:
+        if not equivalents:
+            logger.debug(
+                f"No meal matches full data_id {full_data_id[:16]}... "
+                f"— create a meal with sampling=1.0 first"
+            )
+            return None
+
+        if not require_config_match:
             logger.info(
                 f"Found full-dataset meal '{equivalents[0].name}' "
                 f"(data_id={full_data_id[:16]}...)"
             )
             return equivalents[0]
 
-        logger.debug(
-            f"No meal matches full data_id {full_data_id[:16]}... "
-            f"— create a meal with sampling=1.0 first"
+        _, current_hashes = self._build_config_snapshot_and_hashes()
+        for meal in equivalents:
+            if meal.config_hashes == current_hashes:
+                logger.info(
+                    f"Found full-dataset meal '{meal.name}' "
+                    f"(data_id={full_data_id[:16]}..., config matched)"
+                )
+                return meal
+
+        stale_names = [m.name for m in equivalents]
+        logger.info(
+            f"Found {len(equivalents)} meal(s) with matching data_id "
+            f"but stale config_hashes ({stale_names}). "
+            f"Current: {current_hashes}"
         )
         return None
 
