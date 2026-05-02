@@ -1,6 +1,8 @@
 import json
 import random
+import threading
 import warnings
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -476,11 +478,57 @@ class TestSetGenerator:
             token_tracker=token_tracker,
         )
 
+        concurrent_gen = self.config.get("test_generation", {}).get(
+            "concurrent_generation", 1
+        )
+
         questions = []
         question_id = 1
         total_attempts = 0
         failed_count = 0
         seen_questions: set[str] = set()
+
+        _id_lock = threading.Lock()
+        _list_lock = threading.Lock()
+
+        def _make_generator():
+            return Generator(
+                model_name=llm_config["model_name"],
+                api_key=llm_config["api_key"],
+                base_url=llm_config["base_url"],
+                temperature=self.test_gen_temperature,
+                max_tokens=self.test_gen_max_tokens,
+                token_tracker=token_tracker,
+            )
+
+        generators = [generator]
+        for _ in range(max(0, concurrent_gen - 1)):
+            generators.append(_make_generator())
+
+        _gen_idx = [0]
+
+        def assign_generator():
+            with _gen_lock:
+                idx = _gen_idx[0] % len(generators)
+                _gen_idx[0] += 1
+                return generators[idx]
+
+        _gen_lock = threading.Lock()
+
+        def _generate_one(
+            segments, doc_chunks, q_type, source_path, doc_name, doc_content
+        ):
+            gen = assign_generator()
+            qa = self._generate_hybrid_question(
+                segments=segments,
+                doc_chunks=doc_chunks,
+                question_type=q_type,
+                generator=gen,
+                source_path=source_path,
+                doc_name=doc_name,
+                doc_content=doc_content,
+            )
+            return qa, q_type, source_path
 
         for doc_name, doc_data in document_contents.items():
             assigned_types = doc_question_plans.get(doc_name, [])
@@ -503,51 +551,113 @@ class TestSetGenerator:
                 logger.warning(f"No segments generated for document: {doc_name}")
                 continue
 
-            for q_type in assigned_types:
-                total_attempts += 1
-                logger.info(
-                    f"Generating question {question_id}/{num_questions} "
-                    f"(type={q_type}, doc={doc_name})..."
-                )
+            if concurrent_gen > 1 and len(assigned_types) > 1:
+                with ThreadPoolExecutor(
+                    max_workers=min(concurrent_gen, len(assigned_types))
+                ) as pool:
+                    futures = {}
+                    for q_type in assigned_types:
+                        future = pool.submit(
+                            _generate_one,
+                            segments,
+                            doc_chunks,
+                            q_type,
+                            source_path,
+                            doc_name,
+                            doc_content,
+                        )
+                        futures[future] = q_type
 
-                qa = self._generate_hybrid_question(
-                    segments=segments,
-                    doc_chunks=doc_chunks,
-                    question_type=q_type,
-                    generator=generator,
-                    source_path=source_path,
-                    doc_name=doc_name,
-                    doc_content=doc_content,
-                )
+                    for future in as_completed(futures):
+                        q_type = futures[future]
+                        total_attempts += 1
+                        try:
+                            qa, actual_type, src_path = future.result()
+                        except Exception as e:
+                            logger.warning(f"Concurrent generation failed: {e}")
+                            with _list_lock:
+                                failed_count += 1
+                            continue
 
-                if qa is not None:
-                    qa["id"] = f"q{question_id:03d}"
-                    qa["source_document"] = doc_name
-                    qa["category"] = "hybrid"
+                        if qa is not None:
+                            with _id_lock:
+                                qa["id"] = f"q{question_id:03d}"
+                                question_id += 1
+                            qa["source_document"] = doc_name
+                            qa["category"] = "hybrid"
 
-                    if q_type == "irrelevant":
-                        qa["source_files"] = []
-                        qa["source_chunks"] = []
-                        qa["expect_retrieval"] = False
-                    elif q_type == "missing":
-                        qa["source_files"] = [source_path]
-                        qa["source_chunks"] = []
-                        qa["expect_no_answer"] = True
-                        qa["expect_retrieval"] = False
-                    else:
-                        qa["source_files"] = [source_path]
+                            if actual_type == "irrelevant":
+                                qa["source_files"] = []
+                                qa["source_chunks"] = []
+                                qa["expect_retrieval"] = False
+                            elif actual_type == "missing":
+                                qa["source_files"] = [src_path]
+                                qa["source_chunks"] = []
+                                qa["expect_no_answer"] = True
+                                qa["expect_retrieval"] = False
+                            else:
+                                qa["source_files"] = [src_path]
 
-                    if self._post_process_question(qa, doc_content, seen_questions):
-                        questions.append(qa)
-                        question_id += 1
+                            with _list_lock:
+                                if self._post_process_question(
+                                    qa, doc_content, seen_questions
+                                ):
+                                    questions.append(qa)
+                                else:
+                                    failed_count += 1
+                        else:
+                            with _list_lock:
+                                failed_count += 1
+                            logger.warning(
+                                f"Failed to generate question, total failures: "
+                                f"{failed_count}/{total_attempts}"
+                            )
+            else:
+                for q_type in assigned_types:
+                    total_attempts += 1
+                    logger.info(
+                        f"Generating question {question_id}/{num_questions} "
+                        f"(type={q_type}, doc={doc_name})..."
+                    )
+
+                    qa = self._generate_hybrid_question(
+                        segments=segments,
+                        doc_chunks=doc_chunks,
+                        question_type=q_type,
+                        generator=generator,
+                        source_path=source_path,
+                        doc_name=doc_name,
+                        doc_content=doc_content,
+                    )
+
+                    if qa is not None:
+                        qa["id"] = f"q{question_id:03d}"
+                        qa["source_document"] = doc_name
+                        qa["category"] = "hybrid"
+
+                        if q_type == "irrelevant":
+                            qa["source_files"] = []
+                            qa["source_chunks"] = []
+                            qa["expect_retrieval"] = False
+                        elif q_type == "missing":
+                            qa["source_files"] = [source_path]
+                            qa["source_chunks"] = []
+                            qa["expect_no_answer"] = True
+                            qa["expect_retrieval"] = False
+                        else:
+                            qa["source_files"] = [source_path]
+
+                        if self._post_process_question(qa, doc_content, seen_questions):
+                            questions.append(qa)
+                            question_id += 1
+                        else:
+                            failed_count += 1
                     else:
                         failed_count += 1
-                else:
-                    failed_count += 1
-                    logger.warning(
-                        f"Failed to generate question, total failures: "
-                        f"{failed_count}/{total_attempts}"
-                    )
+                        logger.warning(
+                            f"Failed to generate question, total failures: "
+                            f"{failed_count}/{total_attempts}"
+                        )
 
         if len(questions) < num_questions:
             deficit = num_questions - len(questions)
