@@ -9,6 +9,7 @@ from typing import Any
 import yaml
 from loguru import logger
 
+from src.trace_models import DiagnosisResult, GroundTruth, PipelineTrace
 from src.utils import deep_merge
 
 CASE_TYPE_BAD = "bad"
@@ -155,13 +156,14 @@ def save_case(
     meal_config: Any | None = None,
     meal_name: str | None = None,
     chat_history: list[dict[str, Any]] | None = None,
+    trace: PipelineTrace | dict[str, Any] | None = None,
 ) -> Path:
     """Save a case (bad or good) with full reproducibility context.
 
     Persists files into a timestamped directory under ``data/cases/``:
     ``manifest.json``, ``config_snapshot.yaml``, ``meal_snapshot.json``,
     ``query_result.json``, ``environment.json``, and optionally
-    ``chat_history.json``.
+    ``chat_history.json`` and ``pipeline_trace.json``.
 
     Args:
         case_type: ``CASE_TYPE_BAD`` or ``CASE_TYPE_GOOD``.
@@ -173,6 +175,9 @@ def save_case(
         meal_name: Name of the active meal, or None.
         chat_history: Optional conversation history for multi-turn context.
             Format: ``[{"role": "user"/"assistant", "content": "..."}]``.
+        trace: Optional pipeline trace. If a ``PipelineTrace`` object,
+            ``trace.to_dict()`` is used for serialization; if already a
+            dict, it is written directly.
 
     Returns:
         Path to the created case directory.
@@ -232,6 +237,15 @@ def save_case(
             json.dumps(chat_history, ensure_ascii=False, indent=2), encoding="utf-8"
         )
 
+    if trace is not None:
+        trace_data = trace.to_dict() if isinstance(trace, PipelineTrace) else trace
+        try:
+            (case_dir / "pipeline_trace.json").write_text(
+                json.dumps(trace_data, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        except (OSError, TypeError) as e:
+            logger.error(f"Failed to write pipeline_trace.json for {case_id}: {e}")
+
     logger.info(f"Case saved: {case_id} (type={case_type})")
     return case_dir
 
@@ -250,6 +264,7 @@ def save_case_with_dedup(
     meal_config: Any | None = None,
     meal_name: str | None = None,
     chat_history: list[dict[str, Any]] | None = None,
+    trace: PipelineTrace | dict[str, Any] | None = None,
     saved_case_type: str | None = None,
     saved_case_id: str | None = None,
 ) -> tuple[Path | None, str]:
@@ -272,6 +287,7 @@ def save_case_with_dedup(
         meal_config: MealConfig instance for the active meal, or None.
         meal_name: Name of the active meal, or None.
         chat_history: Optional conversation history for multi-turn context.
+        trace: Optional pipeline trace, passed through to ``save_case()``.
         saved_case_type: The case type already saved for this message, or None.
         saved_case_id: The case directory name already saved, or None.
 
@@ -296,8 +312,100 @@ def save_case_with_dedup(
         meal_config=meal_config,
         meal_name=meal_name,
         chat_history=chat_history,
+        trace=trace,
     )
     return case_dir, DEDUP_STATUS_SAVED
+
+
+def save_ground_truth(case_id: str, ground_truth: GroundTruth | dict[str, Any]) -> None:
+    """Save ground-truth annotation for a case.
+
+    Writes ``ground_truth.json`` to the case directory and updates
+    ``manifest.json`` to set ``has_ground_truth: True``.
+
+    Args:
+        case_id: The case directory name (e.g. ``bc_20260502_143000_a1b2c3``).
+        ground_truth: Ground-truth data. If a ``GroundTruth`` object,
+            ``ground_truth.to_dict()`` is used for serialization; if
+            already a dict, it is written directly.
+
+    Raises:
+        FileNotFoundError: If the case directory does not exist.
+    """
+    case_dir = get_cases_dir() / case_id
+    if not case_dir.exists():
+        raise FileNotFoundError(f"Case not found: {case_id}")
+
+    gt_data = (
+        ground_truth.to_dict()
+        if isinstance(ground_truth, GroundTruth)
+        else ground_truth
+    )
+    try:
+        (case_dir / "ground_truth.json").write_text(
+            json.dumps(gt_data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except (OSError, TypeError) as e:
+        logger.error(f"Failed to write ground_truth.json for {case_id}: {e}")
+        return
+
+    manifest_path = case_dir / "manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["has_ground_truth"] = True
+        manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except (OSError, json.JSONDecodeError) as e:
+        logger.error(f"Failed to update manifest.json for {case_id}: {e}")
+
+    logger.info(f"Ground truth saved for case: {case_id}")
+
+
+def save_diagnosis(case_id: str, diagnosis: DiagnosisResult | dict[str, Any]) -> None:
+    """Save diagnosis result for a case.
+
+    Writes ``diagnosis.json`` to the case directory and updates
+    ``manifest.json`` to set ``has_diagnosis: True`` and
+    ``root_cause`` to the diagnosis root cause.
+
+    Args:
+        case_id: The case directory name (e.g. ``bc_20260502_143000_a1b2c3``).
+        diagnosis: Diagnosis data. If a ``DiagnosisResult`` object,
+            ``diagnosis.to_dict()`` is used for serialization; if
+            already a dict, it is written directly.
+
+    Raises:
+        FileNotFoundError: If the case directory does not exist.
+    """
+    case_dir = get_cases_dir() / case_id
+    if not case_dir.exists():
+        raise FileNotFoundError(f"Case not found: {case_id}")
+
+    diag_data = (
+        diagnosis.to_dict() if isinstance(diagnosis, DiagnosisResult) else diagnosis
+    )
+    try:
+        (case_dir / "diagnosis.json").write_text(
+            json.dumps(diag_data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except (OSError, TypeError) as e:
+        logger.error(f"Failed to write diagnosis.json for {case_id}: {e}")
+        return
+
+    root_cause = diag_data.get("root_cause", "")
+    manifest_path = case_dir / "manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["has_diagnosis"] = True
+        manifest["root_cause"] = root_cause
+        manifest_path.write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except (OSError, json.JSONDecodeError) as e:
+        logger.error(f"Failed to update manifest.json for {case_id}: {e}")
+
+    logger.info(f"Diagnosis saved for case: {case_id}")
 
 
 def list_cases(case_type: str | None = None) -> list[dict[str, Any]]:
@@ -339,7 +447,8 @@ def load_case(case_id: str) -> dict[str, Any]:
     Returns:
         Dictionary with keys ``manifest``, ``config_snapshot``,
         ``meal_snapshot``, ``query_result``, ``environment``, and
-        optionally ``chat_history``.
+        optionally ``chat_history``, ``pipeline_trace``,
+        ``ground_truth``, and ``diagnosis``.
 
     Raises:
         FileNotFoundError: If the case directory does not exist.
@@ -375,6 +484,27 @@ def load_case(case_id: str) -> dict[str, Any]:
     history_path = case_dir / "chat_history.json"
     if history_path.exists():
         data["chat_history"] = json.loads(history_path.read_text(encoding="utf-8"))
+
+    trace_path = case_dir / "pipeline_trace.json"
+    if trace_path.exists():
+        try:
+            data["pipeline_trace"] = json.loads(trace_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"Failed to read pipeline_trace.json for {case_id}: {e}")
+
+    gt_path = case_dir / "ground_truth.json"
+    if gt_path.exists():
+        try:
+            data["ground_truth"] = json.loads(gt_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"Failed to read ground_truth.json for {case_id}: {e}")
+
+    diag_path = case_dir / "diagnosis.json"
+    if diag_path.exists():
+        try:
+            data["diagnosis"] = json.loads(diag_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"Failed to read diagnosis.json for {case_id}: {e}")
 
     return data
 
