@@ -406,8 +406,10 @@ def render_case_analyzer() -> None:
         created = c.get("created_at", "")
         has_gt = "✅" if c.get("has_ground_truth") else "⬜"
         has_diag = "🩺" if c.get("has_diagnosis") else "⬜"
+        root_cause = c.get("root_cause", "")
+        rc_tag = f"[{root_cause}]" if root_cause else ""
         options.append(
-            f"{c.get('case_id', '')} | {preview} | {created[:16]} | GT:{has_gt} Diag:{has_diag}"
+            f"{c.get('case_id', '')} | {preview} | {created[:16]} | GT:{has_gt} Diag:{has_diag} {rc_tag}"
         )
 
     selected_idx = st.selectbox(
