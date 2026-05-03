@@ -606,7 +606,6 @@ def render_qa_demo():
     )
 
     if question:
-        st.session_state.messages.append({"role": "user", "content": question})
         st.session_state.query_error = None
 
         config_overrides = {
@@ -625,6 +624,7 @@ def render_qa_demo():
             try:
                 pipeline = get_pipeline(meal_name)
                 chat_history_for_query = build_chat_history(st.session_state.messages)
+                st.session_state.messages.append({"role": "user", "content": question})
                 result = pipeline.query(
                     question,
                     config_overrides=config_overrides,
