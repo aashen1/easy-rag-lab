@@ -377,44 +377,48 @@ class TestEnhanceAppendMode:
     def test_enhance_appends_tables_when_no_md_tables(
         self, enhancer: PdfPlumberEnhancer
     ) -> None:
-        page_text = "This page has no markdown tables."
+        page_text = "This page has no markdown tables but contains enough text to avoid the skip threshold."
         result = ParseResult(
             pages=[ParsedPage(page_number=1, text=page_text, metadata={})],
             metadata={"parser": "fitz"},
         )
 
-        original_extract = enhancer._extract_tables
-        enhancer._extract_tables = lambda pdf_path, page_idx: [
-            "| Col1 | Col2 | Col3 |\n|---|---|---|\n| a | b | c |\n| d | e | f |"
-        ]
+        original_extract = enhancer._extract_all_tables
+        enhancer._extract_all_tables = lambda pdf_path, page_count: {
+            0: ["| Col1 | Col2 | Col3 |\n|---|---|---|\n| a | b | c |\n| d | e | f |"]
+        }
 
         try:
             enhanced = enhancer.enhance("dummy.pdf", result)
         finally:
-            enhancer._extract_tables = original_extract
+            enhancer._extract_all_tables = original_extract
 
         assert len(enhanced.pages) == 1
         enhanced_text = enhanced.pages[0].text
-        assert "This page has no markdown tables." in enhanced_text
+        assert (
+            "This page has no markdown tables but contains enough text" in enhanced_text
+        )
         assert "| Col1 | Col2 | Col3 |" in enhanced_text
         assert "| a | b | c |" in enhanced_text
 
     def test_enhance_no_change_when_no_plumber_tables(
         self, enhancer: PdfPlumberEnhancer
     ) -> None:
-        page_text = "No tables here."
+        page_text = (
+            "No tables here but the text is long enough to avoid the skip threshold."
+        )
         result = ParseResult(
             pages=[ParsedPage(page_number=1, text=page_text, metadata={})],
             metadata={"parser": "fitz"},
         )
 
-        original_extract = enhancer._extract_tables
-        enhancer._extract_tables = lambda pdf_path, page_idx: []
+        original_extract = enhancer._extract_all_tables
+        enhancer._extract_all_tables = lambda pdf_path, page_count: {}
 
         try:
             enhanced = enhancer.enhance("dummy.pdf", result)
         finally:
-            enhancer._extract_tables = original_extract
+            enhancer._extract_all_tables = original_extract
 
         assert enhanced.pages[0].text == page_text
 
@@ -427,15 +431,15 @@ class TestEnhanceAppendMode:
             metadata={"parser": "pymupdf4llm"},
         )
 
-        original_extract = enhancer._extract_tables
-        enhancer._extract_tables = lambda pdf_path, page_idx: [
-            "| A | B |\n|---|---|\n| x | y |\n| 1 | 2 |"
-        ]
+        original_extract = enhancer._extract_all_tables
+        enhancer._extract_all_tables = lambda pdf_path, page_count: {
+            0: ["| A | B |\n|---|---|\n| x | y |\n| 1 | 2 |"]
+        }
 
         try:
             enhanced = enhancer.enhance("dummy.pdf", result)
         finally:
-            enhancer._extract_tables = original_extract
+            enhancer._extract_all_tables = original_extract
 
         enhanced_text = enhanced.pages[0].text
         assert "Text before" in enhanced_text
@@ -541,35 +545,35 @@ class TestNoDuplicateTables:
             metadata={"parser": "pymupdf4llm"},
         )
 
-        orig_extract = enhancer._extract_tables
-        enhancer._extract_tables = lambda pdf_path, page_idx: [
-            "| A | B |\n|---|---|\n| x | y |"
-        ]
+        orig_extract = enhancer._extract_all_tables
+        enhancer._extract_all_tables = lambda pdf_path, page_count: {
+            0: ["| A | B |\n|---|---|\n| x | y |"]
+        }
 
         try:
             enhanced = enhancer.enhance("dummy.pdf", result)
         finally:
-            enhancer._extract_tables = orig_extract
+            enhancer._extract_all_tables = orig_extract
 
         text = enhanced.pages[0].text
         assert text.count("|---|---|") == 1
 
     def test_append_tables_no_duplicate(self, enhancer: PdfPlumberEnhancer) -> None:
-        page_text = "No tables here."
+        page_text = "This page has no markdown tables but has enough text to avoid the skip threshold."
         result = ParseResult(
             pages=[ParsedPage(page_number=1, text=page_text, metadata={})],
             metadata={"parser": "fitz"},
         )
 
-        orig_extract = enhancer._extract_tables
-        enhancer._extract_tables = lambda pdf_path, page_idx: [
-            "| A | B | C |\n|---|---|---|\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |"
-        ]
+        orig_extract = enhancer._extract_all_tables
+        enhancer._extract_all_tables = lambda pdf_path, page_count: {
+            0: ["| A | B | C |\n|---|---|---|\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |"]
+        }
 
         try:
             enhanced = enhancer.enhance("dummy.pdf", result)
         finally:
-            enhancer._extract_tables = orig_extract
+            enhancer._extract_all_tables = orig_extract
 
         text = enhanced.pages[0].text
         assert text.count("|---|---|---|") == 1
@@ -584,16 +588,145 @@ class TestNoDuplicateTables:
             metadata={"parser": "pymupdf4llm"},
         )
 
-        orig_extract = enhancer._extract_tables
-        enhancer._extract_tables = lambda pdf_path, page_idx: [
-            "| A | B | C | D |\n|---|---|---|---|\n| 1 | 2 | 3 | 4 |\n| 5 | 6 | 7 | 8 |"
-        ]
+        orig_extract = enhancer._extract_all_tables
+        enhancer._extract_all_tables = lambda pdf_path, page_count: {
+            0: [
+                "| A | B | C | D |\n|---|---|---|---|\n| 1 | 2 | 3 | 4 |\n| 5 | 6 | 7 | 8 |"
+            ]
+        }
 
         try:
             enhanced = enhancer.enhance("dummy.pdf", result)
         finally:
-            enhancer._extract_tables = orig_extract
+            enhancer._extract_all_tables = orig_extract
 
         text = enhanced.pages[0].text
         assert "A<br>B" not in text
         assert "| A | B | C | D |" in text
+
+
+@pytest.mark.unit
+class TestSkipShortPages:
+    def test_short_page_without_md_tables_is_skipped(
+        self, enhancer: PdfPlumberEnhancer
+    ) -> None:
+        page_text = "Short."
+        result = ParseResult(
+            pages=[ParsedPage(page_number=1, text=page_text, metadata={})],
+            metadata={"parser": "fitz"},
+        )
+
+        call_count = 0
+        original_extract = enhancer._extract_all_tables
+
+        def counting_extract(pdf_path, page_count):
+            nonlocal call_count
+            call_count += 1
+            return {0: ["| A | B | C |\n|---|---|---|\n| 1 | 2 | 3 |"]}
+
+        enhancer._extract_all_tables = counting_extract
+
+        try:
+            enhanced = enhancer.enhance("dummy.pdf", result)
+        finally:
+            enhancer._extract_all_tables = original_extract
+
+        assert call_count == 1
+        assert enhanced.pages[0].text == page_text
+
+    def test_short_page_with_md_tables_is_not_skipped(
+        self, enhancer: PdfPlumberEnhancer
+    ) -> None:
+        page_text = "| A | B |\n|---|---|\n| 1 | 2 |"
+        result = ParseResult(
+            pages=[ParsedPage(page_number=1, text=page_text, metadata={})],
+            metadata={"parser": "pymupdf4llm"},
+        )
+
+        original_extract = enhancer._extract_all_tables
+        enhancer._extract_all_tables = lambda pdf_path, page_count: {
+            0: ["| A | B | C |\n|---|---|---|\n| x | y | z |\n| p | q | r |"]
+        }
+
+        try:
+            enhanced = enhancer.enhance("dummy.pdf", result)
+        finally:
+            enhancer._extract_all_tables = original_extract
+
+        assert "| x | y | z |" in enhanced.pages[0].text
+
+    def test_long_page_without_md_tables_is_not_skipped(
+        self, enhancer: PdfPlumberEnhancer
+    ) -> None:
+        page_text = "A" * 100
+        result = ParseResult(
+            pages=[ParsedPage(page_number=1, text=page_text, metadata={})],
+            metadata={"parser": "fitz"},
+        )
+
+        original_extract = enhancer._extract_all_tables
+        enhancer._extract_all_tables = lambda pdf_path, page_count: {
+            0: ["| A | B | C |\n|---|---|---|\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |"]
+        }
+
+        try:
+            enhanced = enhancer.enhance("dummy.pdf", result)
+        finally:
+            enhancer._extract_all_tables = original_extract
+
+        assert "| A | B | C |" in enhanced.pages[0].text
+
+
+@pytest.mark.unit
+class TestExtractAllTables:
+    def test_multi_page_result(self, enhancer: PdfPlumberEnhancer) -> None:
+        page1_text = "Page one with enough text to avoid the skip threshold."
+        page2_text = "Page two also has enough text to avoid the skip threshold."
+        result = ParseResult(
+            pages=[
+                ParsedPage(page_number=1, text=page1_text, metadata={}),
+                ParsedPage(page_number=2, text=page2_text, metadata={}),
+            ],
+            metadata={"parser": "fitz"},
+        )
+
+        original_extract = enhancer._extract_all_tables
+        enhancer._extract_all_tables = lambda pdf_path, page_count: {
+            0: ["| A | B | C |\n|---|---|---|\n| 1 | 2 | 3 |\n| 4 | 5 | 6 |"],
+            1: ["| X | Y | Z |\n|---|---|---|\n| a | b | c |\n| d | e | f |"],
+        }
+
+        try:
+            enhanced = enhancer.enhance("dummy.pdf", result)
+        finally:
+            enhancer._extract_all_tables = original_extract
+
+        assert "| A | B | C |" in enhanced.pages[0].text
+        assert "| X | Y | Z |" in enhanced.pages[1].text
+
+    def test_page_count_passed_correctly(self, enhancer: PdfPlumberEnhancer) -> None:
+        result = ParseResult(
+            pages=[
+                ParsedPage(page_number=1, text="A" * 100, metadata={}),
+                ParsedPage(page_number=2, text="B" * 100, metadata={}),
+                ParsedPage(page_number=3, text="C" * 100, metadata={}),
+            ],
+            metadata={"parser": "fitz"},
+        )
+
+        captured_count = None
+        original_extract = enhancer._extract_all_tables
+
+        def spy_extract(pdf_path, page_count):
+            nonlocal captured_count
+            captured_count = page_count
+            return {}
+
+        enhancer._extract_all_tables = spy_extract
+
+        try:
+            enhancer.enhance("dummy.pdf", result)
+        finally:
+            enhancer._extract_all_tables = original_extract
+
+        assert captured_count == 3
