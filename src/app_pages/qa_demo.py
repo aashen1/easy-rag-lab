@@ -8,7 +8,14 @@ import streamlit as st
 from loguru import logger
 
 from src.app_pages.pdf_server import PdfServer, get_or_create_pdf_server
-from src.case_collector import CASE_TYPE_BAD, CASE_TYPE_GOOD, list_cases, save_case
+from src.case_collector import (
+    CASE_TYPE_BAD,
+    CASE_TYPE_GOOD,
+    DEDUP_STATUS_DUPLICATE,
+    DEDUP_STATUS_TYPE_CHANGED,
+    list_cases,
+    save_case_with_dedup,
+)
 from src.meal import MealConfig, MealManager
 from src.pipeline import RAGPipeline
 from src.sampler import SamplingConfig, count_pdf_pages
@@ -170,14 +177,45 @@ def render_pdf_preview() -> None:
     )
 
 
+def _build_chat_history(
+    messages: list[dict[str, Any]], up_to_index: int | None = None
+) -> list[dict[str, Any]]:
+    """Extract chat history from messages for multi-turn context.
+
+    Converts the internal message format to the simple
+    ``[{"role": ..., "content": ...}]`` format expected by
+    ``pipeline.query()`` and ``save_case_with_dedup()``.
+
+    Args:
+        messages: Session state messages list.
+        up_to_index: If provided, only include messages before this
+            index (exclusive). Used when displaying historical messages.
+
+    Returns:
+        List of dicts with ``role`` and ``content`` keys.
+    """
+    history: list[dict[str, Any]] = []
+    end = up_to_index if up_to_index is not None else len(messages)
+    for msg in messages[:end]:
+        role = msg.get("role", "")
+        if role == "user":
+            history.append({"role": "user", "content": msg.get("content", "")})
+        elif role == "assistant":
+            result = msg.get("result", {})
+            answer = result.get("answer", "")
+            if answer:
+                history.append({"role": "assistant", "content": answer})
+    return history
+
+
 def _do_save_case(
-    case_type: str, msg: dict[str, Any], meal_config: MealConfig | None
+    case_type: str,
+    msg: dict[str, Any],
+    meal_config: MealConfig | None,
+    chat_history: list[dict[str, Any]] | None = None,
 ) -> bool:
-    saved = msg.get("saved_case_type")
-    if saved == case_type:
-        label = "Badcase" if case_type == CASE_TYPE_BAD else "Goodcase"
-        st.toast(f"已标记为 {label}，无需重复保存", icon="⚠️")
-        return False
+    saved_case_type = msg.get("saved_case_type")
+    saved_case_id = msg.get("saved_case_id")
 
     result = msg.get("result", {})
     config_overrides = msg.get("config_overrides", {})
@@ -185,7 +223,7 @@ def _do_save_case(
     question = result.get("question", "")
     try:
         base_config = load_config()
-        case_dir = save_case(
+        case_dir, status = save_case_with_dedup(
             case_type=case_type,
             question=question,
             result=result,
@@ -193,8 +231,30 @@ def _do_save_case(
             base_config=base_config,
             meal_config=meal_config,
             meal_name=meal_name,
+            chat_history=chat_history,
+            saved_case_type=saved_case_type,
+            saved_case_id=saved_case_id,
         )
+
+        if status == DEDUP_STATUS_DUPLICATE:
+            label = "Badcase" if case_type == CASE_TYPE_BAD else "Goodcase"
+            st.toast(f"已标记为 {label}，无需重复保存", icon="⚠️")
+            return False
+
+        if status == DEDUP_STATUS_TYPE_CHANGED:
+            msg["saved_case_type"] = case_type
+            msg["saved_case_id"] = case_dir.name
+            old_label = "Badcase" if saved_case_type == CASE_TYPE_BAD else "Goodcase"
+            new_label = "Badcase" if case_type == CASE_TYPE_BAD else "Goodcase"
+            icon = "🚨" if case_type == CASE_TYPE_BAD else "✅"
+            st.toast(
+                f"{icon} 已将 {old_label} 转换为 {new_label}: {case_dir.name}",
+                icon=icon,
+            )
+            return True
+
         msg["saved_case_type"] = case_type
+        msg["saved_case_id"] = case_dir.name
         label = "Badcase" if case_type == CASE_TYPE_BAD else "Goodcase"
         st.toast(
             f"{label} 已保存: {case_dir.name}",
@@ -208,7 +268,10 @@ def _do_save_case(
 
 
 def _display_result(
-    result: dict[str, Any], meal_config: MealConfig | None, msg_index: int = 0
+    result: dict[str, Any],
+    meal_config: MealConfig | None,
+    msg_index: int = 0,
+    chat_history: list[dict[str, Any]] | None = None,
 ):
     st.markdown("### 🤖 答案")
     st.success(result["answer"])
@@ -280,7 +343,7 @@ def _display_result(
             help="标记此回答为坏例，完整落盘以便复现",
             disabled=saved_case_type == CASE_TYPE_BAD,
         ):
-            _do_save_case(CASE_TYPE_BAD, msg, meal_config)
+            _do_save_case(CASE_TYPE_BAD, msg, meal_config, chat_history=chat_history)
     with col_good:
         good_label = (
             "✅ Goodcase ✓" if saved_case_type == CASE_TYPE_GOOD else "✅ Goodcase"
@@ -291,7 +354,7 @@ def _display_result(
             help="标记此回答为好例，完整落盘用于回归测试",
             disabled=saved_case_type == CASE_TYPE_GOOD,
         ):
-            _do_save_case(CASE_TYPE_GOOD, msg, meal_config)
+            _do_save_case(CASE_TYPE_GOOD, msg, meal_config, chat_history=chat_history)
 
 
 def _init_session_state():
@@ -510,7 +573,15 @@ def render_qa_demo():
             if msg["role"] == "user":
                 st.write(msg["content"])
             else:
-                _display_result(msg["result"], meal_config, msg_index=msg_index)
+                chat_history_for_msg = _build_chat_history(
+                    st.session_state.messages, msg_index
+                )
+                _display_result(
+                    msg["result"],
+                    meal_config,
+                    msg_index=msg_index,
+                    chat_history=chat_history_for_msg,
+                )
 
     if st.session_state.messages:
         st.html(
@@ -576,7 +647,12 @@ def render_qa_demo():
         with st.spinner("🔍 正在检索相关文档并生成答案..."):
             try:
                 pipeline = get_pipeline(meal_name)
-                result = pipeline.query(question, config_overrides=config_overrides)
+                chat_history_for_query = _build_chat_history(st.session_state.messages)
+                result = pipeline.query(
+                    question,
+                    config_overrides=config_overrides,
+                    chat_history=chat_history_for_query,
+                )
                 st.session_state.messages.append(
                     {
                         "role": "assistant",
