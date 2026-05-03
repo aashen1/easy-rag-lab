@@ -15,6 +15,7 @@ from src.agent.tools import HIGH_RISK_TOOLS
 def _get_tools():
     from src.agent.tools import (
         chunk_parsed_tool,
+        delete_source,
         enhance_page_tool,
         evaluate_answer_tool,
         get_index_info,
@@ -22,6 +23,8 @@ def _get_tools():
         list_meals,
         parse_pdf_tool,
         query_rag_tool,
+        rebuild_index,
+        update_meal,
     )
 
     return [
@@ -33,6 +36,9 @@ def _get_tools():
         chunk_parsed_tool,
         evaluate_answer_tool,
         get_index_info,
+        rebuild_index,
+        delete_source,
+        update_meal,
     ]
 
 

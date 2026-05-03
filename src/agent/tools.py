@@ -280,4 +280,165 @@ def get_index_info(meal_name: str) -> str:
         return f"Error getting index info: {e}"
 
 
+@tool
+def rebuild_index(meal_name: str, rebuild: bool = True) -> str:
+    """Rebuild the vector index for a meal from its chunk files.
+
+    HIGH-RISK: This operation deletes the existing index and rebuilds from scratch.
+    Requires user approval before execution.
+
+    Args:
+        meal_name: Name of the meal whose index to rebuild.
+        rebuild: Whether to force rebuild (default: True).
+
+    Returns:
+        JSON string with rebuild result including point count.
+    """
+    try:
+        from src.config import get_config
+        from src.meal.manager import MealManager
+
+        config = get_config()
+        mgr = MealManager(config)
+        meal = mgr.load_meal(meal_name)
+        if meal is None:
+            return f"Meal '{meal_name}' not found."
+
+        pipeline = mgr.get_pipeline(meal_name)
+        if pipeline is None:
+            return f"No pipeline found for meal '{meal_name}'."
+
+        indexer = pipeline.indexer
+        embedder = pipeline.embedder
+
+        chunks_dir = str(
+            Path(config.get("paths", {}).get("chunks_dir", "data/chunks"))
+            / meal.data_id
+        )
+        chunks_path = Path(chunks_dir)
+        if not chunks_path.exists():
+            return f"No chunks directory found at {chunks_dir}."
+
+        indexer.create_collection(
+            vector_size=embedder.get_embedding_dimension(), recreate=rebuild
+        )
+        indexer.build_index(
+            chunks_dir=chunks_dir,
+            embedder=embedder,
+            rebuild=rebuild,
+        )
+        info = indexer.get_collection_info()
+        return json.dumps(
+            {
+                "status": "rebuilt",
+                "meal_name": meal_name,
+                "collection_info": info,
+            },
+            ensure_ascii=False,
+            indent=2,
+            default=str,
+        )
+    except Exception as e:
+        logger.error(f"rebuild_index failed: {e}")
+        return f"Error rebuilding index: {e}"
+
+
+@tool
+def delete_source(meal_name: str, source: str) -> str:
+    """Delete a specific source file from the meal's vector index.
+
+    HIGH-RISK: This operation permanently removes indexed data for a source.
+    Requires user approval before execution.
+
+    Args:
+        meal_name: Name of the meal.
+        source: Source file path to delete from the index.
+
+    Returns:
+        JSON string with deletion result.
+    """
+    try:
+        from src.config import get_config
+        from src.meal.manager import MealManager
+
+        config = get_config()
+        mgr = MealManager(config)
+        meal = mgr.load_meal(meal_name)
+        if meal is None:
+            return f"Meal '{meal_name}' not found."
+
+        pipeline = mgr.get_pipeline(meal_name)
+        if pipeline is None:
+            return f"No pipeline found for meal '{meal_name}'."
+
+        indexer = pipeline.indexer
+        deleted_count = indexer.delete_by_source(source)
+        return json.dumps(
+            {
+                "status": "deleted",
+                "meal_name": meal_name,
+                "source": source,
+                "deleted_points": deleted_count,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    except Exception as e:
+        logger.error(f"delete_source failed: {e}")
+        return f"Error deleting source: {e}"
+
+
+@tool
+def update_meal(meal_name: str, updates: dict) -> str:
+    """Update a meal's configuration or metadata.
+
+    HIGH-RISK: This operation modifies meal configuration.
+    Requires user approval before execution.
+
+    Args:
+        meal_name: Name of the meal to update.
+        updates: Dictionary of fields to update (e.g., {"description": "new desc", "tags": ["tag1"]}).
+
+    Returns:
+        JSON string with update result.
+    """
+    try:
+        from src.config import get_config
+        from src.meal.manager import MealManager
+
+        config = get_config()
+        mgr = MealManager(config)
+        meal = mgr.load_meal(meal_name)
+        if meal is None:
+            return f"Meal '{meal_name}' not found."
+
+        allowed_fields = {"description", "tags"}
+        applied = {}
+        for key, value in updates.items():
+            if key in allowed_fields:
+                applied[key] = value
+            else:
+                logger.warning(f"Skipping disallowed field: {key}")
+
+        if not applied:
+            return "No valid fields to update. Allowed fields: " + ", ".join(
+                sorted(allowed_fields)
+            )
+
+        cache = mgr.cache
+        for key, value in applied.items():
+            success = cache.update_manifest_entry(meal.data_id, key, value)
+            if not success:
+                return f"Failed to update field '{key}'."
+
+        return json.dumps(
+            {"status": "updated", "meal_name": meal_name, "applied_updates": applied},
+            ensure_ascii=False,
+            indent=2,
+        )
+    except Exception as e:
+        logger.error(f"update_meal failed: {e}")
+        return f"Error updating meal: {e}"
+
+
 HIGH_RISK_TOOLS = {"rebuild_index", "delete_source", "update_meal"}

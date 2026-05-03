@@ -46,6 +46,9 @@ cmd = "python -m src.testset_cli"
 [tasks.web]
 cmd = "streamlit run src/app.py --server.port 8501"
 
+[tasks.agent]
+cmd = "python -m src.agent.cli"
+
 [tasks._run-exp]
 args = ["config"]
 cmd = "python eval/run_experiment.py --config {{ config }}"
