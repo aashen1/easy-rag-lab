@@ -8,7 +8,6 @@ import streamlit as st
 from loguru import logger
 
 from src.case_collector import (
-    CASE_TYPE_BAD,
     list_cases,
     load_case,
     save_diagnosis,
@@ -20,11 +19,11 @@ from src.trace_models import ROOT_CAUSES, GroundTruth
 
 
 @st.cache_data(ttl=10)
-def _cached_list_bad_cases() -> list[dict[str, Any]]:
+def _cached_list_all_cases() -> list[dict[str, Any]]:
     try:
-        return list_cases(case_type=CASE_TYPE_BAD)
+        return list_cases(case_type=None)
     except Exception as e:
-        logger.error(f"Failed to list bad cases: {e}")
+        logger.error(f"Failed to list cases: {e}")
         return []
 
 
@@ -186,7 +185,7 @@ def _render_stage_detail(steps: list[dict[str, Any]]) -> None:
                                 "source": r.get("source", ""),
                             }
                         )
-                    st.dataframe(rows, use_container_width=True, hide_index=True)
+                    st.dataframe(rows, width="stretch", hide_index=True)
                 else:
                     st.info("无检索结果")
 
@@ -252,14 +251,28 @@ def _render_ground_truth_annotation(case_data: dict[str, Any], case_id: str) -> 
             f"chunk_ids={existing_gt.get('chunk_ids', [])}"
         )
 
-    pdf_options = [pf.get("path", "") for pf in pdf_files] if pdf_files else []
+    pdf_options = sorted([pf.get("path", "") for pf in pdf_files]) if pdf_files else []
     if not pdf_options:
         st.warning("Meal 快照中无 PDF 文件信息，无法标注")
         return
 
+    pdf_search = st.text_input(
+        "搜索 PDF 文件名",
+        value="",
+        key=f"gt_pdf_search_{case_id}",
+    )
+    filtered_pdfs = (
+        [p for p in pdf_options if pdf_search.lower() in p.lower()]
+        if pdf_search
+        else pdf_options
+    )
+    if not filtered_pdfs:
+        st.warning("无匹配的 PDF 文件")
+        return
+
     selected_pdf = st.selectbox(
         "选择 PDF 文件",
-        pdf_options,
+        filtered_pdfs,
         index=0,
         key=f"gt_pdf_{case_id}",
     )
@@ -401,16 +414,18 @@ def _render_diagnosis(case_data: dict[str, Any], case_id: str) -> None:
 
 
 def render_case_analyzer() -> None:
-    st.title("🔍 Bad Case 深度分析")
+    st.title("🔍 Case 深度分析")
 
-    cases = _cached_list_bad_cases()
+    cases = _cached_list_all_cases()
 
     if not cases:
-        st.info("暂无 Bad Case 记录。在问答页面标记 Badcase 后，这里会显示。")
+        st.info("暂无 Case 记录。在问答页面标记 Badcase 或 Goodcase 后，这里会显示。")
         return
 
     options = []
     for c in cases:
+        case_type = c.get("case_type", "bad")
+        type_tag = "[BAD]" if case_type == "bad" else "[GOOD]"
         preview = c.get("question_preview", "unknown")
         created = c.get("created_at", "")
         has_gt = "✅" if c.get("has_ground_truth") else "⬜"
@@ -418,7 +433,7 @@ def render_case_analyzer() -> None:
         root_cause = c.get("root_cause", "")
         rc_tag = f"[{root_cause}]" if root_cause else ""
         options.append(
-            f"{c.get('case_id', '')} | {preview} | {created[:16]} | GT:{has_gt} Diag:{has_diag} {rc_tag}"
+            f"{type_tag} {c.get('case_id', '')} | {preview} | {created[:16]} | GT:{has_gt} Diag:{has_diag} {rc_tag}"
         )
 
     selected_idx = st.selectbox(

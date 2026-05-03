@@ -33,7 +33,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-tab_names = ["💬 问答演示", "🔍 Bad Case 分析", "📖 系统信息"]
+tab_names = ["💬 问答演示", "🔍 Case 分析", "📖 系统信息"]
 has_pdf = bool(st.session_state.get("_pdf_preview_path"))
 if has_pdf:
     tab_names.append("📄 PDF 预览")
