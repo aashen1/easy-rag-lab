@@ -296,3 +296,103 @@ def load_case(case_id: str) -> dict[str, Any]:
         data["environment"] = json.loads(env_path.read_text(encoding="utf-8"))
 
     return data
+
+
+def delete_case(case_id: str) -> None:
+    """Delete a case by moving its directory to .trashbin/.
+
+    Args:
+        case_id: The case directory name (e.g. ``bc_20260502_143000_a1b2c3``).
+
+    Raises:
+        FileNotFoundError: If the case directory does not exist.
+    """
+    cases_dir = get_cases_dir()
+    case_dir = cases_dir / case_id
+    if not case_dir.exists():
+        raise FileNotFoundError(f"Case not found: {case_id}")
+
+    trashbin = cases_dir.parent.parent / ".trashbin"
+    trashbin.mkdir(parents=True, exist_ok=True)
+    dest = trashbin / f"{case_id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+    try:
+        case_dir.rename(dest)
+        logger.info(f"Case moved to trashbin: {case_id} → {dest}")
+    except OSError as e:
+        logger.error(f"Failed to move case {case_id} to trashbin: {e}")
+        raise
+
+
+def convert_case(source_case_id: str, target_type: str) -> Path:
+    """Convert a case from one type to another (e.g. bad→good).
+
+    Loads the source case data, creates a new case of the target type,
+    then deletes the original case directory.
+
+    Args:
+        source_case_id: The source case directory name.
+        target_type: ``CASE_TYPE_BAD`` or ``CASE_TYPE_GOOD``.
+
+    Returns:
+        Path to the newly created case directory.
+
+    Raises:
+        FileNotFoundError: If the source case does not exist.
+        ValueError: If ``target_type`` is not valid.
+    """
+    if target_type not in VALID_CASE_TYPES:
+        raise ValueError(
+            f"Invalid target_type '{target_type}'. Must be one of {VALID_CASE_TYPES}"
+        )
+
+    data = load_case(source_case_id)
+
+    query_result = data.get("query_result", {})
+    question = query_result.get("question", "")
+    config_snapshot = data.get("config_snapshot", {})
+    meal_snapshot = data.get("meal_snapshot", {})
+    meal_name = meal_snapshot.get("meal_name")
+
+    config_overrides: dict[str, Any] = {}
+    base_config = config_snapshot
+
+    new_case_dir = save_case(
+        case_type=target_type,
+        question=question,
+        result=query_result,
+        config_overrides=config_overrides,
+        base_config=base_config,
+        meal_config=None,
+        meal_name=meal_name,
+    )
+
+    delete_case(source_case_id)
+
+    logger.info(
+        f"Case converted: {source_case_id} → {new_case_dir.name} (type={target_type})"
+    )
+    return new_case_dir
+
+
+def find_case_by_question(
+    question: str, case_type: str | None = None
+) -> dict[str, Any] | None:
+    """Find an existing case by question text.
+
+    Searches through all saved cases and returns the first manifest
+    whose ``question_preview`` matches the beginning of the given
+    question text.
+
+    Args:
+        question: The question text to search for.
+        case_type: If provided, only search cases of this type.
+
+    Returns:
+        The matching manifest dictionary, or None if no match found.
+    """
+    cases = list_cases(case_type=case_type)
+    for manifest in cases:
+        preview = manifest.get("question_preview", "")
+        if preview and question.startswith(preview):
+            return manifest
+    return None

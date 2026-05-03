@@ -7,6 +7,9 @@ import yaml
 from src.case_collector import (
     CASE_TYPE_BAD,
     CASE_TYPE_GOOD,
+    convert_case,
+    delete_case,
+    find_case_by_question,
     list_cases,
     load_case,
     save_case,
@@ -352,3 +355,139 @@ class TestCaseIdUniqueness:
             )
 
         assert dir1.name != dir2.name
+
+
+@pytest.mark.unit
+class TestDeleteCase:
+    def test_delete_case_moves_to_trashbin(self, tmp_path):
+        with patch("src.case_collector.get_cases_dir", return_value=tmp_path):
+            case_dir = save_case(
+                CASE_TYPE_BAD, "问题1", _make_result(), {}, _make_base_config()
+            )
+            case_id = case_dir.name
+            assert case_dir.exists()
+
+            delete_case(case_id)
+
+            assert not case_dir.exists()
+            trashbin = tmp_path.parent.parent / ".trashbin"
+            assert trashbin.exists()
+            trashed = list(trashbin.iterdir())
+            assert any(case_id in t.name for t in trashed)
+
+    def test_delete_case_not_found(self, tmp_path):
+        with (
+            patch("src.case_collector.get_cases_dir", return_value=tmp_path),
+            pytest.raises(FileNotFoundError),
+        ):
+            delete_case("nonexistent_case")
+
+
+@pytest.mark.unit
+class TestConvertCase:
+    def test_convert_bad_to_good(self, tmp_path):
+        with patch("src.case_collector.get_cases_dir", return_value=tmp_path):
+            src_dir = save_case(
+                CASE_TYPE_BAD,
+                "公司2024年营业收入是多少？",
+                _make_result(),
+                {},
+                _make_base_config(),
+                meal_name="test_meal",
+            )
+            src_id = src_dir.name
+
+            new_dir = convert_case(src_id, CASE_TYPE_GOOD)
+
+        assert not src_dir.exists()
+        assert new_dir.name.startswith("gc_")
+        new_manifest = json.loads(
+            (new_dir / "manifest.json").read_text(encoding="utf-8")
+        )
+        assert new_manifest["case_type"] == CASE_TYPE_GOOD
+
+    def test_convert_good_to_bad(self, tmp_path):
+        with patch("src.case_collector.get_cases_dir", return_value=tmp_path):
+            src_dir = save_case(
+                CASE_TYPE_GOOD,
+                "测试问题",
+                _make_result(),
+                {},
+                _make_base_config(),
+            )
+            src_id = src_dir.name
+
+            new_dir = convert_case(src_id, CASE_TYPE_BAD)
+
+        assert not src_dir.exists()
+        assert new_dir.name.startswith("bc_")
+
+    def test_convert_preserves_query_result(self, tmp_path):
+        result = _make_result()
+        with patch("src.case_collector.get_cases_dir", return_value=tmp_path):
+            src_dir = save_case(
+                CASE_TYPE_BAD, "测试问题", result, {}, _make_base_config()
+            )
+
+            new_dir = convert_case(src_dir.name, CASE_TYPE_GOOD)
+
+        new_result = json.loads(
+            (new_dir / "query_result.json").read_text(encoding="utf-8")
+        )
+        assert new_result["question"] == result["question"]
+        assert new_result["answer"] == result["answer"]
+
+    def test_convert_invalid_type_raises(self, tmp_path):
+        with (
+            patch("src.case_collector.get_cases_dir", return_value=tmp_path),
+            pytest.raises(ValueError, match="Invalid target_type"),
+        ):
+            convert_case("some_case", "invalid")
+
+    def test_convert_not_found_raises(self, tmp_path):
+        with (
+            patch("src.case_collector.get_cases_dir", return_value=tmp_path),
+            pytest.raises(FileNotFoundError),
+        ):
+            convert_case("nonexistent_case", CASE_TYPE_GOOD)
+
+
+@pytest.mark.unit
+class TestFindCaseByQuestion:
+    def test_find_case_by_question_match(self, tmp_path):
+        with patch("src.case_collector.get_cases_dir", return_value=tmp_path):
+            save_case(
+                CASE_TYPE_BAD,
+                "公司2024年营业收入是多少？",
+                _make_result(),
+                {},
+                _make_base_config(),
+            )
+
+            manifest = find_case_by_question("公司2024年营业收入是多少？")
+
+        assert manifest is not None
+        assert manifest["case_type"] == CASE_TYPE_BAD
+
+    def test_find_case_by_question_no_match(self, tmp_path):
+        with patch("src.case_collector.get_cases_dir", return_value=tmp_path):
+            save_case(CASE_TYPE_BAD, "问题A", _make_result(), {}, _make_base_config())
+
+            manifest = find_case_by_question("完全不相关的问题")
+
+        assert manifest is None
+
+    def test_find_case_by_question_with_type_filter(self, tmp_path):
+        with patch("src.case_collector.get_cases_dir", return_value=tmp_path):
+            save_case(CASE_TYPE_BAD, "问题1", _make_result(), {}, _make_base_config())
+            save_case(CASE_TYPE_GOOD, "问题2", _make_result(), {}, _make_base_config())
+
+            manifest = find_case_by_question("问题1", case_type=CASE_TYPE_GOOD)
+
+        assert manifest is None
+
+    def test_find_case_by_question_empty(self, tmp_path):
+        with patch("src.case_collector.get_cases_dir", return_value=tmp_path):
+            manifest = find_case_by_question("任何问题")
+
+        assert manifest is None
