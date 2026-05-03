@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import warnings
 from copy import deepcopy
 
 from loguru import logger
@@ -229,29 +230,31 @@ class PdfPlumberEnhancer(TableEnhancer):
             settings["vertical_strategy"] = v_strategy
             settings["horizontal_strategy"] = h_strategy
 
-            with pdfplumber.open(pdf_path) as pdf:
-                for page_idx in range(min(page_count, len(pdf.pages))):
-                    page = pdf.pages[page_idx]
-                    try:
-                        plumber_tables = page.find_tables(table_settings=settings)
-                    except Exception as e:
-                        logger.warning(
-                            f"pdfplumber find_tables failed for page "
-                            f"{page_idx + 1}: {str(e)}"
-                        )
-                        continue
-
-                    tables: list[str] = []
-                    for table in plumber_tables:
-                        table_data = table.extract()
-                        if not table_data or not table_data[0]:
+            with warnings.catch_warnings():
+                warnings.filterwarnings("once", message="Could not get FontBBox")
+                with pdfplumber.open(pdf_path) as pdf:
+                    for page_idx in range(min(page_count, len(pdf.pages))):
+                        page = pdf.pages[page_idx]
+                        try:
+                            plumber_tables = page.find_tables(table_settings=settings)
+                        except Exception as e:
+                            logger.warning(
+                                f"pdfplumber find_tables failed for page "
+                                f"{page_idx + 1}: {str(e)}"
+                            )
                             continue
-                        md = self._table_to_markdown(table_data)
-                        if md:
-                            tables.append(md)
 
-                    if tables:
-                        result[page_idx] = tables
+                        tables: list[str] = []
+                        for table in plumber_tables:
+                            table_data = table.extract()
+                            if not table_data or not table_data[0]:
+                                continue
+                            md = self._table_to_markdown(table_data)
+                            if md:
+                                tables.append(md)
+
+                        if tables:
+                            result[page_idx] = tables
 
         except Exception as e:
             logger.warning(f"pdfplumber open failed for {pdf_path}: {str(e)}")
