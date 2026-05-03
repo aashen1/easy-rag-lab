@@ -220,6 +220,7 @@ def _do_save_case(
     result = msg.get("result", {})
     config_overrides = msg.get("config_overrides", {})
     meal_name = msg.get("meal_name")
+    trace_data = msg.get("trace")
     question = result.get("question", "")
     try:
         base_config = load_config()
@@ -232,6 +233,7 @@ def _do_save_case(
             meal_config=meal_config,
             meal_name=meal_name,
             chat_history=chat_history,
+            trace=trace_data,
             saved_case_type=saved_case_type,
             saved_case_id=saved_case_id,
         )
@@ -260,6 +262,11 @@ def _do_save_case(
             f"{label} 已保存: {case_dir.name}",
             icon="🚨" if case_type == CASE_TYPE_BAD else "✅",
         )
+        if case_type == CASE_TYPE_BAD:
+            st.toast(
+                "可到「🔍 Bad Case 分析」标签页进行深度分析",
+                icon="🔬",
+            )
         return True
     except Exception as e:
         logger.error(f"Failed to save case: {e}")
@@ -652,13 +659,16 @@ def render_qa_demo():
                     question,
                     config_overrides=config_overrides,
                     chat_history=chat_history_for_query,
+                    capture_trace=True,
                 )
+                trace_data = result.pop("trace", None)
                 st.session_state.messages.append(
                     {
                         "role": "assistant",
                         "result": result,
                         "config_overrides": config_overrides,
                         "meal_name": meal_name,
+                        "trace": trace_data,
                     }
                 )
             except Exception as e:
