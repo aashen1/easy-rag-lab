@@ -21,6 +21,43 @@ CASES_DIR_NAME = "cases"
 DATA_DIR_NAME = "data"
 
 
+def build_chat_history(
+    messages: list[dict[str, Any]],
+    up_to_index: int | None = None,
+) -> list[dict[str, str]]:
+    """Extract chat history from internal message format.
+
+    Converts the internal message format (where assistant messages
+    contain a ``result`` dict) to the simple
+    ``[{"role": ..., "content": ...}]`` format expected by
+    ``Generator.generate()`` and ``RAGPipeline.query()``.
+
+    Args:
+        messages: Internal message list from CLI or Web UI session.
+            User messages have ``{"role": "user", "content": "..."}``
+            format; assistant messages have ``{"role": "assistant",
+            "result": {"answer": "..."}}`` format.
+        up_to_index: If provided, only include messages before this
+            index (exclusive). Used when building history for a
+            specific historical message.
+
+    Returns:
+        List of dicts with ``role`` and ``content`` keys.
+    """
+    history: list[dict[str, str]] = []
+    end = up_to_index if up_to_index is not None else len(messages)
+    for msg in messages[:end]:
+        role = msg.get("role", "")
+        if role == "user":
+            history.append({"role": "user", "content": msg.get("content", "")})
+        elif role == "assistant":
+            result = msg.get("result", {})
+            answer = result.get("answer", "")
+            if answer:
+                history.append({"role": "assistant", "content": answer})
+    return history
+
+
 def get_cases_dir() -> Path:
     """Return the path to the cases storage directory.
 
@@ -538,7 +575,8 @@ def convert_case(source_case_id: str, target_type: str) -> Path:
     """Convert a case from one type to another (e.g. bad→good).
 
     Loads the source case data, creates a new case of the target type,
-    then deletes the original case directory.
+    migrates all associated data (chat_history, pipeline_trace,
+    ground_truth, diagnosis), then deletes the original case directory.
 
     Args:
         source_case_id: The source case directory name.
@@ -563,6 +601,10 @@ def convert_case(source_case_id: str, target_type: str) -> Path:
     config_snapshot = data.get("config_snapshot", {})
     meal_snapshot = data.get("meal_snapshot", {})
     meal_name = meal_snapshot.get("meal_name")
+    chat_history = data.get("chat_history")
+    pipeline_trace = data.get("pipeline_trace")
+    ground_truth = data.get("ground_truth")
+    diagnosis = data.get("diagnosis")
 
     config_overrides: dict[str, Any] = {}
     base_config = config_snapshot
@@ -575,12 +617,32 @@ def convert_case(source_case_id: str, target_type: str) -> Path:
         base_config=base_config,
         meal_config=None,
         meal_name=meal_name,
+        chat_history=chat_history,
+        trace=pipeline_trace,
     )
+
+    new_case_id = new_case_dir.name
+
+    if ground_truth is not None:
+        gt = (
+            GroundTruth.from_dict(ground_truth)
+            if isinstance(ground_truth, dict)
+            else ground_truth
+        )
+        save_ground_truth(new_case_id, gt)
+
+    if diagnosis is not None:
+        diag = (
+            DiagnosisResult.from_dict(diagnosis)
+            if isinstance(diagnosis, dict)
+            else diagnosis
+        )
+        save_diagnosis(new_case_id, diag)
 
     delete_case(source_case_id)
 
     logger.info(
-        f"Case converted: {source_case_id} → {new_case_dir.name} (type={target_type})"
+        f"Case converted: {source_case_id} → {new_case_id} (type={target_type})"
     )
     return new_case_dir
 

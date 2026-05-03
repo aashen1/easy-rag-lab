@@ -455,6 +455,101 @@ class TestConvertCase:
         ):
             convert_case("nonexistent_case", CASE_TYPE_GOOD)
 
+    def test_convert_migrates_chat_history_and_trace(self, tmp_path):
+        from src.trace_models import PipelineTrace, TraceStep
+
+        chat_history = [
+            {"role": "user", "content": "前一轮问题"},
+            {"role": "assistant", "content": "前一轮回答"},
+        ]
+        trace = PipelineTrace(
+            trace_id="t1",
+            question="测试问题",
+            steps=[
+                TraceStep(
+                    stage="retrieval",
+                    input_data={"query": "测试问题"},
+                    output_data={"results": [], "count": 0},
+                )
+            ],
+        )
+        with patch("src.case_collector.get_cases_dir", return_value=tmp_path):
+            src_dir = save_case(
+                CASE_TYPE_BAD,
+                "测试问题",
+                _make_result(),
+                {},
+                _make_base_config(),
+                chat_history=chat_history,
+                trace=trace,
+            )
+
+            new_dir = convert_case(src_dir.name, CASE_TYPE_GOOD)
+
+        new_history = json.loads(
+            (new_dir / "chat_history.json").read_text(encoding="utf-8")
+        )
+        assert len(new_history) == 2
+        assert new_history[0]["content"] == "前一轮问题"
+
+        new_trace = json.loads(
+            (new_dir / "pipeline_trace.json").read_text(encoding="utf-8")
+        )
+        assert new_trace["trace_id"] == "t1"
+        assert len(new_trace["steps"]) == 1
+
+    def test_convert_migrates_ground_truth_and_diagnosis(self, tmp_path):
+        from src.case_collector import save_diagnosis, save_ground_truth
+        from src.trace_models import DiagnosisResult, GroundTruth
+
+        with patch("src.case_collector.get_cases_dir", return_value=tmp_path):
+            src_dir = save_case(
+                CASE_TYPE_BAD,
+                "测试问题",
+                _make_result(),
+                {},
+                _make_base_config(),
+            )
+            src_id = src_dir.name
+
+            gt = GroundTruth(
+                answer_text="参考答案",
+                source_pdf="report.pdf",
+                source_page=5,
+                chunk_ids=["c1"],
+                annotated_at="2026-05-01T10:00:00",
+                annotator="user",
+            )
+            save_ground_truth(src_id, gt)
+
+            diag = DiagnosisResult(
+                root_cause="retrieval_miss",
+                root_cause_id="RC-1",
+                severity="high",
+                finding="Chunk not retrieved",
+                fix_suggestion="Increase top_k",
+                config_patch={"retrieval": {"top_k": 20}},
+                confidence=0.85,
+            )
+            save_diagnosis(src_id, diag)
+
+            new_dir = convert_case(src_id, CASE_TYPE_GOOD)
+
+        new_gt = json.loads((new_dir / "ground_truth.json").read_text(encoding="utf-8"))
+        assert new_gt["answer_text"] == "参考答案"
+        assert new_gt["source_page"] == 5
+
+        new_diag = json.loads((new_dir / "diagnosis.json").read_text(encoding="utf-8"))
+        assert new_diag["root_cause_id"] == "RC-1"
+        assert new_diag["severity"] == "high"
+
+        new_manifest = json.loads(
+            (new_dir / "manifest.json").read_text(encoding="utf-8")
+        )
+        assert new_manifest["has_ground_truth"] is True
+        assert new_manifest["has_diagnosis"] is True
+        assert new_manifest["root_cause"] == "retrieval_miss"
+
 
 @pytest.mark.unit
 class TestFindCaseByQuestion:

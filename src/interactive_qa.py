@@ -10,36 +10,11 @@ from src.case_collector import (
     CASE_TYPE_GOOD,
     DEDUP_STATUS_DUPLICATE,
     DEDUP_STATUS_TYPE_CHANGED,
+    build_chat_history,
     save_case_with_dedup,
 )
 from src.pipeline import RAGPipeline
 from src.utils import load_config
-
-
-def _build_chat_history(messages: list[dict[str, Any]]) -> list[dict[str, str]]:
-    """Extract chat_history in Anthropic API format from message list.
-
-    Converts the internal message format (with result dicts) to the
-    simple ``[{"role": ..., "content": ...}]`` format expected by
-    ``Generator.generate()``.
-
-    Args:
-        messages: Internal message list from the interactive session.
-
-    Returns:
-        List of dicts with ``role`` and ``content`` keys.
-    """
-    history: list[dict[str, str]] = []
-    for msg in messages:
-        role = msg.get("role", "")
-        if role == "user":
-            history.append({"role": "user", "content": msg.get("content", "")})
-        elif role == "assistant":
-            result = msg.get("result", {})
-            answer = result.get("answer", "")
-            if answer:
-                history.append({"role": "assistant", "content": answer})
-    return history
 
 
 def _get_assistant_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -251,7 +226,7 @@ def interactive_qa(pipeline: RAGPipeline, meal_name: str | None = None) -> None:
             try:
                 base_config = load_config()
                 meal_config = getattr(pipeline, "meal_config", None)
-                chat_history = _build_chat_history(messages)
+                chat_history = build_chat_history(messages)
 
                 case_dir, status = save_case_with_dedup(
                     case_type=case_type,
@@ -289,7 +264,7 @@ def interactive_qa(pipeline: RAGPipeline, meal_name: str | None = None) -> None:
             continue
 
         try:
-            chat_history = _build_chat_history(messages)
+            chat_history = build_chat_history(messages)
             result = pipeline.query(question, chat_history=chat_history)
 
             messages.append({"role": "user", "content": question})

@@ -13,6 +13,7 @@ from src.case_collector import (
     CASE_TYPE_GOOD,
     DEDUP_STATUS_DUPLICATE,
     DEDUP_STATUS_TYPE_CHANGED,
+    build_chat_history,
     list_cases,
     save_case_with_dedup,
 )
@@ -175,37 +176,6 @@ def render_pdf_preview() -> None:
         f'style="border:none;"></iframe>',
         unsafe_allow_html=True,
     )
-
-
-def _build_chat_history(
-    messages: list[dict[str, Any]], up_to_index: int | None = None
-) -> list[dict[str, Any]]:
-    """Extract chat history from messages for multi-turn context.
-
-    Converts the internal message format to the simple
-    ``[{"role": ..., "content": ...}]`` format expected by
-    ``pipeline.query()`` and ``save_case_with_dedup()``.
-
-    Args:
-        messages: Session state messages list.
-        up_to_index: If provided, only include messages before this
-            index (exclusive). Used when displaying historical messages.
-
-    Returns:
-        List of dicts with ``role`` and ``content`` keys.
-    """
-    history: list[dict[str, Any]] = []
-    end = up_to_index if up_to_index is not None else len(messages)
-    for msg in messages[:end]:
-        role = msg.get("role", "")
-        if role == "user":
-            history.append({"role": "user", "content": msg.get("content", "")})
-        elif role == "assistant":
-            result = msg.get("result", {})
-            answer = result.get("answer", "")
-            if answer:
-                history.append({"role": "assistant", "content": answer})
-    return history
 
 
 def _do_save_case(
@@ -580,7 +550,7 @@ def render_qa_demo():
             if msg["role"] == "user":
                 st.write(msg["content"])
             else:
-                chat_history_for_msg = _build_chat_history(
+                chat_history_for_msg = build_chat_history(
                     st.session_state.messages, msg_index
                 )
                 _display_result(
@@ -654,7 +624,7 @@ def render_qa_demo():
         with st.spinner("🔍 正在检索相关文档并生成答案..."):
             try:
                 pipeline = get_pipeline(meal_name)
-                chat_history_for_query = _build_chat_history(st.session_state.messages)
+                chat_history_for_query = build_chat_history(st.session_state.messages)
                 result = pipeline.query(
                     question,
                     config_overrides=config_overrides,

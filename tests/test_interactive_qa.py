@@ -1,7 +1,7 @@
 import pytest
 
+from src.case_collector import build_chat_history
 from src.interactive_qa import (
-    _build_chat_history,
     _get_assistant_messages,
     _parse_case_command,
     _resolve_assistant_msg,
@@ -45,7 +45,7 @@ def _make_messages():
 class TestBuildChatHistory:
     def test_build_chat_history_from_messages(self):
         messages = _make_messages()
-        history = _build_chat_history(messages)
+        history = build_chat_history(messages)
         assert len(history) == 4
         assert history[0] == {"role": "user", "content": "第一个问题"}
         assert history[1] == {"role": "assistant", "content": "第一个回答"}
@@ -53,7 +53,7 @@ class TestBuildChatHistory:
         assert history[3] == {"role": "assistant", "content": "第二个回答"}
 
     def test_build_chat_history_empty(self):
-        history = _build_chat_history([])
+        history = build_chat_history([])
         assert history == []
 
     def test_build_chat_history_skips_empty_answer(self):
@@ -66,9 +66,16 @@ class TestBuildChatHistory:
                 "saved_case_id": None,
             },
         ]
-        history = _build_chat_history(messages)
+        history = build_chat_history(messages)
         assert len(history) == 1
         assert history[0]["role"] == "user"
+
+    def test_build_chat_history_with_up_to_index(self):
+        messages = _make_messages()
+        history = build_chat_history(messages, up_to_index=2)
+        assert len(history) == 2
+        assert history[0] == {"role": "user", "content": "第一个问题"}
+        assert history[1] == {"role": "assistant", "content": "第一个回答"}
 
 
 @pytest.mark.unit
