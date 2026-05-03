@@ -77,43 +77,43 @@
 ```python
 class PyMuPDF4LLMPdfPlumberParser(BaseParser):
     """混合解析器：pymupdf4llm Layout 模式 + pdfplumber 表格提取
-    
+
     流程：
     1. pymupdf4llm 提取整页 Markdown（保留多栏检测）
     2. 从 page_boxes 识别表格区域
     3. pdfplumber 重新提取表格
     4. 替换原表格文本
     """
-    
+
     def parse(self, pdf_path: str) -> ParseResult:
         # 1. pymupdf4llm 提取
         result = pymupdf4llm.to_markdown(
-            pdf_path, 
+            pdf_path,
             page_chunks=True,
             **self._options
         )
-        
+
         pages = []
         for page_data in result:
             text = page_data["text"]
             page_boxes = page_data.get("page_boxes", [])
-            
+
             # 2. 识别表格区域
             table_boxes = [b for b in page_boxes if b["class"] == "table"]
-            
+
             if table_boxes:
                 # 3. pdfplumber 重新提取表格
                 new_tables = self._extract_tables_with_pdfplumber(
-                    pdf_path, 
+                    pdf_path,
                     page_data["metadata"]["page_number"] - 1,
                     table_boxes
                 )
-                
+
                 # 4. 替换表格文本
                 text = self._replace_tables(text, table_boxes, new_tables)
-            
+
             pages.append(ParsedPage(...))
-        
+
         return ParseResult(pages=pages, ...)
 ```
 

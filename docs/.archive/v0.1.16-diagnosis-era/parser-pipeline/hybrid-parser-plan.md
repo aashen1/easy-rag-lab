@@ -52,14 +52,14 @@ pymupdf4llm 的表格是 `<br>` 压缩格式（多公司挤在一行）。解决
 class HybridParser(BaseParser):
     """
     混合解析器：pymupdf4llm Layout + pdfplumber text 表格补强
-    
+
     流程：
     1. pymupdf4llm Layout 解析全文
     2. 检测有表格的页面
     3. 对这些页面用 pdfplumber text 提取表格
     4. 质量过滤 + 替换
     """
-    
+
     def __init__(self, config: dict):
         self.primary_parser = PyMuPDF4LLMParser(config)
         self.table_enhance_strategy = config.get("table_enhance_strategy", "text")
@@ -68,14 +68,14 @@ class HybridParser(BaseParser):
             "max_empty_ratio": 0.5,
             "min_data_rows": 2,
         })
-    
+
     def parse(self, pdf_path: str) -> ParseResult:
         # 1. 主链路解析
         primary_result = self.primary_parser.parse(pdf_path)
-        
+
         # 2. 表格补强
         enhanced_pages = self._enhance_tables(pdf_path, primary_result.pages)
-        
+
         return ParseResult(pages=enhanced_pages, metadata=primary_result.metadata)
 ```
 
@@ -138,15 +138,15 @@ def _replace_tables(self, page_text: str, plumber_tables: list[str]) -> str:
     """
     if not plumber_tables:
         return page_text
-    
+
     lines = page_text.split("\n")
     spans = self._find_md_table_spans(page_text)
-    
+
     # 从后往前替换，避免行号偏移
     for (start, end), plumber_table in zip(reversed(spans), reversed(plumber_tables)):
         replace_lines = plumber_table.split("\n")
         lines[start:end] = replace_lines
-    
+
     return "\n".join(lines)
 ```
 
@@ -221,4 +221,3 @@ parser:
 | `config.yaml`                     | 修改   |
 | `tests/test_hybrid_parser.py`     | 新建   |
 | `docs/user-guides/pdf-parsing.md` | 更新文档 |
-

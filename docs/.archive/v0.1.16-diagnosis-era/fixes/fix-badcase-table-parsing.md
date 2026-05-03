@@ -95,4 +95,3 @@
 2. **pdfplumber 表格策略**: `text` 策略适合无边框表格但可能误检测，`lines` 策略更精确但依赖表格线
 3. **Pipeline 兼容性**: 当前 pipeline.py 硬编码读取 `pymupdf4llm` 子键，切换到 fitz\_pdfplumber 需要修复此问题
 4. **后续全量验证**: 本次只针对单个 PDF 验证，后续如需切换默认解析器，需全量回归测试
-

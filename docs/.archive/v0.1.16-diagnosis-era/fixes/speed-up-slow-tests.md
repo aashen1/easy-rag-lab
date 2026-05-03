@@ -26,7 +26,7 @@ supplement.py:143-145  (三处相同模式)
   resolved_dir = chunks_dir or resolve_chunks_dir(config, meal_config) or Path()
   → 当 MagicMock 没有 config_hashes 时，resolve_chunks_dir 返回 None
   → or Path() 兜底为项目根目录
-  → locate_answer_chunks(chunks_dir=Path()) 
+  → locate_answer_chunks(chunks_dir=Path())
   → chunk_locator.py:455  chunks_dir.rglob("*.jsonl")  ← 全项目递归扫描
 ```
 
@@ -258,4 +258,3 @@ builtin_evaluator.py → eval.metrics.__init__ → eval.metrics.generation → f
 | Step 1 添加 `meal_config.config_hashes = {"chunker": ""}`                       | ⚠️ 空字符串是 falsy，`resolve_chunks_dir` 仍返回 None，实际不起作用                                        | ✅ patch 本身才是修复手段；config\_hashes 可加可不加                    |
 | Step 3 根因: "模块级 import `anthropic` + `RagasEvaluator`"                        | ❌ `RagasEvaluator` 的 ragas/torch 依赖已是延迟导入，不是慢根因；慢根因是 `BuiltinEvaluator` 的导入链触发 `anthropic` | ✅ 改为在 `eval/metrics/__init__.py` 层面延迟导入 `generation` 子模块 |
 | Step 4 删除顶层 `from anthropic import Anthropic`                                 | ⚠️ 遗漏了函数签名 `client: Anthropic` 类型注解会在模块加载时求值，导致 `NameError`                                | ✅ 必须同时添加 `from __future__ import annotations`            |
-

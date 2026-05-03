@@ -14,7 +14,7 @@
 run_experiment() [L387]
   → setup_logger(system_config)  # 初始化主日志
   → logger.add(experiment.log)   # L403: 添加实验日志 handler
-  
+
 run_variant_evaluation() [L74]
   → RAGPipeline.__init__() [L83]
     → setup_logger(self.config)  # 问题所在！调用 logger.remove() 移除所有 handler
@@ -48,14 +48,14 @@ run_variant_evaluation() [L74]
 **文件**: `src/pipeline.py`
 **修改**: 删除第83行 `setup_logger(self.config)`
 
-**原因**: 
+**原因**:
 - 日志应该在程序入口点初始化，而不是在类初始化时
 - `RAGPipeline` 不应该负责日志配置
 
 #### 2. 改进 `setup_logger()` 函数
 
 **文件**: `src/utils.py`
-**修改**: 
+**修改**:
 - 添加 `force` 参数控制是否移除现有 handler
 - 默认 `force=False`，不移除现有 handler
 - 只有在明确需要重新配置时才使用 `force=True`
@@ -63,7 +63,7 @@ run_variant_evaluation() [L74]
 ```python
 def setup_logger(config: dict[str, Any], force: bool = False) -> None:
     """Setup loguru logger with file and console handlers.
-    
+
     Args:
         config: Application configuration dictionary.
         force: If True, remove all existing handlers before setup.
@@ -77,7 +77,7 @@ def setup_logger(config: dict[str, Any], force: bool = False) -> None:
 #### 3. 使用上下文管理器管理实验日志 handler
 
 **文件**: `eval/runner/core.py`
-**修改**: 
+**修改**:
 - 创建上下文管理器 `experiment_log_context()`
 - 在 `run_experiment()` 中使用 `with` 语句管理 handler 生命周期
 - 确保实验结束后 handler 被正确移除
