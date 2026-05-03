@@ -181,8 +181,9 @@ class Generator:
         allow_no_contexts: bool = False,
         max_tokens: int | None = None,
         chat_history: list[dict[str, str]] | None = None,
+        return_prompt_details: bool = False,
         **metadata: Any,
-    ) -> str:
+    ) -> str | dict[str, Any]:
         """Generate an answer using the LLM.
 
         Args:
@@ -208,10 +209,16 @@ class Generator:
                 current user message in the LLM call. Anthropic API
                 requires messages to start with "user" and alternate
                 roles; this is enforced automatically.
+            return_prompt_details: When True, returns a dict with
+                ``answer``, ``system_prompt``, ``user_message``, and
+                ``truncated_count`` instead of just the answer string.
+                Defaults to False for backward compatibility.
             **metadata: Additional metadata for token tracking.
 
         Returns:
-            Generated answer string.
+            Generated answer string when ``return_prompt_details`` is
+            False (default). When True, a dict containing ``answer``,
+            ``system_prompt``, ``user_message``, and ``truncated_count``.
 
         Raises:
             ValueError: If query is empty or not a string.
@@ -234,6 +241,7 @@ class Generator:
             if system_prompt is None:
                 system_prompt = self.DEFAULT_SYSTEM_PROMPT
 
+            original_context_count = len(contexts)
             contexts = self._truncate_contexts(contexts, system_prompt, query)
 
             if sources:
@@ -321,6 +329,13 @@ class Generator:
                 f"Generated answer: {answer[:100]}... "
                 f"(tokens: in={api_input_tokens}, out={api_output_tokens})"
             )
+            if return_prompt_details:
+                return {
+                    "answer": answer,
+                    "system_prompt": system_prompt,
+                    "user_message": user_message,
+                    "truncated_count": original_context_count - len(contexts),
+                }
             return answer
 
         except Exception as e:
