@@ -15,6 +15,8 @@ from src.meal import (
     MealStatus,
     build_chunks_if_needed,
     compute_chunker_config_hash,
+    compute_embedding_config_hash,
+    compute_parser_config_hash,
     create_artifact_cache,
 )
 from src.sampler import SamplingConfig
@@ -27,6 +29,25 @@ if TYPE_CHECKING:
     from src.meal import MealConfig
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+def _build_parser_section(parser_config: dict) -> dict:
+    if "primary" in parser_config:
+        return {
+            "primary": parser_config.get("primary", "pymupdf4llm"),
+            "enhancer": parser_config.get("table_enhancer"),
+            "primary_config": parser_config.get(
+                parser_config.get("primary", "pymupdf4llm"), {}
+            ),
+            "enhancer_config": parser_config.get(
+                parser_config.get("table_enhancer", ""), {}
+            ),
+        }
+    algorithm = parser_config.get("algorithm", "pymupdf4llm")
+    return {
+        "algorithm": algorithm,
+        "options": parser_config.get(algorithm, {}),
+    }
 
 
 def prepare_meal(
@@ -84,30 +105,51 @@ def prepare_meal(
         logger.info(f"Moved existing meal to trashbin: {trashed_path}")
 
     if meal_manager.meal_exists(meal_name):
-        logger.info(f"Meal '{meal_name}' found, loading...")
         meal_config = meal_manager.load_meal(meal_name)
 
-        status, issues = meal_manager.check_meal_status(meal_name)
-        if status != MealStatus.AVAILABLE:
-            logger.warning(
-                f"Meal '{meal_name}' status: {status.value}. "
-                f"Issues: {len(issues)} files affected."
-            )
-            for issue in issues[:5]:
-                logger.warning(f"  - {issue}")
-            if len(issues) > 5:
-                logger.warning(f"  ... and {len(issues) - 5} more issues")
-        else:
-            logger.success(f"Meal '{meal_name}' is available and valid")
+        _, current_hashes = meal_manager._build_config_snapshot_and_hashes()
+        if meal_config.config_hashes != current_hashes:
+            import shutil
 
-        return {
-            "name": meal_name,
-            "config": meal_config,
-            "status": status,
-            "issues": issues,
-            "data_id": meal_config.data_id,
-            "collection_name": meal_config.collection_name,
-        }
+            logger.warning(
+                f"Meal '{meal_name}' has stale config_hashes. "
+                f"Stored: {meal_config.config_hashes}, "
+                f"Current: {current_hashes}. "
+                f"Backing up and recreating with current configuration."
+            )
+            meal_dir = meal_manager.get_meal_dir(meal_name)
+            meals_dir = meal_dir.parent
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_name = f"{meal_name}_backup_{timestamp}"
+            backup_path = meals_dir / backup_name
+            shutil.copytree(str(meal_dir), str(backup_path))
+            logger.info(f"Backed up stale meal to: {backup_path}")
+            shutil.rmtree(str(meal_dir))
+            logger.info(f"Removed stale meal directory: {meal_dir}")
+        else:
+            logger.info(f"Meal '{meal_name}' found, loading...")
+
+            status, issues = meal_manager.check_meal_status(meal_name)
+            if status != MealStatus.AVAILABLE:
+                logger.warning(
+                    f"Meal '{meal_name}' status: {status.value}. "
+                    f"Issues: {len(issues)} files affected."
+                )
+                for issue in issues[:5]:
+                    logger.warning(f"  - {issue}")
+                if len(issues) > 5:
+                    logger.warning(f"  ... and {len(issues) - 5} more issues")
+            else:
+                logger.success(f"Meal '{meal_name}' is available and valid")
+
+            return {
+                "name": meal_name,
+                "config": meal_config,
+                "status": status,
+                "issues": issues,
+                "data_id": meal_config.data_id,
+                "collection_name": meal_config.collection_name,
+            }
 
     create_config = exp_config.data.get("create_if_missing")
     if not create_config:
@@ -446,9 +488,11 @@ def prepare_variant_chunks(
 
     cache = create_artifact_cache(merged_config)
 
+    parser_section = _build_parser_section(merged_config.get("parser", {}))
+    current_parser_hash = compute_parser_config_hash(parser_section)
     parsed_dir = cache.get_parsed_dir(
         meal_config.data_id,
-        parser_hash=meal_config.config_hashes.get("parser"),
+        parser_hash=current_parser_hash,
     )
     chunks_dir = cache.get_chunks_dir(meal_config.data_id, chunker_hash)
 
@@ -495,10 +539,13 @@ def prepare_index_for_variant(
     vector_store_config = merged_config.get("vector_store", {})
 
     chunker_hash = compute_chunker_config_hash(chunker_config)
+    parser_section = _build_parser_section(merged_config.get("parser", {}))
+    current_parser_hash = compute_parser_config_hash(parser_section)
+    current_embedding_hash = compute_embedding_config_hash(embedding_config)
     config_hashes = {
-        "parser": meal_config.config_hashes.get("parser", ""),
+        "parser": current_parser_hash,
         "chunker": chunker_hash,
-        "embedding": meal_config.config_hashes.get("embedding", ""),
+        "embedding": current_embedding_hash,
     }
     from src.meal import compute_index_key, generate_collection_name
 
@@ -539,7 +586,7 @@ def prepare_index_for_variant(
 
         parsed_dir = cache.get_parsed_dir(
             meal_config.data_id,
-            parser_hash=meal_config.config_hashes.get("parser"),
+            parser_hash=current_parser_hash,
         )
         chunks_dir = cache.get_chunks_dir(meal_config.data_id, chunker_hash)
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import warnings
 from copy import deepcopy
 
 from loguru import logger
@@ -71,18 +72,17 @@ class PdfPlumberEnhancer(TableEnhancer):
         """
         return "pdfplumber"
 
+    _SKIP_TEXT_THRESHOLD = 50
+
     def enhance(self, pdf_path: str, result: ParseResult) -> ParseResult:
         """Enhance table regions in a parsed result using pdfplumber.
 
-        For each page that contains markdown tables, re-extracts those
-        tables with pdfplumber and replaces the originals when the
-        pdfplumber version is of sufficient quality.
+        Opens the PDF once and extracts tables for all pages in a
+        single pass, then replaces or appends tables per page.
 
-        For pages without any markdown tables, pdfplumber is still
-        invoked to extract tables and append them to the page text.
-        This ensures that primary parsers which do not produce markdown
-        tables (e.g. FitzParser) still benefit from pdfplumber's
-        table extraction capability.
+        Pages with no markdown tables and very short text (< 50
+        characters) are skipped because they are unlikely to contain
+        tables that the primary parser missed.
 
         Args:
             pdf_path: Path to the original PDF file.
@@ -95,14 +95,30 @@ class PdfPlumberEnhancer(TableEnhancer):
             FileNotFoundError: If the PDF file does not exist.
             Exception: If enhancement fails for any other reason.
         """
+        page_count = len(result.pages)
+        all_tables = self._extract_all_tables(pdf_path, page_count)
+
         enhanced_pages: list[ParsedPage] = []
+        total_extracted = 0
+        total_kept = 0
+        total_reasons: dict[str, int] = {}
+        skipped_pages = 0
 
         for page in result.pages:
             page_idx = page.page_number - 1
             spans = self._find_md_table_spans(page.text)
 
-            plumber_tables = self._extract_tables(pdf_path, page_idx)
-            plumber_tables = self._filter_low_quality(plumber_tables)
+            if not spans and len(page.text.strip()) < self._SKIP_TEXT_THRESHOLD:
+                enhanced_pages.append(page)
+                skipped_pages += 1
+                continue
+
+            plumber_tables = all_tables.get(page_idx, [])
+            total_extracted += len(plumber_tables)
+            plumber_tables, reasons = self._filter_low_quality(plumber_tables)
+            total_kept += len(plumber_tables)
+            for k, v in reasons.items():
+                total_reasons[k] = total_reasons.get(k, 0) + v
 
             if not plumber_tables:
                 enhanced_pages.append(page)
@@ -125,6 +141,17 @@ class PdfPlumberEnhancer(TableEnhancer):
                     page_number=page.page_number,
                     text=new_text,
                     metadata=deepcopy(page.metadata),
+                )
+            )
+
+        if total_extracted > 0:
+            logger.debug(
+                f"Table enhancement: extracted={total_extracted}, kept={total_kept}, "
+                f"filtered={total_extracted - total_kept}, skipped_pages={skipped_pages}"
+                + (
+                    f" ({', '.join(f'{k}={v}' for k, v in total_reasons.items())})"
+                    if total_reasons
+                    else ""
                 )
             )
 
@@ -175,49 +202,64 @@ class PdfPlumberEnhancer(TableEnhancer):
 
         return spans
 
-    def _extract_tables(self, pdf_path: str, page_idx: int) -> list[str]:
-        """Extract tables from a page using pdfplumber.
+    def _extract_all_tables(
+        self, pdf_path: str, page_count: int
+    ) -> dict[int, list[str]]:
+        """Extract tables from all pages in a single PDF open pass.
+
+        Opens the PDF once, iterates over every page, and collects
+        all tables found by pdfplumber.  This avoids the overhead
+        of opening/closing the PDF file once per page.
 
         Args:
             pdf_path: Path to the PDF file.
-            page_idx: 0-indexed page index.
+            page_count: Number of pages to process.
 
         Returns:
-            List of markdown table strings extracted by pdfplumber.
+            Dict mapping 0-indexed page number to list of markdown
+            table strings extracted by pdfplumber.
         """
-        tables: list[str] = []
+        result: dict[int, list[str]] = {}
 
         try:
             import pdfplumber
 
-            with pdfplumber.open(pdf_path) as pdf:
-                if page_idx >= len(pdf.pages):
-                    return []
+            settings = dict(self._table_settings)
+            v_strategy = self._vertical_strategy or self._strategy
+            h_strategy = self._horizontal_strategy or self._strategy
+            settings["vertical_strategy"] = v_strategy
+            settings["horizontal_strategy"] = h_strategy
 
-                page = pdf.pages[page_idx]
-                settings = dict(self._table_settings)
-                v_strategy = self._vertical_strategy or self._strategy
-                h_strategy = self._horizontal_strategy or self._strategy
-                settings["vertical_strategy"] = v_strategy
-                settings["horizontal_strategy"] = h_strategy
+            with warnings.catch_warnings():
+                warnings.filterwarnings("once", message="Could not get FontBBox")
+                with pdfplumber.open(pdf_path) as pdf:
+                    for page_idx in range(min(page_count, len(pdf.pages))):
+                        page = pdf.pages[page_idx]
+                        try:
+                            plumber_tables = page.find_tables(table_settings=settings)
+                        except Exception as e:
+                            logger.warning(
+                                f"pdfplumber find_tables failed for page "
+                                f"{page_idx + 1}: {str(e)}"
+                            )
+                            continue
 
-                plumber_tables = page.find_tables(table_settings=settings)
+                        tables: list[str] = []
+                        for table in plumber_tables:
+                            table_data = table.extract()
+                            if not table_data or not table_data[0]:
+                                continue
+                            md = self._table_to_markdown(table_data)
+                            if md:
+                                tables.append(md)
 
-                for table in plumber_tables:
-                    table_data = table.extract()
-                    if not table_data or not table_data[0]:
-                        continue
-
-                    md = self._table_to_markdown(table_data)
-                    if md:
-                        tables.append(md)
+                        if tables:
+                            result[page_idx] = tables
 
         except Exception as e:
-            logger.warning(
-                f"pdfplumber table extraction failed for page {page_idx + 1}: {str(e)}"
-            )
+            logger.warning(f"pdfplumber open failed for {pdf_path}: {str(e)}")
 
-        return tables
+        return result
 
     @staticmethod
     def _table_to_markdown(table_data: list[list[str | None]]) -> str:
@@ -279,7 +321,9 @@ class PdfPlumberEnhancer(TableEnhancer):
 
         return "\n".join(lines)
 
-    def _filter_low_quality(self, tables: list[str]) -> list[str]:
+    def _filter_low_quality(
+        self, tables: list[str]
+    ) -> tuple[list[str], dict[str, int]]:
         """Filter tables by quality criteria.
 
         A table is considered low-quality if it has fewer than
@@ -290,30 +334,25 @@ class PdfPlumberEnhancer(TableEnhancer):
             tables: List of markdown table strings.
 
         Returns:
-            Filtered list of markdown table strings.
+            Tuple of (filtered tables, filter_reasons dict).
         """
         result: list[str] = []
+        reasons: dict[str, int] = {}
         for md in tables:
             rows, cols, data_rows, empty_ratio, merged_ratio = (
                 self._count_table_quality(md)
             )
             if cols < self._min_columns:
-                logger.debug(
-                    f"Filtered table: cols={cols} < min_columns={self._min_columns}"
-                )
+                reasons["cols_too_few"] = reasons.get("cols_too_few", 0) + 1
                 continue
             if empty_ratio > self._max_empty_ratio:
-                logger.debug(
-                    f"Filtered table: empty_ratio={empty_ratio:.2f} > max={self._max_empty_ratio}"
-                )
+                reasons["empty_ratio_high"] = reasons.get("empty_ratio_high", 0) + 1
                 continue
             if data_rows < self._min_data_rows:
-                logger.debug(
-                    f"Filtered table: data_rows={data_rows} < min={self._min_data_rows}"
-                )
+                reasons["rows_too_few"] = reasons.get("rows_too_few", 0) + 1
                 continue
             result.append(md)
-        return result
+        return result, reasons
 
     @staticmethod
     def _append_tables(text: str, plumber_tables: list[str]) -> str:

@@ -943,13 +943,33 @@ class TestMealManager:
     def test_find_full_dataset_meal_found(self, temp_dirs):
         manager = MealManager(temp_dirs)
         full_data_id = manager.cache._compute_full_data_id()
-        meal_config = self._make_meal_config(name="full_meal", data_id=full_data_id)
+        _, current_hashes = manager._build_config_snapshot_and_hashes()
+        meal_config = self._make_meal_config(
+            name="full_meal", data_id=full_data_id, config_hashes=current_hashes
+        )
         self._save_meal(manager, meal_config)
 
         result = manager.find_full_dataset_meal()
         assert result is not None
         assert result.name == "full_meal"
         assert result.data_id == full_data_id
+
+    def test_find_full_dataset_meal_stale_config(self, temp_dirs):
+        manager = MealManager(temp_dirs)
+        full_data_id = manager.cache._compute_full_data_id()
+        meal_config = self._make_meal_config(
+            name="full_meal",
+            data_id=full_data_id,
+            config_hashes={"parser": "stale0000", "chunker": "stale0000"},
+        )
+        self._save_meal(manager, meal_config)
+
+        result = manager.find_full_dataset_meal()
+        assert result is None
+
+        result_loose = manager.find_full_dataset_meal(require_config_match=False)
+        assert result_loose is not None
+        assert result_loose.name == "full_meal"
 
     def test_find_full_dataset_meal_not_found(self, temp_dirs):
         manager = MealManager(temp_dirs)
@@ -978,7 +998,10 @@ class TestMealManager:
     def test_get_or_create_full_meal_returns_existing(self, temp_dirs):
         manager = MealManager(temp_dirs)
         full_data_id = manager.cache._compute_full_data_id()
-        meal_config = self._make_meal_config(name="all", data_id=full_data_id)
+        _, current_hashes = manager._build_config_snapshot_and_hashes()
+        meal_config = self._make_meal_config(
+            name="all", data_id=full_data_id, config_hashes=current_hashes
+        )
         self._save_meal(manager, meal_config)
 
         result = manager.get_or_create_full_meal()
@@ -989,7 +1012,10 @@ class TestMealManager:
     def test_get_or_create_full_meal_returns_existing_different_name(self, temp_dirs):
         manager = MealManager(temp_dirs)
         full_data_id = manager.cache._compute_full_data_id()
-        meal_config = self._make_meal_config(name="full_dataset", data_id=full_data_id)
+        _, current_hashes = manager._build_config_snapshot_and_hashes()
+        meal_config = self._make_meal_config(
+            name="full_dataset", data_id=full_data_id, config_hashes=current_hashes
+        )
         self._save_meal(manager, meal_config)
 
         result = manager.get_or_create_full_meal()
