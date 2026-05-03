@@ -9,6 +9,120 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _No unreleased changes yet._
 
+## [0.1.16] - 2026-05-04
+
+Diagnosis-driven development — Bad Case closed-loop analysis, hybrid parser pipeline, experiment reuse, test set consolidation.
+
+### Added
+
+- Bad Case closed-loop analysis: case_collector (5-file reproducible archive), trace_models (pipeline stage capture), case_diagnoser (6 root cause categories RC-0~RC-5), retrieval_analyzer, ground_truth_finder
+- Query history ring buffer for CLI single-query mode with dedup and case type conversion
+- Interactive QA enhancement: multi-turn chat_history from CLI → Pipeline → Generator, /badcase and /goodcase commands
+- Streamlit Case Analyzer page: pipeline trace visualization, ground truth annotation, root cause diagnosis
+- CompositeParser two-step architecture: primary parser + table enhancer hot-pluggable combination
+- FitzParser (pure fitz primary parser) and PdfPlumberEnhancer (table enhancement module)
+- Multi-criteria better_wins quality comparison (row count, empty cell ratio, merged cell ratio)
+- Parser benchmark module (eval/parser_benchmark/) for standalone parser quality evaluation
+- PdfPlumberEnhancer performance optimization: open PDF once instead of per-page
+- Experiment report reuse: InPlaceReuseHandler, CopyMigrateHandler, ExperimentFingerprint config matching
+- call_with_retry with exponential backoff for 429 rate-limit errors
+- Stress test v2 with binary search for API concurrency limits (safe_max=21, default 10)
+- TestSetComposer with merge, filter, and incremental compose
+- testset_review package (AI reviewer + display + engine + PDF viewer)
+- testset_cli unified CLI with enrich, review, approve, compose, generate, migrate subcommands
+- MealManager.get_or_create_full_meal() for default meal resolution
+- meals.default_name config option for auto-resolved meal
+- Unify --query/--interactive/--build-index into Meal/Artifact system via auto-resolve
+- chat_history parameter through RAGPipeline.query() → Generator.generate()
+- save_case_with_dedup shared dedup function and chat_history support in save_case/load_case
+- S9 evaluation profiling stage and config hash verification
+- ResumeConfig for YAML-based resume settings
+- Three-layer test system (unit / standard / all) with pytest-xdist parallel execution
+- Streamlit AppTest smoke tests for UI automation (Layer 1)
+- Automated workflow script for merging feature branches into dev
+
+### Changed
+
+- Default parser switched to pymupdf4llm + pdfplumber(text) with OCR off (experiment-verified)
+- PdfPlumberEnhancer better_wins upgraded from single-dimension to multi-criteria quality comparison
+- PdfPlumberEnhancer now appends tables when primary parser produces no markdown tables
+- Sparse row filtering in pdfplumber table conversion to reduce noise from text strategy
+- table_settings strategy override instead of setdefault in PdfPlumberEnhancer
+- Interactive QA moved from main.py to src/interactive_qa.py with enhanced case collection
+- Web UI qa_demo refactored to use save_case_with_dedup and pass chat_history for multi-turn
+- Review tool generalized to support any test set via --input
+- Shared distribution functions extracted to test_generation.distribution
+- TestSetManager extended with quality_status and portable test set support
+- Unified pytest config with slow marker for ragas tests
+- Experiment runner integrated reuse logic and manifest
+
+### Fixed
+
+- Stale config in experiment prepare_meal: config_hashes mismatch now triggers rebuild
+- find_full_dataset_meal now checks config_hashes to detect stale meals
+- Full-parsed cache reuse with page_chunks=True
+- Pipeline indexer closed before creating new one to prevent Qdrant concurrent access conflict
+- Legacy mode page_chunks metadata key difference handling
+- Messages.append moved after build_chat_history to prevent question duplication in multi-turn chat
+- Case analyzer updated to support all case types, PDF search, and deprecated API fix
+- Root cause label added to case list
+- FontBBox warnings from pdfplumber suppressed
+- Control characters in LLM JSON responses now handled
+- Profiling stage tracking corrected for S1-S4
+- Experiment log handler lifecycle management to prevent log loss
+- setup_logger force parameter to preserve existing handlers
+- RAGPipeline no longer calls setup_logger to prevent handler removal
+- Module-level logger.remove call removed to preserve global handlers
+- Duplicate log handlers prevented when setup_logger called multiple times
+- PDF preview double-click issue on first open
+- JS execution enabled in st.html with unsafe_allow_javascript=True
+- Duplicate case saves prevented, switching between bad/good allowed
+- load_config result cached to avoid repeated YAML reads and log spam
+- VectorIndexer created in __init__ when meal_name is provided
+- Helper functions moved before main() to fix NameError
+- Testset CLI bug fixes and generate subcommand added
+- YAML resume config and hash mismatch bug in evaluation
+- BM25Retriever instance reuse across retrieve tests with class-scoped fixture
+- resolve_chunks_dir patched in supplement tests to prevent full project directory scan
+
+## [0.1.15] - 2026-05-01
+
+Experiment acceleration — concurrent queries, checkpoint resume, thread-safe pipeline, Streamlit UI upgrade.
+
+### Added
+
+- Concurrent query evaluation via clone_for_concurrency() sharing read-only components
+- Concurrent builtin evaluation with configurable worker count
+- Question-level checkpoint with atomic writes for resume capability
+- --resume CLI support for interrupted experiment recovery
+- RAGPipeline.clone_for_concurrency() for thread-safe pipeline cloning
+- VectorIndexer.reopen() and is_closed() for indexer cache reuse
+- Streamlit multi-turn conversation history
+- Dynamic config_overrides sidebar with lazy loading (BM25/Reranker/QueryRewriter)
+- Floating navigation buttons in Streamlit UI
+- Streamlit UI migration to st.html, deprecating st.components.v1.html
+- recall@3/5/10 metrics
+- MetricResolver graceful filtering of unavailable backends
+- Unified error_handler module for evaluation system
+
+### Changed
+
+- deep_merge extracted to utils.py
+- top_k dynamic parameter support
+- BM25Retriever signature unified
+- QueryRewriter auth fix
+- Dead code cleanup
+
+### Fixed
+
+- BuiltinEvaluator configuration fix
+- sanitize_name() deduplication (6x→1x)
+
+### Refactored
+
+- CLAUDE.md streamlined (116→76 lines)
+- Docstring completion and type annotation corrections (str | None)
+
 ## [0.1.14] - 2026-04-29
 
 Code health governance — decompose god files into packages, add strategy pattern and Pydantic validation.
