@@ -2,11 +2,56 @@
 
 <!-- status: active -->
 
-> 最后更新：2026-05-01
+> 最后更新：2026-05-04
 
 本文档记录项目的版本迭代历程，每个版本的关键决策、交付成果和经验教训。
 
 > 说明：因为一直在修LLM合成评测集的质量问题，一直拖着没有发版，东做做西做做积压了几百个commit，于是让LLM帮忙想了个"故事感"，一下子拆了五个版本出来，这个调子，只能说~~很装~~
+
+---
+
+## v0.1.16 (2026-05-04)
+
+### 版本主题
+
+诊得明
+
+### 叙事
+
+> v0.1.15 让系统跑得快，但跑得快不等于跑得对。
+>
+> 这一版让系统学会"看病"——Bad Case 从发现到追踪到诊断到根因定位，全链路闭环；解析链路从"能用"升级为"精调"，混合架构让表格不再是盲区；实验系统学会"省着花"，报告复用和缓存校验让算力不再浪费；测试集管线从碎片化走向统一入口。
+>
+> 不是跑得更快，而是跑得更明白。
+
+### 关键决策
+
+- 建立 Bad Case 闭环分析体系：收集→追踪→诊断→根因定位，Pipeline trace 捕获 + Case Analyzer 可视化 + Root Cause Diagnoser 自动归因
+- 采用两步法解析架构（CompositeParser = 主力解析器 + 表格增强器），6 种候选管线抽样实验确定默认链路为 pymupdf4llm + pdfplumber(text)，OCR 关闭
+- 实验报告引入复用机制（InPlaceReuseHandler + CopyMigrateHandler），配置指纹识别判断是否实质相同
+- 测试集管线整合：TestSetComposer + testset_review + testset_cli 统一入口，消除碎片化
+- 统一 --query/--interactive/--build-index 到 Meal/Artifact 系统，消除独立链路
+- 引入 call_with_retry 指数退避处理 429 限流，压力测试确定安全并发上限（safe_max=21，默认 10）
+- 建立三层测试体系（unit / standard / all）+ pytest-xdist 并行加速
+
+### 交付成果
+
+- **Bad Case 闭环分析**：case_collector（5 文件完整可复现）、trace_models（管线各阶段中间结果）、case_diagnoser（6 类根因自动诊断 RC-0~RC-5）、retrieval_analyzer（检索质量分析）、ground_truth_finder（标准答案定位）、query_history（CLI 环形历史缓冲区）、interactive_qa（多轮对话 + /badcase 命令）、case_analyzer 页面（Streamlit 可视化分析）
+- **混合解析链路**：CompositeParser 两步法架构、FitzParser（纯 fitz 主力）、PdfPlumberEnhancer（表格补强）、better_wins 多维度质量比较（行数/空单元格率/合并单元格率）、parser_benchmark 独立评测模块、PdfPlumberEnhancer 性能优化（PDF 只开一次）
+- **实验系统增强**：experiment_reuse（InPlaceReuseHandler + CopyMigrateHandler + 配置指纹）、llm_retry（call_with_retry 指数退避）、ResumeConfig YAML 支持、S9 evaluation profiling stage
+- **测试集管线整合**：TestSetComposer（合并/过滤/增量组合）、testset_review（AI 审核）、testset_cli（统一 CLI：enrich/review/approve/compose/generate/migrate）、distribution 模块提取
+- **Meal 系统统一**：get_or_create_full_meal()、meals.default_name 配置、--query/--interactive/--build-index 自动接入 Meal
+- **多轮对话贯通**：chat_history 从 CLI → Pipeline → Generator 全链路、save_case_with_dedup 去重、build_chat_history 重构
+- **缓存与配置修复**：prepare_meal 配置匹配检查（防旧缓存）、find_full_dataset_meal config_hashes 校验、page_chunks 模式缓存复用、load_config 结果缓存
+- **日志系统修复**：setup_logger handler 生命周期管理、RAGPipeline 移除 setup_logger 调用、实验日志 handler 保护
+- **测试基础设施**：三层测试 + pytest-xdist 并行、unit marker 标注、Streamlit AppTest 冒烟测试、BM25Retriever class-scoped fixture 复用
+- **代码健康**：docstring 补全、类型标注修正、控制字符 JSON 修复、profiling stage 追踪修正、Qdrant 并发访问冲突修复
+
+### 版本验收
+
+- Git tag: `v0.1.16`
+- L1: lint + test-all 全绿
+- L2: 归档文档完整性验证（32 documents + 12 specs = 44 文件，逐文件 diff 全 OK）
 
 ---
 
@@ -427,7 +472,7 @@ MVP RAG 基础链路
 
 ## 版本规划
 
-### v0.1.16（计划中）
+### v0.1.17（计划中）
 
 - 透明版完整实验报告（FEAT-010）
 - Baseline 标定与"花头"效果验证
