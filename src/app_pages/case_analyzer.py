@@ -109,14 +109,17 @@ def _render_pipeline_trace_html(steps: list[dict[str, Any]]) -> None:
                 input_count = f"输入: {len(inp.get('results', []))}"
                 output_count = f"输出: {len(out.get('results', []))}"
             elif stage == "context_assembly":
-                input_count = f"chunks: {inp.get('chunk_count', '?')}"
-                output_count = f"tokens: {out.get('total_tokens', '?')}"
+                input_count = (
+                    f"chunks: {inp.get('context_count', inp.get('chunk_count', '?'))}"
+                )
+                output_count = f"final: {out.get('final_context_count', out.get('context_count', '?'))}"
             elif stage == "query_rewrite":
                 input_count = "q: 1"
                 output_count = f"改写: {len(out.get('rewritten_queries', []))}"
             elif stage == "generation":
-                input_count = f"tokens: {inp.get('total_tokens', '?')}"
-                output_count = f"tokens: {out.get('output_tokens', '?')}"
+                token_usage = out.get("token_usage") or {}
+                input_count = "prompt"
+                output_count = f"tokens: {token_usage.get('total_tokens', '?')}"
 
             bg = "#d4edda"
             border = "#28a745"
@@ -162,7 +165,7 @@ def _render_stage_detail(steps: list[dict[str, Any]]) -> None:
 
         with st.expander(f"{label} ({duration:.0f}ms)"):
             if stage == "query_rewrite":
-                original = inp.get("query", "")
+                original = inp.get("original_question", inp.get("query", ""))
                 rewritten = out.get("rewritten_queries", [])
                 st.markdown("**原始问题：**")
                 st.info(original)
@@ -205,12 +208,18 @@ def _render_stage_detail(steps: list[dict[str, Any]]) -> None:
                         )
 
             elif stage == "context_assembly":
-                truncated = out.get("truncated", False)
-                total_tokens = out.get("total_tokens", 0)
-                max_tokens = inp.get("max_context_tokens", 0)
-                context_count = out.get("context_count", 0)
-                st.markdown(f"**上下文 chunks 数：** {context_count}")
-                st.markdown(f"**总 tokens：** {total_tokens} / {max_tokens}")
+                context_count = inp.get("context_count", inp.get("chunk_count", "?"))
+                final_count = out.get(
+                    "final_context_count", out.get("context_count", "?")
+                )
+                max_tokens = step.get("metadata", {}).get("max_context_tokens", "?")
+                truncated = (
+                    final_count != context_count
+                    if isinstance(final_count, int) and isinstance(context_count, int)
+                    else False
+                )
+                st.markdown(f"**上下文 chunks 数：** {context_count} → {final_count}")
+                st.markdown(f"**max_context_tokens：** {max_tokens}")
                 if truncated:
                     st.warning("⚠️ 上下文被截断")
 

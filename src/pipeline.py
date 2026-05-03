@@ -744,6 +744,14 @@ class RAGPipeline:
                 )
                 t0 = time.perf_counter()
                 pre_rerank_count = len(results)
+                pre_rerank_snapshot = [
+                    {
+                        "chunk_id": r.get("chunk_id", ""),
+                        "score": r["score"],
+                        "source": r["metadata"].get("source", ""),
+                    }
+                    for r in results
+                ]
                 results = self.reranker.rerank(
                     question, results, top_n=self.reranker_top_n
                 )
@@ -751,7 +759,10 @@ class RAGPipeline:
                     trace.steps.append(
                         TraceStep(
                             stage="rerank",
-                            input_data={"result_count": pre_rerank_count},
+                            input_data={
+                                "result_count": pre_rerank_count,
+                                "results": pre_rerank_snapshot,
+                            },
                             output_data={
                                 "results": [
                                     {
