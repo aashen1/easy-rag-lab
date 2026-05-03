@@ -1,0 +1,283 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from langchain_core.tools import tool
+from loguru import logger
+
+
+@tool
+def list_meals(meal_dir: str | None = None) -> str:
+    """List all available meals in the system.
+
+    Args:
+        meal_dir: Optional directory path containing meal data. Defaults to config value.
+
+    Returns:
+        JSON string with list of meal names and their basic info.
+    """
+    try:
+        from src.config import get_config
+        from src.meal.manager import MealManager
+
+        config = get_config()
+        mgr = MealManager(config)
+        meals = mgr.list_meals()
+        result = []
+        for m in meals:
+            result.append(
+                {
+                    "name": m.name,
+                    "data_id": m.data_id,
+                    "pdf_count": len(m.pdf_files),
+                    "creation_mode": m.creation_mode,
+                }
+            )
+        return json.dumps(result, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"list_meals failed: {e}")
+        return f"Error listing meals: {e}"
+
+
+@tool
+def get_meal_detail(meal_name: str) -> str:
+    """Get detailed information about a specific meal, including its PDF files and config.
+
+    Args:
+        meal_name: Name of the meal to inspect.
+
+    Returns:
+        JSON string with meal details including pdf_files, config_snapshot, and stats.
+    """
+    try:
+        from src.config import get_config
+        from src.meal.manager import MealManager
+
+        config = get_config()
+        mgr = MealManager(config)
+        meal = mgr.load_meal(meal_name)
+        if meal is None:
+            return f"Meal '{meal_name}' not found."
+        result = {
+            "name": meal.name,
+            "data_id": meal.data_id,
+            "creation_mode": meal.creation_mode,
+            "pdf_files": [
+                {"path": f.path, "sha256": f.sha256, "size_bytes": f.size_bytes}
+                for f in meal.pdf_files
+            ],
+            "stats": meal.stats,
+            "config_snapshot": meal.config_snapshot,
+        }
+        return json.dumps(result, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"get_meal_detail failed: {e}")
+        return f"Error getting meal detail: {e}"
+
+
+@tool
+def query_rag_tool(question: str, meal_name: str) -> str:
+    """Query the RAG pipeline with a question to test retrieval and generation quality.
+
+    Args:
+        question: The question to ask the RAG system.
+        meal_name: Name of the meal whose pipeline to query.
+
+    Returns:
+        JSON string with answer, sources, and scores.
+    """
+    try:
+        from src.config import get_config
+        from src.core.ops.query import query_rag
+        from src.meal.manager import MealManager
+
+        config = get_config()
+        mgr = MealManager(config)
+        meal = mgr.load_meal(meal_name)
+        if meal is None:
+            return f"Meal '{meal_name}' not found."
+        pipeline = mgr.get_pipeline(meal_name)
+        if pipeline is None:
+            return f"No pipeline found for meal '{meal_name}'."
+        result = query_rag(question, pipeline)
+        return json.dumps(result, ensure_ascii=False, indent=2, default=str)
+    except Exception as e:
+        logger.error(f"query_rag_tool failed: {e}")
+        return f"Error querying RAG: {e}"
+
+
+@tool
+def parse_pdf_tool(
+    pdf_path: str, parser_name: str = "pymupdf4llm", enhancer_name: str | None = None
+) -> str:
+    """Parse a PDF file and return the extracted text per page.
+
+    Args:
+        pdf_path: Path to the PDF file.
+        parser_name: Parser to use (default: pymupdf4llm).
+        enhancer_name: Optional table enhancer (e.g., pdfplumber).
+
+    Returns:
+        JSON string with page_number to text mapping and metadata.
+    """
+    try:
+        from src.core.ops.parse import parse_pdf
+
+        result = parse_pdf(
+            pdf_path, parser_name=parser_name, enhancer_name=enhancer_name
+        )
+        pages = {
+            p.page_number: p.text[:500] + ("..." if len(p.text) > 500 else "")
+            for p in result.pages
+        }
+        output = {
+            "metadata": result.metadata,
+            "pages": pages,
+            "total_pages": len(result.pages),
+        }
+        return json.dumps(output, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"parse_pdf_tool failed: {e}")
+        return f"Error parsing PDF: {e}"
+
+
+@tool
+def enhance_page_tool(
+    pdf_path: str,
+    page_number: int,
+    existing_text: str,
+    enhancer_name: str = "pdfplumber",
+) -> str:
+    """Enhance a single page's text with table extraction from pdfplumber.
+
+    Args:
+        pdf_path: Path to the PDF file.
+        page_number: 1-indexed page number to enhance.
+        existing_text: The current text of the page.
+        enhancer_name: Enhancer to use (default: pdfplumber).
+
+    Returns:
+        The enhanced text for the page.
+    """
+    try:
+        from src.core.ops.parse import enhance_page
+
+        result = enhance_page(
+            pdf_path, page_number, existing_text, enhancer_name=enhancer_name
+        )
+        return result
+    except Exception as e:
+        logger.error(f"enhance_page_tool failed: {e}")
+        return f"Error enhancing page: {e}"
+
+
+@tool
+def chunk_parsed_tool(
+    pdf_path: str,
+    strategy: str = "page_aware",
+    chunk_size: int = 512,
+    overlap: int = 0,
+    parser_name: str = "pymupdf4llm",
+    enhancer_name: str | None = None,
+) -> str:
+    """Parse a PDF and chunk it using the specified strategy.
+
+    Args:
+        pdf_path: Path to the PDF file.
+        strategy: Chunking strategy (fixed, page_aware, semantic).
+        chunk_size: Maximum chunk size in tokens.
+        overlap: Overlap between chunks in tokens.
+        parser_name: Parser to use.
+        enhancer_name: Optional table enhancer.
+
+    Returns:
+        JSON string with chunk count and first few chunks preview.
+    """
+    try:
+        from src.core.ops.chunk import chunk_parsed
+        from src.core.ops.parse import parse_pdf
+
+        parse_result = parse_pdf(
+            pdf_path, parser_name=parser_name, enhancer_name=enhancer_name
+        )
+        chunks = chunk_parsed(
+            parse_result, strategy=strategy, chunk_size=chunk_size, overlap=overlap
+        )
+        preview = [
+            {"text": c["text"][:200] + "...", "metadata": c.get("metadata", {})}
+            for c in chunks[:5]
+        ]
+        output = {"total_chunks": len(chunks), "preview": preview}
+        return json.dumps(output, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"chunk_parsed_tool failed: {e}")
+        return f"Error chunking: {e}"
+
+
+@tool
+def evaluate_answer_tool(
+    question: str,
+    answer: str,
+    contexts: list[str],
+    expected_answer: str | None = None,
+) -> str:
+    """Evaluate a RAG answer quality using available metrics.
+
+    Args:
+        question: The original question.
+        answer: The generated answer.
+        contexts: The retrieved context passages.
+        expected_answer: Optional expected answer for comparison.
+
+    Returns:
+        JSON string with metric scores.
+    """
+    try:
+        from src.core.ops.evaluate import evaluate_single
+
+        result = evaluate_single(
+            question=question,
+            answer=answer,
+            contexts=contexts,
+            expected_answer=expected_answer,
+        )
+        return json.dumps(result, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"evaluate_answer_tool failed: {e}")
+        return f"Error evaluating: {e}"
+
+
+@tool
+def get_index_info(meal_name: str) -> str:
+    """Get information about the vector index for a meal's collection.
+
+    Args:
+        meal_name: Name of the meal.
+
+    Returns:
+        JSON string with index info (point count, vector size, etc).
+    """
+    try:
+        from src.config import get_config
+        from src.indexer import VectorIndexer
+
+        config = get_config()
+        collection_name = f"meal_{meal_name}"
+        persist_dir = str(
+            Path(config.get("index", {}).get("persist_dir", "data/index"))
+        )
+        indexer = VectorIndexer(
+            persist_dir=persist_dir, collection_name=collection_name
+        )
+        info = indexer.get_collection_info()
+        indexer.close()
+        if info is None:
+            return f"No index found for meal '{meal_name}'."
+        return json.dumps(info, ensure_ascii=False, indent=2, default=str)
+    except Exception as e:
+        logger.error(f"get_index_info failed: {e}")
+        return f"Error getting index info: {e}"
+
+
+HIGH_RISK_TOOLS = {"rebuild_index", "delete_source", "update_meal"}
