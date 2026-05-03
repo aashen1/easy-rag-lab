@@ -86,12 +86,17 @@ def enhance_page(
         Enhanced text for the page with improved table formatting.
 
     Raises:
-        NotImplementedError: This function is not yet implemented.
+        FileNotFoundError: If *pdf_path* does not exist.
+        ParsingError: If *enhancer_name* is not registered.
     """
-    raise NotImplementedError(
-        "enhance_page() will be implemented when PdfPlumberEnhancer "
-        "gains an enhance_page() method"
-    )
+    pdf_path = Path(pdf_path)
+    if not pdf_path.exists():
+        raise FileNotFoundError(f"PDF file not found: {pdf_path}")
+
+    enhancer = ParserRegistry.get_enhancer(enhancer_name, enhancer_options)
+    logger.debug(f"Enhancing page {page_number} of {pdf_path} with {enhancer_name}")
+    result = enhancer.enhance_page(str(pdf_path), page_number, existing_text)
+    return result
 
 
 def enhance_table(
@@ -117,9 +122,19 @@ def enhance_table(
         Enhanced text for the table region.
 
     Raises:
-        NotImplementedError: This function is not yet implemented.
+        FileNotFoundError: If *pdf_path* does not exist.
+        ParsingError: If *enhancer_name* is not registered.
     """
-    raise NotImplementedError(
-        "enhance_table() will be implemented when PdfPlumberEnhancer "
-        "gains an enhance_table() method"
+    pdf_path = Path(pdf_path)
+    if not pdf_path.exists():
+        raise FileNotFoundError(f"PDF file not found: {pdf_path}")
+
+    enhancer = ParserRegistry.get_enhancer(enhancer_name, enhancer_options)
+    logger.debug(
+        f"Enhancing table {table_index} on page {page_number} of {pdf_path} "
+        f"with {enhancer_name}"
     )
+    result = enhancer.enhance_table(
+        str(pdf_path), page_number, table_index, existing_text
+    )
+    return result

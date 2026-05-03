@@ -160,6 +160,80 @@ class PdfPlumberEnhancer(TableEnhancer):
             metadata=deepcopy(result.metadata),
         )
 
+    def enhance_page(self, pdf_path: str, page_number: int, existing_text: str) -> str:
+        """Enhance tables on a single page using pdfplumber.
+
+        Extracts tables for the specified page only, filters low-quality
+        results, and either replaces existing markdown tables in the
+        text or appends the extracted tables at the end.
+
+        Args:
+            pdf_path: Path to the original PDF file.
+            page_number: 1-indexed page number to enhance.
+            existing_text: Text already extracted by the primary parser.
+
+        Returns:
+            Enhanced page text with improved table formatting.
+        """
+        page_idx = page_number - 1
+        all_tables = self._extract_all_tables(pdf_path, page_number)
+        plumber_tables = all_tables.get(page_idx, [])
+
+        if not plumber_tables:
+            return existing_text
+
+        plumber_tables, _ = self._filter_low_quality(plumber_tables)
+
+        if not plumber_tables:
+            return existing_text
+
+        spans = self._find_md_table_spans(existing_text)
+        if spans:
+            return self._replace_tables(existing_text, plumber_tables)
+        return self._append_tables(existing_text, plumber_tables)
+
+    def enhance_table(
+        self, pdf_path: str, page_number: int, table_index: int, existing_text: str
+    ) -> str:
+        """Enhance a single table on a page using pdfplumber.
+
+        Extracts tables for the specified page, selects the table at
+        the given 1-indexed position, and replaces only that table in
+        the existing text.  If the specific table does not exist or
+        fails quality filtering, the original text is returned unchanged.
+
+        Args:
+            pdf_path: Path to the original PDF file.
+            page_number: 1-indexed page number containing the table.
+            table_index: 1-indexed position of the table within the page.
+            existing_text: Text already extracted by the primary parser.
+
+        Returns:
+            Enhanced text with the specified table replaced.
+        """
+        page_idx = page_number - 1
+        table_idx = table_index - 1
+        all_tables = self._extract_all_tables(pdf_path, page_number)
+        page_tables = all_tables.get(page_idx, [])
+
+        if table_idx >= len(page_tables):
+            return existing_text
+
+        target_table = page_tables[table_idx]
+        filtered, _ = self._filter_low_quality([target_table])
+
+        if not filtered:
+            return existing_text
+
+        plumber_md = filtered[0]
+        spans = self._find_md_table_spans(existing_text)
+
+        if table_idx < len(spans):
+            start, end = spans[table_idx]
+            return existing_text[:start] + plumber_md + existing_text[end:]
+
+        return self._append_tables(existing_text, [plumber_md])
+
     @staticmethod
     def _find_md_table_spans(text: str) -> list[tuple[int, int]]:
         """Find start/end positions of markdown tables in text.

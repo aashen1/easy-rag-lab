@@ -35,6 +35,7 @@ class MealConfig:
     stats: dict[str, Any] = field(default_factory=dict)
     equivalence_groups: dict[str, list[str]] = field(default_factory=dict)
     composition: dict[str, Any] = field(default_factory=dict)
+    creation_mode: str = "random"
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -80,4 +81,5 @@ class MealConfig:
             stats=data.get("stats", {}),
             equivalence_groups=data.get("equivalence_groups", {}),
             composition=data.get("composition", {}),
+            creation_mode=data.get("creation_mode", "random"),
         )

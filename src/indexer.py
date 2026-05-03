@@ -1,11 +1,21 @@
+from __future__ import annotations
+
 import json
+import uuid
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from loguru import logger
 from qdrant_client import QdrantClient
-from qdrant_client.http.models import Distance, PointStruct, VectorParams
+from qdrant_client.http.models import (
+    Distance,
+    FieldCondition,
+    Filter,
+    MatchValue,
+    PointStruct,
+    VectorParams,
+)
 
 from src.embedder import Embedder
 from src.exceptions import IndexingError
@@ -171,6 +181,133 @@ class VectorIndexer:
 
         except Exception as e:
             error_msg = f"Failed to index chunks: {str(e)}"
+            logger.error(error_msg)
+            raise IndexingError(error_msg) from e
+
+    def delete_by_source(self, source: str) -> int:
+        """Delete all points whose payload metadata.source matches the given source.
+
+        Args:
+            source: The source string to match against the ``metadata.source``
+                field in each point's payload.
+
+        Returns:
+            The number of points that were deleted.
+
+        Raises:
+            Exception: If the count or delete operation fails.
+        """
+        try:
+            count_result = self.client.count(
+                collection_name=self.collection_name,
+                count_filter=Filter(
+                    must=[
+                        FieldCondition(
+                            key="metadata.source",
+                            match=MatchValue(value=source),
+                        )
+                    ]
+                ),
+            )
+            affected = count_result.count
+            logger.info(
+                f"Found {affected} points matching source='{source}' in {self.collection_name}"
+            )
+
+            if affected == 0:
+                logger.info("No points to delete")
+                return 0
+
+            self.client.delete(
+                collection_name=self.collection_name,
+                points_selector=Filter(
+                    must=[
+                        FieldCondition(
+                            key="metadata.source",
+                            match=MatchValue(value=source),
+                        )
+                    ]
+                ),
+            )
+            logger.success(
+                f"Deleted {affected} points with source='{source}' from {self.collection_name}"
+            )
+            return affected
+
+        except Exception as e:
+            error_msg = f"Failed to delete by source '{source}': {str(e)}"
+            logger.error(error_msg)
+            raise IndexingError(error_msg) from e
+
+    def upsert_chunks(
+        self,
+        chunks: list[dict[str, Any]],
+        embeddings: np.ndarray,
+        batch_size: int = 100,
+    ) -> int:
+        """Insert or update chunks with embeddings using UUID-based point IDs.
+
+        Unlike :meth:`index_chunks` which uses sequential integer IDs,
+        this method generates a UUID for each point to avoid ID collisions
+        when upserting incrementally.
+
+        Args:
+            chunks: List of chunk dictionaries, each containing at least a
+                ``text`` key and optionally ``chunk_id`` and ``metadata`` keys.
+            embeddings: Numpy array of shape ``(N, D)`` where N matches the
+                number of chunks and D is the embedding dimension.
+            batch_size: Number of points to upsert in each batch. Defaults to 100.
+
+        Returns:
+            The number of chunks upserted.
+
+        Raises:
+            ValueError: If the number of chunks does not match the number of
+                embeddings.
+            Exception: If the upsert operation fails.
+        """
+        if not chunks or len(embeddings) == 0:
+            logger.warning("No chunks or embeddings to upsert")
+            return 0
+
+        if len(chunks) != len(embeddings):
+            error_msg = f"Number of chunks ({len(chunks)}) does not match number of embeddings ({len(embeddings)})"
+            logger.error(error_msg)
+            raise IndexingError(error_msg)
+
+        try:
+            logger.info(f"Upserting {len(chunks)} chunks with UUID IDs")
+
+            points = []
+            for i, (chunk, embedding) in enumerate(
+                zip(chunks, embeddings, strict=False)
+            ):
+                point = PointStruct(
+                    id=str(uuid.uuid4()),
+                    vector=embedding.tolist(),
+                    payload={
+                        "chunk_id": chunk.get("chunk_id", f"chunk_{i}"),
+                        "text": chunk["text"],
+                        "metadata": chunk.get("metadata", {}),
+                    },
+                )
+                points.append(point)
+
+            for i in range(0, len(points), batch_size):
+                batch = points[i : i + batch_size]
+                self.client.upsert(
+                    collection_name=self.collection_name,
+                    points=batch,
+                )
+                logger.debug(
+                    f"Upserted batch {i // batch_size + 1}/{(len(points) - 1) // batch_size + 1}"
+                )
+
+            logger.success(f"Successfully upserted {len(chunks)} chunks")
+            return len(chunks)
+
+        except Exception as e:
+            error_msg = f"Failed to upsert chunks: {str(e)}"
             logger.error(error_msg)
             raise IndexingError(error_msg) from e
 

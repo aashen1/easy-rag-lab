@@ -310,6 +310,51 @@ class ArtifactCache:
             logger.error(f"Failed to load manifest for data_id {data_id}: {str(e)}")
             return None
 
+    def update_manifest_entry(self, data_id: str, key: str, value: Any) -> bool:
+        """Update a single entry in the manifest for a given data ID.
+
+        Loads the current manifest, updates the specified key, and saves
+        the manifest back. If the save fails, the original value is
+        restored to maintain consistency.
+
+        Args:
+            data_id: Data identifier string.
+            key: Manifest key to update.
+            value: New value to assign to the key.
+
+        Returns:
+            True if the entry was updated and saved successfully,
+            False if the manifest does not exist or the save failed.
+
+        Raises:
+            ValueError: If data_id or key is empty.
+        """
+        if not data_id:
+            raise ValueError("data_id must not be empty")
+        if not key:
+            raise ValueError("key must not be empty")
+
+        manifest = self.load_manifest(data_id)
+        if manifest is None:
+            logger.warning(
+                f"Cannot update manifest entry: manifest not found for data_id {data_id}"
+            )
+            return False
+
+        old_value = manifest.get(key)
+        manifest[key] = value
+
+        if not self.save_manifest(data_id, manifest):
+            manifest[key] = old_value
+            if key in manifest and old_value is None:
+                del manifest[key]
+            logger.error(
+                f"Failed to save manifest after updating key '{key}' for data_id {data_id}, rolled back"
+            )
+            return False
+
+        return True
+
     def get_full_parsed_dir(self, parser_hash: str) -> Path:
         """Get the parsed directory for full-mode (all PDFs in raw_dir).
 
