@@ -7,12 +7,16 @@ import yaml
 from src.case_collector import (
     CASE_TYPE_BAD,
     CASE_TYPE_GOOD,
+    DEDUP_STATUS_DUPLICATE,
+    DEDUP_STATUS_SAVED,
+    DEDUP_STATUS_TYPE_CHANGED,
     convert_case,
     delete_case,
     find_case_by_question,
     list_cases,
     load_case,
     save_case,
+    save_case_with_dedup,
 )
 
 
@@ -491,3 +495,200 @@ class TestFindCaseByQuestion:
             manifest = find_case_by_question("任何问题")
 
         assert manifest is None
+
+
+@pytest.mark.unit
+class TestSaveCaseWithChatHistory:
+    def test_save_case_with_chat_history_creates_file(self, tmp_path):
+        chat_history = [
+            {"role": "user", "content": "第一个问题"},
+            {"role": "assistant", "content": "第一个回答"},
+        ]
+        with patch("src.case_collector.get_cases_dir", return_value=tmp_path):
+            case_dir = save_case(
+                case_type=CASE_TYPE_BAD,
+                question="第二个问题",
+                result=_make_result(),
+                config_overrides={},
+                base_config=_make_base_config(),
+                chat_history=chat_history,
+            )
+
+        assert (case_dir / "chat_history.json").exists()
+        saved_history = json.loads(
+            (case_dir / "chat_history.json").read_text(encoding="utf-8")
+        )
+        assert len(saved_history) == 2
+        assert saved_history[0]["role"] == "user"
+        assert saved_history[1]["role"] == "assistant"
+
+    def test_save_case_without_chat_history_no_file(self, tmp_path):
+        with patch("src.case_collector.get_cases_dir", return_value=tmp_path):
+            case_dir = save_case(
+                case_type=CASE_TYPE_BAD,
+                question="测试问题",
+                result=_make_result(),
+                config_overrides={},
+                base_config=_make_base_config(),
+            )
+
+        assert not (case_dir / "chat_history.json").exists()
+
+    def test_save_case_empty_chat_history_no_file(self, tmp_path):
+        with patch("src.case_collector.get_cases_dir", return_value=tmp_path):
+            case_dir = save_case(
+                case_type=CASE_TYPE_BAD,
+                question="测试问题",
+                result=_make_result(),
+                config_overrides={},
+                base_config=_make_base_config(),
+                chat_history=[],
+            )
+
+        assert not (case_dir / "chat_history.json").exists()
+
+    def test_manifest_has_chat_history_flag(self, tmp_path):
+        chat_history = [
+            {"role": "user", "content": "问题"},
+            {"role": "assistant", "content": "回答"},
+        ]
+        with patch("src.case_collector.get_cases_dir", return_value=tmp_path):
+            case_dir = save_case(
+                case_type=CASE_TYPE_BAD,
+                question="测试问题",
+                result=_make_result(),
+                config_overrides={},
+                base_config=_make_base_config(),
+                chat_history=chat_history,
+            )
+
+        manifest = json.loads((case_dir / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["has_chat_history"] is True
+
+    def test_manifest_no_chat_history_flag_false(self, tmp_path):
+        with patch("src.case_collector.get_cases_dir", return_value=tmp_path):
+            case_dir = save_case(
+                case_type=CASE_TYPE_BAD,
+                question="测试问题",
+                result=_make_result(),
+                config_overrides={},
+                base_config=_make_base_config(),
+            )
+
+        manifest = json.loads((case_dir / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["has_chat_history"] is False
+
+
+@pytest.mark.unit
+class TestLoadCaseWithChatHistory:
+    def test_load_case_with_chat_history(self, tmp_path):
+        chat_history = [
+            {"role": "user", "content": "问题1"},
+            {"role": "assistant", "content": "回答1"},
+        ]
+        with patch("src.case_collector.get_cases_dir", return_value=tmp_path):
+            case_dir = save_case(
+                CASE_TYPE_BAD,
+                "测试问题",
+                _make_result(),
+                {},
+                _make_base_config(),
+                chat_history=chat_history,
+            )
+
+            data = load_case(case_dir.name)
+
+        assert "chat_history" in data
+        assert len(data["chat_history"]) == 2
+
+    def test_load_case_without_chat_history(self, tmp_path):
+        with patch("src.case_collector.get_cases_dir", return_value=tmp_path):
+            case_dir = save_case(
+                CASE_TYPE_BAD,
+                "测试问题",
+                _make_result(),
+                {},
+                _make_base_config(),
+            )
+
+            data = load_case(case_dir.name)
+
+        assert "chat_history" not in data
+
+
+@pytest.mark.unit
+class TestSaveCaseWithDedup:
+    def test_first_save_returns_saved(self, tmp_path):
+        with patch("src.case_collector.get_cases_dir", return_value=tmp_path):
+            case_dir, status = save_case_with_dedup(
+                case_type=CASE_TYPE_BAD,
+                question="测试问题",
+                result=_make_result(),
+                config_overrides={},
+                base_config=_make_base_config(),
+                saved_case_type=None,
+                saved_case_id=None,
+            )
+
+        assert status == DEDUP_STATUS_SAVED
+        assert case_dir is not None
+        assert case_dir.name.startswith("bc_")
+
+    def test_duplicate_same_type_returns_duplicate(self, tmp_path):
+        with patch("src.case_collector.get_cases_dir", return_value=tmp_path):
+            case_dir, status = save_case_with_dedup(
+                case_type=CASE_TYPE_BAD,
+                question="测试问题",
+                result=_make_result(),
+                config_overrides={},
+                base_config=_make_base_config(),
+                saved_case_type=CASE_TYPE_BAD,
+                saved_case_id="bc_existing_case",
+            )
+
+        assert status == DEDUP_STATUS_DUPLICATE
+        assert case_dir is None
+
+    def test_type_changed_returns_type_changed(self, tmp_path):
+        with patch("src.case_collector.get_cases_dir", return_value=tmp_path):
+            src_dir = save_case(
+                CASE_TYPE_BAD,
+                "测试问题",
+                _make_result(),
+                {},
+                _make_base_config(),
+            )
+
+            case_dir, status = save_case_with_dedup(
+                case_type=CASE_TYPE_GOOD,
+                question="测试问题",
+                result=_make_result(),
+                config_overrides={},
+                base_config=_make_base_config(),
+                saved_case_type=CASE_TYPE_BAD,
+                saved_case_id=src_dir.name,
+            )
+
+        assert status == DEDUP_STATUS_TYPE_CHANGED
+        assert case_dir is not None
+        assert case_dir.name.startswith("gc_")
+
+    def test_with_chat_history(self, tmp_path):
+        chat_history = [
+            {"role": "user", "content": "问题1"},
+            {"role": "assistant", "content": "回答1"},
+        ]
+        with patch("src.case_collector.get_cases_dir", return_value=tmp_path):
+            case_dir, status = save_case_with_dedup(
+                case_type=CASE_TYPE_BAD,
+                question="测试问题",
+                result=_make_result(),
+                config_overrides={},
+                base_config=_make_base_config(),
+                chat_history=chat_history,
+                saved_case_type=None,
+                saved_case_id=None,
+            )
+
+        assert status == DEDUP_STATUS_SAVED
+        assert (case_dir / "chat_history.json").exists()
