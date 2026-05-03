@@ -352,6 +352,10 @@ token_cost:
       output_price_per_1k: 0.00125
       conversion_factor: 0.25
 
+query_history:
+  max_entries: 10
+  dir: "data/query_history"
+
 # 日志配置
 logging:
   level: "INFO"

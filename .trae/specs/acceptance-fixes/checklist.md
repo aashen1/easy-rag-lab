@@ -1,0 +1,11 @@
+- [x] qa_demo.py 中 `build_chat_history` 在 `messages.append` 之前调用，当前用户消息不出现在 chat_history 中
+- [x] Case Analyzer 列表同时展示 Bad Case 和 Good Case，每条前缀 `[BAD]`/`[GOOD]`
+- [x] Case Analyzer 空列表提示文案包含"Badcase 或 Goodcase"
+- [x] Case Analyzer 页面标题为"🔍 Case 深度分析"
+- [x] app.py Tab 名称为"🔍 Case 分析"
+- [x] Ground Truth PDF 列表按文件名升序排列
+- [x] Ground Truth PDF 选择支持关键词过滤（不区分大小写子串匹配）
+- [x] 无匹配 PDF 时显示提示信息
+- [x] `st.dataframe` 使用 `width="stretch"` 而非 `use_container_width=True`
+- [x] `pixi run test` 全部通过
+- [x] `pixi run ruff check` 无错误

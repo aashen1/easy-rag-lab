@@ -180,8 +180,10 @@ class Generator:
         sources: list[str] | None = None,
         allow_no_contexts: bool = False,
         max_tokens: int | None = None,
+        chat_history: list[dict[str, str]] | None = None,
+        return_prompt_details: bool = False,
         **metadata: Any,
-    ) -> str:
+    ) -> str | dict[str, Any]:
         """Generate an answer using the LLM.
 
         Args:
@@ -201,10 +203,22 @@ class Generator:
             max_tokens: Optional per-call override for the maximum
                 number of tokens in the response. When None, falls
                 back to self.max_tokens.
+            chat_history: Optional conversation history for multi-turn
+                context. Format: ``[{"role": "user"/"assistant",
+                "content": "..."}]``. Messages are prepended to the
+                current user message in the LLM call. Anthropic API
+                requires messages to start with "user" and alternate
+                roles; this is enforced automatically.
+            return_prompt_details: When True, returns a dict with
+                ``answer``, ``system_prompt``, ``user_message``, and
+                ``truncated_count`` instead of just the answer string.
+                Defaults to False for backward compatibility.
             **metadata: Additional metadata for token tracking.
 
         Returns:
-            Generated answer string.
+            Generated answer string when ``return_prompt_details`` is
+            False (default). When True, a dict containing ``answer``,
+            ``system_prompt``, ``user_message``, and ``truncated_count``.
 
         Raises:
             ValueError: If query is empty or not a string.
@@ -227,6 +241,7 @@ class Generator:
             if system_prompt is None:
                 system_prompt = self.DEFAULT_SYSTEM_PROMPT
 
+            original_context_count = len(contexts)
             contexts = self._truncate_contexts(contexts, system_prompt, query)
 
             if sources:
@@ -253,18 +268,39 @@ class Generator:
                 max_tokens if max_tokens is not None else self.max_tokens
             )
 
+            llm_messages: list[dict[str, str]] = []
+
+            if chat_history:
+                for msg in chat_history:
+                    role = msg.get("role", "user")
+                    content = msg.get("content", "")
+                    if role in ("user", "assistant") and content:
+                        llm_messages.append({"role": role, "content": content})
+
+                if llm_messages and llm_messages[0]["role"] != "user":
+                    llm_messages = [m for m in llm_messages if m["role"] == "user"] + [
+                        m for m in llm_messages if m["role"] == "assistant"
+                    ]
+                    if llm_messages and llm_messages[0]["role"] != "user":
+                        llm_messages = []
+
+                cleaned: list[dict[str, str]] = []
+                for m in llm_messages:
+                    if cleaned and cleaned[-1]["role"] == m["role"]:
+                        cleaned[-1]["content"] += "\n" + m["content"]
+                    else:
+                        cleaned.append({"role": m["role"], "content": m["content"]})
+                llm_messages = cleaned
+
+            llm_messages.append({"role": "user", "content": user_message})
+
             message = call_with_retry(
                 self.client.messages.create,
                 model=self.model_name,
                 max_tokens=effective_max_tokens,
                 temperature=self.temperature,
                 system=system_prompt,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": user_message,
-                    }
-                ],
+                messages=llm_messages,
             )
 
             answer = message.content[0].text
@@ -293,6 +329,13 @@ class Generator:
                 f"Generated answer: {answer[:100]}... "
                 f"(tokens: in={api_input_tokens}, out={api_output_tokens})"
             )
+            if return_prompt_details:
+                return {
+                    "answer": answer,
+                    "system_prompt": system_prompt,
+                    "user_message": user_message,
+                    "truncated_count": original_context_count - len(contexts),
+                }
             return answer
 
         except Exception as e:

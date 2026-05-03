@@ -63,6 +63,127 @@ class TestGenerator:
         with pytest.raises(GenerationError, match="Failed to generate answer"):
             generator.generate(query="What is the revenue?", contexts=["some context"])
 
+
+@pytest.mark.unit
+class TestGeneratorChatHistory:
+    @patch("src.llm_client.Anthropic")
+    def test_chat_history_prepended_to_messages(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = _make_generator()
+        chat_history = [
+            {"role": "user", "content": "What is the revenue?"},
+            {"role": "assistant", "content": "Revenue was 100 billion."},
+        ]
+        generator.generate(
+            query="What about profit?",
+            contexts=["Profit was 50 billion."],
+            chat_history=chat_history,
+        )
+        call_kwargs = mock_anthropic_client.messages.create.call_args
+        messages = call_kwargs.kwargs["messages"]
+        assert len(messages) == 3
+        assert messages[0]["role"] == "user"
+        assert "revenue" in messages[0]["content"].lower()
+        assert messages[1]["role"] == "assistant"
+        assert messages[1]["content"] == "Revenue was 100 billion."
+        assert messages[2]["role"] == "user"
+        assert "profit" in messages[2]["content"].lower()
+
+    @patch("src.llm_client.Anthropic")
+    def test_no_chat_history_single_message(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = _make_generator()
+        generator.generate(
+            query="What is the revenue?",
+            contexts=["Revenue was 100 billion."],
+        )
+        call_kwargs = mock_anthropic_client.messages.create.call_args
+        messages = call_kwargs.kwargs["messages"]
+        assert len(messages) == 1
+        assert messages[0]["role"] == "user"
+
+    @patch("src.llm_client.Anthropic")
+    def test_empty_chat_history_same_as_none(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = _make_generator()
+        generator.generate(
+            query="What is the revenue?",
+            contexts=["Revenue was 100 billion."],
+            chat_history=[],
+        )
+        call_kwargs = mock_anthropic_client.messages.create.call_args
+        messages = call_kwargs.kwargs["messages"]
+        assert len(messages) == 1
+
+    @patch("src.llm_client.Anthropic")
+    def test_chat_history_starts_with_assistant_auto_fixes(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = _make_generator()
+        chat_history = [
+            {"role": "assistant", "content": "Hello"},
+            {"role": "user", "content": "What is the revenue?"},
+        ]
+        generator.generate(
+            query="What about profit?",
+            contexts=["Profit was 50 billion."],
+            chat_history=chat_history,
+        )
+        call_kwargs = mock_anthropic_client.messages.create.call_args
+        messages = call_kwargs.kwargs["messages"]
+        assert messages[0]["role"] == "user"
+
+    @patch("src.llm_client.Anthropic")
+    def test_chat_history_consecutive_same_role_merged(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = _make_generator()
+        chat_history = [
+            {"role": "user", "content": "Question 1"},
+            {"role": "user", "content": "Question 2"},
+            {"role": "assistant", "content": "Answer"},
+        ]
+        generator.generate(
+            query="Question 3",
+            contexts=["Some context."],
+            chat_history=chat_history,
+        )
+        call_kwargs = mock_anthropic_client.messages.create.call_args
+        messages = call_kwargs.kwargs["messages"]
+        assert messages[0]["role"] == "user"
+        assert "Question 1" in messages[0]["content"]
+        assert "Question 2" in messages[0]["content"]
+        assert messages[1]["role"] == "assistant"
+        assert messages[2]["role"] == "user"
+
+    @patch("src.llm_client.Anthropic")
+    def test_chat_history_invalid_roles_filtered(
+        self, mock_anthropic_cls, mock_anthropic_client
+    ):
+        mock_anthropic_cls.return_value = mock_anthropic_client
+        generator = _make_generator()
+        chat_history = [
+            {"role": "system", "content": "You are helpful"},
+            {"role": "user", "content": "What is the revenue?"},
+            {"role": "tool", "content": "Some tool output"},
+        ]
+        generator.generate(
+            query="What about profit?",
+            contexts=["Profit was 50 billion."],
+            chat_history=chat_history,
+        )
+        call_kwargs = mock_anthropic_client.messages.create.call_args
+        messages = call_kwargs.kwargs["messages"]
+        assert all(m["role"] in ("user", "assistant") for m in messages)
+
     @patch("src.llm_client.Anthropic")
     def test_generate_custom_system_prompt(
         self, mock_anthropic_cls, mock_anthropic_client

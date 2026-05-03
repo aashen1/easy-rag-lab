@@ -168,6 +168,7 @@ class TestRAGPipeline:
             "What is the revenue?",
             ["Revenue was 100 billion.", "Profit increased by 10%."],
             sources=["report_2023.pdf", "report_2024.pdf"],
+            chat_history=None,
         )
         assert result["question"] == "What is the revenue?"
         assert result["answer"] == "Revenue was 100 billion."

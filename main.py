@@ -4,10 +4,17 @@ from typing import Any
 
 from loguru import logger
 
-from src.case_collector import CASE_TYPE_BAD, CASE_TYPE_GOOD, save_case
+from src.case_collector import (
+    CASE_TYPE_BAD,
+    CASE_TYPE_GOOD,
+    convert_case,
+    save_case,
+)
 from src.exceptions import ConfigurationError
+from src.interactive_qa import interactive_qa
 from src.meal import MealManager, MealStatus, validate_meal_name
 from src.pipeline import RAGPipeline
+from src.query_history import QueryHistory
 from src.sampler import SamplingConfig
 from src.test_set_manager import TestSetManager
 from src.utils import load_config, setup_logger
@@ -144,6 +151,37 @@ def main() -> None:
         help="Generate LLM report for a completed experiment directory",
     )
 
+    history_group = parser.add_argument_group("Query history commands")
+    history_group.add_argument(
+        "--history-list",
+        action="store_true",
+        help="List recent query history records",
+    )
+    history_group.add_argument(
+        "--history-show",
+        type=str,
+        metavar="ID",
+        help="Show details of a specific history record",
+    )
+    history_group.add_argument(
+        "--history-save",
+        type=str,
+        metavar="ID",
+        help="Save a history record as badcase/goodcase (requires --case-type)",
+    )
+    history_group.add_argument(
+        "--case-type",
+        type=str,
+        choices=["bad", "good"],
+        help="Case type for --history-save (bad or good)",
+    )
+    history_group.add_argument(
+        "--history-limit",
+        type=int,
+        default=10,
+        help="Number of history records to list (default: 10)",
+    )
+
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -167,6 +205,9 @@ def main() -> None:
         or args.meal
         or args.llm_report_only
         or args.interactive
+        or args.history_list
+        or args.history_show
+        or args.history_save
     )
 
     if not has_action:
@@ -174,6 +215,18 @@ def main() -> None:
         return
 
     meal_manager = MealManager(config)
+
+    if args.history_list:
+        _handle_history_list(config, args.history_limit)
+        return
+
+    if args.history_show:
+        _handle_history_show(config, args.history_show)
+        return
+
+    if args.history_save:
+        _handle_history_save(config, args.history_save, args.case_type)
+        return
 
     if args.list_meals:
         _handle_list_meals(meal_manager)
@@ -279,8 +332,21 @@ def main() -> None:
         if args.query:
             result = pipeline.query(args.query)
             _print_query_result(result)
+            history_cfg = config.get("query_history", {})
+            history = QueryHistory(
+                max_entries=history_cfg.get("max_entries", 10),
+                history_dir=history_cfg.get("dir"),
+            )
+            record_id = history.add(
+                question=args.query,
+                result=result,
+                meal_name=resolved_meal,
+                llm_preset=args.llm_preset,
+                config_overrides={},
+            )
+            print(f"\n📝 已记录到历史 (ID: {record_id})")
         elif args.interactive:
-            _interactive_qa(pipeline, resolved_meal)
+            interactive_qa(pipeline, resolved_meal)
     elif needs_meal:
         logger.error(
             "No meal available. Create one with --create-meal or add PDFs to data/raw/."
@@ -781,6 +847,187 @@ def _handle_generate_test_set(
         sys.exit(1)
 
 
+def _handle_history_list(config: dict[str, Any], limit: int) -> None:
+    """List recent query history records.
+
+    Args:
+        config: Configuration dictionary.
+        limit: Maximum number of records to display.
+    """
+    history_cfg = config.get("query_history", {})
+    history = QueryHistory(
+        max_entries=history_cfg.get("max_entries", 10),
+        history_dir=history_cfg.get("dir"),
+    )
+    records = history.list_recent(limit=limit)
+
+    if not records:
+        print("📝 暂无查询历史记录")
+        return
+
+    print(f"\n📝 最近 {len(records)} 条问答记录：")
+    print("─" * 70)
+    print(f"{'ID':<10} {'时间':<20} {'问题预览':<28} {'状态'}")
+    print("─" * 70)
+
+    for rec in records:
+        rid = rec.get("id", "")
+        ts = rec.get("timestamp", "")
+        time_str = ts[5:19] if len(ts) >= 19 else ts
+        question = rec.get("question", "")
+        preview = question[:24] + "..." if len(question) > 24 else question
+        saved = rec.get("saved_case_type")
+        if saved == CASE_TYPE_BAD:
+            status = "🚨 bad"
+        elif saved == CASE_TYPE_GOOD:
+            status = "✅ good"
+        else:
+            status = "—"
+        print(f"{rid:<10} {time_str:<20} {preview:<28} {status}")
+
+    print("─" * 70)
+    print("使用 --history-save <id> --case-type bad|good 保存为 case\n")
+
+
+def _handle_history_show(config: dict[str, Any], record_id: str) -> None:
+    """Show details of a specific history record.
+
+    Args:
+        config: Configuration dictionary.
+        record_id: The history record ID to display.
+    """
+    history_cfg = config.get("query_history", {})
+    history = QueryHistory(
+        max_entries=history_cfg.get("max_entries", 10),
+        history_dir=history_cfg.get("dir"),
+    )
+    record = history.get(record_id)
+
+    if record is None:
+        print(f"❌ 未找到记录: {record_id}")
+        return
+
+    print(f"\n📝 历史记录详情 — {record_id}")
+    print("─" * 50)
+    print(f"时间:     {record.get('timestamp', '')}")
+    print(f"问题:     {record.get('question', '')}")
+    print(f"Meal:     {record.get('meal_name', '—')}")
+    print(f"LLM预设:  {record.get('llm_preset', '—')}")
+    saved = record.get("saved_case_type")
+    if saved == CASE_TYPE_BAD:
+        print(f"状态:     🚨 Badcase ({record.get('saved_case_id', '')})")
+    elif saved == CASE_TYPE_GOOD:
+        print(f"状态:     ✅ Goodcase ({record.get('saved_case_id', '')})")
+    else:
+        print("状态:     未保存")
+
+    query_result = record.get("query_result")
+    if query_result:
+        answer = query_result.get("answer", "")
+        print(f"\n回答:     {answer}")
+
+        sources = query_result.get("sources", [])
+        scores = query_result.get("scores", [])
+        if sources:
+            print("\n参考来源：")
+            for i, (src, score) in enumerate(
+                zip(sources[:3], scores[:3], strict=False), 1
+            ):
+                src_name = src.split("\\")[-1] if "\\" in src else src
+                print(f"   {i}. {src_name} (相关度: {score:.4f})")
+
+        tu = query_result.get("token_usage")
+        if tu:
+            print(
+                f"\nToken: in={tu['input_tokens']:,} out={tu['output_tokens']:,} "
+                f"total={tu['total_tokens']:,}"
+            )
+
+    print("─" * 50)
+
+
+def _handle_history_save(
+    config: dict[str, Any], record_id: str, case_type: str | None
+) -> None:
+    """Save a history record as a badcase or goodcase.
+
+    Implements deduplication and type conversion logic:
+    - Same type already saved → reject with message
+    - Different type already saved → convert (delete old, create new)
+    - Not saved yet → create new case
+
+    Args:
+        config: Configuration dictionary.
+        record_id: The history record ID to save.
+        case_type: ``"bad"`` or ``"good"``.
+    """
+    if case_type is None:
+        print("❌ 必须指定 --case-type bad 或 --case-type good")
+        return
+
+    history_cfg = config.get("query_history", {})
+    history = QueryHistory(
+        max_entries=history_cfg.get("max_entries", 10),
+        history_dir=history_cfg.get("dir"),
+    )
+    record = history.get(record_id)
+
+    if record is None:
+        print(f"❌ 未找到记录: {record_id}")
+        return
+
+    saved_type, saved_case_id = history.check_saved(record_id)
+
+    if saved_type == case_type:
+        label = "Badcase" if case_type == CASE_TYPE_BAD else "Goodcase"
+        icon = "🚨" if case_type == CASE_TYPE_BAD else "✅"
+        print(f"{icon} 该记录已标记为 {label}，无需重复保存")
+        return
+
+    query_result = record.get("query_result")
+    if query_result is None:
+        print(f"❌ 记录 {record_id} 的查询结果文件缺失")
+        return
+
+    question = query_result.get("question", "")
+    meal_name = record.get("meal_name")
+
+    if saved_type is not None and saved_case_id is not None:
+        try:
+            new_dir = convert_case(saved_case_id, case_type)
+            history.mark_saved(record_id, case_type, new_dir.name)
+            old_label = "Badcase" if saved_type == CASE_TYPE_BAD else "Goodcase"
+            new_label = "Badcase" if case_type == CASE_TYPE_BAD else "Goodcase"
+            new_icon = "🚨" if case_type == CASE_TYPE_BAD else "✅"
+            print(
+                f"{new_icon} 已将 {old_label} 转换为 {new_label}: {new_dir.name}\n"
+                f"   原 {old_label} ({saved_case_id}) 已删除"
+            )
+        except Exception as e:
+            logger.error(f"Failed to convert case: {e}")
+            print(f"❌ 转换失败: {e}")
+        return
+
+    try:
+        base_config = load_config()
+        case_dir = save_case(
+            case_type=case_type,
+            question=question,
+            result=query_result,
+            config_overrides=record.get("config_overrides", {}),
+            base_config=base_config,
+            meal_config=None,
+            meal_name=meal_name,
+        )
+        history.mark_saved(record_id, case_type, case_dir.name)
+        icon = "🚨" if case_type == CASE_TYPE_BAD else "✅"
+        label = "Badcase" if case_type == CASE_TYPE_BAD else "Goodcase"
+        print(f"{icon} {label} 已保存: {case_dir.name}")
+    except Exception as e:
+        logger.error(f"Failed to save case: {e}")
+        print(f"❌ 保存失败: {e}")
+
+
 def _print_query_result(result: dict[str, Any]) -> None:
     """Print a formatted query result to stdout.
 
@@ -815,111 +1062,6 @@ def _print_query_result(result: dict[str, Any]) -> None:
             print(f"    System Prompt: {tu['system_prompt_tokens']:,}")
             print(f"    Contexts:      {tu['contexts_tokens']:,}")
             print(f"    Query:         {tu['query_tokens']:,}")
-
-
-def _interactive_qa(pipeline: RAGPipeline, meal_name: str | None = None) -> None:
-    """Run an interactive Q&A session.
-
-    Continuously prompts for questions and displays answers until
-    the user types 'quit' or 'exit'. Tracks and displays token usage
-    on exit. Supports ``/badcase`` and ``/goodcase`` commands to save
-    the last query result for reproducibility.
-
-    Args:
-        pipeline: RAGPipeline instance for query execution.
-        meal_name: Optional meal name to display in the welcome message.
-    """
-    collection_info = pipeline.indexer.get_collection_info()
-    if meal_name:
-        print(f"\n🤖 RAG 问答系统已启动（meal: {meal_name}）")
-    else:
-        print("\n🤖 RAG 问答系统已启动")
-
-    if collection_info:
-        chunks_count = collection_info.get("points_count", 0)
-        print(f"📝 数据库中已有 {chunks_count} 个文档片段")
-    else:
-        print(
-            "⚠️  数据库为空，请先构建索引：pixi run python main.py --build-index --meal <name>"
-        )
-
-    print("输入 'quit' 或 'exit' 退出")
-    print("输入 '/badcase' 或 '/goodcase' 保存最近一次查询\n")
-
-    last_result: dict[str, Any] | None = None
-    last_config_overrides: dict[str, Any] | None = None
-
-    while True:
-        try:
-            question = input("💬 You: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print("\n\n👋 再见！\n")
-            break
-
-        if not question:
-            continue
-        if question.lower() in ("quit", "exit", "q"):
-            tracker = pipeline.token_tracker
-            if tracker and tracker.record_count > 0:
-                total = tracker.get_total()
-                print(
-                    f"\n📊 Session Token Usage: in={total.input_tokens:,} "
-                    f"out={total.output_tokens:,} total={total.total_tokens:,}"
-                )
-            print("👋 再见！\n")
-            break
-
-        if question.lower() in ("/badcase", "/goodcase"):
-            if last_result is None:
-                print("⚠️  还没有查询记录，请先提问\n")
-                continue
-            case_type = (
-                CASE_TYPE_BAD if question.lower() == "/badcase" else CASE_TYPE_GOOD
-            )
-            try:
-                base_config = load_config()
-                meal_config = getattr(pipeline, "meal_config", None)
-                case_dir = save_case(
-                    case_type=case_type,
-                    question=last_result.get("question", ""),
-                    result=last_result,
-                    config_overrides=last_config_overrides or {},
-                    base_config=base_config,
-                    meal_config=meal_config,
-                    meal_name=meal_name,
-                )
-                icon = "🚨" if case_type == CASE_TYPE_BAD else "✅"
-                label = "Badcase" if case_type == CASE_TYPE_BAD else "Goodcase"
-                print(f"{icon} {label} 已保存: {case_dir.name}\n")
-            except Exception as e:
-                logger.error(f"Failed to save case: {e}")
-                print(f"❌ 保存失败: {e}\n")
-            continue
-
-        try:
-            result = pipeline.query(question)
-            last_result = result
-            last_config_overrides = None
-            print(f"\n🤖 Assistant: {result['answer']}\n")
-
-            if "token_usage" in result and result["token_usage"]:
-                tu = result["token_usage"]
-                print(
-                    f"📊 Tokens: in={tu['input_tokens']:,} out={tu['output_tokens']:,} "
-                    f"total={tu['total_tokens']:,}\n"
-                )
-
-            if "sources" in result and result["sources"]:
-                print("📚 参考来源：")
-                for i, (source, score) in enumerate(
-                    zip(result["sources"][:3], result["scores"][:3], strict=False), 1
-                ):
-                    source_name = source.split("\\")[-1] if "\\" in source else source
-                    print(f"   {i}. {source_name} (相关度: {score:.4f})")
-                print()
-        except Exception as e:
-            logger.error(f"Error processing query: {str(e)}")
-            print(f"\n❌ 处理问题时出错: {str(e)}\n")
 
 
 def _handle_merge_meals(

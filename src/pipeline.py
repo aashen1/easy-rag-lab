@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -35,6 +37,7 @@ from src.retriever import Retriever
 from src.sampler import SamplingConfig, determine_sample
 from src.semantic_chunker import process_parsed_files_semantic
 from src.token_tracker import TokenTracker
+from src.trace_models import PipelineTrace, TraceStep
 from src.utils import get_llm_config, load_config
 
 
@@ -574,6 +577,8 @@ class RAGPipeline:
         question: str,
         return_contexts: bool = True,
         config_overrides: dict[str, Any] | None = None,
+        chat_history: list[dict[str, str]] | None = None,
+        capture_trace: bool = False,
     ) -> dict[str, Any]:
         """Execute a RAG query: retrieve relevant contexts and generate an answer.
 
@@ -590,11 +595,20 @@ class RAGPipeline:
             config_overrides: Optional dictionary of config overrides to
                 deep-merge with ``self.config`` for this query only. When
                 None, the pipeline's base config is used unchanged.
+            chat_history: Optional conversation history for multi-turn context.
+                Format: ``[{"role": "user"/"assistant", "content": "..."}]``.
+                Passed through to ``Generator.generate()``.
+            capture_trace: When True, records detailed timing and data at each
+                pipeline stage (query_rewrite, retrieval, rerank,
+                context_assembly, generation) and includes a ``trace`` key in
+                the response dictionary. Defaults to False.
 
         Returns:
             A dictionary containing at minimum ``question`` and ``answer`` keys.
             When ``return_contexts`` is True, also includes ``contexts``,
             ``scores``, ``sources``, ``chunk_ids``, and optionally ``token_usage``.
+            When ``capture_trace`` is True, also includes ``trace`` with the
+            full pipeline trace data.
 
         Raises:
             RetrievalError: If ``question`` is empty or not a string, or if
@@ -607,6 +621,13 @@ class RAGPipeline:
 
         try:
             logger.info(f"Processing query: {question[:50]}...")
+
+            trace = None
+            if capture_trace:
+                trace = PipelineTrace(
+                    trace_id=f"trace_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{hash(question) % 10000:04d}",
+                    question=question,
+                )
 
             if config_overrides is not None:
                 from src.utils import deep_merge
@@ -635,7 +656,21 @@ class RAGPipeline:
             else:
                 rewrite_strategy = NoRewriteStrategy()
 
+            t0 = time.perf_counter()
             rewritten = rewrite_strategy.rewrite(question)
+            if capture_trace:
+                trace.steps.append(
+                    TraceStep(
+                        stage="query_rewrite",
+                        input_data={"original_question": question},
+                        output_data={
+                            "rewritten_queries": rewritten.queries,
+                            "is_multi": rewritten.is_multi,
+                        },
+                        duration_ms=(time.perf_counter() - t0) * 1000,
+                        metadata={"strategy": type(rewrite_strategy).__name__},
+                    )
+                )
 
             if effective_method in ("bm25", "hybrid"):
                 self._ensure_bm25_index()
@@ -665,6 +700,7 @@ class RAGPipeline:
             if not is_multi and self.profiler:
                 self.profiler.begin_stage("S6")
 
+            t0 = time.perf_counter()
             if is_multi:
                 results = self._retrieve_multi(
                     retrieval_strategy, rewritten.queries, effective_top_k
@@ -673,28 +709,146 @@ class RAGPipeline:
                 results = retrieval_strategy.retrieve(
                     rewritten.queries[0], effective_top_k
                 ).chunks
+            if capture_trace:
+                trace.steps.append(
+                    TraceStep(
+                        stage="retrieval",
+                        input_data={
+                            "query": (
+                                rewritten.queries[0]
+                                if not is_multi
+                                else rewritten.queries
+                            ),
+                            "top_k": effective_top_k,
+                        },
+                        output_data={
+                            "results": [
+                                {
+                                    "chunk_id": r.get("chunk_id", ""),
+                                    "score": r["score"],
+                                    "source": r["metadata"].get("source", ""),
+                                }
+                                for r in results
+                            ],
+                            "count": len(results),
+                        },
+                        duration_ms=(time.perf_counter() - t0) * 1000,
+                        metadata={"method": effective_method},
+                    )
+                )
 
             if effective_reranker_enabled and results:
                 self._ensure_reranker()
                 logger.debug(
                     f"Reranking {'multi-query ' if is_multi else ''}results..."
                 )
+                t0 = time.perf_counter()
+                pre_rerank_count = len(results)
+                pre_rerank_snapshot = [
+                    {
+                        "chunk_id": r.get("chunk_id", ""),
+                        "score": r["score"],
+                        "source": r["metadata"].get("source", ""),
+                    }
+                    for r in results
+                ]
                 results = self.reranker.rerank(
                     question, results, top_n=self.reranker_top_n
                 )
+                if capture_trace:
+                    trace.steps.append(
+                        TraceStep(
+                            stage="rerank",
+                            input_data={
+                                "result_count": pre_rerank_count,
+                                "results": pre_rerank_snapshot,
+                            },
+                            output_data={
+                                "results": [
+                                    {
+                                        "chunk_id": r.get("chunk_id", ""),
+                                        "rerank_score": r.get("rerank_score"),
+                                        "score": r["score"],
+                                    }
+                                    for r in results
+                                ],
+                                "count": len(results),
+                            },
+                            duration_ms=(time.perf_counter() - t0) * 1000,
+                            metadata={
+                                "model": (
+                                    self.reranker.model_name if self.reranker else None
+                                ),
+                                "top_n": self.reranker_top_n,
+                            },
+                        )
+                    )
 
             if not is_multi and self.profiler:
                 self.profiler.end_stage()
 
+            t0 = time.perf_counter()
             scores = self._compute_scores(results, is_multi)
             contexts = [r["text"] for r in results]
             sources = [r["metadata"].get("source", "Unknown") for r in results]
             chunk_ids = [r.get("chunk_id", "") for r in results]
+            ctx_step = None
+            if capture_trace:
+                ctx_step = TraceStep(
+                    stage="context_assembly",
+                    input_data={"context_count": len(contexts), "sources": sources},
+                    output_data={"final_context_count": len(contexts)},
+                    duration_ms=(time.perf_counter() - t0) * 1000,
+                    metadata={"max_context_tokens": self.generator.max_context_tokens},
+                )
+                trace.steps.append(ctx_step)
 
             logger.debug("Generating answer...")
             if not is_multi and self.profiler:
                 self.profiler.begin_stage("S7")
-            answer = self.generator.generate(question, contexts, sources=sources)
+
+            t0 = time.perf_counter()
+            if capture_trace:
+                gen_result = self.generator.generate(
+                    question,
+                    contexts,
+                    sources=sources,
+                    chat_history=chat_history,
+                    return_prompt_details=True,
+                )
+                answer = gen_result["answer"]
+                truncated_count = gen_result.get("truncated_count", 0)
+                if ctx_step is not None and truncated_count > 0:
+                    ctx_step.output_data["final_context_count"] = (
+                        len(contexts) - truncated_count
+                    )
+                trace.steps.append(
+                    TraceStep(
+                        stage="generation",
+                        input_data={
+                            "system_prompt": gen_result["system_prompt"],
+                            "user_message": gen_result["user_message"],
+                        },
+                        output_data={
+                            "answer": answer,
+                            "token_usage": (
+                                self.generator.last_token_usage.to_dict()
+                                if self.generator.last_token_usage
+                                else None
+                            ),
+                        },
+                        duration_ms=(time.perf_counter() - t0) * 1000,
+                        metadata={
+                            "model": self.generator.model_name,
+                            "temperature": self.generator.temperature,
+                        },
+                    )
+                )
+            else:
+                answer = self.generator.generate(
+                    question, contexts, sources=sources, chat_history=chat_history
+                )
+
             if not is_multi and self.profiler:
                 self.profiler.end_stage()
 
@@ -706,6 +860,8 @@ class RAGPipeline:
                 response["chunk_ids"] = chunk_ids
             if self.generator.last_token_usage is not None:
                 response["token_usage"] = self.generator.last_token_usage.to_dict()
+            if capture_trace:
+                response["trace"] = trace.to_dict()
 
             logger.success(
                 f"Query processed successfully{' (multi-query)' if is_multi else ''}"

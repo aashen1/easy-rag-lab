@@ -1,0 +1,28 @@
+- [x] TraceStep dataclass 包含 stage / input_data / output_data / duration_ms / metadata 字段，to_dict() 序列化正确
+- [x] PipelineTrace dataclass 包含 trace_id / question / steps / created_at 字段，to_dict() / from_dict() 往返一致
+- [x] GroundTruth dataclass 包含 answer_text / source_pdf / source_page / chunk_ids / annotated_at / annotator 字段
+- [x] DiagnosisResult dataclass 包含 root_cause / root_cause_id / severity / finding / fix_suggestion / config_patch / confidence 字段
+- [x] RAGPipeline.query(capture_trace=True) 返回值包含 trace 字段，5 个阶段均有 TraceStep
+- [x] RAGPipeline.query(capture_trace=False) 行为与现有完全一致，返回值不含 trace
+- [x] Generator.generate(return_prompt_details=True) 返回字典含 answer / system_prompt / user_message / truncated_count
+- [x] Generator.generate(return_prompt_details=False) 返回纯字符串（向后兼容）
+- [x] save_case(trace=...) 写入 pipeline_trace.json 到 case 目录
+- [x] save_ground_truth() 写入 ground_truth.json 并更新 manifest.has_ground_truth
+- [x] save_diagnosis() 写入 diagnosis.json 并更新 manifest.has_diagnosis 和 manifest.root_cause
+- [x] load_case() 返回值包含 pipeline_trace / ground_truth / diagnosis 键
+- [x] find_chunks_by_source_page() 精确匹配返回正确 chunk 列表
+- [x] find_chunks_by_source_page() 模糊匹配回退到页码范围
+- [x] find_chunks_by_source_page() 无匹配返回空列表
+- [x] compute_ground_truth_metrics() 正确计算 found_in_retrieval / retrieval_rank / retrieval_score / found_in_rerank / rerank_rank / rerank_score / found_in_context / context_dropped
+- [x] diagnose() 对 RC-0~RC-5 六类根因分类正确
+- [x] diagnose() 每类根因附带 severity / finding / fix_suggestion / config_patch
+- [x] Streamlit 分析页面展示 bad case 列表（时间倒序、问题预览、诊断状态、根因标签）
+- [x] 管线链路总览展示 5 阶段流水线图，颜色编码正确
+- [x] 逐阶段展开视图正确展示检索/重排序/生成阶段的输入输出
+- [x] Ground Truth 标注界面支持 PDF 选择 + 页码输入 + chunk 查找 + 确认保存
+- [x] 诊断报告视图展示根因标签 + 严重程度 + 修复建议
+- [x] app.py 新增 "🔍 Bad Case 分析" Tab
+- [x] qa_demo.py 查询时 capture_trace=True，trace 存入 session_state.messages
+- [x] 标记 Bad Case 后 toast 提示可到分析 Tab 进行深度分析
+- [x] 所有新增代码遵循项目规范：loguru 日志、公共函数 docstring、IO 操作 try/except
+- [x] 所有新增测试通过 pixi run test-unit
