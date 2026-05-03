@@ -194,4 +194,3 @@ def _build_parser_section(parser_config: dict) -> dict:
 * **向后兼容**：配置匹配时行为不变；配置不匹配时自动重建，用户无需手动操作
 
 * **数据安全**：旧 meal 在 meals 目录内备份为 `{name}_backup_{timestamp}`，用户可随时恢复
-

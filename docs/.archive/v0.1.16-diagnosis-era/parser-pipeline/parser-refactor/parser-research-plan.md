@@ -341,10 +341,10 @@ pymupdf4llm 的 page_chunks 返回中包含 `page_boxes`，其中 `class="table"
 for page_data in result:
     page_boxes = page_data.get("page_boxes", [])
     table_boxes = [b for b in page_boxes if b["class"] == "table"]
-    
+
     if not table_boxes:
         continue  # 该页无表格，跳过补强
-    
+
     # 只对有表格的页面调用 pdfplumber
     # 可选：用 bbox 限定 pdfplumber 的搜索区域
     for box in table_boxes:
@@ -618,10 +618,10 @@ class ParserRegistry:
             enhancer_config: dict | None = None) -> BaseParser:
         """创建解析器链路：主力 + 可选表格补强"""
         primary_parser = cls._get_primary(primary, primary_config)
-        
+
         if enhancer is None:
             return primary_parser
-        
+
         enhancer_module = cls._get_enhancer(enhancer, enhancer_config)
         return CompositeParser(primary_parser, enhancer_module)
 ```
@@ -633,7 +633,7 @@ class ParserRegistry:
 
 class TableEnhancer(ABC):
     """表格补强模块基类。
-    
+
     接收主力解析器的 ParseResult，检测表格区域，
     用更专业的表格提取库重新提取，替换原表格。
     """
@@ -646,11 +646,11 @@ class TableEnhancer(ABC):
     @abstractmethod
     def enhance(self, pdf_path: str, result: ParseResult) -> ParseResult:
         """对解析结果进行表格补强
-        
+
         Args:
             pdf_path: PDF 文件路径（补强模块可能需要重新访问原始 PDF）
             result: 主力解析器的输出
-            
+
         Returns:
             表格补强后的 ParseResult
         """
@@ -702,13 +702,13 @@ class PdfPlumberEnhancer(TableEnhancer):
             if not table_spans:
                 enhanced_pages.append(page)
                 continue
-            
+
             # 用 pdfplumber 重新提取该页表格
             plumber_tables = self._extract_tables(pdf_path, page.page_number - 1)
-            
+
             # 质量过滤
             plumber_tables = self._filter_low_quality(plumber_tables)
-            
+
             if plumber_tables:
                 # 替换原表格
                 new_text = self._replace_tables(page.text, table_spans, plumber_tables)
@@ -717,7 +717,7 @@ class PdfPlumberEnhancer(TableEnhancer):
                 )
             else:
                 enhanced_pages.append(page)
-        
+
         return ParseResult(pages=enhanced_pages, metadata=result.metadata)
 ```
 
@@ -749,7 +749,7 @@ class FitzParser(BaseParser):
             pages.append(ParsedPage(page_number=page_idx + 1, text=md_text, ...))
         doc.close()
         return ParseResult(pages=pages, ...)
-    
+
     # 复用 fitz_pdfplumber_parser.py 中的：
     # _extract_page_blocks, _detect_columns, _is_noise,
     # _detect_heading, _blocks_to_markdown
@@ -862,7 +862,7 @@ data/parser_reports/exp_20260502_120000/
 ```yaml
 parser:
   primary: "pymupdf4llm"           # 主力解析器: pymupdf4llm / fitz
-  
+
   # pymupdf4llm 参数（Layout 和 Legacy 共用 + Legacy 专属）
   pymupdf4llm:
     # 模式切换（关键！全局状态，需特殊处理）
@@ -893,7 +893,7 @@ parser:
     use_glyphs: false
     # 项目自定义后处理
     clean_degenerate_tables: true
-  
+
   # fitz 参数（逻辑模块化，每个模块可开关）
   fitz:
     header_filter: true
@@ -913,10 +913,10 @@ parser:
       h2: {font_size: 14, bold: true}
       h3: {font_size: 12, bold: true}
       h4: {font_size: 11, bold: true, max_length: 100}
-  
+
   # 表格补强（null = 不补强）
   table_enhancer: "pdfplumber"      # pdfplumber / null
-  
+
   # pdfplumber 参数
   pdfplumber:
     # 策略（水平垂直可独立设置）
@@ -999,4 +999,3 @@ parser:
 1. 确认计划 → 开始 Step 1（架构重构）
 2. 重构完成后 → Step 2（最小可行评测，跑基线网格 6 种组合）
 3. 根据评测结果 → 确定最佳链路
-

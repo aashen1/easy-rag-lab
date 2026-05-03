@@ -531,10 +531,10 @@ resume:
   # 从哪个实验目录恢复（支持相对路径或绝对路径）
   # 可以是目录名（自动在 data/exp_reports 下查找）或完整路径
   from: "exp_20260501_120000"  # 或 "data/exp_reports/exp_20260501_120000"
-  
+
   # 是否强制重跑所有 variant（默认 false）
   force_rerun: false
-  
+
   # 选择性重跑的 variant（默认空）
   force_variants: ["variant_a"]
 

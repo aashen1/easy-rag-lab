@@ -94,7 +94,7 @@ def __init__(
 
 ```python
 def create_meal(..., profiler: Any | None = None) -> MealConfig:
-    # ... 
+    # ...
     meal_config = self._build_pipeline(
         ...,
         profiler=profiler or self.profiler,
@@ -252,4 +252,3 @@ indexer = prepare_index_for_variant(...)
 2. 检查 profiling 报告中 S1-S4 全部有数据
 3. 确认 S3 显示正确的 embedding 时间（\~27 分钟）
 4. 确认 S1 仅显示 PDF 解析时间
-
