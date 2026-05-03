@@ -574,6 +574,7 @@ class RAGPipeline:
         question: str,
         return_contexts: bool = True,
         config_overrides: dict[str, Any] | None = None,
+        chat_history: list[dict[str, str]] | None = None,
     ) -> dict[str, Any]:
         """Execute a RAG query: retrieve relevant contexts and generate an answer.
 
@@ -590,6 +591,9 @@ class RAGPipeline:
             config_overrides: Optional dictionary of config overrides to
                 deep-merge with ``self.config`` for this query only. When
                 None, the pipeline's base config is used unchanged.
+            chat_history: Optional conversation history for multi-turn context.
+                Format: ``[{"role": "user"/"assistant", "content": "..."}]``.
+                Passed through to ``Generator.generate()``.
 
         Returns:
             A dictionary containing at minimum ``question`` and ``answer`` keys.
@@ -694,7 +698,9 @@ class RAGPipeline:
             logger.debug("Generating answer...")
             if not is_multi and self.profiler:
                 self.profiler.begin_stage("S7")
-            answer = self.generator.generate(question, contexts, sources=sources)
+            answer = self.generator.generate(
+                question, contexts, sources=sources, chat_history=chat_history
+            )
             if not is_multi and self.profiler:
                 self.profiler.end_stage()
 
