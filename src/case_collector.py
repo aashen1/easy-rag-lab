@@ -154,12 +154,14 @@ def save_case(
     base_config: dict[str, Any],
     meal_config: Any | None = None,
     meal_name: str | None = None,
+    chat_history: list[dict[str, Any]] | None = None,
 ) -> Path:
     """Save a case (bad or good) with full reproducibility context.
 
-    Persists five files into a timestamped directory under ``data/cases/``:
+    Persists files into a timestamped directory under ``data/cases/``:
     ``manifest.json``, ``config_snapshot.yaml``, ``meal_snapshot.json``,
-    ``query_result.json``, and ``environment.json``.
+    ``query_result.json``, ``environment.json``, and optionally
+    ``chat_history.json``.
 
     Args:
         case_type: ``CASE_TYPE_BAD`` or ``CASE_TYPE_GOOD``.
@@ -169,6 +171,8 @@ def save_case(
         base_config: The base configuration (from config.yaml).
         meal_config: MealConfig instance for the active meal, or None.
         meal_name: Name of the active meal, or None.
+        chat_history: Optional conversation history for multi-turn context.
+            Format: ``[{"role": "user"/"assistant", "content": "..."}]``.
 
     Returns:
         Path to the created case directory.
@@ -185,6 +189,8 @@ def save_case(
     case_dir = get_cases_dir() / case_id
     case_dir.mkdir(parents=True, exist_ok=True)
 
+    has_history = chat_history is not None and len(chat_history) > 0
+
     manifest = {
         "case_id": case_id,
         "case_type": case_type,
@@ -192,6 +198,7 @@ def save_case(
         "created_at": datetime.now().isoformat(),
         "question_preview": question[:50],
         "meal_name": meal_name,
+        "has_chat_history": has_history,
     }
     (case_dir / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -220,8 +227,77 @@ def save_case(
         json.dumps(env_info, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
+    if has_history:
+        (case_dir / "chat_history.json").write_text(
+            json.dumps(chat_history, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
     logger.info(f"Case saved: {case_id} (type={case_type})")
     return case_dir
+
+
+DEDUP_STATUS_SAVED = "saved"
+DEDUP_STATUS_DUPLICATE = "duplicate"
+DEDUP_STATUS_TYPE_CHANGED = "type_changed"
+
+
+def save_case_with_dedup(
+    case_type: str,
+    question: str,
+    result: dict[str, Any],
+    config_overrides: dict[str, Any],
+    base_config: dict[str, Any],
+    meal_config: Any | None = None,
+    meal_name: str | None = None,
+    chat_history: list[dict[str, Any]] | None = None,
+    saved_case_type: str | None = None,
+    saved_case_id: str | None = None,
+) -> tuple[Path | None, str]:
+    """Save a case with deduplication logic shared by CLI and Web UI.
+
+    Implements the same dedup rules used in both the CLI interactive
+    session and the Web UI:
+
+    - Same type already saved → skip (``DEDUP_STATUS_DUPLICATE``)
+    - Different type already saved → convert via ``convert_case()``
+      (``DEDUP_STATUS_TYPE_CHANGED``)
+    - Not saved yet → create new case (``DEDUP_STATUS_SAVED``)
+
+    Args:
+        case_type: ``CASE_TYPE_BAD`` or ``CASE_TYPE_GOOD``.
+        question: The original user question.
+        result: The full query result dictionary from ``pipeline.query()``.
+        config_overrides: The config overrides used for this query.
+        base_config: The base configuration (from config.yaml).
+        meal_config: MealConfig instance for the active meal, or None.
+        meal_name: Name of the active meal, or None.
+        chat_history: Optional conversation history for multi-turn context.
+        saved_case_type: The case type already saved for this message, or None.
+        saved_case_id: The case directory name already saved, or None.
+
+    Returns:
+        Tuple of (case_dir_path or None, status_string).
+        Status is one of ``DEDUP_STATUS_SAVED``, ``DEDUP_STATUS_DUPLICATE``,
+        or ``DEDUP_STATUS_TYPE_CHANGED``.
+    """
+    if saved_case_type == case_type:
+        return None, DEDUP_STATUS_DUPLICATE
+
+    if saved_case_type is not None and saved_case_id is not None:
+        new_dir = convert_case(saved_case_id, case_type)
+        return new_dir, DEDUP_STATUS_TYPE_CHANGED
+
+    case_dir = save_case(
+        case_type=case_type,
+        question=question,
+        result=result,
+        config_overrides=config_overrides,
+        base_config=base_config,
+        meal_config=meal_config,
+        meal_name=meal_name,
+        chat_history=chat_history,
+    )
+    return case_dir, DEDUP_STATUS_SAVED
 
 
 def list_cases(case_type: str | None = None) -> list[dict[str, Any]]:
@@ -262,7 +338,8 @@ def load_case(case_id: str) -> dict[str, Any]:
 
     Returns:
         Dictionary with keys ``manifest``, ``config_snapshot``,
-        ``meal_snapshot``, ``query_result``, and ``environment``.
+        ``meal_snapshot``, ``query_result``, ``environment``, and
+        optionally ``chat_history``.
 
     Raises:
         FileNotFoundError: If the case directory does not exist.
@@ -294,6 +371,10 @@ def load_case(case_id: str) -> dict[str, Any]:
     env_path = case_dir / "environment.json"
     if env_path.exists():
         data["environment"] = json.loads(env_path.read_text(encoding="utf-8"))
+
+    history_path = case_dir / "chat_history.json"
+    if history_path.exists():
+        data["chat_history"] = json.loads(history_path.read_text(encoding="utf-8"))
 
     return data
 
