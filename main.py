@@ -11,6 +11,7 @@ from src.case_collector import (
     save_case,
 )
 from src.exceptions import ConfigurationError
+from src.interactive_qa import interactive_qa
 from src.meal import MealManager, MealStatus, validate_meal_name
 from src.pipeline import RAGPipeline
 from src.query_history import QueryHistory
@@ -345,7 +346,7 @@ def main() -> None:
             )
             print(f"\n📝 已记录到历史 (ID: {record_id})")
         elif args.interactive:
-            _interactive_qa(pipeline, resolved_meal)
+            interactive_qa(pipeline, resolved_meal)
     elif needs_meal:
         logger.error(
             "No meal available. Create one with --create-meal or add PDFs to data/raw/."
@@ -1061,135 +1062,6 @@ def _print_query_result(result: dict[str, Any]) -> None:
             print(f"    System Prompt: {tu['system_prompt_tokens']:,}")
             print(f"    Contexts:      {tu['contexts_tokens']:,}")
             print(f"    Query:         {tu['query_tokens']:,}")
-
-
-def _interactive_qa(pipeline: RAGPipeline, meal_name: str | None = None) -> None:
-    """Run an interactive Q&A session.
-
-    Continuously prompts for questions and displays answers until
-    the user types 'quit' or 'exit'. Tracks and displays token usage
-    on exit. Supports ``/badcase`` and ``/goodcase`` commands to save
-    the last query result for reproducibility.
-
-    Args:
-        pipeline: RAGPipeline instance for query execution.
-        meal_name: Optional meal name to display in the welcome message.
-    """
-    collection_info = pipeline.indexer.get_collection_info()
-    if meal_name:
-        print(f"\n🤖 RAG 问答系统已启动（meal: {meal_name}）")
-    else:
-        print("\n🤖 RAG 问答系统已启动")
-
-    if collection_info:
-        chunks_count = collection_info.get("points_count", 0)
-        print(f"📝 数据库中已有 {chunks_count} 个文档片段")
-    else:
-        print(
-            "⚠️  数据库为空，请先构建索引：pixi run python main.py --build-index --meal <name>"
-        )
-
-    print("输入 'quit' 或 'exit' 退出")
-    print("输入 '/badcase' 或 '/goodcase' 保存最近一次查询\n")
-
-    last_result: dict[str, Any] | None = None
-    last_config_overrides: dict[str, Any] | None = None
-    last_saved_type: str | None = None
-    last_saved_case_id: str | None = None
-
-    while True:
-        try:
-            question = input("💬 You: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print("\n\n👋 再见！\n")
-            break
-
-        if not question:
-            continue
-        if question.lower() in ("quit", "exit", "q"):
-            tracker = pipeline.token_tracker
-            if tracker and tracker.record_count > 0:
-                total = tracker.get_total()
-                print(
-                    f"\n📊 Session Token Usage: in={total.input_tokens:,} "
-                    f"out={total.output_tokens:,} total={total.total_tokens:,}"
-                )
-            print("👋 再见！\n")
-            break
-
-        if question.lower() in ("/badcase", "/goodcase"):
-            if last_result is None:
-                print("⚠️  还没有查询记录，请先提问\n")
-                continue
-            case_type = (
-                CASE_TYPE_BAD if question.lower() == "/badcase" else CASE_TYPE_GOOD
-            )
-            icon = "🚨" if case_type == CASE_TYPE_BAD else "✅"
-            label = "Badcase" if case_type == CASE_TYPE_BAD else "Goodcase"
-
-            if last_saved_type == case_type:
-                print(f"{icon} 已标记为 {label}，无需重复保存\n")
-                continue
-
-            try:
-                base_config = load_config()
-                meal_config = getattr(pipeline, "meal_config", None)
-
-                if last_saved_type is not None and last_saved_case_id is not None:
-                    new_dir = convert_case(last_saved_case_id, case_type)
-                    old_label = (
-                        "Badcase" if last_saved_type == CASE_TYPE_BAD else "Goodcase"
-                    )
-                    print(
-                        f"{icon} 已将 {old_label} 转换为 {label}: {new_dir.name}\n"
-                        f"   原 {old_label} ({last_saved_case_id}) 已删除\n"
-                    )
-                    last_saved_type = case_type
-                    last_saved_case_id = new_dir.name
-                else:
-                    case_dir = save_case(
-                        case_type=case_type,
-                        question=last_result.get("question", ""),
-                        result=last_result,
-                        config_overrides=last_config_overrides or {},
-                        base_config=base_config,
-                        meal_config=meal_config,
-                        meal_name=meal_name,
-                    )
-                    print(f"{icon} {label} 已保存: {case_dir.name}\n")
-                    last_saved_type = case_type
-                    last_saved_case_id = case_dir.name
-            except Exception as e:
-                logger.error(f"Failed to save case: {e}")
-                print(f"❌ 保存失败: {e}\n")
-            continue
-
-        try:
-            result = pipeline.query(question)
-            last_result = result
-            last_config_overrides = None
-            last_saved_type = None
-            last_saved_case_id = None
-            print(f"\n🤖 Assistant: {result['answer']}\n")
-
-            if "token_usage" in result and result["token_usage"]:
-                tu = result["token_usage"]
-                print(
-                    f"📊 Tokens: in={tu['input_tokens']:,} out={tu['output_tokens']:,} "
-                    f"total={tu['total_tokens']:,}\n"
-                )
-
-            if "sources" in result and result["sources"]:
-                print("📚 参考来源：")
-                for i, (source, score) in enumerate(
-                    zip(result["sources"][:3], result["scores"][:3], strict=False), 1
-                ):
-                    source_name = source.split("\\")[-1] if "\\" in source else source
-                    print(f"   {i}. {source_name} (相关度: {score:.4f})")
-                print()
-        except Exception as e:
-            logger.error(f"Error processing query: {str(e)}")
-            print(f"\n❌ 处理问题时出错: {str(e)}\n")
 
 
 def _handle_merge_meals(
