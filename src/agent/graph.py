@@ -94,12 +94,34 @@ def _infer_pdf_type(source: str) -> str:
 def agent_node(state: MaintenanceState) -> dict[str, Any]:
     """LLM decision node: invoke the model with tools bound.
 
+    If a tool is locked (``locked_tool`` is set), skip LLM decision and
+    construct an AIMessage with the specified tool_call directly. The lock
+    is cleared after being consumed.
+
     Args:
         state: Current graph state.
 
     Returns:
         State update with the LLM's response message.
     """
+    locked_tool = state.get("locked_tool")
+    locked_tool_args = state.get("locked_tool_args")
+
+    if locked_tool:
+        import uuid
+
+        tool_call = {
+            "name": locked_tool,
+            "args": locked_tool_args or {},
+            "id": f"locked_{uuid.uuid4().hex[:8]}",
+        }
+        ai_message = AIMessage(content="", tool_calls=[tool_call])
+        return {
+            "messages": [ai_message],
+            "locked_tool": None,
+            "locked_tool_args": None,
+        }
+
     llm = _get_llm()
     tools = _get_tools()
     llm_with_tools = llm.bind_tools(tools)
@@ -121,6 +143,7 @@ def agent_node(state: MaintenanceState) -> dict[str, Any]:
     system_content = build_system_prompt(
         stage_history=state.get("stage_history"),
         experiences=experiences,
+        locked_tool=None,
     )
     messages = [SystemMessage(content=system_content)] + state["messages"]
     response = llm_with_tools.invoke(messages)

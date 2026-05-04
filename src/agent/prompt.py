@@ -4,6 +4,7 @@ from __future__ import annotations
 def build_system_prompt(
     stage_history: list[str] | None = None,
     experiences: list[dict] | None = None,
+    locked_tool: str | None = None,
 ) -> str:
     prompt = """你是 RAG 系统的维修工 Agent。你的职责是诊断和修复 RAG 管线中的问题。
 
@@ -83,6 +84,9 @@ def build_system_prompt(
                 f"({exp.get('reason', '无说明')})"
             )
         prompt += "\n\n## 历史经验推荐\n\n" + "\n".join(exp_lines)
+
+    if locked_tool:
+        prompt += f"\n\n## 工具锁定\n\n当前用户已锁定工具 {locked_tool}，请等待执行结果后再决策。"
 
     return prompt
 

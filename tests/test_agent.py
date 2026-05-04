@@ -36,6 +36,8 @@ class TestMaintenanceState:
             execution_log=[],
             stage_history=[],
             auto_review=False,
+            locked_tool=None,
+            locked_tool_args=None,
         )
         assert state["messages"] == []
         assert state["current_meal"] is None
@@ -52,6 +54,8 @@ class TestMaintenanceState:
             execution_log=["TOOL: list_meals"],
             stage_history=[],
             auto_review=False,
+            locked_tool=None,
+            locked_tool_args=None,
         )
         assert state["current_meal"] == "test_meal"
         assert state["diagnosis"] == [{"issue": "bad chunk"}]
@@ -186,6 +190,8 @@ class TestShouldContinue:
             execution_log=[],
             stage_history=[],
             auto_review=False,
+            locked_tool=None,
+            locked_tool_args=None,
         )
         assert should_continue(state) == "tools"
 
@@ -204,6 +210,8 @@ class TestShouldContinue:
             execution_log=[],
             stage_history=[],
             auto_review=False,
+            locked_tool=None,
+            locked_tool_args=None,
         )
         assert should_continue(state) == "__end__"
 
@@ -229,6 +237,8 @@ class TestToolNode:
             execution_log=[],
             stage_history=[],
             auto_review=False,
+            locked_tool=None,
+            locked_tool_args=None,
         )
         result = tool_node(state)
         assert len(result["messages"]) == 1
@@ -583,6 +593,8 @@ class TestMaintenanceStateNewFields:
             execution_log=[],
             stage_history=["parse_pdf_tool"],
             auto_review=False,
+            locked_tool=None,
+            locked_tool_args=None,
         )
         assert state["stage_history"] == ["parse_pdf_tool"]
         assert state["auto_review"] is False
@@ -598,6 +610,8 @@ class TestMaintenanceStateNewFields:
             execution_log=[],
             stage_history=[],
             auto_review=True,
+            locked_tool=None,
+            locked_tool_args=None,
         )
         assert state["auto_review"] is True
 
@@ -623,6 +637,8 @@ class TestToolNodeStageHistory:
             execution_log=[],
             stage_history=["parse_pdf_tool"],
             auto_review=False,
+            locked_tool=None,
+            locked_tool_args=None,
         )
         result = tool_node(state)
         assert "parse_pdf_tool" in result["stage_history"]
@@ -811,6 +827,8 @@ class TestAutoReviewInterrupt:
             execution_log=[],
             stage_history=[],
             auto_review=True,
+            locked_tool=None,
+            locked_tool_args=None,
         )
         with patch("src.agent.graph.interrupt") as mock_interrupt:
             tool_node(state)
@@ -839,6 +857,8 @@ class TestAutoReviewInterrupt:
             execution_log=[],
             stage_history=[],
             auto_review=True,
+            locked_tool=None,
+            locked_tool_args=None,
         )
         with patch("src.agent.graph.interrupt") as mock_interrupt:
             tool_node(state)
@@ -873,6 +893,8 @@ class TestAutoReviewInterrupt:
             execution_log=[],
             stage_history=[],
             auto_review=False,
+            locked_tool=None,
+            locked_tool_args=None,
         )
         with patch("src.agent.graph.interrupt") as mock_interrupt:
             tool_node(state)
@@ -936,3 +958,134 @@ class TestCLIReviewCommand:
 
     def test_review_off_sets_auto_review(self):
         assert True
+
+
+class TestLockedTool:
+    def test_locked_tool_skips_llm(self):
+        from langchain_core.messages import AIMessage
+
+        from src.agent.graph import agent_node
+        from src.agent.state import MaintenanceState
+
+        state = MaintenanceState(
+            messages=[{"role": "user", "content": "test"}],
+            current_meal=None,
+            current_source=None,
+            diagnosis=[],
+            pending_action=None,
+            approved=None,
+            execution_log=[],
+            stage_history=[],
+            auto_review=False,
+            locked_tool="parse_pdf_tool",
+            locked_tool_args={"pdf_path": "test.pdf"},
+        )
+        result = agent_node(state)
+        assert len(result["messages"]) == 1
+        ai_msg = result["messages"][0]
+        assert isinstance(ai_msg, AIMessage)
+        assert len(ai_msg.tool_calls) == 1
+        assert ai_msg.tool_calls[0]["name"] == "parse_pdf_tool"
+        assert ai_msg.tool_calls[0]["args"] == {"pdf_path": "test.pdf"}
+        assert result["locked_tool"] is None
+        assert result["locked_tool_args"] is None
+
+    def test_no_locked_tool_calls_llm(self):
+        from unittest.mock import MagicMock, patch
+
+        from src.agent.graph import agent_node
+        from src.agent.state import MaintenanceState
+
+        state = MaintenanceState(
+            messages=[{"role": "user", "content": "test"}],
+            current_meal=None,
+            current_source=None,
+            diagnosis=[],
+            pending_action=None,
+            approved=None,
+            execution_log=[],
+            stage_history=[],
+            auto_review=False,
+            locked_tool=None,
+            locked_tool_args=None,
+        )
+
+        mock_llm = MagicMock()
+        mock_response = MagicMock()
+        mock_response.content = "test response"
+        mock_llm.bind_tools.return_value.invoke.return_value = mock_response
+
+        with (
+            patch("src.agent.graph._get_llm", return_value=mock_llm),
+            patch("src.agent.graph._get_tools", return_value=[]),
+        ):
+            result = agent_node(state)
+            assert "messages" in result
+            mock_llm.bind_tools.return_value.invoke.assert_called_once()
+
+    def test_state_has_locked_tool_fields(self):
+        state = MaintenanceState(
+            messages=[],
+            current_meal=None,
+            current_source=None,
+            diagnosis=[],
+            pending_action=None,
+            approved=None,
+            execution_log=[],
+            stage_history=[],
+            auto_review=False,
+            locked_tool="list_meals",
+            locked_tool_args=None,
+        )
+        assert state["locked_tool"] == "list_meals"
+        assert state["locked_tool_args"] is None
+
+
+class TestCLICommands:
+    def test_parse_command(self):
+        from src.agent.cli import _handle_cli_command
+
+        result = _handle_cli_command(":parse pymupdf4llm", False)
+        assert result == "请用 pymupdf4llm 解析当前 PDF"
+
+    def test_back_command(self):
+        from src.agent.cli import _handle_cli_command
+
+        result = _handle_cli_command(":back chunk", False)
+        assert result == "回到chunk阶段重新做"
+
+    def test_compare_command(self):
+        from src.agent.cli import _handle_cli_command
+
+        result = _handle_cli_command(":compare", False)
+        assert result == "生成对比报告"
+
+    def test_report_command(self):
+        from src.agent.cli import _handle_cli_command
+
+        result = _handle_cli_command(":report", False)
+        assert result == "生成维修报告"
+
+    def test_history_command(self):
+        from src.agent.cli import _handle_cli_command
+
+        result = _handle_cli_command(":history", False)
+        assert result == "__show_history__"
+
+    def test_status_command(self):
+        from src.agent.cli import _handle_cli_command
+
+        result = _handle_cli_command(":status", False)
+        assert result == "__show_status__"
+
+    def test_non_command_returns_none(self):
+        from src.agent.cli import _handle_cli_command
+
+        result = _handle_cli_command("hello", False)
+        assert result is None
+
+    def test_unknown_command_returns_none(self):
+        from src.agent.cli import _handle_cli_command
+
+        result = _handle_cli_command(":unknown", False)
+        assert result is None

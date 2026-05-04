@@ -15,3 +15,5 @@ class MaintenanceState(dict):
     execution_log: list[str]
     stage_history: list[str]
     auto_review: bool
+    locked_tool: str | None
+    locked_tool_args: dict[str, Any] | None
