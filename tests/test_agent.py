@@ -982,11 +982,17 @@ class TestAgentNodeExperienceRetrieval:
 
 
 class TestCLIReviewCommand:
-    def test_review_on_sets_auto_review(self):
-        assert True
+    def test_review_on_not_handled_by_cli_command(self):
+        from src.agent.cli import _handle_cli_command
 
-    def test_review_off_sets_auto_review(self):
-        assert True
+        result = _handle_cli_command(":review on", False)
+        assert result is None
+
+    def test_review_off_not_handled_by_cli_command(self):
+        from src.agent.cli import _handle_cli_command
+
+        result = _handle_cli_command(":review off", False)
+        assert result is None
 
 
 class TestLockedTool:
