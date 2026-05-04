@@ -365,3 +365,67 @@ Spec 未涉及此性能问题，但验收中发现 `_extract_all_tables` 会遍�
 Spec 要求 `create_curated_meal` 工具创建手动 Meal。实际实现中 `creation_mode = "manual"` 在 `_build_pipeline()` 返回后才设置，但 manifest 已写盘。
 
 **结论**：已在本次验收中修复（commit: fix: pass creation_mode to _build_pipeline）。
+
+---
+
+## Phase 3 验收勘误（2026-05-05）
+
+### 勘误 10: 空壳经验自动保存（P0-3 续）
+
+Phase 2 验收中发现经验自动保存中 `best_parser`/`best_chunk_strategy`/`best_chunk_size` 全是 None，推迟到 Phase 3 修复。Phase 3 实现后问题仍然存在。
+
+**结论**：已在本次验收中修复。从 `tool_call["args"]` 中提取实际使用的 parser_name、strategy、chunk_size 填充经验记录（commit: fix: extract actual parser/chunk params from tool_call args for experience）。
+
+### 勘误 11: ComparisonReporter 推荐逻辑假设所有指标越大越好
+
+`ComparisonReporter.generate()` 使用 `max()` 选择最优方案，但某些指标（如 error_rate、latency_ms）越小越好。
+
+**结论**：已在本次验收中修复。添加 `LOWER_IS_BETTER_KEYS` 集合，对这些指标使用 `min()`（commit: fix: support lower-is-better metrics in ComparisonReporter）。
+
+### 勘误 12: Streamlit interrupt 处理可能无法恢复
+
+`maintenance.py` 中 interrupt 后的批准/拒绝按钮在 `st.rerun()` 后可能丢失 interrupt 上下文。LangGraph 的 interrupt 机制设计用于同步执行流，而 Streamlit 的 rerun 模式会丢失中间状态。
+
+**结论**：已知风险，暂不修复。需要手动测试验证，修复涉及 Streamlit 架构重构。
+
+### 勘误 13: 报告工具依赖 LLM 传参
+
+`generate_maintenance_report_tool` 要求 LLM 传入 `execution_log`、`stage_history` 等参数，但 LLM 无法直接访问 state，只能从对话上下文推断。
+
+**结论**：已知限制，暂不修复。更好的做法是让工具从 checkpointer 读取当前 state，但需要传入 thread_id 和 config，改动较大。
+
+### 勘误 14: locked_tool 冗余 prompt
+
+当 `locked_tool` 存在时，LLM 不会被调用，但 `build_system_prompt()` 仍被调用并传入 `locked_tool` 参数。
+
+**结论**：已在本次验收中修复。移除了 `locked_tool` 参数和对应的 prompt 段落（commit: refactor: remove locked_tool from build_system_prompt since LLM is skipped）。
+
+### 勘误 15: CLI review 空壳测试
+
+`TestCLIReviewCommand` 两个方法只有 `assert True`，没有实际测试逻辑。
+
+**结论**：已在本次验收中修复。补充了实际测试，验证 `:review on/off` 不被 `_handle_cli_command` 处理（commit: fix: replace empty TestCLIReviewCommand with actual tests）。
+
+### 勘误 16: config 读取无缓存
+
+`get_agent_config()` 每次调用都重新 `load_config()`，在 `chunk_parsed_tool` 中被调用 3 次。
+
+**结论**：已在本次验收中修复。添加 `@functools.lru_cache`（commit: perf: add lru_cache to get_agent_config）。
+
+### 勘误 17: _get_tool_names 不必要地清除缓存
+
+`maintenance.py` 中 `_get_tool_names()` 每次调用 `_get_tools.cache_clear()`，抵消 LRU 缓存优势。
+
+**结论**：已在本次验收中修复。移除了 `cache_clear()` 调用（commit: perf: remove unnecessary cache_clear in _get_tool_names）。
+
+### 仍未解决的问题
+
+| 问题 | 严重度 | 原因 |
+|------|--------|------|
+| Streamlit interrupt 处理 | P0 | 需架构重构 |
+| MaintenanceState 改 TypedDict | P1 | LangGraph 兼容性待验证 |
+| 报告工具从 checkpointer 读 state | P1 | 改动较大 |
+| Streamlit 双重状态管理 | P1 | 需重构 maintenance.py |
+| 操作时间线缺时间列 | P2 | 改动链路长 |
+| Streamlit 报告展示/下载 | P2 | UI 功能增强 |
+| WAL 模式 | P2 | 性能优化 |
