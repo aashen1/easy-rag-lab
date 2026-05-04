@@ -13,21 +13,24 @@ def _get_tool_names() -> list[str]:
     _get_tools.cache_clear()
     tools = _get_tools()
     names = ["自动"] + [t.name for t in tools]
-    _get_tools.cache_clear()
     return names
 
 
 @st.cache_resource
 def _get_compiled_agent():
-    """Compile the agent with SqliteSaver and InMemoryStore, cached."""
+    """Compile the agent with SqliteSaver and InMemoryStore, cached.
+
+    Uses get_checkpointer_direct() to create a SqliteSaver with a
+    persistent connection that stays alive across Streamlit reruns.
+    """
     from langgraph.store.memory import InMemoryStore
 
-    from src.agent.checkpoint import get_checkpointer
+    from src.agent.checkpoint import get_checkpointer_direct
     from src.agent.graph import compile_agent
 
+    checkpointer = get_checkpointer_direct()
     store = InMemoryStore()
-    with get_checkpointer() as checkpointer:
-        return compile_agent(checkpointer=checkpointer, store=store)
+    return compile_agent(checkpointer=checkpointer, store=store)
 
 
 def render_maintenance():

@@ -45,6 +45,49 @@ class TestGetCheckpointer:
                 assert checkpointer is not None
 
 
+class TestGetCheckpointerDirect:
+    def test_get_checkpointer_direct_creates_sqlite_saver(self, tmp_path):
+        from src.agent.checkpoint import get_checkpointer_direct
+
+        db_path = str(tmp_path / "test_direct.db")
+        checkpointer = get_checkpointer_direct(db_path=db_path)
+        assert checkpointer is not None
+        assert checkpointer.conn is not None
+        checkpointer.conn.close()
+
+    def test_get_checkpointer_direct_creates_directory(self, tmp_path):
+        from src.agent.checkpoint import get_checkpointer_direct
+
+        db_path = str(tmp_path / "subdir" / "direct_checkpoints.db")
+        checkpointer = get_checkpointer_direct(db_path=db_path)
+        assert checkpointer is not None
+        checkpointer.conn.close()
+
+    def test_get_checkpointer_direct_reads_config(self):
+        from unittest.mock import patch
+
+        from src.agent.checkpoint import get_checkpointer_direct
+
+        with patch(
+            "src.agent.config.get_checkpoint_config",
+            return_value={"db_path": "data/test_direct_checkpoints.db"},
+        ):
+            checkpointer = get_checkpointer_direct()
+            assert checkpointer is not None
+            checkpointer.conn.close()
+
+    def test_get_checkpointer_direct_connection_alive_after_return(self, tmp_path):
+        from src.agent.checkpoint import get_checkpointer_direct
+
+        db_path = str(tmp_path / "test_alive.db")
+        checkpointer = get_checkpointer_direct(db_path=db_path)
+        cursor = checkpointer.conn.cursor()
+        cursor.execute("SELECT 1")
+        result = cursor.fetchone()
+        assert result == (1,)
+        checkpointer.conn.close()
+
+
 class TestCheckpointConfig:
     def test_get_checkpoint_config_returns_section(self):
         from unittest.mock import patch
