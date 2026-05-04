@@ -192,6 +192,24 @@ class TestComparisonReporter:
         assert "推荐：B" in report
         assert "A 在" not in report or "1 项指标" in report
 
+    def test_lower_is_better_metrics(self):
+        from src.agent.reporters.comparison_report import ComparisonReporter
+
+        reporter = ComparisonReporter()
+        reporter.add_result("A", {"error_rate": 0.05, "latency_ms": 200})
+        reporter.add_result("B", {"error_rate": 0.02, "latency_ms": 100})
+        report = reporter.generate()
+        assert "推荐：B" in report
+
+    def test_higher_is_better_default(self):
+        from src.agent.reporters.comparison_report import ComparisonReporter
+
+        reporter = ComparisonReporter()
+        reporter.add_result("A", {"answer_relevancy": 0.9, "chunk_count": 100})
+        reporter.add_result("B", {"answer_relevancy": 0.7, "chunk_count": 80})
+        report = reporter.generate()
+        assert "推荐：A" in report
+
 
 class TestReportTools:
     def test_generate_maintenance_report_tool_exists(self):

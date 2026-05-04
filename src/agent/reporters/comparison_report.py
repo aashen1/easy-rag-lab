@@ -11,6 +11,15 @@ from loguru import logger
 class ComparisonReporter:
     """Generate comparison reports for multiple experiment results."""
 
+    LOWER_IS_BETTER_KEYS = {
+        "error_rate",
+        "latency_ms",
+        "avg_latency",
+        "p95_latency",
+        "chunk_overlap",
+        "hallucination_rate",
+    }
+
     def __init__(self) -> None:
         self._results: list[dict[str, Any]] = []
 
@@ -102,7 +111,10 @@ class ComparisonReporter:
                         with contextlib.suppress(ValueError, TypeError):
                             numeric_vals.append((r["label"], float(v)))
                 if len(numeric_vals) >= 2:
-                    best = max(numeric_vals, key=lambda x: x[1])
+                    if key in self.LOWER_IS_BETTER_KEYS:
+                        best = min(numeric_vals, key=lambda x: x[1])
+                    else:
+                        best = max(numeric_vals, key=lambda x: x[1])
                     win_counts[best[0]] += 1
                     win_details[best[0]].append(f"{key}={best[1]}")
             recommended = max(win_counts, key=lambda k: win_counts[k])
