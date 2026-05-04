@@ -553,12 +553,12 @@ class TestNewTools:
             result = close_issue.invoke({"issue_id": "BUG-20260504-001-wt1"})
             assert "closed" in result
 
-    def test_get_tools_returns_all_19_tools(self):
+    def test_get_tools_returns_all_21_tools(self):
         from src.agent.graph import _get_tools
 
         _get_tools.cache_clear()
         tools = _get_tools()
-        assert len(tools) == 19
+        assert len(tools) == 21
         tool_names = {t.name for t in tools}
         assert "embed_chunks_tool" in tool_names
         assert "index_chunks_tool" in tool_names

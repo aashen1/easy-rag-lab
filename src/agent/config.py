@@ -14,3 +14,13 @@ def get_agent_default(key: str, fallback: Any = None) -> Any:
     agent_config = get_agent_config()
     defaults = agent_config.get("defaults", {})
     return defaults.get(key, fallback)
+
+
+def get_checkpoint_config() -> dict[str, Any]:
+    """Return the agent checkpoint configuration section.
+
+    Returns:
+        Dict with checkpoint settings (e.g., ``db_path``).
+    """
+    agent_config = get_agent_config()
+    return agent_config.get("checkpoint", {})

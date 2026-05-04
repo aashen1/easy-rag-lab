@@ -872,3 +872,85 @@ def list_pdfs(pattern: str = "*.pdf") -> str:
     except Exception as e:
         logger.error(f"list_pdfs failed: {e}")
         return f"Error listing PDFs: {e}"
+
+
+@tool
+def generate_maintenance_report_tool(
+    session_id: str = "default",
+    current_source: str | None = None,
+    current_meal: str | None = None,
+    execution_log: list[str] | None = None,
+    stage_history: list[str] | None = None,
+    diagnosis: list[dict] | None = None,
+    messages_summary: list[str] | None = None,
+) -> str:
+    """Generate a maintenance session report summarizing all operations.
+
+    Args:
+        session_id: Session identifier for the report.
+        current_source: Current PDF source path.
+        current_meal: Current meal name.
+        execution_log: List of execution log entries.
+        stage_history: List of tool names executed in order.
+        diagnosis: List of diagnostic findings.
+        messages_summary: Key findings from AI messages.
+
+    Returns:
+        JSON string with report file path.
+    """
+    try:
+        from src.agent.reporters.maintenance_report import MaintenanceReporter
+
+        reporter = MaintenanceReporter()
+        state = {
+            "current_source": current_source,
+            "current_meal": current_meal,
+            "execution_log": execution_log or [],
+            "stage_history": stage_history or [],
+            "diagnosis": diagnosis or [],
+            "messages": [],
+        }
+        report = reporter.generate(state, session_id)
+        filepath = reporter.save(report, session_id)
+        return json.dumps(
+            {"status": "generated", "report_path": str(filepath)},
+            ensure_ascii=False,
+            indent=2,
+        )
+    except Exception as e:
+        logger.error(f"generate_maintenance_report_tool failed: {e}")
+        return f"Error generating maintenance report: {e}"
+
+
+@tool
+def generate_comparison_report_tool(
+    results: list[dict],
+    session_id: str = "default",
+) -> str:
+    """Generate a comparison report for multiple experiment results.
+
+    Args:
+        results: List of dicts, each with 'label' and 'metrics' keys.
+            Example: [{"label": "方案A", "metrics": {"chunk_count": 100}},
+                      {"label": "方案B", "metrics": {"chunk_count": 85}}]
+        session_id: Session identifier for the report.
+
+    Returns:
+        JSON string with report file path.
+    """
+    try:
+        from src.agent.reporters.comparison_report import ComparisonReporter
+
+        reporter = ComparisonReporter()
+        for r in results:
+            reporter.add_result(r["label"], r["metrics"])
+        report = reporter.generate()
+        filepath = reporter.save(report, session_id)
+        return json.dumps(
+            {"status": "generated", "report_path": str(filepath)},
+            ensure_ascii=False,
+            indent=2,
+        )
+    except Exception as e:
+        logger.error(f"generate_comparison_report_tool failed: {e}")
+        return f"Error generating comparison report: {e}"

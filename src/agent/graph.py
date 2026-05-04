@@ -27,6 +27,8 @@ def _get_tools():
         embed_chunks_tool,
         enhance_page_tool,
         evaluate_answer_tool,
+        generate_comparison_report_tool,
+        generate_maintenance_report_tool,
         get_index_info,
         get_meal_detail,
         index_chunks_tool,
@@ -59,6 +61,8 @@ def _get_tools():
         rebuild_index,
         delete_source,
         update_meal,
+        generate_maintenance_report_tool,
+        generate_comparison_report_tool,
     ]
 
 

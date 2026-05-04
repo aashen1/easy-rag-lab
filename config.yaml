@@ -369,6 +369,8 @@ logging:
 # ============================================================
 
 agent:
+  checkpoint:
+    db_path: "data/agent_checkpoints.db"
   defaults:
     parser_name: "pymupdf4llm"
     enhancer_name: "pdfplumber"

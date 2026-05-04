@@ -39,6 +39,7 @@ def build_system_prompt(
 - **Meal 管理**：list_meals, get_meal_detail, create_curated_meal
 - **文件浏览**：list_pdfs
 - **Issue 管理**：create_issue, list_issues, close_issue
+- **报告生成**：generate_maintenance_report_tool, generate_comparison_report_tool
 
 ## 高风险操作
 
