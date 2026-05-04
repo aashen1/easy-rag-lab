@@ -9,6 +9,40 @@ from langchain_core.tools import tool
 from loguru import logger
 
 
+def _resolve_pdf_path(pdf_path: str) -> str:
+    """Resolve a PDF path, trying the raw data directory if the file is not found.
+
+    If the given path does not exist, attempts to prefix it with the raw
+    data directory from config (e.g., ``data/raw/``). This handles cases
+    where the LLM provides a relative path without the data prefix.
+
+    Args:
+        pdf_path: The PDF file path to resolve.
+
+    Returns:
+        The resolved path string that exists on disk, or the original path
+        if no alternative is found (letting the downstream code handle the
+        FileNotFoundError).
+    """
+    p = Path(pdf_path)
+    if p.exists():
+        return pdf_path
+
+    try:
+        from src.utils import load_config
+
+        config = load_config()
+        raw_dir = config.get("parser", {}).get("input_dir", "data/raw")
+        candidate = Path(raw_dir) / pdf_path
+        if candidate.exists():
+            logger.info(f"Resolved PDF path: {pdf_path} -> {candidate}")
+            return str(candidate)
+    except Exception:
+        pass
+
+    return pdf_path
+
+
 def _backup_to_trashbin(source_path: Path, label: str) -> str | None:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     trashbin = Path(".trashbin")
@@ -110,19 +144,10 @@ def query_rag_tool(question: str, meal_name: str) -> str:
         JSON string with answer, sources, and scores.
     """
     try:
-        from src.core.ops.query import query_rag
-        from src.meal.manager import MealManager
-        from src.utils import load_config
+        from src.pipeline import RAGPipeline
 
-        config = load_config()
-        mgr = MealManager(config)
-        meal = mgr.load_meal(meal_name)
-        if meal is None:
-            return f"Meal '{meal_name}' not found."
-        pipeline = mgr.get_pipeline(meal_name)
-        if pipeline is None:
-            return f"No pipeline found for meal '{meal_name}'."
-        result = query_rag(question, pipeline)
+        pipeline = RAGPipeline(meal_name=meal_name)
+        result = pipeline.query(question)
         return json.dumps(result, ensure_ascii=False, indent=2, default=str)
     except Exception as e:
         logger.error(f"query_rag_tool failed: {e}")
@@ -136,7 +161,8 @@ def parse_pdf_tool(
     """Parse a PDF file and return the extracted text per page.
 
     Args:
-        pdf_path: Path to the PDF file.
+        pdf_path: Path to the PDF file. If the file is not found, will try
+            prefixing with the raw data directory from config (e.g., data/raw/).
         parser_name: Parser to use (default: pymupdf4llm).
         enhancer_name: Optional table enhancer (e.g., pdfplumber).
 
@@ -146,8 +172,9 @@ def parse_pdf_tool(
     try:
         from src.core.ops.parse import parse_pdf
 
+        resolved_path = _resolve_pdf_path(pdf_path)
         result = parse_pdf(
-            pdf_path, parser_name=parser_name, enhancer_name=enhancer_name
+            resolved_path, parser_name=parser_name, enhancer_name=enhancer_name
         )
         pages = {
             p.page_number: p.text[:500] + ("..." if len(p.text) > 500 else "")
@@ -185,8 +212,9 @@ def enhance_page_tool(
     try:
         from src.core.ops.parse import enhance_page
 
+        resolved_path = _resolve_pdf_path(pdf_path)
         result = enhance_page(
-            pdf_path, page_number, existing_text, enhancer_name=enhancer_name
+            resolved_path, page_number, existing_text, enhancer_name=enhancer_name
         )
         return result
     except Exception as e:
@@ -220,8 +248,9 @@ def chunk_parsed_tool(
         from src.core.ops.chunk import chunk_parsed
         from src.core.ops.parse import parse_pdf
 
+        resolved_path = _resolve_pdf_path(pdf_path)
         parse_result = parse_pdf(
-            pdf_path, parser_name=parser_name, enhancer_name=enhancer_name
+            resolved_path, parser_name=parser_name, enhancer_name=enhancer_name
         )
         chunks = chunk_parsed(
             parse_result, strategy=strategy, chunk_size=chunk_size, overlap=overlap
@@ -319,21 +348,9 @@ def rebuild_index(meal_name: str, rebuild: bool = True) -> str:
         JSON string with rebuild result including point count.
     """
     try:
-        from src.meal.manager import MealManager
-        from src.utils import load_config
+        from src.pipeline import RAGPipeline
 
-        config = load_config()
-        mgr = MealManager(config)
-        meal = mgr.load_meal(meal_name)
-        if meal is None:
-            return f"Meal '{meal_name}' not found."
-
-        pipeline = mgr.get_pipeline(meal_name)
-        if pipeline is None:
-            return f"No pipeline found for meal '{meal_name}'."
-
-        indexer = pipeline.indexer
-        embedder = pipeline.embedder
+        pipeline = RAGPipeline(meal_name=meal_name)
 
         chunks_dir = str(pipeline._chunks_dir) if pipeline._chunks_dir else None
         if not chunks_dir:
@@ -342,20 +359,15 @@ def rebuild_index(meal_name: str, rebuild: bool = True) -> str:
         if not chunks_path.exists():
             return f"No chunks directory found at {chunks_dir}."
 
-        backup_path = _backup_to_trashbin(chunks_path, f"chunks_{meal.data_id}")
+        backup_path = _backup_to_trashbin(
+            chunks_path, f"chunks_{pipeline.meal.data_id}"
+        )
         backup_info = (
             {"backup_path": backup_path} if backup_path else {"backup_path": None}
         )
 
-        indexer.create_collection(
-            vector_size=embedder.get_embedding_dimension(), recreate=rebuild
-        )
-        indexer.build_index(
-            chunks_dir=chunks_dir,
-            embedder=embedder,
-            rebuild=rebuild,
-        )
-        info = indexer.get_collection_info()
+        pipeline.build_index(rebuild=rebuild)
+        info = pipeline.indexer.get_collection_info()
         return json.dumps(
             {
                 "status": "rebuilt",
@@ -387,19 +399,9 @@ def delete_source(meal_name: str, source: str) -> str:
         JSON string with deletion result.
     """
     try:
-        from src.meal.manager import MealManager
-        from src.utils import load_config
+        from src.pipeline import RAGPipeline
 
-        config = load_config()
-        mgr = MealManager(config)
-        meal = mgr.load_meal(meal_name)
-        if meal is None:
-            return f"Meal '{meal_name}' not found."
-
-        pipeline = mgr.get_pipeline(meal_name)
-        if pipeline is None:
-            return f"No pipeline found for meal '{meal_name}'."
-
+        pipeline = RAGPipeline(meal_name=meal_name)
         indexer = pipeline.indexer
 
         logger.info(f"Deleting source '{source}' from meal '{meal_name}'")

@@ -2,9 +2,29 @@ from __future__ import annotations
 
 import sys
 
+from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.types import Command
 from loguru import logger
+
+
+def _format_agent_response(result: dict) -> None:
+    """Print the agent's final response and execution log to the console.
+
+    Args:
+        result: The final graph execution result dict.
+    """
+    messages = result.get("messages", [])
+    for msg in reversed(messages):
+        if isinstance(msg, AIMessage) and msg.content:
+            print(f"\n🤖 维修工: {msg.content}")
+            break
+
+    exec_log = result.get("execution_log", [])
+    if exec_log:
+        print(f"\n📋 执行日志: {len(exec_log)} 条记录")
+        for entry in exec_log[-5:]:
+            print(f"   - {entry}")
 
 
 def run_agent():
@@ -68,18 +88,7 @@ def run_agent():
                     else:
                         state = Command(resume=True)
             else:
-                last_message = (
-                    result.get("messages", [])[-1] if result.get("messages") else None
-                )
-                if last_message and hasattr(last_message, "content"):
-                    print(f"\n🤖 维修工: {last_message.content}")
-
-                exec_log = result.get("execution_log", [])
-                if exec_log:
-                    print(f"\n📋 执行日志: {len(exec_log)} 条记录")
-                    for entry in exec_log[-5:]:
-                        print(f"   - {entry}")
-
+                _format_agent_response(result)
                 break
 
     return 0

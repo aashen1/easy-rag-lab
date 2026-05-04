@@ -81,12 +81,21 @@ def approval_node(state: MaintenanceState) -> dict[str, Any]:
 
     Uses LangGraph interrupt() to pause execution and wait for user decision.
 
+    For each high-risk tool call, the user is prompted to approve or reject.
+    - Approved calls are kept in the AI message's tool_calls for execution.
+    - Rejected calls are replaced with ToolMessage responses indicating rejection.
+
+    If all tool calls are rejected, the node returns rejection messages so the
+    graph routes back to the agent node for re-evaluation instead of proceeding
+    to tool execution.
+
     Args:
         state: Current graph state.
 
     Returns:
-        State update with rejection messages for denied operations,
-        or empty dict if all operations are approved.
+        State update dict. If any rejections occurred, includes a modified
+        AIMessage (with only approved tool_calls) and rejection ToolMessages.
+        If all operations are approved, returns empty dict (no state change).
     """
     last_message = state["messages"][-1]
     if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
@@ -124,7 +133,7 @@ def approval_node(state: MaintenanceState) -> dict[str, Any]:
 
     if rejected_messages:
         updated_ai = AIMessage(
-            content=last_message.content,
+            content=last_message.content or "",
             tool_calls=remaining_tool_calls,
             id=last_message.id,
         )
@@ -134,6 +143,27 @@ def approval_node(state: MaintenanceState) -> dict[str, Any]:
         }
 
     return {}
+
+
+def _route_after_approval(state: MaintenanceState) -> Literal["tools", "agent"]:
+    """Route after approval: if there are approved tool calls, execute them;
+    otherwise go back to agent for re-evaluation.
+
+    After approval_node, the last message could be:
+    - A ToolMessage (rejection) if all tools were rejected -> go to agent
+    - An AIMessage with remaining tool_calls if some were approved -> go to tools
+    - The original AIMessage if no high-risk tools were present -> go to tools
+
+    Args:
+        state: Current graph state.
+
+    Returns:
+        "tools" if there are pending tool calls to execute, "agent" otherwise.
+    """
+    last_message = state["messages"][-1]
+    if isinstance(last_message, AIMessage) and last_message.tool_calls:
+        return "tools"
+    return "agent"
 
 
 def tool_node(state: MaintenanceState) -> dict[str, Any]:
@@ -147,6 +177,9 @@ def tool_node(state: MaintenanceState) -> dict[str, Any]:
     """
     tools_by_name = {t.name: t for t in _get_tools()}
     last_message = state["messages"][-1]
+
+    if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
+        return {"messages": []}
 
     results = []
     log_entries = []
@@ -212,7 +245,11 @@ def build_graph() -> StateGraph:
     graph.add_conditional_edges(
         "agent", should_continue, {"tools": "approval", END: END}
     )
-    graph.add_edge("approval", "tools")
+    graph.add_conditional_edges(
+        "approval",
+        _route_after_approval,
+        {"tools": "tools", "agent": "agent"},
+    )
     graph.add_edge("tools", "agent")
 
     return graph
