@@ -143,7 +143,7 @@ def agent_node(state: MaintenanceState) -> dict[str, Any]:
     system_content = build_system_prompt(
         stage_history=state.get("stage_history"),
         experiences=experiences,
-        locked_tool=None,
+        locked_tool=locked_tool,
     )
     messages = [SystemMessage(content=system_content)] + state["messages"]
     response = llm_with_tools.invoke(messages)
