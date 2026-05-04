@@ -44,6 +44,71 @@ class TestMaintenanceReporter:
         assert "# 维修报告" in report
         assert "无操作记录" in report
 
+    def test_generate_report_with_config_recommendations(self):
+        from src.agent.reporters.maintenance_report import MaintenanceReporter
+
+        reporter = MaintenanceReporter()
+        state = {
+            "current_source": "test.pdf",
+            "current_meal": "meal_2024",
+            "execution_log": [],
+            "stage_history": [],
+            "diagnosis": [],
+            "messages": [],
+            "config_recommendations": [
+                {"item": "chunk_size", "value": 256, "reason": "减少信息丢失"},
+                {"item": "parser", "value": "pymupdf4llm", "reason": "年报最佳"},
+            ],
+        }
+        report = reporter.generate(state, "rec-session")
+        assert "最终配置推荐" in report
+        assert "chunk_size" in report
+        assert "256" in report
+        assert "减少信息丢失" in report
+
+    def test_generate_report_with_experiences(self):
+        from src.agent.reporters.maintenance_report import MaintenanceReporter
+
+        reporter = MaintenanceReporter()
+        state = {
+            "current_source": "test.pdf",
+            "current_meal": "meal_2024",
+            "execution_log": [],
+            "stage_history": [],
+            "diagnosis": [],
+            "messages": [],
+            "experiences": [
+                {
+                    "pdf_type": "annual_report",
+                    "best_parser": "pymupdf4llm",
+                    "best_chunk_strategy": "page_aware",
+                    "best_chunk_size": 512,
+                    "reason": "年报测试结果",
+                },
+            ],
+        }
+        report = reporter.generate(state, "exp-session")
+        assert "经验记录" in report
+        assert "annual_report" in report
+        assert "pymupdf4llm" in report
+        assert "年报测试结果" in report
+
+    def test_generate_report_empty_recommendations_and_experiences(self):
+        from src.agent.reporters.maintenance_report import MaintenanceReporter
+
+        reporter = MaintenanceReporter()
+        state = {
+            "current_source": None,
+            "current_meal": None,
+            "execution_log": [],
+            "stage_history": [],
+            "diagnosis": [],
+            "messages": [],
+        }
+        report = reporter.generate(state, "empty-session")
+        assert "无配置推荐" in report
+        assert "无经验记录" in report
+
     def test_save_report(self, tmp_path, monkeypatch):
         from src.agent.reporters.maintenance_report import MaintenanceReporter
 
@@ -106,6 +171,26 @@ class TestComparisonReporter:
         report = reporter.generate()
         assert "page_aware" in report
         assert "fixed" in report
+
+    def test_comparison_recommendation_picks_best(self):
+        from src.agent.reporters.comparison_report import ComparisonReporter
+
+        reporter = ComparisonReporter()
+        reporter.add_result("方案A", {"chunk_count": 100, "char_count": 50000})
+        reporter.add_result("方案B", {"chunk_count": 85, "char_count": 48000})
+        report = reporter.generate()
+        assert "推荐：方案A" in report
+        assert "2 项数值指标上表现最优" in report
+
+    def test_comparison_recommendation_with_mixed_metrics(self):
+        from src.agent.reporters.comparison_report import ComparisonReporter
+
+        reporter = ComparisonReporter()
+        reporter.add_result("A", {"strategy": "page_aware", "count": 80})
+        reporter.add_result("B", {"strategy": "fixed", "count": 100})
+        report = reporter.generate()
+        assert "推荐：B" in report
+        assert "A 在" not in report or "1 项指标" in report
 
 
 class TestReportTools:

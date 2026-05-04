@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -90,10 +91,37 @@ class ComparisonReporter:
                     pass
 
         sections.append("## 推荐方案")
-        if self._results:
-            sections.append(
-                "基于以上对比，推荐选择指标表现更优的方案。具体选择需结合业务场景判断。"
-            )
+        if len(self._results) >= 2:
+            win_counts: dict[str, int] = {r["label"]: 0 for r in self._results}
+            win_details: dict[str, list[str]] = {r["label"]: [] for r in self._results}
+            for key in sorted(all_keys):
+                numeric_vals: list[tuple[str, float]] = []
+                for r in self._results:
+                    v = r["metrics"].get(key)
+                    if v is not None:
+                        with contextlib.suppress(ValueError, TypeError):
+                            numeric_vals.append((r["label"], float(v)))
+                if len(numeric_vals) >= 2:
+                    best = max(numeric_vals, key=lambda x: x[1])
+                    win_counts[best[0]] += 1
+                    win_details[best[0]].append(f"{key}={best[1]}")
+            recommended = max(win_counts, key=lambda k: win_counts[k])
+            if win_counts[recommended] > 0:
+                sections.append(f"**推荐：{recommended}**")
+                sections.append(
+                    f"在 {win_counts[recommended]} 项数值指标上表现最优："
+                    f"{', '.join(win_details[recommended])}"
+                )
+            else:
+                sections.append("无数值型指标可比较，推荐需结合业务场景判断。")
+            for r in self._results:
+                if r["label"] != recommended and win_counts[r["label"]] > 0:
+                    sections.append(
+                        f"- {r['label']} 在 {win_counts[r['label']]} 项指标上更优："
+                        f"{', '.join(win_details[r['label']])}"
+                    )
+        else:
+            sections.append("需要至少两组结果才能推荐方案。")
 
         return "\n\n".join(sections)
 

@@ -883,6 +883,8 @@ def generate_maintenance_report_tool(
     stage_history: list[str] | None = None,
     diagnosis: list[dict] | None = None,
     messages_summary: list[str] | None = None,
+    config_recommendations: list[dict] | None = None,
+    experiences: list[dict] | None = None,
 ) -> str:
     """Generate a maintenance session report summarizing all operations.
 
@@ -894,6 +896,8 @@ def generate_maintenance_report_tool(
         stage_history: List of tool names executed in order.
         diagnosis: List of diagnostic findings.
         messages_summary: Key findings from AI messages.
+        config_recommendations: List of recommended config items with item, value, reason.
+        experiences: List of experience records with pdf_type, best_parser, etc.
 
     Returns:
         JSON string with report file path.
@@ -909,6 +913,8 @@ def generate_maintenance_report_tool(
             "stage_history": stage_history or [],
             "diagnosis": diagnosis or [],
             "messages": [],
+            "config_recommendations": config_recommendations or [],
+            "experiences": experiences or [],
         }
         report = reporter.generate(state, session_id)
         filepath = reporter.save(report, session_id)

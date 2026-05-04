@@ -73,6 +73,38 @@ class MaintenanceReporter:
         else:
             sections.append("无阶段记录")
 
+        sections.append("## 最终配置推荐")
+        config_recommendations = state.get("config_recommendations", [])
+        if config_recommendations:
+            for rec in config_recommendations:
+                if isinstance(rec, dict):
+                    sections.append(
+                        f"- **{rec.get('item', '未知')}**: "
+                        f"{rec.get('value', 'N/A')} "
+                        f"({rec.get('reason', '无说明')})"
+                    )
+                else:
+                    sections.append(f"- {rec}")
+        else:
+            sections.append("无配置推荐")
+
+        sections.append("## 经验记录")
+        experiences = state.get("experiences", [])
+        if experiences:
+            for exp in experiences:
+                if isinstance(exp, dict):
+                    sections.append(
+                        f"- **{exp.get('pdf_type', '未知类型')}**: "
+                        f"推荐解析器={exp.get('best_parser', 'N/A')}, "
+                        f"分块策略={exp.get('best_chunk_strategy', 'N/A')}, "
+                        f"分块大小={exp.get('best_chunk_size', 'N/A')} "
+                        f"({exp.get('reason', '无说明')})"
+                    )
+                else:
+                    sections.append(f"- {exp}")
+        else:
+            sections.append("无经验记录")
+
         return "\n\n".join(sections)
 
     def save(self, report: str, session_id: str) -> Path:
