@@ -119,12 +119,12 @@ class TestMaintenanceReporter:
         assert filepath.exists()
         assert filepath.read_text(encoding="utf-8") == report
 
-    def test_save_creates_directory(self, tmp_path, monkeypatch):
+    def test_save_creates_directory(self, tmp_path):
         from src.agent.reporters.maintenance_report import MaintenanceReporter
 
-        monkeypatch.chdir(tmp_path)
+        reports_dir = tmp_path / "data" / "maintenance_reports"
         reporter = MaintenanceReporter()
-        filepath = reporter.save("# Report", "session-1")
+        filepath = reporter.save("# Report", "session-1", reports_dir=reports_dir)
         assert "data" in str(filepath)
         assert "maintenance_reports" in str(filepath)
 
@@ -150,15 +150,15 @@ class TestComparisonReporter:
         report = reporter.generate()
         assert "至少两组" in report
 
-    def test_save_comparison_report(self, tmp_path, monkeypatch):
+    def test_save_comparison_report(self, tmp_path):
         from src.agent.reporters.comparison_report import ComparisonReporter
 
-        monkeypatch.chdir(tmp_path)
+        reports_dir = tmp_path / "data" / "maintenance_reports"
         reporter = ComparisonReporter()
         reporter.add_result("A", {"count": 10})
         reporter.add_result("B", {"count": 20})
         report = reporter.generate()
-        filepath = reporter.save(report, "comp-session")
+        filepath = reporter.save(report, "comp-session", reports_dir=reports_dir)
         assert filepath.exists()
         assert "comparison" in filepath.name
 
@@ -228,6 +228,16 @@ class TestReportTools:
         from src.agent.tools import generate_maintenance_report_tool
 
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(
+            "src.agent.reporters.maintenance_report.load_config",
+            lambda: {
+                "agent": {
+                    "maintenance_reports_dir": str(
+                        tmp_path / "data" / "maintenance_reports"
+                    )
+                }
+            },
+        )
         result = generate_maintenance_report_tool.invoke(
             {
                 "session_id": "test",
@@ -244,6 +254,16 @@ class TestReportTools:
         from src.agent.tools import generate_comparison_report_tool
 
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(
+            "src.agent.reporters.comparison_report.load_config",
+            lambda: {
+                "agent": {
+                    "maintenance_reports_dir": str(
+                        tmp_path / "data" / "maintenance_reports"
+                    )
+                }
+            },
+        )
         result = generate_comparison_report_tool.invoke(
             {
                 "results": [

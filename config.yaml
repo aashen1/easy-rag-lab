@@ -371,6 +371,9 @@ logging:
 agent:
   checkpoint:
     db_path: "data/agent_checkpoints.db"
+  trashbin_dir: ".trashbin"
+  maintenance_reports_dir: "data/maintenance_reports"
+  subprocess_timeout: 30
   defaults:
     parser_name: "pymupdf4llm"
     enhancer_name: "pdfplumber"

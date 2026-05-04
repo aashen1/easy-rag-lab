@@ -6,6 +6,8 @@ from typing import Any
 
 from loguru import logger
 
+from src.utils import load_config
+
 
 class MaintenanceReporter:
     """Generate maintenance session reports in Markdown format."""
@@ -107,17 +109,27 @@ class MaintenanceReporter:
 
         return "\n\n".join(sections)
 
-    def save(self, report: str, session_id: str) -> Path:
-        """Save the report to the data/maintenance_reports/ directory.
+    def save(
+        self, report: str, session_id: str, reports_dir: str | Path | None = None
+    ) -> Path:
+        """Save the report to the configured maintenance reports directory.
 
         Args:
             report: Markdown report content.
             session_id: Session identifier for filename.
+            reports_dir: Override directory for saving. Defaults to config value.
 
         Returns:
             Path to the saved report file.
         """
-        reports_dir = Path("data/maintenance_reports")
+        if reports_dir is None:
+            reports_dir = Path(
+                load_config()
+                .get("agent", {})
+                .get("maintenance_reports_dir", "data/maintenance_reports")
+            )
+        else:
+            reports_dir = Path(reports_dir)
         try:
             reports_dir.mkdir(parents=True, exist_ok=True)
         except OSError as e:

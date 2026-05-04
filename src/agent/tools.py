@@ -6,6 +6,7 @@ import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from langchain_core.tools import tool
 from loguru import logger
@@ -45,9 +46,17 @@ def _resolve_pdf_path(pdf_path: str) -> str:
     return pdf_path
 
 
+def _get_agent_config(key: str, default: Any = None) -> Any:
+    from src.utils import load_config
+
+    config = load_config()
+    return config.get("agent", {}).get(key, default)
+
+
 def _backup_to_trashbin(source_path: Path, label: str) -> str | None:
+    trashbin_dir = _get_agent_config("trashbin_dir", ".trashbin")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    trashbin = Path(".trashbin")
+    trashbin = Path(trashbin_dir)
     dest = trashbin / f"{label}_{timestamp}"
     try:
         trashbin.mkdir(parents=True, exist_ok=True)
@@ -433,9 +442,10 @@ def delete_source(meal_name: str, source: str) -> str:
         try:
             points_metadata = indexer.scroll_by_source(source, with_vectors=False)
             if points_metadata:
+                trashbin_dir = _get_agent_config("trashbin_dir", ".trashbin")
                 source_hash = hashlib.md5(source.encode()).hexdigest()[:8]
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                trashbin = Path(".trashbin")
+                trashbin = Path(trashbin_dir)
                 trashbin.mkdir(parents=True, exist_ok=True)
                 backup_file = trashbin / f"source_backup_{source_hash}_{timestamp}.json"
                 backup_file.write_text(
@@ -552,6 +562,7 @@ def create_issue(
         JSON string with creation result.
     """
     try:
+        timeout = _get_agent_config("subprocess_timeout", 30)
         cmd = [
             "pixi",
             "run",
@@ -566,7 +577,7 @@ def create_issue(
         ]
         if labels:
             cmd.extend(["-l", labels])
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         if result.returncode != 0:
             logger.warning(f"create_issue command failed: {result.stderr}")
             return json.dumps(
@@ -581,7 +592,7 @@ def create_issue(
         )
     except subprocess.TimeoutExpired:
         logger.error("create_issue timed out")
-        return "Error: create_issue timed out after 30 seconds"
+        return f"Error: create_issue timed out after {timeout} seconds"
     except Exception as e:
         logger.error(f"create_issue failed: {e}")
         return f"Error creating issue: {e}"
@@ -602,12 +613,13 @@ def list_issues(
         JSON string with issue list.
     """
     try:
+        timeout = _get_agent_config("subprocess_timeout", 30)
         cmd = ["pixi", "run", "issue", "list", "--all"]
         if status:
             cmd.extend(["--status", status])
         if issue_type:
             cmd.extend(["--type", issue_type])
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         if result.returncode != 0:
             logger.warning(f"list_issues command failed: {result.stderr}")
             return json.dumps(
@@ -622,7 +634,7 @@ def list_issues(
         )
     except subprocess.TimeoutExpired:
         logger.error("list_issues timed out")
-        return "Error: list_issues timed out after 30 seconds"
+        return f"Error: list_issues timed out after {timeout} seconds"
     except Exception as e:
         logger.error(f"list_issues failed: {e}")
         return f"Error listing issues: {e}"
@@ -639,8 +651,9 @@ def close_issue(issue_id: str) -> str:
         JSON string with closure result.
     """
     try:
+        timeout = _get_agent_config("subprocess_timeout", 30)
         cmd = ["pixi", "run", "issue", "done", issue_id]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         if result.returncode != 0:
             logger.warning(f"close_issue command failed: {result.stderr}")
             return json.dumps(
@@ -655,7 +668,7 @@ def close_issue(issue_id: str) -> str:
         )
     except subprocess.TimeoutExpired:
         logger.error("close_issue timed out")
-        return "Error: close_issue timed out after 30 seconds"
+        return f"Error: close_issue timed out after {timeout} seconds"
     except Exception as e:
         logger.error(f"close_issue failed: {e}")
         return f"Error closing issue: {e}"

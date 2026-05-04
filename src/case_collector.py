@@ -10,7 +10,7 @@ import yaml
 from loguru import logger
 
 from src.trace_models import DiagnosisResult, GroundTruth, PipelineTrace
-from src.utils import deep_merge
+from src.utils import deep_merge, load_config
 
 CASE_TYPE_BAD = "bad"
 CASE_TYPE_GOOD = "good"
@@ -560,7 +560,10 @@ def delete_case(case_id: str) -> None:
     if not case_dir.exists():
         raise FileNotFoundError(f"Case not found: {case_id}")
 
-    trashbin = cases_dir.parent.parent / ".trashbin"
+    trashbin_dir = load_config().get("agent", {}).get("trashbin_dir", ".trashbin")
+    trashbin = Path(trashbin_dir)
+    if not trashbin.is_absolute():
+        trashbin = cases_dir.parent.parent / trashbin_dir
     trashbin.mkdir(parents=True, exist_ok=True)
     dest = trashbin / f"{case_id}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
     try:
