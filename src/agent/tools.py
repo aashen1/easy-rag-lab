@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import subprocess
 from datetime import datetime
 from pathlib import Path
 
@@ -531,4 +532,334 @@ def update_meal(meal_name: str, updates: dict) -> str:
         return f"Error updating meal: {e}"
 
 
-HIGH_RISK_TOOLS = {"rebuild_index", "delete_source", "update_meal"}
+@tool
+def create_issue(
+    title: str,
+    issue_type: str = "bug",
+    priority: str = "medium",
+    labels: str | None = None,
+) -> str:
+    """Create a new issue in the issue tracking system.
+
+    Args:
+        title: Issue title.
+        issue_type: Type of issue (bug/feat/rf/opt/inv/test). Defaults to 'bug'.
+        priority: Priority level (high/medium/low). Defaults to 'medium'.
+        labels: Comma-separated labels.
+
+    Returns:
+        JSON string with creation result.
+    """
+    try:
+        cmd = [
+            "pixi",
+            "run",
+            "issue",
+            "create",
+            "-t",
+            issue_type,
+            "-T",
+            title,
+            "-p",
+            priority,
+        ]
+        if labels:
+            cmd.extend(["-l", labels])
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode != 0:
+            logger.warning(f"create_issue command failed: {result.stderr}")
+            return json.dumps(
+                {"status": "error", "stderr": result.stderr.strip()},
+                ensure_ascii=False,
+                indent=2,
+            )
+        return json.dumps(
+            {"status": "created", "output": result.stdout.strip()},
+            ensure_ascii=False,
+            indent=2,
+        )
+    except subprocess.TimeoutExpired:
+        logger.error("create_issue timed out")
+        return "Error: create_issue timed out after 30 seconds"
+    except Exception as e:
+        logger.error(f"create_issue failed: {e}")
+        return f"Error creating issue: {e}"
+
+
+@tool
+def list_issues(
+    status: str | None = None,
+    issue_type: str | None = None,
+) -> str:
+    """List issues from the issue tracking system.
+
+    Args:
+        status: Filter by status (todo/in_progress/review/done/deferred/cancelled).
+        issue_type: Filter by type (bug/feat/rf/opt/inv/test).
+
+    Returns:
+        JSON string with issue list.
+    """
+    try:
+        cmd = ["pixi", "run", "issue", "list", "--all"]
+        if status:
+            cmd.extend(["--status", status])
+        if issue_type:
+            cmd.extend(["--type", issue_type])
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode != 0:
+            logger.warning(f"list_issues command failed: {result.stderr}")
+            return json.dumps(
+                {"status": "error", "stderr": result.stderr.strip()},
+                ensure_ascii=False,
+                indent=2,
+            )
+        return json.dumps(
+            {"status": "ok", "output": result.stdout.strip()},
+            ensure_ascii=False,
+            indent=2,
+        )
+    except subprocess.TimeoutExpired:
+        logger.error("list_issues timed out")
+        return "Error: list_issues timed out after 30 seconds"
+    except Exception as e:
+        logger.error(f"list_issues failed: {e}")
+        return f"Error listing issues: {e}"
+
+
+@tool
+def close_issue(issue_id: str) -> str:
+    """Close an issue by marking it as done.
+
+    Args:
+        issue_id: The issue ID to close (e.g., BUG-20260504-001-wt1).
+
+    Returns:
+        JSON string with closure result.
+    """
+    try:
+        cmd = ["pixi", "run", "issue", "done", issue_id]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode != 0:
+            logger.warning(f"close_issue command failed: {result.stderr}")
+            return json.dumps(
+                {"status": "error", "stderr": result.stderr.strip()},
+                ensure_ascii=False,
+                indent=2,
+            )
+        return json.dumps(
+            {"status": "closed", "issue_id": issue_id, "output": result.stdout.strip()},
+            ensure_ascii=False,
+            indent=2,
+        )
+    except subprocess.TimeoutExpired:
+        logger.error("close_issue timed out")
+        return "Error: close_issue timed out after 30 seconds"
+    except Exception as e:
+        logger.error(f"close_issue failed: {e}")
+        return f"Error closing issue: {e}"
+
+
+HIGH_RISK_TOOLS = {
+    "rebuild_index",
+    "delete_source",
+    "update_meal",
+    "delete_and_reindex_tool",
+}
+
+
+@tool
+def embed_chunks_tool(chunks: list[dict], collection_name: str | None = None) -> str:
+    """Embed a list of text chunks using the configured embedder.
+
+    Args:
+        chunks: List of chunk dictionaries, each containing a 'text' key.
+        collection_name: Target collection name. Defaults to config value.
+
+    Returns:
+        JSON string with embedding dimension and chunk count.
+    """
+    try:
+        from src.agent.config import get_agent_default
+        from src.core.ops.embed import embed_chunks
+        from src.embedder import Embedder
+        from src.utils import load_config
+
+        if collection_name is None:
+            collection_name = get_agent_default("collection_name", "financial_reports")
+
+        config = load_config()
+        embedder = Embedder(config)
+        result = embed_chunks(chunks, embedder)
+        return json.dumps(
+            {
+                "embedding_dim": len(result[0]) if result else 0,
+                "chunk_count": len(result),
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    except Exception as e:
+        logger.error(f"embed_chunks_tool failed: {e}")
+        return f"Error embedding chunks: {e}"
+
+
+@tool
+def index_chunks_tool(chunks: list[dict], collection_name: str | None = None) -> str:
+    """Index a list of chunks into the vector store.
+
+    Args:
+        chunks: List of chunk dictionaries to index.
+        collection_name: Target collection name. Defaults to config value.
+
+    Returns:
+        JSON string with indexed count.
+    """
+    try:
+        from src.agent.config import get_agent_default
+        from src.core.ops.index import index_chunks
+        from src.embedder import Embedder
+        from src.utils import load_config
+
+        if collection_name is None:
+            collection_name = get_agent_default("collection_name", "financial_reports")
+
+        config = load_config()
+        embedder = Embedder(config)
+        indexed = index_chunks(chunks, embedder, collection_name=collection_name)
+        return json.dumps(
+            {"indexed_count": indexed, "collection_name": collection_name},
+            ensure_ascii=False,
+            indent=2,
+        )
+    except Exception as e:
+        logger.error(f"index_chunks_tool failed: {e}")
+        return f"Error indexing chunks: {e}"
+
+
+@tool
+def delete_and_reindex_tool(
+    source: str, new_chunks: list[dict], collection_name: str | None = None
+) -> str:
+    """Delete vectors for a source and re-index with new chunks.
+
+    HIGH-RISK: This operation removes existing vectors and replaces them.
+    Requires user approval before execution.
+
+    Args:
+        source: Source identifier to delete and re-index.
+        new_chunks: New chunk dictionaries to index.
+        collection_name: Target collection name. Defaults to config value.
+
+    Returns:
+        JSON string with re-indexed count.
+    """
+    try:
+        from src.agent.config import get_agent_default
+        from src.core.ops.index import delete_source_and_reindex
+        from src.embedder import Embedder
+        from src.utils import load_config
+
+        if collection_name is None:
+            collection_name = get_agent_default("collection_name", "financial_reports")
+
+        config = load_config()
+        embedder = Embedder(config)
+        reindexed = delete_source_and_reindex(
+            source, new_chunks, embedder, collection_name=collection_name
+        )
+        return json.dumps(
+            {
+                "reindexed_count": reindexed,
+                "source": source,
+                "collection_name": collection_name,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    except Exception as e:
+        logger.error(f"delete_and_reindex_tool failed: {e}")
+        return f"Error deleting and reindexing: {e}"
+
+
+@tool
+def create_curated_meal(
+    name: str | None = None,
+    pdf_files: list[str] | None = None,
+    source_dir: str | None = None,
+    file_pattern: str | None = None,
+    tags: list[str] | None = None,
+    description: str | None = None,
+) -> str:
+    """Create a new meal by manually specifying PDF files.
+
+    Args:
+        name: Optional name for the meal.
+        pdf_files: List of PDF file paths to include.
+        source_dir: Directory to search for PDFs.
+        file_pattern: Filename pattern for filtering (e.g., '*年报*').
+        tags: Tags for the meal.
+        description: Description for the meal.
+
+    Returns:
+        JSON string with created meal details.
+    """
+    try:
+        from src.meal.manager import MealManager
+        from src.utils import load_config
+
+        config = load_config()
+        mgr = MealManager(config)
+        meal = mgr.create_meal_manual(
+            name=name,
+            pdf_files=pdf_files,
+            source_dir=source_dir,
+            file_pattern=file_pattern,
+            tags=tags,
+            description=description,
+        )
+        result = {
+            "name": meal.name,
+            "data_id": meal.data_id,
+            "creation_mode": meal.creation_mode,
+            "pdf_count": len(meal.pdf_files),
+        }
+        return json.dumps(result, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"create_curated_meal failed: {e}")
+        return f"Error creating curated meal: {e}"
+
+
+@tool
+def list_pdfs(pattern: str = "*.pdf") -> str:
+    """List available PDF files in the raw data directory.
+
+    Args:
+        pattern: Glob pattern for filtering files. Defaults to '*.pdf'.
+
+    Returns:
+        JSON string with list of PDF files.
+    """
+    try:
+        from src.utils import load_config
+
+        config = load_config()
+        raw_dir = Path(config.get("parser", {}).get("input_dir", "data/raw"))
+        if not raw_dir.exists():
+            return f"Raw data directory not found: {raw_dir}"
+
+        pdf_files = []
+        for f in sorted(raw_dir.rglob(pattern)):
+            stat = f.stat()
+            pdf_files.append(
+                {
+                    "name": f.name,
+                    "path": str(f),
+                    "size_bytes": stat.st_size,
+                    "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                }
+            )
+        return json.dumps(pdf_files, ensure_ascii=False, indent=2)
+    except Exception as e:
+        logger.error(f"list_pdfs failed: {e}")
+        return f"Error listing PDFs: {e}"
