@@ -363,3 +363,16 @@ logging:
   log_dir: "logs"
   rotation: "10 MB"
   retention: "7 days"
+
+# ============================================================
+# Agent 配置
+# ============================================================
+
+agent:
+  defaults:
+    parser_name: "pymupdf4llm"
+    enhancer_name: "pdfplumber"
+    chunk_size: 512
+    chunk_overlap: 0
+    collection_name: "financial_reports"
+    thread_id: "maintenance-session"
