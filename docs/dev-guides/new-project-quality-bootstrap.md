@@ -2,13 +2,13 @@
 
 > 本文档面向从零开始创建新 Python 项目的开发者，介绍如何从第一天就建立完整的代码质量防线，确保项目在 Ruff 检查、pytest 测试、pre-commit 钩子、Conventional Commits 等规范下健康成长。
 >
-> 这些实践提炼自 ash-easy-rag 项目（v0.1.0 ~ v0.1.16）的真实演进经验——该项目在无规范期积累了近 1000 个 lint 错误，最终花了多个版本才清偿完毕。本文的目标是让你不必重蹈覆辙。
+> 这些实践提炼自 easy-rag-lab 项目（v0.1.0 ~ v0.1.16）的真实演进经验——该项目在无规范期积累了近 1000 个 lint 错误，最终花了多个版本才清偿完毕。本文的目标是让你不必重蹈覆辙。
 
 ---
 
 ## 1. 为什么要从第一天就建防线？
 
-ash-easy-rag 的教训：
+easy-rag-lab 的教训：
 
 | 阶段 | 状况 | 代价 |
 |------|------|------|
@@ -156,7 +156,7 @@ indent-style = "space"
 - ❌ `E402`：不要全局忽略。如果某处 import 必须延迟，用 `# noqa: E402` 行级忽略
 - ❌ 其他规则：先不要忽略，遇到真正需要忽略的再按行处理
 
-> **经验教训**：全局忽略是隐性债务。ash-easy-rag 曾全局忽略 `SIM108` 和 `E402`，导致新代码中本应修复的违规也被放行，直到移除全局忽略时才发现遗漏。
+> **经验教训**：全局忽略是隐性债务。easy-rag-lab 曾全局忽略 `SIM108` 和 `E402`，导致新代码中本应修复的违规也被放行，直到移除全局忽略时才发现遗漏。
 
 ### Step 5：配置 pytest
 
@@ -181,7 +181,7 @@ tmp_path_retention_policy = "failed"
 |--------|-----|------|
 | `testpaths` | `["tests"]` | 只在 tests 目录找测试 |
 | `markers` | unit / integration / slow | 三层测试分层，按需选择运行深度 |
-| `addopts` | `--basetemp=.pytest_tmp` | 临时文件放在项目根目录，方便清理和 .gitignore |
+| `addopts` | `--basetemp=.pytest_tmp` | 临时文件放在项目根目录，减轻系统盘SSD压力（默认会生成在C盘`Temp`文件夹） |
 | `tmp_path_retention_count` | `0` | 通过的测试自动清理临时文件 |
 | `tmp_path_retention_policy` | `"failed"` | 只保留失败测试的临时文件用于调试 |
 
@@ -640,7 +640,7 @@ pixi run pytest tests/test_file.py::TestClass::test_method -v
 
 ### Q: 如何处理 lint 盲区？
 
-确保 ruff 的检查路径覆盖**所有** Python 源文件。ash-easy-rag 曾因 ruff task 仅覆盖 `src/ eval/ tests/`，导致根目录的 `main.py` 包含 17 个 lint 错误而不被发现。
+确保 ruff 的检查路径覆盖**所有** Python 源文件。easy-rag-lab 曾因 ruff task 仅覆盖 `src/ eval/ tests/`，导致根目录的 `main.py` 包含 17 个 lint 错误而不被发现。
 
 ---
 
