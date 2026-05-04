@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 from typing import Any, Literal
 
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
@@ -7,20 +8,31 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 from loguru import logger
 
-from src.agent.prompt import SYSTEM_PROMPT
+from src.agent.prompt import build_system_prompt
 from src.agent.state import MaintenanceState
 from src.agent.tools import HIGH_RISK_TOOLS
 
+_agent_store = None
 
+
+@functools.lru_cache(maxsize=1)
 def _get_tools():
     from src.agent.tools import (
         chunk_parsed_tool,
+        close_issue,
+        create_curated_meal,
+        create_issue,
+        delete_and_reindex_tool,
         delete_source,
+        embed_chunks_tool,
         enhance_page_tool,
         evaluate_answer_tool,
         get_index_info,
         get_meal_detail,
+        index_chunks_tool,
+        list_issues,
         list_meals,
+        list_pdfs,
         parse_pdf_tool,
         query_rag_tool,
         rebuild_index,
@@ -36,12 +48,21 @@ def _get_tools():
         chunk_parsed_tool,
         evaluate_answer_tool,
         get_index_info,
+        embed_chunks_tool,
+        index_chunks_tool,
+        delete_and_reindex_tool,
+        create_curated_meal,
+        list_pdfs,
+        create_issue,
+        list_issues,
+        close_issue,
         rebuild_index,
         delete_source,
         update_meal,
     ]
 
 
+@functools.lru_cache(maxsize=1)
 def _get_llm():
     from src.llm_client import create_langchain_anthropic_client
     from src.utils import get_llm_config, load_config
@@ -57,6 +78,15 @@ def _get_llm():
     )
 
 
+def _infer_pdf_type(source: str) -> str:
+    source_lower = source.lower()
+    if "年报" in source_lower or "annual" in source_lower:
+        return "annual_report"
+    if "研报" in source_lower or "research" in source_lower:
+        return "research_report"
+    return "generic"
+
+
 def agent_node(state: MaintenanceState) -> dict[str, Any]:
     """LLM decision node: invoke the model with tools bound.
 
@@ -70,7 +100,25 @@ def agent_node(state: MaintenanceState) -> dict[str, Any]:
     tools = _get_tools()
     llm_with_tools = llm.bind_tools(tools)
 
-    messages = [SystemMessage(content=SYSTEM_PROMPT)] + state["messages"]
+    experiences = None
+    if _agent_store is not None:
+        try:
+            from src.agent.memory.experience_store import ExperienceStore
+
+            exp_store = ExperienceStore(_agent_store)
+            current_source = state.get("current_source")
+            if current_source:
+                pdf_type = _infer_pdf_type(current_source)
+                namespace = ("default", "maintenance_experience", pdf_type)
+                experiences = exp_store.get_all_experiences(namespace)
+        except Exception as e:
+            logger.warning(f"Failed to retrieve experiences: {e}")
+
+    system_content = build_system_prompt(
+        stage_history=state.get("stage_history"),
+        experiences=experiences,
+    )
+    messages = [SystemMessage(content=system_content)] + state["messages"]
     response = llm_with_tools.invoke(messages)
 
     return {"messages": [response]}
@@ -183,6 +231,7 @@ def tool_node(state: MaintenanceState) -> dict[str, Any]:
 
     results = []
     log_entries = []
+    executed_tools = []
 
     for tool_call in last_message.tool_calls:
         tool_fn = tools_by_name.get(tool_call["name"])
@@ -207,10 +256,48 @@ def tool_node(state: MaintenanceState) -> dict[str, Any]:
             ToolMessage(content=str(observation), tool_call_id=tool_call["id"])
         )
         log_entries.append(log_entry)
+        executed_tools.append(tool_call["name"])
+
+    if _agent_store is not None and executed_tools:
+        experience_tools = {"parse_pdf_tool", "chunk_parsed_tool"}
+        if any(t in experience_tools for t in executed_tools):
+            try:
+                from src.agent.memory.experience_store import ExperienceStore
+
+                exp_store = ExperienceStore(_agent_store)
+                current_source = state.get("current_source")
+                if current_source:
+                    pdf_type = _infer_pdf_type(current_source)
+                    namespace = ("default", "maintenance_experience", pdf_type)
+                    experience = {
+                        "pdf_type": pdf_type,
+                        "source": current_source,
+                        "best_parser": None,
+                        "best_chunk_strategy": None,
+                        "best_chunk_size": None,
+                        "reason": f"Auto-saved after {', '.join(executed_tools)}",
+                        "tools_used": executed_tools,
+                    }
+                    exp_store.save_experience(namespace, experience)
+            except Exception as e:
+                logger.warning(f"Failed to save experience: {e}")
+
+    auto_review = state.get("auto_review", False)
+    if auto_review and executed_tools:
+        review_tools = {"parse_pdf_tool", "chunk_parsed_tool"}
+        reviewable = [t for t in executed_tools if t in review_tools]
+        if reviewable:
+            interrupt(
+                {
+                    "question": f"自动审查：{', '.join(reviewable)} 执行完成，请检查结果",
+                    "tools": reviewable,
+                }
+            )
 
     return {
         "messages": results,
         "execution_log": state.get("execution_log", []) + log_entries,
+        "stage_history": state.get("stage_history", []) + executed_tools,
     }
 
 
@@ -255,15 +342,20 @@ def build_graph() -> StateGraph:
     return graph
 
 
-def compile_agent(checkpointer=None):
+def compile_agent(checkpointer=None, store=None):
     """Compile the maintenance agent graph with an optional checkpointer.
 
     Args:
         checkpointer: Optional LangGraph checkpointer for persistence.
             Defaults to None (no persistence).
+        store: Optional LangGraph store for experience persistence.
+            Defaults to None (no experience store).
 
     Returns:
         Compiled graph ready for invocation.
     """
+    global _agent_store
+    _agent_store = store
+
     graph = build_graph()
-    return graph.compile(checkpointer=checkpointer)
+    return graph.compile(checkpointer=checkpointer, store=store)
