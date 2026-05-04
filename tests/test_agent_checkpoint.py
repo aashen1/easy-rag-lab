@@ -92,8 +92,9 @@ class TestCheckpointConfig:
     def test_get_checkpoint_config_returns_section(self):
         from unittest.mock import patch
 
-        from src.agent.config import get_checkpoint_config
+        from src.agent.config import get_agent_config, get_checkpoint_config
 
+        get_agent_config.cache_clear()
         with patch(
             "src.utils.load_config",
             return_value={"agent": {"checkpoint": {"db_path": "data/test.db"}}},
@@ -104,8 +105,9 @@ class TestCheckpointConfig:
     def test_get_checkpoint_config_returns_empty_when_missing(self):
         from unittest.mock import patch
 
-        from src.agent.config import get_checkpoint_config
+        from src.agent.config import get_agent_config, get_checkpoint_config
 
+        get_agent_config.cache_clear()
         with patch("src.utils.load_config", return_value={"agent": {}}):
             result = get_checkpoint_config()
             assert result == {}

@@ -418,8 +418,9 @@ class TestAgentConfig:
     def test_get_agent_default_returns_fallback(self):
         from unittest.mock import patch
 
-        from src.agent.config import get_agent_default
+        from src.agent.config import get_agent_config, get_agent_default
 
+        get_agent_config.cache_clear()
         with patch("src.utils.load_config", return_value={}):
             assert get_agent_default("parser_name", "pymupdf4llm") == "pymupdf4llm"
 
@@ -428,6 +429,7 @@ class TestAgentConfig:
 
         from src.agent.config import get_agent_config
 
+        get_agent_config.cache_clear()
         with patch(
             "src.utils.load_config",
             return_value={"agent": {"defaults": {"chunk_size": 1024}}},
