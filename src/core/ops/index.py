@@ -10,7 +10,7 @@ from src.indexer import VectorIndexer
 def index_chunks(
     chunks: list[dict[str, Any]],
     embedder: Any,
-    collection_name: str = "financial_reports",
+    collection_name: str | None = None,
     batch_size: int = 32,
     source_filter: set | None = None,
 ) -> int:
@@ -26,7 +26,7 @@ def index_chunks(
         embedder: An object with ``embed_texts(texts, batch_size)`` and
             ``get_embedding_dimension()`` methods.
         collection_name: Name of the Qdrant collection. Defaults to
-            ``"financial_reports"``.
+            value from config or ``"financial_reports"``.
         batch_size: Batch size for the embedding call. Defaults to 32.
         source_filter: Optional set of source paths to filter chunks
             before indexing. Currently unused but reserved for future
@@ -38,6 +38,10 @@ def index_chunks(
     Raises:
         Exception: If embedding or indexing fails.
     """
+    if collection_name is None:
+        from src.agent.config import get_agent_default
+
+        collection_name = get_agent_default("collection_name", "financial_reports")
     if not chunks:
         logger.warning("No chunks provided for indexing")
         return 0
@@ -68,7 +72,7 @@ def delete_source_and_reindex(
     source: str,
     new_chunks: list[dict[str, Any]],
     embedder: Any,
-    collection_name: str = "financial_reports",
+    collection_name: str | None = None,
 ) -> int:
     """Delete vectors belonging to a source and re-insert updated chunks.
 
@@ -83,7 +87,7 @@ def delete_source_and_reindex(
         embedder: An object with ``embed_texts(texts, batch_size)`` and
             ``get_embedding_dimension()`` methods.
         collection_name: Name of the Qdrant collection. Defaults to
-            ``"financial_reports"``.
+            value from config or ``"financial_reports"``.
 
     Returns:
         The number of new chunks indexed.
@@ -91,6 +95,10 @@ def delete_source_and_reindex(
     Raises:
         Exception: If deletion, embedding, or indexing fails.
     """
+    if collection_name is None:
+        from src.agent.config import get_agent_default
+
+        collection_name = get_agent_default("collection_name", "financial_reports")
     indexer: VectorIndexer | None = None
     try:
         indexer = VectorIndexer(collection_name=collection_name)

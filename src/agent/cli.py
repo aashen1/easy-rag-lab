@@ -33,12 +33,14 @@ def run_agent():
     Returns:
         Exit code (0 for normal exit).
     """
+    from src.agent.config import get_agent_default
     from src.agent.graph import compile_agent
 
     checkpointer = MemorySaver()
     agent = compile_agent(checkpointer=checkpointer)
 
-    config = {"configurable": {"thread_id": "maintenance-session"}}
+    thread_id = get_agent_default("thread_id", "maintenance-session")
+    config = {"configurable": {"thread_id": thread_id}}
 
     print("🔧 RAG 维修工 Agent 已启动")
     print("输入问题进行诊断，输入 'quit' 或 'exit' 退出")

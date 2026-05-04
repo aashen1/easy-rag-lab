@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import shutil
 from datetime import datetime
@@ -156,20 +157,24 @@ def query_rag_tool(question: str, meal_name: str) -> str:
 
 @tool
 def parse_pdf_tool(
-    pdf_path: str, parser_name: str = "pymupdf4llm", enhancer_name: str | None = None
+    pdf_path: str, parser_name: str | None = None, enhancer_name: str | None = None
 ) -> str:
     """Parse a PDF file and return the extracted text per page.
 
     Args:
         pdf_path: Path to the PDF file. If the file is not found, will try
             prefixing with the raw data directory from config (e.g., data/raw/).
-        parser_name: Parser to use (default: pymupdf4llm).
+        parser_name: Parser to use (default: from config or pymupdf4llm).
         enhancer_name: Optional table enhancer (e.g., pdfplumber).
 
     Returns:
         JSON string with page_number to text mapping and metadata.
     """
     try:
+        if parser_name is None:
+            from src.agent.config import get_agent_default
+
+            parser_name = get_agent_default("parser_name", "pymupdf4llm")
         from src.core.ops.parse import parse_pdf
 
         resolved_path = _resolve_pdf_path(pdf_path)
@@ -196,7 +201,7 @@ def enhance_page_tool(
     pdf_path: str,
     page_number: int,
     existing_text: str,
-    enhancer_name: str = "pdfplumber",
+    enhancer_name: str | None = None,
 ) -> str:
     """Enhance a single page's text with table extraction from pdfplumber.
 
@@ -204,12 +209,16 @@ def enhance_page_tool(
         pdf_path: Path to the PDF file.
         page_number: 1-indexed page number to enhance.
         existing_text: The current text of the page.
-        enhancer_name: Enhancer to use (default: pdfplumber).
+        enhancer_name: Enhancer to use (default: from config or pdfplumber).
 
     Returns:
         The enhanced text for the page.
     """
     try:
+        if enhancer_name is None:
+            from src.agent.config import get_agent_default
+
+            enhancer_name = get_agent_default("enhancer_name", "pdfplumber")
         from src.core.ops.parse import enhance_page
 
         resolved_path = _resolve_pdf_path(pdf_path)
@@ -226,9 +235,9 @@ def enhance_page_tool(
 def chunk_parsed_tool(
     pdf_path: str,
     strategy: str = "page_aware",
-    chunk_size: int = 512,
-    overlap: int = 0,
-    parser_name: str = "pymupdf4llm",
+    chunk_size: int | None = None,
+    overlap: int | None = None,
+    parser_name: str | None = None,
     enhancer_name: str | None = None,
 ) -> str:
     """Parse a PDF and chunk it using the specified strategy.
@@ -236,15 +245,27 @@ def chunk_parsed_tool(
     Args:
         pdf_path: Path to the PDF file.
         strategy: Chunking strategy (fixed, page_aware, semantic).
-        chunk_size: Maximum chunk size in tokens.
-        overlap: Overlap between chunks in tokens.
-        parser_name: Parser to use.
+        chunk_size: Maximum chunk size in tokens (default: from config or 512).
+        overlap: Overlap between chunks in tokens (default: from config or 0).
+        parser_name: Parser to use (default: from config or pymupdf4llm).
         enhancer_name: Optional table enhancer.
 
     Returns:
         JSON string with chunk count and first few chunks preview.
     """
     try:
+        if parser_name is None:
+            from src.agent.config import get_agent_default
+
+            parser_name = get_agent_default("parser_name", "pymupdf4llm")
+        if chunk_size is None:
+            from src.agent.config import get_agent_default
+
+            chunk_size = get_agent_default("chunk_size", 512)
+        if overlap is None:
+            from src.agent.config import get_agent_default
+
+            overlap = get_agent_default("chunk_overlap", 0)
         from src.core.ops.chunk import chunk_parsed
         from src.core.ops.parse import parse_pdf
 
@@ -406,6 +427,28 @@ def delete_source(meal_name: str, source: str) -> str:
 
         logger.info(f"Deleting source '{source}' from meal '{meal_name}'")
 
+        backup_path = None
+        try:
+            points_metadata = indexer.scroll_by_source(source, with_vectors=False)
+            if points_metadata:
+                source_hash = hashlib.md5(source.encode()).hexdigest()[:8]
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                trashbin = Path(".trashbin")
+                trashbin.mkdir(parents=True, exist_ok=True)
+                backup_file = trashbin / f"source_backup_{source_hash}_{timestamp}.json"
+                backup_file.write_text(
+                    json.dumps(
+                        points_metadata, ensure_ascii=False, indent=2, default=str
+                    ),
+                    encoding="utf-8",
+                )
+                backup_path = str(backup_file)
+                logger.info(
+                    f"Backed up {len(points_metadata)} points metadata to {backup_path}"
+                )
+        except Exception as e:
+            logger.warning(f"Backup failed for source '{source}': {e}")
+
         deleted_count = indexer.delete_by_source(source)
         return json.dumps(
             {
@@ -413,6 +456,7 @@ def delete_source(meal_name: str, source: str) -> str:
                 "meal_name": meal_name,
                 "source": source,
                 "deleted_points": deleted_count,
+                "backup_path": backup_path,
             },
             ensure_ascii=False,
             indent=2,
