@@ -142,6 +142,7 @@ def agent_node(state: MaintenanceState) -> dict[str, Any]:
 
     llm = _get_llm()
     tools = _get_tools()
+    logger.info(f"Agent node: binding {len(tools)} tools to LLM")
     llm_with_tools = llm.bind_tools(tools)
 
     experiences = None
@@ -164,7 +165,20 @@ def agent_node(state: MaintenanceState) -> dict[str, Any]:
         mode=state.get("mode", "light"),
     )
     messages = [SystemMessage(content=system_content)] + state["messages"]
+    logger.info(f"Agent node: invoking LLM with {len(messages)} messages")
     response = llm_with_tools.invoke(messages)
+
+    has_tool_calls = (
+        bool(response.tool_calls) if hasattr(response, "tool_calls") else False
+    )
+    logger.info(
+        f"Agent node: LLM response - tool_calls={has_tool_calls}, content_preview={response.content[:200] if response.content else '(empty)'}"
+    )
+    if has_tool_calls:
+        for tc in response.tool_calls:
+            logger.info(
+                f"  tool_call: name={tc['name']}, args_keys={list(tc.get('args', {}).keys())}"
+            )
 
     return {"messages": [response]}
 
