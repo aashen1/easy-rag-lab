@@ -17,3 +17,5 @@ class MaintenanceState(dict):
     auto_review: bool
     locked_tool: str | None
     locked_tool_args: dict[str, Any] | None
+    delete_count: int
+    mode: str

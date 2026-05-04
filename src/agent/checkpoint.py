@@ -9,14 +9,6 @@ from loguru import logger
 
 
 def _resolve_db_path(db_path: str | None = None) -> Path:
-    """Resolve the checkpoint database path from config if not provided.
-
-    Args:
-        db_path: Explicit database path, or None to read from config.
-
-    Returns:
-        Resolved Path object with parent directories created.
-    """
     if db_path is None:
         from src.agent.config import get_checkpoint_config
 
@@ -24,7 +16,11 @@ def _resolve_db_path(db_path: str | None = None) -> Path:
         db_path = ckpt_config.get("db_path", "data/agent_checkpoints.db")
 
     db_path_obj = Path(db_path)
-    db_path_obj.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        db_path_obj.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        logger.error(f"Failed to create checkpoint directory {db_path_obj.parent}: {e}")
+        raise
     return db_path_obj
 
 
@@ -53,25 +49,15 @@ def get_checkpointer(db_path: str | None = None) -> Generator:
 
 
 def get_checkpointer_direct(db_path: str | None = None):
-    """Create a SqliteSaver with a persistent connection (no context manager).
-
-    Suitable for long-lived applications like Streamlit where the
-    checkpointer needs to stay alive across multiple invocations.
-    The caller is responsible for closing the underlying connection
-    when no longer needed.
-
-    Args:
-        db_path: Path to the SQLite database file. If None, reads from
-            config.yaml agent.checkpoint.db_path, falling back to
-            ``data/agent_checkpoints.db``.
-
-    Returns:
-        A SqliteSaver instance with an open connection.
-    """
     from langgraph.checkpoint.sqlite import SqliteSaver
 
     db_path_obj = _resolve_db_path(db_path)
 
     logger.info(f"Initializing SqliteSaver (direct) at {db_path_obj}")
-    conn = sqlite3.connect(str(db_path_obj), check_same_thread=False)
-    return SqliteSaver(conn)
+    try:
+        conn = sqlite3.connect(str(db_path_obj), check_same_thread=False)
+        conn.execute("PRAGMA journal_mode=WAL")
+        return SqliteSaver(conn)
+    except sqlite3.Error as e:
+        logger.error(f"Failed to initialize SqliteSaver at {db_path_obj}: {e}")
+        raise

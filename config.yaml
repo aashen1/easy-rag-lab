@@ -371,6 +371,9 @@ logging:
 agent:
   checkpoint:
     db_path: "data/agent_checkpoints.db"
+  trashbin_dir: ".trashbin"
+  maintenance_reports_dir: "data/maintenance_reports"
+  subprocess_timeout: 30
   defaults:
     parser_name: "pymupdf4llm"
     enhancer_name: "pdfplumber"
@@ -378,3 +381,5 @@ agent:
     chunk_overlap: 0
     collection_name: "financial_reports"
     thread_id: "maintenance-session"
+    mode: "light"
+    delete_count_threshold: 3

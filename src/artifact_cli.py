@@ -115,7 +115,7 @@ def cmd_info(args: argparse.Namespace) -> None:
             print("Manifest:")
             print(json.dumps(manifest, indent=2, ensure_ascii=False))
         except Exception as e:
-            print(f"Failed to read manifest: {e}")
+            logger.error(f"Failed to read manifest: {e}")
     else:
         print("No manifest.json found")
 

@@ -1471,22 +1471,20 @@ class MealManager:
             pdf_files: List of PDF file paths to parse.
             output_dir: Directory for parsed output files.
         """
-        from src.parsers.registry import ParserRegistry
+        from src.core.ops.parse import parse_pdf
 
         if "primary" in parser_config:
             primary = parser_config.get("primary", "pymupdf4llm")
             enhancer = parser_config.get("table_enhancer")
             primary_config = parser_config.get(primary, {})
             enhancer_config = parser_config.get(enhancer or "", {})
-            parser = ParserRegistry.get_composite(
-                primary, enhancer, primary_config, enhancer_config
-            )
             use_page_chunks = bool(primary_config.get("page_chunks", False))
         else:
-            algorithm = parser_config.get("algorithm", "pymupdf4llm")
-            parser_options = parser_config.get(algorithm, {})
-            parser = ParserRegistry.get(algorithm, parser_options)
-            use_page_chunks = bool(parser_options.get("page_chunks", False))
+            primary = parser_config.get("algorithm", "pymupdf4llm")
+            primary_config = parser_config.get(primary, {})
+            enhancer = None
+            enhancer_config = {}
+            use_page_chunks = bool(primary_config.get("page_chunks", False))
 
         for pdf_file in pdf_files:
             try:
@@ -1500,7 +1498,13 @@ class MealManager:
                     logger.info(f"Skipping (already parsed): {pdf_file.name}")
                     continue
 
-                result = parser.parse(str(pdf_file))
+                result = parse_pdf(
+                    str(pdf_file),
+                    parser_name=primary,
+                    parser_options=primary_config,
+                    enhancer_name=enhancer,
+                    enhancer_options=enhancer_config,
+                )
 
                 output_file.parent.mkdir(parents=True, exist_ok=True)
 
