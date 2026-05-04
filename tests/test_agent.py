@@ -434,3 +434,230 @@ class TestLLMClientCaching:
         tools2 = _get_tools()
         assert tools1 is tools2
         _get_tools.cache_clear()
+
+
+class TestNewTools:
+    def test_embed_chunks_tool_exists(self):
+        from src.agent.tools import embed_chunks_tool
+
+        assert embed_chunks_tool.name == "embed_chunks_tool"
+
+    def test_index_chunks_tool_exists(self):
+        from src.agent.tools import index_chunks_tool
+
+        assert index_chunks_tool.name == "index_chunks_tool"
+
+    def test_delete_and_reindex_tool_exists(self):
+        from src.agent.tools import delete_and_reindex_tool
+
+        assert delete_and_reindex_tool.name == "delete_and_reindex_tool"
+
+    def test_delete_and_reindex_is_high_risk(self):
+        from src.agent.tools import HIGH_RISK_TOOLS
+
+        assert "delete_and_reindex_tool" in HIGH_RISK_TOOLS
+
+    def test_create_curated_meal_exists(self):
+        from src.agent.tools import create_curated_meal
+
+        assert create_curated_meal.name == "create_curated_meal"
+
+    def test_list_pdfs_exists(self):
+        from src.agent.tools import list_pdfs
+
+        assert list_pdfs.name == "list_pdfs"
+
+    def test_create_issue_exists(self):
+        from src.agent.tools import create_issue
+
+        assert create_issue.name == "create_issue"
+
+    def test_list_issues_exists(self):
+        from src.agent.tools import list_issues
+
+        assert list_issues.name == "list_issues"
+
+    def test_close_issue_exists(self):
+        from src.agent.tools import close_issue
+
+        assert close_issue.name == "close_issue"
+
+    def test_create_issue_with_mock_subprocess(self):
+        from unittest.mock import MagicMock, patch
+
+        from src.agent.tools import create_issue
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "✓ Issue created successfully!"
+        mock_result.stderr = ""
+
+        with patch("src.agent.tools.subprocess.run", return_value=mock_result):
+            result = create_issue.invoke(
+                {"title": "Test bug", "issue_type": "bug", "priority": "high"}
+            )
+            assert "created" in result
+
+    def test_list_issues_with_mock_subprocess(self):
+        from unittest.mock import MagicMock, patch
+
+        from src.agent.tools import list_issues
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "No issues found."
+        mock_result.stderr = ""
+
+        with patch("src.agent.tools.subprocess.run", return_value=mock_result):
+            result = list_issues.invoke({"status": "todo"})
+            assert "ok" in result
+
+    def test_close_issue_with_mock_subprocess(self):
+        from unittest.mock import MagicMock, patch
+
+        from src.agent.tools import close_issue
+
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = "✓ Issue done successfully!"
+        mock_result.stderr = ""
+
+        with patch("src.agent.tools.subprocess.run", return_value=mock_result):
+            result = close_issue.invoke({"issue_id": "BUG-20260504-001-wt1"})
+            assert "closed" in result
+
+    def test_get_tools_returns_all_19_tools(self):
+        from src.agent.graph import _get_tools
+
+        _get_tools.cache_clear()
+        tools = _get_tools()
+        assert len(tools) == 19
+        tool_names = {t.name for t in tools}
+        assert "embed_chunks_tool" in tool_names
+        assert "index_chunks_tool" in tool_names
+        assert "delete_and_reindex_tool" in tool_names
+        assert "create_curated_meal" in tool_names
+        assert "list_pdfs" in tool_names
+        assert "create_issue" in tool_names
+        assert "list_issues" in tool_names
+        assert "close_issue" in tool_names
+        _get_tools.cache_clear()
+
+
+class TestMaintenanceStateNewFields:
+    def test_state_with_stage_history(self):
+        state = MaintenanceState(
+            messages=[],
+            current_meal=None,
+            current_source=None,
+            diagnosis=[],
+            pending_action=None,
+            approved=None,
+            execution_log=[],
+            stage_history=["parse_pdf_tool"],
+            auto_review=False,
+        )
+        assert state["stage_history"] == ["parse_pdf_tool"]
+        assert state["auto_review"] is False
+
+    def test_state_auto_review_default(self):
+        state = MaintenanceState(
+            messages=[],
+            current_meal=None,
+            current_source=None,
+            diagnosis=[],
+            pending_action=None,
+            approved=None,
+            execution_log=[],
+            stage_history=[],
+            auto_review=True,
+        )
+        assert state["auto_review"] is True
+
+
+class TestToolNodeStageHistory:
+    def test_tool_node_updates_stage_history(self):
+        from langchain_core.messages import AIMessage
+
+        from src.agent.graph import tool_node
+
+        state = MaintenanceState(
+            messages=[
+                AIMessage(
+                    content="",
+                    tool_calls=[{"name": "list_meals", "args": {}, "id": "tc1"}],
+                )
+            ],
+            current_meal=None,
+            current_source=None,
+            diagnosis=[],
+            pending_action=None,
+            approved=None,
+            execution_log=[],
+            stage_history=["parse_pdf_tool"],
+            auto_review=False,
+        )
+        result = tool_node(state)
+        assert "parse_pdf_tool" in result["stage_history"]
+        assert "list_meals" in result["stage_history"]
+
+
+class TestBuildSystemPrompt:
+    def test_base_prompt_contains_workflow(self):
+        from src.agent.prompt import build_system_prompt
+
+        prompt = build_system_prompt()
+        assert "诊断" in prompt
+        assert "修复" in prompt
+
+    def test_prompt_with_stage_history(self):
+        from src.agent.prompt import build_system_prompt
+
+        prompt = build_system_prompt(
+            stage_history=["parse_pdf_tool", "chunk_parsed_tool"]
+        )
+        assert "已执行步骤" in prompt
+        assert "parse_pdf_tool" in prompt
+        assert "chunk_parsed_tool" in prompt
+
+    def test_prompt_with_experiences(self):
+        from src.agent.prompt import build_system_prompt
+
+        experiences = [
+            {
+                "pdf_type": "年报",
+                "best_parser": "pymupdf4llm+pdfplumber",
+                "best_chunk_strategy": "page_aware",
+                "best_chunk_size": 512,
+                "reason": "年报表格多",
+            }
+        ]
+        prompt = build_system_prompt(experiences=experiences)
+        assert "历史经验推荐" in prompt
+        assert "年报" in prompt
+        assert "pymupdf4llm+pdfplumber" in prompt
+
+    def test_prompt_without_optional_sections(self):
+        from src.agent.prompt import build_system_prompt
+
+        prompt = build_system_prompt()
+        assert "已执行步骤" not in prompt
+        assert "历史经验推荐" not in prompt
+
+    def test_prompt_contains_issue_rules(self):
+        from src.agent.prompt import build_system_prompt
+
+        prompt = build_system_prompt()
+        assert "Issue" in prompt
+
+    def test_prompt_contains_rollback_instructions(self):
+        from src.agent.prompt import build_system_prompt
+
+        prompt = build_system_prompt()
+        assert "回退" in prompt
+
+    def test_system_prompt_backward_compat(self):
+        from src.agent.prompt import SYSTEM_PROMPT
+
+        assert isinstance(SYSTEM_PROMPT, str)
+        assert len(SYSTEM_PROMPT) > 100
