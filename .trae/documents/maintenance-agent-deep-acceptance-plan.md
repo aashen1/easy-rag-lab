@@ -234,30 +234,46 @@
 
 ## 五、验收执行步骤
 
-### Step 1: 自动化基线确认
+> **⚠️ 并行开发约束**：Phase 3 正在另一个 worktree 中实现，涉及以下文件：
+> - `src/agent/cli.py`, `src/agent/graph.py`, `src/agent/state.py`, `src/agent/prompt.py`, `src/agent/config.py`, `config.yaml`, `src/app.py`, `src/parser.py`
+> - 新建 `src/agent/checkpoint.py`, `src/agent/reporters/`, `src/app_pages/maintenance.py` 等
+>
+> **本验收只修改不与 Phase 3 冲突的文件**，冲突文件的问题记录为"待 Phase 3 合并后修复"。
+
+### Step 1: 自动化基线确认（只读）
 - `pixi run test` 全量通过
 - `pixi run lint` 通过
 
 ### Step 2: P0 Bug 验证与修复
-- P0-1: 验证 `creation_mode` 未写入 manifest → 修复
-- P0-2: 验证 CLI 状态丢失 → 修复
-- P0-3: 验证空壳经验 → 修复（要么填充有意义的值，要么暂时关闭自动保存）
+
+| Bug | 涉及文件 | 是否与 Phase 3 冲突 | 处理策略 |
+|-----|---------|-------------------|---------|
+| P0-1 `creation_mode` 未写入 manifest | `src/meal/manager.py` | ❌ 不冲突 | ✅ 本轮修复 |
+| P0-2 CLI 状态丢失 | `src/agent/cli.py` | ⚠️ 冲突 | 📋 记录，Phase 3 T1(SqliteSaver)+T3(CLI增强) 会重构 cli.py，届时一并修复 |
+| P0-3 空壳经验 | `src/agent/graph.py` | ⚠️ 冲突 | 📋 记录，Phase 3 T7(提示词优化) 可能涉及，待合并后修复 |
+
+**本轮实际修复**：仅 P0-1
 
 ### Step 3: P1 功能缺陷修复
-- P1-1: `MaintenanceState` 改为 `TypedDict`
-- P1-2/P1-3: 补充 `approval_node` 和 `_route_after_approval` 测试
-- P1-4: 修复 `collection_name` 与 meal 系统冲突
-- P1-5: `query.py` 补全异常处理
-- P1-6: 评估 `enhance_page` 性能问题
-- P1-7: 补充 CLI review 测试
-- P1-8: 移除或标注 `search_experiences` 死代码
-- P1-9: 评估 `evaluate_single` 中文分词问题
-- P1-10: `get_agent_default` 加缓存
 
-### Step 4: P2 风格改进（可选）
-- 按优先级逐步处理
+| 缺陷 | 涉及文件 | 是否与 Phase 3 冲突 | 处理策略 |
+|------|---------|-------------------|---------|
+| P1-1 `MaintenanceState` 改 TypedDict | `src/agent/state.py` | ⚠️ 冲突（T4 会新增字段） | 📋 记录，待 Phase 3 合并后统一重构 |
+| P1-2/P1-3 approval_node 测试 | `tests/test_agent.py` | ⚠️ 可能冲突 | ✅ 新增测试文件 `tests/test_agent_approval.py`，避免修改现有测试 |
+| P1-4 `collection_name` 冲突 | `config.yaml`, `src/agent/tools.py` | ⚠️ config.yaml 冲突 | 📋 记录，待 Phase 3 合并后修复 |
+| P1-5 `query.py` 异常处理 | `src/core/ops/query.py` | ❌ 不冲突 | ✅ 本轮修复 |
+| P1-6 `enhance_page` 性能 | `src/parsers/pdfplumber_enhancer.py` | ❌ 不冲突 | ✅ 本轮评估+修复 |
+| P1-7 CLI review 空壳测试 | `tests/test_agent.py` | ⚠️ 可能冲突 | 📋 记录，Phase 3 T3 会重写 CLI |
+| P1-8 `search_experiences` 死代码 | `src/agent/memory/experience_store.py` | ❌ 不冲突 | ✅ 本轮标注 |
+| P1-9 `evaluate_single` 中文分词 | `src/core/ops/evaluate.py` | ❌ 不冲突 | ✅ 本轮修复 |
+| P1-10 `get_agent_default` 缓存 | `src/agent/config.py` | ⚠️ 冲突 | 📋 记录，待 Phase 3 合并后修复 |
 
-### Step 5: Spec 更新
+**本轮实际修复**：P1-5, P1-6, P1-8, P1-9 + P1-2/P1-3（新建测试文件）
+
+### Step 4: P2 风格改进（本轮不执行）
+- 全部推迟到 Phase 3 合并后，避免冲突
+
+### Step 5: Spec 更新（只修改 spec 文件，不冲突）
 - 将架构简化决策（ReAct vs 多节点）更新到 Spec
 - 标注"软拦截"而非"硬拦截"
 - 标注未实现的 Phase 3 功能
@@ -268,10 +284,35 @@
 
 ---
 
-## 六、验收结论标准
+## 六、本轮修复范围总结
+
+### ✅ 本轮修复（不与 Phase 3 冲突）
+
+| 编号 | 修复项 | 涉及文件 |
+|------|--------|---------|
+| P0-1 | `creation_mode` 未写入 manifest | `src/meal/manager.py` |
+| P1-2/3 | approval_node + route_after_approval 测试 | 新建 `tests/test_agent_approval.py` |
+| P1-5 | `query.py` 异常处理 | `src/core/ops/query.py` |
+| P1-6 | `enhance_page` 性能优化 | `src/parsers/pdfplumber_enhancer.py` |
+| P1-8 | `search_experiences` 死代码标注 | `src/agent/memory/experience_store.py` |
+| P1-9 | `evaluate_single` 中文分词 | `src/core/ops/evaluate.py` |
+
+### 📋 记录待 Phase 3 合并后修复
+
+| 编号 | 问题 | 原因 |
+|------|------|------|
+| P0-2 | CLI 状态丢失 | Phase 3 T1+T3 会重构 cli.py |
+| P0-3 | 空壳经验 | Phase 3 T7 会优化 graph.py |
+| P1-1 | MaintenanceState 改 TypedDict | Phase 3 T4 会新增字段 |
+| P1-4 | collection_name 冲突 | Phase 3 会修改 config.yaml |
+| P1-7 | CLI review 空壳测试 | Phase 3 T3 会重写 CLI |
+| P1-10 | config 缓存 | Phase 3 会修改 config.py |
+
+---
+
+## 七、验收结论标准
 
 | 条件 | 判定 |
 |------|------|
-| P0 全部修复 + P1 至少修复 5 个 + 测试全通过 | ✅ 验收通过 |
-| P0 全部修复 + P1 修复不足 5 个 | ⚠️ 有条件通过，需限期修复 |
-| P0 有未修复项 | ❌ 验收不通过 |
+| P0-1 修复 + P1 本轮 4 项修复 + 测试全通过 | ✅ 验收通过（附带待合并后修复清单） |
+| P0-1 未修复 | ❌ 验收不通过 |
