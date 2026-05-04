@@ -346,7 +346,14 @@ def tool_node(state: MaintenanceState) -> dict[str, Any]:
             )
 
         try:
-            observation = tool_fn.invoke(tool_call["args"])
+            tool_args = dict(tool_call["args"])
+            if tool_call["name"] == "generate_maintenance_report_tool":
+                tool_args.setdefault("current_source", state.get("current_source"))
+                tool_args.setdefault("current_meal", state.get("current_meal"))
+                tool_args.setdefault("execution_log", state.get("execution_log", []))
+                tool_args.setdefault("stage_history", state.get("stage_history", []))
+                tool_args.setdefault("diagnosis", state.get("diagnosis", []))
+            observation = tool_fn.invoke(tool_args)
             log_entry = f"TOOL: {tool_call['name']}"
         except Exception as e:
             logger.error(f"Tool {tool_call['name']} failed: {e}")

@@ -1357,3 +1357,88 @@ class TestModePrompt:
 
         prompt = build_system_prompt()
         assert "轻量模式" in prompt
+
+
+class TestReportToolStateInjection:
+    def test_report_tool_auto_fills_state(self):
+        from src.agent.graph import tool_node
+
+        state = MaintenanceState(
+            messages=[
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "generate_maintenance_report_tool",
+                            "args": {"session_id": "test-session"},
+                            "id": "tc1",
+                        }
+                    ],
+                )
+            ],
+            current_meal="test_meal",
+            current_source="test.pdf",
+            diagnosis=[{"issue": "bad chunk"}],
+            pending_action=None,
+            approved=None,
+            execution_log=["TOOL: list_meals", "TOOL: rebuild_index"],
+            stage_history=["list_meals", "get_index_info"],
+            auto_review=False,
+            locked_tool=None,
+            locked_tool_args=None,
+            delete_count=0,
+            mode="light",
+        )
+        with patch("src.agent.graph._get_tools") as mock_tools:
+            mock_tool = MagicMock()
+            mock_tool.name = "generate_maintenance_report_tool"
+            mock_tool.invoke.return_value = '{"status": "generated"}'
+            mock_tools.return_value = [mock_tool]
+            tool_node(state)
+        call_args = mock_tool.invoke.call_args[0][0]
+        assert call_args["current_meal"] == "test_meal"
+        assert call_args["current_source"] == "test.pdf"
+        assert call_args["execution_log"] == ["TOOL: list_meals", "TOOL: rebuild_index"]
+        assert call_args["stage_history"] == ["list_meals", "get_index_info"]
+        assert call_args["diagnosis"] == [{"issue": "bad chunk"}]
+
+    def test_report_tool_preserves_explicit_args(self):
+        from src.agent.graph import tool_node
+
+        state = MaintenanceState(
+            messages=[
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "generate_maintenance_report_tool",
+                            "args": {
+                                "session_id": "test-session",
+                                "current_meal": "explicit_meal",
+                            },
+                            "id": "tc1",
+                        }
+                    ],
+                )
+            ],
+            current_meal="state_meal",
+            current_source="test.pdf",
+            diagnosis=[],
+            pending_action=None,
+            approved=None,
+            execution_log=[],
+            stage_history=["list_meals"],
+            auto_review=False,
+            locked_tool=None,
+            locked_tool_args=None,
+            delete_count=0,
+            mode="light",
+        )
+        with patch("src.agent.graph._get_tools") as mock_tools:
+            mock_tool = MagicMock()
+            mock_tool.name = "generate_maintenance_report_tool"
+            mock_tool.invoke.return_value = '{"status": "generated"}'
+            mock_tools.return_value = [mock_tool]
+            tool_node(state)
+        call_args = mock_tool.invoke.call_args[0][0]
+        assert call_args["current_meal"] == "explicit_meal"

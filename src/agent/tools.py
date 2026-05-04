@@ -888,13 +888,17 @@ def generate_maintenance_report_tool(
 ) -> str:
     """Generate a maintenance session report summarizing all operations.
 
+    Call with just session_id - the system will automatically fill in
+    execution_log, stage_history, diagnosis, and other fields from the
+    current session state. You do NOT need to provide those parameters.
+
     Args:
         session_id: Session identifier for the report.
-        current_source: Current PDF source path.
-        current_meal: Current meal name.
-        execution_log: List of execution log entries.
-        stage_history: List of tool names executed in order.
-        diagnosis: List of diagnostic findings.
+        current_source: Current PDF source path (auto-filled if omitted).
+        current_meal: Current meal name (auto-filled if omitted).
+        execution_log: Auto-filled from session state - do not provide.
+        stage_history: Auto-filled from session state - do not provide.
+        diagnosis: Auto-filled from session state - do not provide.
         messages_summary: Key findings from AI messages.
         config_recommendations: List of recommended config items with item, value, reason.
         experiences: List of experience records with pdf_type, best_parser, etc.

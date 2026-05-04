@@ -42,6 +42,11 @@ def build_system_prompt(
 - **Issue 管理**：create_issue, list_issues, close_issue
 - **报告生成**：generate_maintenance_report_tool, generate_comparison_report_tool
 
+## 报告生成说明
+
+- 调用 generate_maintenance_report_tool 时只需传入 session_id，系统会自动从会话状态中提取执行日志、阶段历史、诊断结果等完整信息
+- 你不需要手动传入 execution_log、stage_history、diagnosis 等参数
+
 ## 工具选择示例
 
 ### 解析器选择
