@@ -44,25 +44,29 @@ def parse_pdf(
     if not pdf_path.exists():
         raise FileNotFoundError(f"PDF file not found: {pdf_path}")
 
-    if enhancer_name is not None:
-        logger.debug(
-            f"Creating composite parser: primary={parser_name}, "
-            f"enhancer={enhancer_name}"
-        )
-        parser = ParserRegistry.get_composite(
-            primary=parser_name,
-            enhancer=enhancer_name,
-            primary_config=parser_options,
-            enhancer_config=enhancer_options,
-        )
-    else:
-        logger.debug(f"Creating parser via legacy interface: {parser_name}")
-        parser = ParserRegistry.get(name=parser_name, config=parser_options)
+    try:
+        if enhancer_name is not None:
+            logger.debug(
+                f"Creating composite parser: primary={parser_name}, "
+                f"enhancer={enhancer_name}"
+            )
+            parser = ParserRegistry.get_composite(
+                primary=parser_name,
+                enhancer=enhancer_name,
+                primary_config=parser_options,
+                enhancer_config=enhancer_options,
+            )
+        else:
+            logger.debug(f"Creating parser via legacy interface: {parser_name}")
+            parser = ParserRegistry.get(name=parser_name, config=parser_options)
 
-    logger.info(f"Parsing PDF: {pdf_path}")
-    result = parser.parse(str(pdf_path))
-    logger.info(f"Parsed {len(result.pages)} pages from {pdf_path.name}")
-    return result
+        logger.info(f"Parsing PDF: {pdf_path}")
+        result = parser.parse(str(pdf_path))
+        logger.info(f"Parsed {len(result.pages)} pages from {pdf_path.name}")
+        return result
+    except Exception as e:
+        logger.error(f"parse_pdf failed: {e}")
+        raise
 
 
 def enhance_page(
@@ -93,10 +97,14 @@ def enhance_page(
     if not pdf_path.exists():
         raise FileNotFoundError(f"PDF file not found: {pdf_path}")
 
-    enhancer = ParserRegistry.get_enhancer(enhancer_name, enhancer_options)
-    logger.debug(f"Enhancing page {page_number} of {pdf_path} with {enhancer_name}")
-    result = enhancer.enhance_page(str(pdf_path), page_number, existing_text)
-    return result
+    try:
+        enhancer = ParserRegistry.get_enhancer(enhancer_name, enhancer_options)
+        logger.debug(f"Enhancing page {page_number} of {pdf_path} with {enhancer_name}")
+        result = enhancer.enhance_page(str(pdf_path), page_number, existing_text)
+        return result
+    except Exception as e:
+        logger.error(f"enhance_page failed: {e}")
+        raise
 
 
 def enhance_table(
@@ -129,12 +137,16 @@ def enhance_table(
     if not pdf_path.exists():
         raise FileNotFoundError(f"PDF file not found: {pdf_path}")
 
-    enhancer = ParserRegistry.get_enhancer(enhancer_name, enhancer_options)
-    logger.debug(
-        f"Enhancing table {table_index} on page {page_number} of {pdf_path} "
-        f"with {enhancer_name}"
-    )
-    result = enhancer.enhance_table(
-        str(pdf_path), page_number, table_index, existing_text
-    )
-    return result
+    try:
+        enhancer = ParserRegistry.get_enhancer(enhancer_name, enhancer_options)
+        logger.debug(
+            f"Enhancing table {table_index} on page {page_number} of {pdf_path} "
+            f"with {enhancer_name}"
+        )
+        result = enhancer.enhance_table(
+            str(pdf_path), page_number, table_index, existing_text
+        )
+        return result
+    except Exception as e:
+        logger.error(f"enhance_table failed: {e}")
+        raise

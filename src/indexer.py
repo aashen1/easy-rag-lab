@@ -239,6 +239,65 @@ class VectorIndexer:
             logger.error(error_msg)
             raise IndexingError(error_msg) from e
 
+    def scroll_by_source(self, source: str, with_vectors: bool = False) -> list[dict]:
+        """Scroll all points whose payload metadata.source matches the given source.
+
+        Args:
+            source: The source string to match against the ``metadata.source``
+                field in each point's payload.
+            with_vectors: Whether to include vector data in the results.
+                Defaults to False.
+
+        Returns:
+            A list of dictionaries, each containing ``id`` and ``payload``
+            keys. Returns an empty list if no matching points are found.
+
+        Raises:
+            IndexingError: If the scroll operation fails.
+        """
+        try:
+            source_filter = Filter(
+                must=[
+                    FieldCondition(
+                        key="metadata.source",
+                        match=MatchValue(value=source),
+                    )
+                ]
+            )
+
+            logger.info(
+                f"Scrolling points with source='{source}' in {self.collection_name}"
+            )
+
+            all_points = []
+            offset = None
+
+            while True:
+                records, next_offset = self.client.scroll(
+                    collection_name=self.collection_name,
+                    scroll_filter=source_filter,
+                    limit=100,
+                    with_payload=True,
+                    with_vectors=with_vectors,
+                    offset=offset,
+                )
+
+                for record in records:
+                    all_points.append({"id": record.id, "payload": record.payload})
+
+                if next_offset is None:
+                    break
+                offset = next_offset
+
+            logger.info(f"Found {len(all_points)} points with source='{source}'")
+
+            return all_points
+
+        except Exception as e:
+            error_msg = f"Failed to scroll by source '{source}': {str(e)}"
+            logger.error(error_msg)
+            raise IndexingError(error_msg) from e
+
     def upsert_chunks(
         self,
         chunks: list[dict[str, Any]],
