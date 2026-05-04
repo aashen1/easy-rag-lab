@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
-from streamlit.testing.v1 import AppTest
 
 from src.meal.models import MealConfig, MealFile
 
@@ -215,6 +214,8 @@ def ui_mock_pdf_page_count():
 def app(
     ui_mock_config, ui_mock_logger, ui_mock_pipeline, ui_mock_meals, ui_mock_pdf_server
 ):
+    from streamlit.testing.v1 import AppTest
+
     at = AppTest.from_file("src/app.py")
     at.run(timeout=30)
     yield at
@@ -229,6 +230,8 @@ def app_with_pdf(
     ui_mock_pdf_server,
     ui_mock_pdf_page_count,
 ):
+    from streamlit.testing.v1 import AppTest
+
     at = AppTest.from_file("src/app.py")
     at.session_state["_pdf_preview_path"] = (
         "data/raw/annual_reports/2023/company_a/report.pdf"

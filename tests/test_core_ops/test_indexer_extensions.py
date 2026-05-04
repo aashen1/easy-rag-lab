@@ -29,10 +29,11 @@ class TestVectorIndexerDeleteBySource:
         count_result.count = 0
         mock_client.count.return_value = count_result
 
-        indexer = VectorIndexer(collection_name="test_col")
-        indexer.client = mock_client
+        with patch("src.indexer.QdrantClient", return_value=mock_client):
+            indexer = VectorIndexer(collection_name="test_col")
+            indexer.client = mock_client
 
-        result = indexer.delete_by_source("nonexistent.pdf")
+            result = indexer.delete_by_source("nonexistent.pdf")
 
         assert result == 0
         mock_client.delete.assert_not_called()
@@ -52,10 +53,11 @@ class TestVectorIndexerUpsertChunks:
         ]
         embeddings = np.ones((2, 128), dtype=np.float32)
 
-        indexer = VectorIndexer(collection_name="test_col")
-        indexer.client = mock_client
+        with patch("src.indexer.QdrantClient", return_value=mock_client):
+            indexer = VectorIndexer(collection_name="test_col")
+            indexer.client = mock_client
 
-        result = indexer.upsert_chunks(chunks, embeddings)
+            result = indexer.upsert_chunks(chunks, embeddings)
 
         assert result == 2
         mock_client.upsert.assert_called()
