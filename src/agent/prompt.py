@@ -4,6 +4,7 @@ from __future__ import annotations
 def build_system_prompt(
     stage_history: list[str] | None = None,
     experiences: list[dict] | None = None,
+    mode: str = "light",
 ) -> str:
     prompt = """你是 RAG 系统的维修工 Agent。你的职责是诊断和修复 RAG 管线中的问题。
 
@@ -67,6 +68,8 @@ def build_system_prompt(
 - 更新 meal 配置 (update_meal)
 - 删除并重新索引 (delete_and_reindex_tool)
 
+**重要**：连续删除多个数据源前，请向用户说明累计影响范围。
+
 ## 约束规则
 
 - 不要连续调用同一工具超过 3 次，如果连续失败，分析原因并换策略
@@ -101,6 +104,11 @@ def build_system_prompt(
 - 高风险操作必须等待用户确认
 - 记录所有操作到执行日志
 - 如果不确定，宁可多问一句"""
+
+    if mode == "light":
+        prompt += "\n\n## 当前模式：轻量模式\n\n- 仅处理用户指定的 1-2 个 PDF\n- 不触发 Meal 批量体系\n- 专注于单文件精细诊断和修复"
+    elif mode == "full":
+        prompt += "\n\n## 当前模式：全量模式\n\n- 可调用 Meal 批量体系处理完整数据集\n- 可使用 create_curated_meal 创建新的 Meal\n- 注意：全量操作影响范围大，执行前务必确认"
 
     if stage_history:
         steps = "\n".join(f"  {i + 1}. {s}" for i, s in enumerate(stage_history))

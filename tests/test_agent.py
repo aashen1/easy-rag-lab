@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
+from langchain_core.messages import AIMessage
 
 from src.agent.state import MaintenanceState
 from src.agent.tools import FORBIDDEN_OPERATIONS, HIGH_RISK_TOOLS
@@ -1118,3 +1120,240 @@ class TestCLICommands:
 
         result = _handle_cli_command(":unknown", False)
         assert result is None
+
+    def test_mode_command(self):
+        from src.agent.cli import _handle_cli_command
+
+        result = _handle_cli_command(":mode", False)
+        assert result == "__set_mode__"
+
+
+class TestDeleteCountSafety:
+    def test_state_has_delete_count_field(self):
+        state = MaintenanceState(
+            messages=[],
+            current_meal=None,
+            current_source=None,
+            diagnosis=[],
+            pending_action=None,
+            approved=None,
+            execution_log=[],
+            stage_history=[],
+            auto_review=False,
+            locked_tool=None,
+            locked_tool_args=None,
+            delete_count=0,
+            mode="light",
+        )
+        assert state["delete_count"] == 0
+        assert state["mode"] == "light"
+
+    def test_delete_count_increments(self):
+        from src.agent.graph import tool_node
+
+        state = MaintenanceState(
+            messages=[
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "delete_source",
+                            "args": {"source": "test.pdf"},
+                            "id": "tc1",
+                        }
+                    ],
+                )
+            ],
+            current_meal=None,
+            current_source=None,
+            diagnosis=[],
+            pending_action=None,
+            approved=None,
+            execution_log=[],
+            stage_history=["list_meals", "get_index_info"],
+            auto_review=False,
+            locked_tool=None,
+            locked_tool_args=None,
+            delete_count=0,
+            mode="light",
+        )
+        with patch("src.agent.graph._get_tools") as mock_tools:
+            mock_tool = MagicMock()
+            mock_tool.name = "delete_source"
+            mock_tool.invoke.return_value = "Deleted test.pdf"
+            mock_tools.return_value = [mock_tool]
+            result = tool_node(state)
+        assert result["delete_count"] == 1
+
+    def test_delete_count_accumulates(self):
+        from src.agent.graph import tool_node
+
+        state = MaintenanceState(
+            messages=[
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "delete_source",
+                            "args": {"source": "a.pdf"},
+                            "id": "tc1",
+                        },
+                        {
+                            "name": "delete_source",
+                            "args": {"source": "b.pdf"},
+                            "id": "tc2",
+                        },
+                    ],
+                )
+            ],
+            current_meal=None,
+            current_source=None,
+            diagnosis=[],
+            pending_action=None,
+            approved=None,
+            execution_log=[],
+            stage_history=["list_meals"],
+            auto_review=False,
+            locked_tool=None,
+            locked_tool_args=None,
+            delete_count=1,
+            mode="light",
+        )
+        with patch("src.agent.graph._get_tools") as mock_tools:
+            mock_tool = MagicMock()
+            mock_tool.name = "delete_source"
+            mock_tool.invoke.return_value = "Deleted"
+            mock_tools.return_value = [mock_tool]
+            result = tool_node(state)
+        assert result["delete_count"] == 3
+
+
+class TestStageGuard:
+    def test_repair_blocked_without_diagnosis(self):
+        from src.agent.graph import tool_node
+
+        state = MaintenanceState(
+            messages=[
+                AIMessage(
+                    content="",
+                    tool_calls=[{"name": "rebuild_index", "args": {}, "id": "tc1"}],
+                )
+            ],
+            current_meal=None,
+            current_source=None,
+            diagnosis=[],
+            pending_action=None,
+            approved=None,
+            execution_log=[],
+            stage_history=[],
+            auto_review=False,
+            locked_tool=None,
+            locked_tool_args=None,
+            delete_count=0,
+            mode="light",
+        )
+        with patch("src.agent.graph._get_tools") as mock_tools:
+            mock_tool = MagicMock()
+            mock_tool.name = "rebuild_index"
+            mock_tools.return_value = [mock_tool]
+            result = tool_node(state)
+        assert any("被拒绝" in str(m.content) for m in result["messages"])
+        assert "GUARD" in result["execution_log"][-1]
+
+    def test_repair_allowed_after_diagnosis(self):
+        from src.agent.graph import tool_node
+
+        state = MaintenanceState(
+            messages=[
+                AIMessage(
+                    content="",
+                    tool_calls=[{"name": "rebuild_index", "args": {}, "id": "tc1"}],
+                )
+            ],
+            current_meal=None,
+            current_source=None,
+            diagnosis=[],
+            pending_action=None,
+            approved=None,
+            execution_log=[],
+            stage_history=["list_meals", "get_index_info"],
+            auto_review=False,
+            locked_tool=None,
+            locked_tool_args=None,
+            delete_count=0,
+            mode="light",
+        )
+        with patch("src.agent.graph._get_tools") as mock_tools:
+            mock_tool = MagicMock()
+            mock_tool.name = "rebuild_index"
+            mock_tool.invoke.return_value = "Index rebuilt"
+            mock_tools.return_value = [mock_tool]
+            result = tool_node(state)
+        assert not any("被拒绝" in str(m.content) for m in result["messages"])
+
+    def test_delete_source_blocked_without_diagnosis(self):
+        from src.agent.graph import tool_node
+
+        state = MaintenanceState(
+            messages=[
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "delete_source",
+                            "args": {"source": "test.pdf"},
+                            "id": "tc1",
+                        }
+                    ],
+                )
+            ],
+            current_meal=None,
+            current_source=None,
+            diagnosis=[],
+            pending_action=None,
+            approved=None,
+            execution_log=[],
+            stage_history=[],
+            auto_review=False,
+            locked_tool=None,
+            locked_tool_args=None,
+            delete_count=0,
+            mode="light",
+        )
+        with patch("src.agent.graph._get_tools") as mock_tools:
+            mock_tool = MagicMock()
+            mock_tool.name = "delete_source"
+            mock_tools.return_value = [mock_tool]
+            result = tool_node(state)
+        assert any("被拒绝" in str(m.content) for m in result["messages"])
+
+    def test_diagnosis_tools_not_blocked(self):
+        from src.agent.graph import DIAGNOSIS_TOOLS
+
+        assert "list_meals" in DIAGNOSIS_TOOLS
+        assert "get_meal_detail" in DIAGNOSIS_TOOLS
+        assert "query_rag_tool" in DIAGNOSIS_TOOLS
+        assert "get_index_info" in DIAGNOSIS_TOOLS
+        assert "evaluate_answer_tool" in DIAGNOSIS_TOOLS
+
+
+class TestModePrompt:
+    def test_light_mode_prompt(self):
+        from src.agent.prompt import build_system_prompt
+
+        prompt = build_system_prompt(mode="light")
+        assert "轻量模式" in prompt
+        assert "仅处理用户指定的 1-2 个 PDF" in prompt
+
+    def test_full_mode_prompt(self):
+        from src.agent.prompt import build_system_prompt
+
+        prompt = build_system_prompt(mode="full")
+        assert "全量模式" in prompt
+        assert "Meal 批量体系" in prompt
+
+    def test_default_mode_is_light(self):
+        from src.agent.prompt import build_system_prompt
+
+        prompt = build_system_prompt()
+        assert "轻量模式" in prompt

@@ -52,10 +52,20 @@ def render_maintenance():
             "diagnosis": [],
             "execution_log": [],
             "stage_history": [],
+            "delete_count": 0,
         }
+    if "maintenance_mode" not in st.session_state:
+        st.session_state.maintenance_mode = "light"
 
     with st.sidebar:
         st.markdown("### 🔧 维修工控制面板")
+
+        st.session_state.maintenance_mode = st.selectbox(
+            "模式",
+            options=["light", "full"],
+            format_func=lambda x: "轻量模式" if x == "light" else "全量模式",
+            index=0 if st.session_state.maintenance_mode == "light" else 1,
+        )
 
         tool_names = _get_tool_names()
         selected_tool = st.selectbox(
@@ -124,6 +134,8 @@ def render_maintenance():
                         "auto_review": st.session_state.maintenance_auto_review,
                         "locked_tool": st.session_state.maintenance_locked_tool,
                         "locked_tool_args": None,
+                        "delete_count": current.get("delete_count", 0),
+                        "mode": st.session_state.maintenance_mode,
                     }
 
                     result = agent.invoke(state, config=config)
@@ -159,6 +171,7 @@ def render_maintenance():
                             "diagnosis",
                             "execution_log",
                             "stage_history",
+                            "delete_count",
                         ):
                             if key in result:
                                 st.session_state.maintenance_current_state[key] = (

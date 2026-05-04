@@ -26,3 +26,7 @@ def get_checkpoint_config() -> dict[str, Any]:
     """
     agent_config = get_agent_config()
     return agent_config.get("checkpoint", {})
+
+
+def get_delete_count_threshold() -> int:
+    return get_agent_config().get("delete_count_threshold", 3)

@@ -47,6 +47,12 @@ def _parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="指定目标 PDF 路径，注入到会话的 current_source",
     )
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        default=False,
+        help="启用全量模式（默认为轻量模式）",
+    )
     return parser.parse_args(argv)
 
 
@@ -85,6 +91,8 @@ def _handle_cli_command(user_input: str, auto_review: bool) -> str | None:
         return "__show_history__"
     if cmd == ":status":
         return "__show_status__"
+    if cmd == ":mode":
+        return "__set_mode__"
 
     return None
 
@@ -128,9 +136,11 @@ def run_agent(argv: list[str] | None = None):
         print("  :history         - 显示执行历史")
         print("  :status          - 显示当前状态")
         print("  :review on/off   - 切换自动审查")
+        print("  :mode light/full - 切换轻量/全量模式")
         print("-" * 50)
 
         auto_review = False
+        current_mode = "full" if args.full else "light"
         current_state = {
             "current_meal": None,
             "current_source": args.pdf,
@@ -140,6 +150,8 @@ def run_agent(argv: list[str] | None = None):
             "execution_log": [],
             "stage_history": [],
             "auto_review": auto_review,
+            "delete_count": 0,
+            "mode": current_mode,
         }
 
         while True:
@@ -165,6 +177,18 @@ def run_agent(argv: list[str] | None = None):
                 auto_review = False
                 current_state["auto_review"] = False
                 print("📋 自动审查已关闭")
+                continue
+
+            if user_input.startswith(":mode"):
+                parts = user_input.strip().split()
+                if len(parts) >= 2 and parts[1] in ("light", "full"):
+                    current_mode = parts[1]
+                    current_state["mode"] = current_mode
+                    print(
+                        f"🔧 已切换到{'全量' if current_mode == 'full' else '轻量'}模式"
+                    )
+                else:
+                    print(f"当前模式: {current_mode} (用法: :mode light/full)")
                 continue
 
             cli_result = _handle_cli_command(user_input, auto_review)
@@ -203,6 +227,8 @@ def run_agent(argv: list[str] | None = None):
                 "execution_log": current_state.get("execution_log", []),
                 "stage_history": current_state.get("stage_history", []),
                 "auto_review": auto_review,
+                "delete_count": current_state.get("delete_count", 0),
+                "mode": current_mode,
             }
 
             while True:
@@ -232,6 +258,7 @@ def run_agent(argv: list[str] | None = None):
                         "diagnosis",
                         "execution_log",
                         "stage_history",
+                        "delete_count",
                     ):
                         if key in result:
                             current_state[key] = result[key]

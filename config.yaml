@@ -378,3 +378,5 @@ agent:
     chunk_overlap: 0
     collection_name: "financial_reports"
     thread_id: "maintenance-session"
+    mode: "light"
+    delete_count_threshold: 3

@@ -8,11 +8,29 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import interrupt
 from loguru import logger
 
+from src.agent.config import get_delete_count_threshold
 from src.agent.prompt import build_system_prompt
 from src.agent.state import MaintenanceState
 from src.agent.tools import FORBIDDEN_OPERATIONS, HIGH_RISK_TOOLS
 
 _agent_store = None
+
+DIAGNOSIS_TOOLS = {
+    "list_meals",
+    "get_meal_detail",
+    "query_rag_tool",
+    "get_index_info",
+    "evaluate_answer_tool",
+    "list_pdfs",
+    "list_issues",
+}
+
+REPAIR_TOOLS = {
+    "rebuild_index",
+    "delete_source",
+    "delete_and_reindex_tool",
+    "update_meal",
+}
 
 
 @functools.lru_cache(maxsize=1)
@@ -143,6 +161,7 @@ def agent_node(state: MaintenanceState) -> dict[str, Any]:
     system_content = build_system_prompt(
         stage_history=state.get("stage_history"),
         experiences=experiences,
+        mode=state.get("mode", "light"),
     )
     messages = [SystemMessage(content=system_content)] + state["messages"]
     response = llm_with_tools.invoke(messages)
@@ -252,6 +271,16 @@ def _route_after_approval(state: MaintenanceState) -> Literal["tools", "agent"]:
 def tool_node(state: MaintenanceState) -> dict[str, Any]:
     """Execute tool calls from the last AI message and return results.
 
+    Implements two safety mechanisms:
+
+    1. **Stage guard**: If a REPAIR tool is called without any prior
+       DIAGNOSIS tool in ``stage_history``, the call is rejected with a
+       message telling the LLM to diagnose first.
+    2. **Delete count**: Tracks how many ``delete_source`` calls have
+       been made.  When the count reaches ``DELETE_COUNT_THRESHOLD``,
+       an interrupt is triggered to warn the user about cumulative
+       impact.
+
     Args:
         state: Current graph state.
 
@@ -264,9 +293,13 @@ def tool_node(state: MaintenanceState) -> dict[str, Any]:
     if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
         return {"messages": []}
 
+    stage_history = state.get("stage_history", [])
+    has_diagnosis = bool(set(stage_history) & DIAGNOSIS_TOOLS)
+
     results = []
     log_entries = []
     executed_tools = []
+    new_delete_count = state.get("delete_count", 0)
 
     for tool_call in last_message.tool_calls:
         tool_fn = tools_by_name.get(tool_call["name"])
@@ -278,6 +311,39 @@ def tool_node(state: MaintenanceState) -> dict[str, Any]:
                 )
             )
             continue
+
+        if tool_call["name"] in REPAIR_TOOLS and not has_diagnosis:
+            logger.info(f"GUARD: {tool_call['name']} blocked - no diagnosis performed")
+            results.append(
+                ToolMessage(
+                    content=(
+                        "操作被拒绝：请先进行诊断（查看 meal、检查索引、测试查询），"
+                        "再执行修复操作。可用诊断工具：list_meals, get_meal_detail, "
+                        "query_rag_tool, get_index_info, evaluate_answer_tool"
+                    ),
+                    tool_call_id=tool_call["id"],
+                )
+            )
+            log_entries.append(f"GUARD: {tool_call['name']} blocked - no diagnosis")
+            continue
+
+        if (
+            tool_call["name"] == "delete_source"
+            and new_delete_count >= get_delete_count_threshold()
+        ):
+            interrupt(
+                {
+                    "question": (
+                        f"⚠️ 累计删除警告：已执行 {new_delete_count} 次删除操作，"
+                        f"继续删除可能严重影响数据完整性。请确认是否继续。"
+                    ),
+                    "tool_call": {
+                        "name": tool_call["name"],
+                        "args": tool_call["args"],
+                        "id": tool_call["id"],
+                    },
+                }
+            )
 
         try:
             observation = tool_fn.invoke(tool_call["args"])
@@ -292,6 +358,9 @@ def tool_node(state: MaintenanceState) -> dict[str, Any]:
         )
         log_entries.append(log_entry)
         executed_tools.append(tool_call["name"])
+
+        if tool_call["name"] == "delete_source":
+            new_delete_count += 1
 
     if _agent_store is not None and executed_tools:
         experience_tools = {"parse_pdf_tool", "chunk_parsed_tool"}
@@ -349,6 +418,7 @@ def tool_node(state: MaintenanceState) -> dict[str, Any]:
         "messages": results,
         "execution_log": state.get("execution_log", []) + log_entries,
         "stage_history": state.get("stage_history", []) + executed_tools,
+        "delete_count": new_delete_count,
     }
 
 
