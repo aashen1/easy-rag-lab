@@ -305,12 +305,28 @@ def tool_node(state: MaintenanceState) -> dict[str, Any]:
                 if current_source:
                     pdf_type = _infer_pdf_type(current_source)
                     namespace = ("default", "maintenance_experience", pdf_type)
+
+                    best_parser = None
+                    best_chunk_strategy = None
+                    best_chunk_size = None
+                    for tool_call in last_message.tool_calls:
+                        args = tool_call.get("args", {})
+                        if tool_call["name"] == "parse_pdf_tool":
+                            best_parser = args.get("parser_name")
+                        elif tool_call["name"] == "chunk_parsed_tool":
+                            best_chunk_strategy = args.get("strategy")
+                            chunk_size_val = args.get("chunk_size")
+                            if chunk_size_val is not None:
+                                best_chunk_size = chunk_size_val
+                            if args.get("parser_name") and not best_parser:
+                                best_parser = args.get("parser_name")
+
                     experience = {
                         "pdf_type": pdf_type,
                         "source": current_source,
-                        "best_parser": None,
-                        "best_chunk_strategy": None,
-                        "best_chunk_size": None,
+                        "best_parser": best_parser,
+                        "best_chunk_strategy": best_chunk_strategy,
+                        "best_chunk_size": best_chunk_size,
                         "reason": f"Auto-saved after {', '.join(executed_tools)}",
                         "tools_used": executed_tools,
                     }
