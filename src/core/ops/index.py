@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import uuid
 from typing import Any
 
 from loguru import logger
-from qdrant_client.http.models import FieldCondition, Filter, MatchValue
 
 from src.indexer import VectorIndexer
 
@@ -98,22 +96,11 @@ def delete_source_and_reindex(
         indexer = VectorIndexer(collection_name=collection_name)
 
         logger.info(f"Deleting vectors for source '{source}' from '{collection_name}'")
-        indexer.client.delete(
-            collection_name=collection_name,
-            points_selector=Filter(
-                must=[
-                    FieldCondition(
-                        key="metadata.source",
-                        match=MatchValue(value=source),
-                    )
-                ]
-            ),
-        )
+        indexer.delete_by_source(source)
         logger.success(f"Deleted vectors for source '{source}'")
 
         if not new_chunks:
             logger.warning("No new chunks provided after deletion")
-            indexer.close()
             return 0
 
         texts = [chunk["text"] for chunk in new_chunks]
@@ -124,40 +111,13 @@ def delete_source_and_reindex(
         if collection_info is None:
             indexer.create_collection(vector_size=vector_size, recreate=False)
 
-        offset = 0
-        if collection_info is not None:
-            offset = collection_info.get("points_count", 0)
-
-        from qdrant_client.http.models import PointStruct
-
-        points = []
-        for i, (chunk, embedding) in enumerate(
-            zip(new_chunks, embeddings, strict=False)
-        ):
-            point_id = str(uuid.uuid4())
-            point = PointStruct(
-                id=point_id,
-                vector=embedding.tolist(),
-                payload={
-                    "chunk_id": chunk.get("chunk_id", f"chunk_{offset + i}"),
-                    "text": chunk["text"],
-                    "metadata": chunk.get("metadata", {}),
-                },
-            )
-            points.append(point)
-
-        for i in range(0, len(points), 100):
-            batch = points[i : i + 100]
-            indexer.client.upsert(
-                collection_name=collection_name,
-                points=batch,
-            )
+        indexer.upsert_chunks(new_chunks, embeddings)
 
         logger.success(f"Re-indexed {len(new_chunks)} chunks for source '{source}'")
-        indexer.close()
         return len(new_chunks)
     except Exception as e:
         logger.error(f"Failed to delete source and reindex: {e}")
+        raise
+    finally:
         if indexer is not None:
             indexer.close()
-        raise

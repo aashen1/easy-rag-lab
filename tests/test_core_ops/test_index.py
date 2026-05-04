@@ -43,10 +43,7 @@ class TestDeleteSourceAndReindex:
         mock_embedder.embed_texts.return_value = np.ones((1, 128), dtype=np.float32)
         mock_embedder.get_embedding_dimension.return_value = 128
 
-        mock_client = MagicMock()
         mock_indexer = MagicMock()
-        mock_indexer.client = mock_client
-        mock_indexer.get_collection_info.return_value = {"points_count": 10}
 
         new_chunks = [{"text": "new chunk", "metadata": {"source": "a.pdf"}}]
 
@@ -56,16 +53,15 @@ class TestDeleteSourceAndReindex:
             )
 
         assert result == 1
-        mock_client.delete.assert_called_once()
-        mock_client.upsert.assert_called_once()
+        mock_indexer.delete_by_source.assert_called_once_with("a.pdf")
+        mock_indexer.upsert_chunks.assert_called_once()
+        mock_indexer.close.assert_called_once()
 
     def test_delete_and_reindex_no_new_chunks(self):
         from src.core.ops.index import delete_source_and_reindex
 
         mock_embedder = MagicMock()
-        mock_client = MagicMock()
         mock_indexer = MagicMock()
-        mock_indexer.client = mock_client
 
         with patch("src.core.ops.index.VectorIndexer", return_value=mock_indexer):
             result = delete_source_and_reindex(
@@ -73,4 +69,5 @@ class TestDeleteSourceAndReindex:
             )
 
         assert result == 0
-        mock_indexer.close.assert_called()
+        mock_indexer.delete_by_source.assert_called_once_with("a.pdf")
+        mock_indexer.close.assert_called_once()

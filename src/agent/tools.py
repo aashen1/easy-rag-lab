@@ -287,13 +287,15 @@ def get_index_info(meal_name: str) -> str:
         config = get_config()
         collection_name = f"meal_{meal_name}"
         persist_dir = str(
-            Path(config.get("index", {}).get("persist_dir", "data/index"))
+            Path(config.get("vector_store", {}).get("persist_dir", "data/vector_store"))
         )
         indexer = VectorIndexer(
             persist_dir=persist_dir, collection_name=collection_name
         )
-        info = indexer.get_collection_info()
-        indexer.close()
+        try:
+            info = indexer.get_collection_info()
+        finally:
+            indexer.close()
         if info is None:
             return f"No index found for meal '{meal_name}'."
         return json.dumps(info, ensure_ascii=False, indent=2, default=str)
@@ -333,10 +335,9 @@ def rebuild_index(meal_name: str, rebuild: bool = True) -> str:
         indexer = pipeline.indexer
         embedder = pipeline.embedder
 
-        chunks_dir = str(
-            Path(config.get("paths", {}).get("chunks_dir", "data/chunks"))
-            / meal.data_id
-        )
+        chunks_dir = str(pipeline._chunks_dir) if pipeline._chunks_dir else None
+        if not chunks_dir:
+            return f"No chunks directory found for meal '{meal_name}'."
         chunks_path = Path(chunks_dir)
         if not chunks_path.exists():
             return f"No chunks directory found at {chunks_dir}."
@@ -401,13 +402,7 @@ def delete_source(meal_name: str, source: str) -> str:
 
         indexer = pipeline.indexer
 
-        persist_dir = (
-            Path(indexer.persist_dir) if hasattr(indexer, "persist_dir") else None
-        )
-        backup_info = {}
-        if persist_dir and persist_dir.exists():
-            backup_path = _backup_to_trashbin(persist_dir, f"index_{meal_name}")
-            backup_info = {"backup_path": backup_path}
+        logger.info(f"Deleting source '{source}' from meal '{meal_name}'")
 
         deleted_count = indexer.delete_by_source(source)
         return json.dumps(
@@ -416,7 +411,6 @@ def delete_source(meal_name: str, source: str) -> str:
                 "meal_name": meal_name,
                 "source": source,
                 "deleted_points": deleted_count,
-                **backup_info,
             },
             ensure_ascii=False,
             indent=2,
