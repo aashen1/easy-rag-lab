@@ -300,3 +300,68 @@ Phase 0 + Phase 1 已验收通过，维修工 Agent 具备了基本的 LangGraph
 ## REMOVED Requirements
 
 无移除的需求。
+
+---
+
+## 验收勘误（2026-05-05 深度验收）
+
+以下问题在深度验收中发现，作为 Spec 的补充说明：
+
+### 勘误 1: 架构简化——ReAct 单节点 vs 多节点
+
+Spec 原始设计包含 `parse_node`, `chunk_node`, `embed_node` 等独立节点 + `Command(goto=...)` 跳转。实际实现为 ReAct 单节点模式（所有工具在 `tool_node` 统一执行，`agent_node` 每次重新决策）。
+
+**决策理由**：Phase 2 plan 中有明确记录——ReAct 模式下不需要 Command(goto=...)，LLM 自然会根据上下文选择工具。
+
+**结论**：可接受的架构简化。`stage_history` 替代了显式跳转，LLM 通过提示词感知历史。
+
+### 勘误 2: 安全拦截为"软拦截"而非"硬拦截"
+
+Spec 要求"系统 SHALL 维护一个危险操作白名单，禁止删除整个 Qdrant collection"。实际实现：
+- `FORBIDDEN_OPERATIONS` 集合拦截已知危险操作名
+- `HIGH_RISK_TOOLS` + interrupt 审批高风险操作
+- **但** LLM 可通过组合合法工具达到类似效果（如先 `delete_source` 逐个删除）
+
+**结论**：部分可接受。当前实现为"软拦截"，依赖 LLM 不主动绕过。硬拦截需要工具级别的权限控制，属于 Phase 3 范围。
+
+### 勘误 3: 经验自动保存保存的是"空壳经验"
+
+Spec 要求"当发现好的配置组合时，自动保存经验"。实际实现中，只要执行了 `parse_pdf_tool` 或 `chunk_parsed_tool` 就自动保存，但保存的经验中 `best_parser`、`best_chunk_strategy`、`best_chunk_size` 全是 `None`，只有 `tools_used` 和 `reason` 有值。
+
+**结论**：需要修复。要么填充有意义的值，要么暂时关闭自动保存。此问题涉及 `graph.py`，与 Phase 3 冲突，待合并后修复。
+
+### 勘误 4: CLI 状态不跨轮次保持
+
+Spec 要求 `auto_review` 可通过 `:review on/off` 切换。实际实现中，CLI 每轮对话重建 state，`auto_review`、`execution_log`、`stage_history` 等非 messages 字段不跨轮次保持。
+
+**结论**：需要修复。Phase 3 T1(SqliteSaver)+T3(CLI增强) 会重构 cli.py，届时一并修复。
+
+### 勘误 5: `search_experiences` 方法从未被调用
+
+Spec 要求实现 `search_experiences(namespace, query)` 方法。实际实现中 `agent_node` 使用 `get_all_experiences` 而非 `search_experiences`，因为 `InMemoryStore` 不支持语义搜索。
+
+**结论**：方法保留为未来使用（已标注 docstring），当采用支持搜索的持久化存储时启用。
+
+### 勘误 6: `query.py` 共享单元缺少异常处理
+
+Spec 只要求修复 `parse.py` 的异常处理，遗漏了 `query.py`。
+
+**结论**：已在本次验收中修复（commit: fix: add try/except to query_rag）。
+
+### 勘误 7: `evaluate_single` 的 `_word_overlap` 对中文不友好
+
+Spec 未涉及此问题，但验收中发现 `_word_overlap` 使用 `str.split()` 按空格分词，中文句子被当作单个 token。
+
+**结论**：已在本次验收中修复（commit: fix: use character bigrams in _word_overlap）。
+
+### 勘误 8: `enhance_page`/`enhance_table` 单页操作遍历全 PDF
+
+Spec 未涉及此性能问题，但验收中发现 `_extract_all_tables` 会遍历所有页面。
+
+**结论**：已在本次验收中修复（commit: perf: add _extract_single_page_tables）。
+
+### 勘误 9: `create_meal_manual()` 的 `creation_mode` 未写入 manifest
+
+Spec 要求 `create_curated_meal` 工具创建手动 Meal。实际实现中 `creation_mode = "manual"` 在 `_build_pipeline()` 返回后才设置，但 manifest 已写盘。
+
+**结论**：已在本次验收中修复（commit: fix: pass creation_mode to _build_pipeline）。
