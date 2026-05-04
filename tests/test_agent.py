@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -222,3 +223,35 @@ class TestSystemPrompt:
         assert "rebuild_index" in SYSTEM_PROMPT
         assert "delete_source" in SYSTEM_PROMPT
         assert "update_meal" in SYSTEM_PROMPT
+
+
+class TestBackupToTrashbin:
+    def test_backup_file(self, tmp_path):
+        from src.agent.tools import _backup_to_trashbin
+
+        src = tmp_path / "test.json"
+        src.write_text('{"key": "value"}')
+
+        result = _backup_to_trashbin(src, "test_file")
+
+        assert result is not None
+        assert "test_file" in result
+        assert ".trashbin" in result
+
+    def test_backup_directory(self, tmp_path):
+        from src.agent.tools import _backup_to_trashbin
+
+        src_dir = tmp_path / "test_dir"
+        src_dir.mkdir()
+        (src_dir / "file.txt").write_text("content")
+
+        result = _backup_to_trashbin(src_dir, "test_dir")
+
+        assert result is not None
+        assert "test_dir" in result
+
+    def test_backup_nonexistent_path(self):
+        from src.agent.tools import _backup_to_trashbin
+
+        result = _backup_to_trashbin(Path("/nonexistent/path"), "test")
+        assert result is None

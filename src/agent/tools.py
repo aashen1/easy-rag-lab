@@ -1,10 +1,32 @@
 from __future__ import annotations
 
 import json
+import shutil
+from datetime import datetime
 from pathlib import Path
 
 from langchain_core.tools import tool
 from loguru import logger
+
+
+def _backup_to_trashbin(source_path: Path, label: str) -> str | None:
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    trashbin = Path(".trashbin")
+    dest = trashbin / f"{label}_{timestamp}"
+    try:
+        trashbin.mkdir(parents=True, exist_ok=True)
+        if source_path.is_dir():
+            shutil.copytree(str(source_path), str(dest))
+        elif source_path.is_file():
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(str(source_path), str(dest))
+        else:
+            return None
+        logger.info(f"Backed up {source_path} to {dest}")
+        return str(dest)
+    except Exception as e:
+        logger.warning(f"Backup failed for {source_path}: {e}")
+        return None
 
 
 @tool
@@ -319,6 +341,11 @@ def rebuild_index(meal_name: str, rebuild: bool = True) -> str:
         if not chunks_path.exists():
             return f"No chunks directory found at {chunks_dir}."
 
+        backup_path = _backup_to_trashbin(chunks_path, f"chunks_{meal.data_id}")
+        backup_info = (
+            {"backup_path": backup_path} if backup_path else {"backup_path": None}
+        )
+
         indexer.create_collection(
             vector_size=embedder.get_embedding_dimension(), recreate=rebuild
         )
@@ -333,6 +360,7 @@ def rebuild_index(meal_name: str, rebuild: bool = True) -> str:
                 "status": "rebuilt",
                 "meal_name": meal_name,
                 "collection_info": info,
+                **backup_info,
             },
             ensure_ascii=False,
             indent=2,
@@ -372,6 +400,15 @@ def delete_source(meal_name: str, source: str) -> str:
             return f"No pipeline found for meal '{meal_name}'."
 
         indexer = pipeline.indexer
+
+        persist_dir = (
+            Path(indexer.persist_dir) if hasattr(indexer, "persist_dir") else None
+        )
+        backup_info = {}
+        if persist_dir and persist_dir.exists():
+            backup_path = _backup_to_trashbin(persist_dir, f"index_{meal_name}")
+            backup_info = {"backup_path": backup_path}
+
         deleted_count = indexer.delete_by_source(source)
         return json.dumps(
             {
@@ -379,6 +416,7 @@ def delete_source(meal_name: str, source: str) -> str:
                 "meal_name": meal_name,
                 "source": source,
                 "deleted_points": deleted_count,
+                **backup_info,
             },
             ensure_ascii=False,
             indent=2,
@@ -426,13 +464,25 @@ def update_meal(meal_name: str, updates: dict) -> str:
             )
 
         cache = mgr.cache
+
+        manifest_path = cache.get_artifact_group_dir(meal.data_id) / "manifest.json"
+        backup_info = {}
+        if manifest_path.exists():
+            backup_path = _backup_to_trashbin(manifest_path, f"manifest_{meal.data_id}")
+            backup_info = {"backup_path": backup_path}
+
         for key, value in applied.items():
             success = cache.update_manifest_entry(meal.data_id, key, value)
             if not success:
                 return f"Failed to update field '{key}'."
 
         return json.dumps(
-            {"status": "updated", "meal_name": meal_name, "applied_updates": applied},
+            {
+                "status": "updated",
+                "meal_name": meal_name,
+                "applied_updates": applied,
+                **backup_info,
+            },
             ensure_ascii=False,
             indent=2,
         )
