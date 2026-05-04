@@ -79,6 +79,7 @@ class TestMealManagerCreateMealManual:
             collection_name="meal_test",
             pdf_files=[],
             stats={"total_pages": 0, "total_chunks": 0},
+            creation_mode="manual",
         )
 
         mock_path = MagicMock()
