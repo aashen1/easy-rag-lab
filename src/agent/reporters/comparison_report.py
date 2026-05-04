@@ -148,12 +148,20 @@ class ComparisonReporter:
             Path to the saved report file.
         """
         reports_dir = Path("data/maintenance_reports")
-        reports_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            reports_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            logger.error(f"Failed to create reports directory {reports_dir}: {e}")
+            raise
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"comparison_{session_id}_{timestamp}.md"
         filepath = reports_dir / filename
 
-        filepath.write_text(report, encoding="utf-8")
+        try:
+            filepath.write_text(report, encoding="utf-8")
+        except OSError as e:
+            logger.error(f"Failed to write comparison report to {filepath}: {e}")
+            raise
         logger.info(f"Comparison report saved to {filepath}")
         return filepath

@@ -336,7 +336,8 @@ def get_index_info(meal_name: str) -> str:
         from src.utils import load_config
 
         config = load_config()
-        collection_name = f"meal_{meal_name}"
+        prefix = config.get("meals", {}).get("collection_prefix", "m_")
+        collection_name = f"{prefix}{meal_name}"
         persist_dir = str(
             Path(config.get("vector_store", {}).get("persist_dir", "data/vector_store"))
         )
