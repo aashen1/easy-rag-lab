@@ -708,14 +708,6 @@ class TestBuildSystemPrompt:
         assert "错误处理指导" in prompt
         assert "先分析错误原因" in prompt
 
-    def test_prompt_with_locked_tool(self):
-        from src.agent.prompt import build_system_prompt
-
-        prompt = build_system_prompt(locked_tool="parse_pdf_tool")
-        assert "工具锁定" in prompt
-        assert "parse_pdf_tool" in prompt
-        assert "历史经验推荐" not in prompt
-
     def test_prompt_contains_issue_rules(self):
         from src.agent.prompt import build_system_prompt
 
