@@ -1,14 +1,36 @@
 from __future__ import annotations
 
+import re
+
 from loguru import logger
 
 
-def _word_overlap(text_a: str, text_b: str) -> float:
-    """Compute simple word-overlap ratio between two strings.
+def _char_bigrams(text: str) -> set[str]:
+    """Extract character bigrams from text, skipping whitespace.
 
-    Tokenises both inputs on whitespace, then returns the ratio of
-    shared unique words to the total unique words across both inputs
-    (Jaccard-like).
+    Works well for Chinese (where word boundaries are implicit) and
+    reasonably for English (where bigrams still capture substring
+    overlap).  This avoids the problem of ``str.split()`` treating
+    an entire Chinese sentence as a single token.
+
+    Args:
+        text: Input text.
+
+    Returns:
+        Set of two-character strings.
+    """
+    cleaned = re.sub(r"\s+", "", text.lower())
+    if len(cleaned) < 2:
+        return {cleaned} if cleaned else set()
+    return {cleaned[i : i + 2] for i in range(len(cleaned) - 1)}
+
+
+def _word_overlap(text_a: str, text_b: str) -> float:
+    """Compute overlap ratio between two strings using character bigrams.
+
+    Uses character bigrams instead of whitespace tokenisation so that
+    Chinese text (which lacks spaces between words) is handled
+    correctly.  The metric is Jaccard-like: |intersection| / |union|.
 
     Args:
         text_a: First text.
@@ -17,8 +39,8 @@ def _word_overlap(text_a: str, text_b: str) -> float:
     Returns:
         Float between 0.0 and 1.0 indicating overlap strength.
     """
-    set_a = set(text_a.lower().split())
-    set_b = set(text_b.lower().split())
+    set_a = _char_bigrams(text_a)
+    set_b = _char_bigrams(text_b)
     if not set_a and not set_b:
         return 1.0
     if not set_a or not set_b:
