@@ -27,6 +27,14 @@ class ExperienceStore:
     def search_experiences(
         self, namespace: tuple[str, ...], query: str | None = None
     ) -> list[dict[str, Any]]:
+        """Search experiences by query string.
+
+        NOTE: This method is currently unused in the agent graph.
+        ``agent_node`` uses ``get_all_experiences`` instead because
+        InMemoryStore does not support semantic search.  This method
+        is retained for future use when a persistent store with
+        search capability is adopted.
+        """
         try:
             kwargs: dict[str, Any] = {}
             if query:
