@@ -13,7 +13,6 @@ from src.meal import (
     compute_data_id,
     compute_parser_config_hash,
 )
-from src.parsers.registry import ParserRegistry
 from src.utils import detect_document_category
 
 
@@ -152,7 +151,6 @@ def parse_all_pdfs_unified(
         logger.info(f"Skipped {len(results)} files (valid cache found)")
         return results
 
-    parser = ParserRegistry.get(algorithm, parser_options or {})
     results = []
 
     for meal_file in pdf_files:
@@ -183,7 +181,13 @@ def parse_all_pdfs_unified(
 
         try:
             output_file.parent.mkdir(parents=True, exist_ok=True)
-            result = parser.parse(str(pdf_path))
+            from src.core.ops.parse import parse_pdf
+
+            result = parse_pdf(
+                pdf_path,
+                parser_name=algorithm,
+                parser_options=parser_options or {},
+            )
 
             if use_page_chunks:
                 pages_data = [
@@ -351,9 +355,6 @@ def parse_all_pdfs_composite(
         logger.info(f"Skipped {len(results)} files (valid cache found)")
         return results
 
-    parser = ParserRegistry.get_composite(
-        primary, enhancer, primary_config, enhancer_config
-    )
     results = []
 
     for meal_file in pdf_files:
@@ -384,7 +385,15 @@ def parse_all_pdfs_composite(
 
         try:
             output_file.parent.mkdir(parents=True, exist_ok=True)
-            result = parser.parse(str(pdf_path))
+            from src.core.ops.parse import parse_pdf
+
+            result = parse_pdf(
+                pdf_path,
+                parser_name=primary,
+                enhancer_name=enhancer,
+                parser_options=primary_config or {},
+                enhancer_options=enhancer_config,
+            )
 
             if use_page_chunks:
                 pages_data = [
