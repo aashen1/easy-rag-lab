@@ -43,17 +43,17 @@ def _get_tools():
 
 
 def _get_llm():
-    from src.config import get_config
     from src.llm_client import create_langchain_anthropic_client
+    from src.utils import get_llm_config, load_config
 
-    config = get_config()
-    llm_config = config.get("llm", {})
+    config = load_config()
+    llm_config = get_llm_config(config)
     return create_langchain_anthropic_client(
-        api_key=llm_config.get("api_key", ""),
-        base_url=llm_config.get("base_url"),
-        model_name=llm_config.get("model", "claude-sonnet-4-20250514"),
-        temperature=0.0,
-        max_tokens=4096,
+        api_key=llm_config["api_key"],
+        base_url=llm_config["base_url"],
+        model_name=llm_config["model_name"],
+        temperature=llm_config["temperature"],
+        max_tokens=llm_config["max_tokens"],
     )
 
 

@@ -40,10 +40,10 @@ def list_meals(meal_dir: str | None = None) -> str:
         JSON string with list of meal names and their basic info.
     """
     try:
-        from src.config import get_config
         from src.meal.manager import MealManager
+        from src.utils import load_config
 
-        config = get_config()
+        config = load_config()
         mgr = MealManager(config)
         meals = mgr.list_meals()
         result = []
@@ -73,10 +73,10 @@ def get_meal_detail(meal_name: str) -> str:
         JSON string with meal details including pdf_files, config_snapshot, and stats.
     """
     try:
-        from src.config import get_config
         from src.meal.manager import MealManager
+        from src.utils import load_config
 
-        config = get_config()
+        config = load_config()
         mgr = MealManager(config)
         meal = mgr.load_meal(meal_name)
         if meal is None:
@@ -110,11 +110,11 @@ def query_rag_tool(question: str, meal_name: str) -> str:
         JSON string with answer, sources, and scores.
     """
     try:
-        from src.config import get_config
         from src.core.ops.query import query_rag
         from src.meal.manager import MealManager
+        from src.utils import load_config
 
-        config = get_config()
+        config = load_config()
         mgr = MealManager(config)
         meal = mgr.load_meal(meal_name)
         if meal is None:
@@ -281,10 +281,10 @@ def get_index_info(meal_name: str) -> str:
         JSON string with index info (point count, vector size, etc).
     """
     try:
-        from src.config import get_config
         from src.indexer import VectorIndexer
+        from src.utils import load_config
 
-        config = get_config()
+        config = load_config()
         collection_name = f"meal_{meal_name}"
         persist_dir = str(
             Path(config.get("vector_store", {}).get("persist_dir", "data/vector_store"))
@@ -319,10 +319,10 @@ def rebuild_index(meal_name: str, rebuild: bool = True) -> str:
         JSON string with rebuild result including point count.
     """
     try:
-        from src.config import get_config
         from src.meal.manager import MealManager
+        from src.utils import load_config
 
-        config = get_config()
+        config = load_config()
         mgr = MealManager(config)
         meal = mgr.load_meal(meal_name)
         if meal is None:
@@ -387,10 +387,10 @@ def delete_source(meal_name: str, source: str) -> str:
         JSON string with deletion result.
     """
     try:
-        from src.config import get_config
         from src.meal.manager import MealManager
+        from src.utils import load_config
 
-        config = get_config()
+        config = load_config()
         mgr = MealManager(config)
         meal = mgr.load_meal(meal_name)
         if meal is None:
@@ -435,10 +435,10 @@ def update_meal(meal_name: str, updates: dict) -> str:
         JSON string with update result.
     """
     try:
-        from src.config import get_config
         from src.meal.manager import MealManager
+        from src.utils import load_config
 
-        config = get_config()
+        config = load_config()
         mgr = MealManager(config)
         meal = mgr.load_meal(meal_name)
         if meal is None:
