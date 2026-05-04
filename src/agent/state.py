@@ -13,3 +13,5 @@ class MaintenanceState(dict):
     pending_action: dict[str, Any] | None
     approved: bool | None
     execution_log: list[str]
+    stage_history: list[str]
+    auto_review: bool
