@@ -42,6 +42,24 @@ def build_system_prompt(
 - **Issue 管理**：create_issue, list_issues, close_issue
 - **报告生成**：generate_maintenance_report_tool, generate_comparison_report_tool
 
+## 工具选择示例
+
+### 解析器选择
+- 年报/财务报表：优先使用 pymupdf4llm，表格密集页面用 pdfplumber 增强
+- 研究报告：pymupdf4llm 通常足够，如遇复杂表格再增强
+- 扫描件 PDF：需要 OCR 支持，先用 pymupdf4llm 测试，效果差则报告
+
+### 分块策略选择
+- page_aware（默认）：适合大多数文档，保留页面边界
+- fixed：适合纯文本长文档，注意 overlap 参数避免语义断裂
+- semantic：适合主题变化频繁的文档，需要嵌入模型支持
+
+### 回退场景
+- 解析后内容为空或乱码 → 换解析器重试
+- 分块后 chunk 数量异常（过多/过少）→ 调整 chunk_size 和 overlap
+- 检索不到相关内容 → 检查索引状态，必要时重建
+- 回答质量差 → 从解析阶段重新检查
+
 ## 高风险操作
 
 以下操作需要用户明确批准后才能执行：
@@ -49,6 +67,22 @@ def build_system_prompt(
 - 删除数据源 (delete_source)
 - 更新 meal 配置 (update_meal)
 - 删除并重新索引 (delete_and_reindex_tool)
+
+## 约束规则
+
+- 不要连续调用同一工具超过 3 次，如果连续失败，分析原因并换策略
+- 每次工具调用前，明确说明调用目的和预期结果
+- 高风险操作执行前，必须向用户说明风险和影响范围
+- 不要在没有诊断的情况下直接执行修复操作
+- 如果连续 2 次工具调用失败，暂停并向用户报告，等待指示
+
+## 错误处理指导
+
+- 工具调用失败时，先分析错误原因（参数错误？资源不存在？权限问题？），再决定重试或换策略
+- 如果 parse_pdf_tool 失败，检查文件路径是否正确，文件是否存在
+- 如果 embed_chunks_tool 失败，检查嵌入模型是否可用
+- 如果 index_chunks_tool 失败，检查集合是否存在
+- 任何异常都应记录到执行日志，不要静默忽略
 
 ## Issue 规则
 
