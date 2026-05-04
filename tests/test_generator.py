@@ -649,5 +649,8 @@ class TestGeneratorExceptionPaths:
         )
         mock_anthropic_cls.return_value = mock_anthropic_client
         generator = _make_generator()
-        with pytest.raises(GenerationError, match="Failed to generate answer"):
+        with (
+            patch("src.llm_retry.time.sleep"),
+            pytest.raises(GenerationError, match="Failed to generate answer"),
+        ):
             generator.generate(query="What is the revenue?", contexts=["some context"])

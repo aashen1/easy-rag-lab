@@ -500,6 +500,146 @@ class MealManager:
         )
         return meal_config
 
+    def create_meal_manual(
+        self,
+        name: str | None = None,
+        pdf_files: list[str] | None = None,
+        source_dir: str | None = None,
+        file_pattern: str | None = None,
+        tags: list[str] | None = None,
+        description: str | None = None,
+        force_parse: bool = False,
+        force_chunk: bool = False,
+        profiler: Any | None = None,
+    ) -> MealConfig:
+        """Create a new meal by manually specifying PDF files instead of sampling.
+
+        Supports two modes of file resolution:
+        1. Explicit file list via ``pdf_files`` — paths are resolved relative
+           to ``raw_dir``.
+        2. Directory search via ``source_dir`` + ``file_pattern`` — files
+           matching the pattern are discovered under ``source_dir`` using
+           ``rglob`` (recursive) or ``glob`` (non-recursive).
+
+        Args:
+            name: Desired meal name. If None, a timestamp-based name is generated.
+            pdf_files: List of PDF file paths relative to raw_dir (or absolute).
+            source_dir: Directory to search for PDFs. Used with ``file_pattern``.
+            file_pattern: Glob pattern for PDF discovery (e.g. ``*.pdf``).
+                If the pattern contains ``**``, uses ``rglob``; otherwise ``glob``.
+            tags: Optional list of tags for categorizing this manual meal.
+            description: Optional human-readable description of the meal.
+            force_parse: If True, re-parse PDFs even if cached artifacts exist.
+            force_chunk: If True, re-chunk documents even if cached artifacts exist.
+            profiler: Optional PipelineProfiler for stage tracking.
+
+        Returns:
+            MealConfig object for the newly created manual meal.
+
+        Raises:
+            MealError: If neither ``pdf_files`` nor ``source_dir``+``file_pattern``
+                is provided, if no valid PDFs are found, or if the meal name
+                is invalid or already exists.
+        """
+        if name is None:
+            name = generate_timestamp_name()
+
+        if not validate_meal_name(name):
+            raise MealError(
+                f"Invalid meal name '{name}'. "
+                "Only alphanumeric characters, underscores, and hyphens are allowed."
+            )
+
+        if self.meal_exists(name):
+            raise MealError(f"Meal '{name}' already exists")
+
+        resolved_paths: list[Path] = []
+        if pdf_files is not None:
+            for pdf_input in pdf_files:
+                pdf_path = Path(pdf_input)
+                if not pdf_path.is_absolute():
+                    pdf_path = self.raw_dir / pdf_path
+                if not pdf_path.exists():
+                    raise MealError(f"PDF file does not exist: {pdf_input}")
+                resolved_paths.append(pdf_path)
+        elif source_dir is not None and file_pattern is not None:
+            search_root = Path(source_dir)
+            if not search_root.is_absolute():
+                search_root = self.raw_dir / search_root
+            if not search_root.exists():
+                raise MealError(f"Source directory does not exist: {source_dir}")
+            if "**" in file_pattern:
+                resolved_paths = sorted(search_root.rglob(file_pattern))
+            else:
+                resolved_paths = sorted(search_root.glob(file_pattern))
+            resolved_paths = [p for p in resolved_paths if p.is_file()]
+        else:
+            raise MealError("Must provide either pdf_files or source_dir+file_pattern")
+
+        if not resolved_paths:
+            raise MealError("No PDF files found for manual meal")
+
+        meal_files: list[MealFile] = []
+        for pdf_path in resolved_paths:
+            try:
+                rel_path = pdf_path.relative_to(self.raw_dir).as_posix()
+                sha256 = compute_file_sha256(pdf_path)
+                size_bytes = pdf_path.stat().st_size
+                meal_files.append(
+                    MealFile(
+                        path=rel_path,
+                        sha256=sha256,
+                        size_bytes=size_bytes,
+                    )
+                )
+            except Exception as e:
+                logger.warning(f"Skipping {pdf_path}: {str(e)}")
+
+        if not meal_files:
+            raise MealError("No PDF files could be processed for the manual meal")
+
+        data_id = compute_data_id(meal_files)
+        config_snapshot, config_hashes = self._build_config_snapshot_and_hashes()
+        index_key = compute_index_key(data_id, config_hashes)
+        collection_name = generate_collection_name(index_key, self.collection_prefix)
+
+        chunker_hash = config_hashes["chunker"]
+        parser_hash = config_hashes["parser"]
+
+        parsed_dir, chunks_dir = self.cache.ensure_dirs(
+            data_id, chunker_hash, parser_hash
+        )
+
+        sampling_config_dict: dict[str, Any] = {
+            "mode": "manual",
+            "pdf_count": len(meal_files),
+            "tags": tags,
+            "description": description,
+        }
+
+        meal_config = self._build_pipeline(
+            meal_files=meal_files,
+            config_snapshot=config_snapshot,
+            config_hashes=config_hashes,
+            data_id=data_id,
+            collection_name=collection_name,
+            pdfs_to_parse=resolved_paths,
+            parsed_dir=parsed_dir,
+            chunks_dir=chunks_dir,
+            sampling_config=sampling_config_dict,
+            meal_name=name,
+            force_chunk=force_chunk,
+            profiler=profiler or self.profiler,
+        )
+
+        meal_config.creation_mode = "manual"
+
+        logger.success(
+            f"Manual meal '{name}' created successfully "
+            f"[{data_id[:12]}] ({len(meal_files)} PDFs, {meal_config.stats['total_pages']} pages, {meal_config.stats['total_chunks']} chunks)"
+        )
+        return meal_config
+
     def load_meal(self, name: str) -> MealConfig:
         """Load a meal configuration from its manifest file.
 

@@ -192,6 +192,42 @@ class ParserRegistry:
         return CompositeParser(primary=primary_instance, enhancer=enhancer_instance)
 
     @classmethod
+    def get_enhancer(
+        cls, enhancer_name: str = "pdfplumber", enhancer_options: dict | None = None
+    ) -> TableEnhancer:
+        """Instantiate and return a table enhancer by name.
+
+        Validates that the enhancer name is registered, performs a lazy
+        import if the class has not been loaded yet, and returns a new
+        instance configured with *enhancer_options*.
+
+        Args:
+            enhancer_name: Name of a registered enhancer (default
+                ``"pdfplumber"``).
+            enhancer_options: Optional configuration dict forwarded to
+                the enhancer constructor.
+
+        Returns:
+            A ``TableEnhancer`` instance.
+
+        Raises:
+            ParsingError: If *enhancer_name* is not registered.
+            ImportError: If the enhancer module cannot be imported.
+        """
+        if enhancer_name not in cls._enhancers:
+            raise ParsingError(
+                f"Enhancer '{enhancer_name}' is not registered. "
+                f"Available: {cls.list_enhancers()}"
+            )
+
+        enhancer_class = cls._enhancers[enhancer_name]
+        if enhancer_class is None:
+            enhancer_class = cls._lazy_import_enhancer(enhancer_name)
+            cls._enhancers[enhancer_name] = enhancer_class
+
+        return enhancer_class(config=enhancer_options or {})
+
+    @classmethod
     def list_names(cls) -> list[str]:
         """Return a sorted list of all registered parser names.
 

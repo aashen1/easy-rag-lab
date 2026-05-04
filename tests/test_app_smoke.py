@@ -10,7 +10,7 @@ class TestAppLoad:
         assert not app.exception
 
     def test_tab_count(self, app):
-        assert len(app.tabs) == 3
+        assert len(app.tabs) == 4
 
 
 class TestQADemoTab:
@@ -133,10 +133,10 @@ class TestAboutTab:
 
 class TestPDFPreviewTab:
     def test_no_pdf_no_tab(self, app):
-        assert len(app.tabs) == 3
+        assert len(app.tabs) == 4
 
     def test_pdf_tab_appears_with_path(self, app_with_pdf):
-        assert len(app_with_pdf.tabs) == 4
+        assert len(app_with_pdf.tabs) == 5
         assert not app_with_pdf.exception
 
     def test_close_pdf_preview(self, app_with_pdf):
