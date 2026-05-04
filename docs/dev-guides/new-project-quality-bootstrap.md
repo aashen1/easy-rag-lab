@@ -678,6 +678,636 @@ pixi run pytest tests/test_file.py::TestClass::test_method -v
 
 ---
 
+## 11. GitHub Template Repo：把新手包变成一键模板
+
+上面 Step 1 ~ Step 13 是手动搭建的完整流程。但每次建新项目都走一遍，即使有文档也很容易遗漏。GitHub 提供了 **Template Repository** 功能，可以把整套质量体系打包成一个模板，新建项目时一键复制。
+
+### 11.1 Template Repo 是什么？
+
+Template Repo 和 Fork 的区别：
+
+| | Fork | Template Repo |
+|---|------|-------------|
+| 提交历史 | 继承父仓库全部历史 | **只有一次初始提交** |
+| 贡献图 | 不计入个人贡献 | **计入个人贡献** |
+| 与原仓库关系 | 持续关联，可提 PR | **完全独立**，无后续关联 |
+| 适用场景 | 给已有项目贡献代码 | **从零开始新项目** |
+
+简单说：Template Repo 就是"复制一份干净的起点"，没有历史包袱，也没有和原仓库的绑定关系。
+
+### 11.2 创建 Template Repo
+
+**第一步：准备模板仓库的内容**
+
+按照本文 Step 1 ~ Step 13 搭建好一个空项目骨架，包含以下文件：
+
+```
+my-python-template/
+├── .github/
+│   └── workflows/
+│       └── ci.yml              # CI 工作流（见第 12 节）
+├── .trae/
+│   └── rules/
+│       ├── commit-rule.md
+│       └── trashbin-rule.md
+├── src/
+│   └── __init__.py
+├── tests/
+│   ├── __init__.py
+│   └── conftest.py
+├── .gitignore
+├── .pre-commit-config.yaml
+├── .env.example
+├── CLAUDE.md
+├── pixi.toml
+└── pyproject.toml
+```
+
+**第二步：推送到 GitHub**
+
+```bash
+git remote add origin git@github.com:your-name/my-python-template.git
+git push -u origin main
+```
+
+**第三步：在 GitHub 上标记为模板**
+
+1. 打开仓库页面 → **Settings**
+2. 找到 **Repository template** 区域
+3. 勾选 ✅ **Template repository**
+4. 保存
+
+就这样，模板仓库就创建好了。
+
+### 11.3 从模板创建新项目
+
+**方式一：GitHub 网页**
+
+1. 打开模板仓库页面
+2. 点击绿色的 **Use this template** 按钮
+3. 输入新仓库名称、选择可见性
+4. 点击 **Create repository from template**
+5. 克隆新仓库到本地
+
+**方式二：GitHub CLI**
+
+```bash
+gh repo create my-new-project --template your-name/my-python-template --private
+git clone git@github.com:your-name/my-new-project.git
+cd my-new-project
+```
+
+**方式三：直接克隆（离线使用）**
+
+如果不想依赖 GitHub 模板功能，也可以直接把模板目录复制一份：
+
+```bash
+cp -r /path/to/my-python-template /path/to/my-new-project
+cd /path/to/my-new-project
+rm -rf .git
+git init
+```
+
+### 11.4 创建后必做的初始化
+
+从模板创建新项目后，需要做以下定制：
+
+```bash
+# 1. 安装 pixi 依赖
+pixi install
+
+# 2. 安装 pre-commit 钩子
+pixi run pre-commit-install
+
+# 3. 修改 CLAUDE.md 中的项目名称和描述
+
+# 4. 修改 pixi.toml 中的项目名称
+
+# 5. 修改 .env.example 中的环境变量（按新项目需求）
+
+# 6. 验证质量体系
+pixi run ruff-check
+pixi run lint
+pixi run test-unit
+pixi run pre-commit-run
+```
+
+### 11.5 模板维护建议
+
+- **模板仓库用 `main` 分支**，不需要开发分支
+- **不要在模板里放业务代码**，只放质量基础设施和骨架
+- **模板更新后，已创建的项目不会自动同步**——这是设计如此，因为每个项目已经独立了
+- 如果想传播模板的改进，可以在 README 中写明"模板版本"，让使用者自行判断是否需要手动同步
+
+---
+
+## 12. CI/CD：让质量防线从本地延伸到云端
+
+前面所有的防线（pre-commit、post-merge）都运行在本地。对于个人项目这已经足够，但一旦涉及多人协作，就需要 CI/CD 来做远程门控——确保推到远程仓库的代码也必须通过检查。
+
+### 12.1 本地防线 vs 远程防线
+
+| 防线 | 位置 | 触发时机 | 强制性 | 覆盖范围 |
+|------|------|---------|--------|---------|
+| pre-commit | 本地 | `git commit` 前 | 可被 `--no-verify` 跳过 | lint + format |
+| post-merge | 本地 | `git merge` 后 | 非阻塞，仅通知 | 标准测试 |
+| **CI** | 远程 | push / PR 时 | **不可跳过** | lint + 测试 + 更多 |
+| **PR 门控** | 远程 | 合并 PR 时 | **不通过就不让合** | CI 全部通过 |
+
+**核心价值**：CI 是"不可跳过的防线"。即使开发者本地 `--no-verify` 跳过了 pre-commit，CI 仍然会拦截不合格的代码。
+
+### 12.2 最小 CI 工作流
+
+创建 `.github/workflows/ci.yml`：
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          cache: true
+
+      - name: Lint
+        run: pixi run lint
+
+      - name: Run tests
+        run: pixi run test
+```
+
+**这个配置做了什么？**
+
+1. 每次 push 到 `main`/`dev` 或创建 PR 时自动触发
+2. 在 GitHub 提供的 Ubuntu 机器上运行
+3. 用 `setup-pixi` 安装 pixi 并缓存依赖
+4. 跑 lint（ruff check + format）
+5. 跑标准测试（排除 integration 和 slow）
+
+**前提条件**：项目的 `pixi.toml` 必须支持 `linux-64` 平台，且不硬依赖 GPU。如果你的项目目前只配了 `win-64`，需要添加平台支持（见第 13 节）。
+
+### 12.3 增强版 CI 工作流
+
+在最小版基础上，可以逐步添加更多能力：
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          cache: true
+      - run: pixi run lint
+
+  test-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          cache: true
+      - run: pixi run test-unit
+
+  test-standard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          cache: true
+      - run: pixi run test
+
+  test-full:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          cache: true
+      - run: pixi run test-all
+```
+
+**增强点**：
+
+| 特性 | 说明 |
+|------|------|
+| **Job 拆分** | lint / test-unit / test-standard / test-full 分开跑，更快定位问题 |
+| **concurrency** | 同一分支的新 push 自动取消旧的运行，节省资源 |
+| **条件执行** | `test-full` 只在 push 到 main 时跑，PR 中不跑全量 |
+| **缓存** | pixi 依赖缓存，加速后续运行 |
+
+### 12.4 PR 合并门控
+
+在 GitHub 仓库设置中配置 **Branch Protection Rules**：
+
+1. 进入 **Settings → Branches → Branch protection rules**
+2. 点击 **Add rule**，目标分支填 `main`
+3. 勾选以下选项：
+   - ✅ **Require status checks to pass before merging**
+   - ✅ **Require branches to be up to date before merging**
+   - 在 Status checks 列表中选 `lint`、`test-unit`、`test-standard`
+   - ✅ **Require pull request reviews before merging**（可选）
+
+**效果**：PR 必须等 CI 全部通过 + 至少一人 review 后才能合并。任何人都无法绕过。
+
+### 12.5 环境变量与密钥管理
+
+CI 中需要的环境变量（如 API Key）通过 GitHub Secrets 管理：
+
+1. 进入 **Settings → Secrets and variables → Actions**
+2. 点击 **New repository secret**
+3. 添加需要的密钥（如 `LLM_API_KEY`）
+
+在 CI 工作流中引用：
+
+```yaml
+env:
+  TORCH_DEVICE: cpu
+  RUN_INTEGRATION_TESTS: false
+
+jobs:
+  test-integration:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: prefix-dev/setup-pixi@v0.8.1
+      - run: pixi run test-all
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          RUN_INTEGRATION_TESTS: true
+```
+
+**原则**：
+- 密钥只存在 GitHub Secrets 中，永远不写在代码或配置文件里
+- integration 测试只在 main 分支的 push 中运行，不在 PR 中运行（避免消耗 API 额度）
+
+---
+
+## 13. CUDA/GPU 项目的 CI：从"跑不了"到"跑得通"
+
+如果你的项目用到了 PyTorch + CUDA（像本项目一样），CI 就不是加一个 workflow 文件那么简单了。GitHub 提供的免费 runner 只有 CPU，没有 GPU。这意味着你需要额外处理 GPU 依赖的问题。
+
+### 13.1 问题出在哪？
+
+以本项目为例，`pixi.toml` 中有以下 CUDA 相关的硬编码：
+
+```toml
+[system-requirements]
+cuda = "12.6"                          # ← 告诉 pixi：这个项目需要 CUDA 12.6
+
+[pypi-dependencies]
+torch = { version = "==2.6.0+cu126" } # ← 指定 CUDA 版本的 torch
+torchvision = { version = "==0.21.0+cu126" }
+
+[pypi-options]
+find-links = [
+    { path = 'B:/useradmin/torch_cache' },  # ← 本地缓存路径，CI 不存在
+]
+```
+
+这三行在本地开发时没问题，但到了 CI 的 Ubuntu 机器上：
+
+| 问题 | 原因 |
+|------|------|
+| `cuda = "12.6"` | CI 没有 GPU，也没有 CUDA Toolkit，pixi 解析依赖时可能报错 |
+| `torch==2.6.0+cu126` | `+cu126` 是 CUDA 专用版本，CPU 环境装不了 |
+| `find-links` 本地路径 | `B:/useradmin/torch_cache` 在 Linux 上不存在 |
+
+### 13.2 解决方案：pixi feature 机制
+
+pixi 提供了 `[feature]` 机制，可以在同一个 `pixi.toml` 中定义多套环境，按需切换。核心思路是：**本地开发用 GPU 环境，CI 用 CPU 环境**。
+
+#### 修改后的 `pixi.toml` 结构
+
+```toml
+[workspace]
+name = "my-project"
+version = "0.1.0"
+channels = ["conda-forge"]
+platforms = ["win-64", "linux-64"]    # ← 添加 linux-64
+
+[dependencies]
+python = "3.12.*"
+
+# ==============================
+# 公共依赖（GPU/CPU 通用）
+# ==============================
+[pypi-dependencies]
+loguru = ">=0.7.3, <0.8"
+python-dotenv = ">=1.2.2, <2"
+pyyaml = ">=6.0.3, <7"
+# ... 其他非 torch 依赖 ...
+
+# ==============================
+# GPU 环境（本地开发）
+# ==============================
+[feature.cuda]
+system-requirements = { cuda = "12.6" }
+
+[feature.cuda.pypi-dependencies]
+torch = "==2.6.0+cu126"
+torchvision = "==0.21.0+cu126"
+
+# ==============================
+# CPU 环境（CI 用）
+# ==============================
+[feature.cpu.pypi-dependencies]
+torch = "==2.6.0+cpu"
+torchvision = "==0.21.0+cpu"
+
+# ==============================
+# 环境映射
+# ==============================
+[environments]
+default = ["cuda"]    # pixi install 默认装 GPU 版
+ci = ["cpu"]          # pixi run -e ci 使用 CPU 版
+```
+
+**使用方式**：
+
+```bash
+# 本地开发（默认 GPU 环境）
+pixi install
+pixi run test
+
+# CI 中（CPU 环境）
+pixi install -e ci
+pixi run -e ci test
+```
+
+#### 处理 find-links 本地缓存
+
+`find-links` 中的本地路径不应该提交到仓库。有两种处理方式：
+
+**方式一：移到用户级 pixi 配置**
+
+```bash
+# 在 ~/.pixi/config.toml 中配置（不提交到仓库）
+[pypi-config]
+find-links = ["B:/useradmin/torch_cache"]
+```
+
+**方式二：改用 PyTorch 官方镜像源**
+
+```toml
+[pypi-options]
+index-url = "https://pypi.org/simple"
+extra-index-urls = ["https://download.pytorch.org/whl/cu126"]
+```
+
+这样 pixi 会直接从 PyTorch 官方下载 CUDA 版 wheel，不需要本地缓存。
+
+### 13.3 CPU 环境的 CI 工作流
+
+配置好 pixi feature 后，CI 工作流就很简单了：
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          environments: ci        # ← 使用 CPU 环境
+          cache: true
+
+      - name: Lint
+        run: pixi run -e ci lint
+
+      - name: Run tests
+        run: pixi run -e ci test
+        env:
+          TORCH_DEVICE: cpu       # ← 告诉代码用 CPU
+```
+
+### 13.4 代码中处理 GPU/CPU 兼容
+
+除了依赖管理，代码中也需要处理设备兼容性。典型做法是读取环境变量：
+
+```python
+import os
+import torch
+
+def get_device() -> str:
+    """获取计算设备，支持环境变量覆盖"""
+    device = os.getenv("TORCH_DEVICE", "cuda")
+    if device == "cuda" and not torch.cuda.is_available():
+        device = "cpu"
+    return device
+```
+
+配置文件中同理，把硬编码的 `device: "cuda"` 改为支持环境变量覆盖。
+
+### 13.5 如果 CI 中也需要 GPU 怎么办？
+
+有些测试确实需要 GPU 才能跑（比如验证 CUDA kernel 是否正确、模型是否真的在 GPU 上运行）。这种情况下，GitHub 免费的 CPU runner 就不够用了，需要 **自托管 GPU Runner**。
+
+#### 方案一：自托管 Runner（自己买机器）
+
+**你需要准备**：
+
+1. **一台有 NVIDIA GPU 的服务器**（物理机或云主机）
+   - 最低配置：一张 T4 / GTX 1080 即可
+   - 推荐配置：A10 / V100（性价比好）
+   - 操作系统：Ubuntu 22.04 LTS
+
+2. **安装基础软件**：
+
+```bash
+# NVIDIA 驱动（确保 nvidia-smi 可用）
+sudo apt install nvidia-driver-535
+
+# Docker
+curl -fsSL https://get.docker.com | sh
+
+# NVIDIA Container Toolkit（让 Docker 能用 GPU）
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+  sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+  sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+sudo apt update
+sudo apt install -y nvidia-container-toolkit
+sudo systemctl restart docker
+
+# 验证
+docker run --rm --gpus all nvidia/cuda:12.6.0-base-ubuntu22.04 nvidia-smi
+```
+
+3. **注册 GitHub Actions Runner**：
+
+```bash
+mkdir actions-runner && cd actions-runner
+curl -o actions-runner-linux-x64.tar.gz -L \
+  https://github.com/actions/runner/releases/latest/download/actions-runner-linux-x64.tar.gz
+tar xzf ./actions-runner-linux-x64.tar.gz
+
+# 在 GitHub 仓库的 Settings → Actions → Runners → New self-hosted runner
+# 页面中获取 token，然后：
+./config.sh --url https://github.com/your-org/your-repo --token YOUR_TOKEN
+
+# 安装为系统服务（开机自启）
+sudo ./svc.sh install
+sudo ./svc.sh start
+```
+
+4. **给 Runner 打标签**：
+
+注册时给 Runner 打上 `gpu` 标签，方便工作流指定：
+
+```yaml
+jobs:
+  test-gpu:
+    runs-on: [self-hosted, linux, gpu]   # ← 只在有 GPU 的 runner 上跑
+    steps:
+      - uses: actions/checkout@v4
+      - run: pixi run test-all
+```
+
+#### 方案二：云 GPU Runner（按需租用）
+
+如果不想自己维护服务器，可以用云服务提供的 GPU CI：
+
+| 服务 | GPU 型号 | 大致价格 | 特点 |
+|------|---------|---------|------|
+| **GitHub-hosted GPU**（Beta） | T4 | ~$0.04/min | 官方支持，配置最简单 |
+| **Lambda Cloud** | A100 / H100 | ~$1.10/hr | 性能强，按小时计费 |
+| **RunPod** | A100 / A6000 | ~$1.64/hr | 支持 Serverless 模式 |
+| **Google Cloud** | T4 / L4 / A100 | 按需定价 | GCP 生态集成 |
+
+> **GitHub-hosted GPU Runner** 目前还在 Beta 阶段，需要申请。如果获批，使用方式和普通 runner 一样简单：
+>
+> ```yaml
+> jobs:
+>   test-gpu:
+>     runs-on: ubuntu-24.04-gpu        # ← GitHub 提供的 GPU runner
+>     steps:
+>       - uses: actions/checkout@v4
+>       - run: pixi run test-all
+> ```
+
+#### 方案三：Docker 容器 + GPU（推荐）
+
+在自托管 Runner 上，用 Docker 容器隔离每次运行的环境：
+
+```yaml
+jobs:
+  test-gpu:
+    runs-on: [self-hosted, linux, gpu]
+    container:
+      image: pytorch/pytorch:2.6.0-cuda12.6-cudnn9-devel
+      options: --gpus all --shm-size=2gb
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: prefix-dev/setup-pixi@v0.8.1
+        with:
+          environments: cuda
+          cache: true
+
+      - name: Verify GPU
+        run: python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}, Device: {torch.cuda.get_device_name(0)}')"
+
+      - name: Run all tests
+        run: pixi run -e cuda test-all
+```
+
+**为什么推荐容器？**
+
+| | 裸机运行 | Docker 容器 |
+|---|---------|------------|
+| 环境隔离 | ❌ 测试之间可能互相影响 | ✅ 每次运行都是干净环境 |
+| 依赖管理 | 需要手动安装 | 镜像自带所有依赖 |
+| 安全性 | 测试代码直接跑在宿主机 | 容器内运行，限制权限 |
+| 可复现性 | 依赖宿主机状态 | 镜像版本锁定，完全可复现 |
+
+### 13.6 推荐的渐进式实施路径
+
+不要一上来就搞 GPU CI。按以下顺序逐步推进：
+
+```
+阶段 1：CPU-only CI（立即可做）
+├── pixi.toml 添加 linux-64 平台
+├── pixi.toml 添加 [feature.cpu] 环境
+├── 代码中处理 TORCH_DEVICE 环境变量
+├── 创建 .github/workflows/ci.yml
+└── 配置 PR 合并门控
+
+阶段 2：GPU 测试标记（准备期）
+├── 给需要 GPU 的测试加 @pytest.mark.gpu
+├── CI 中用 -m "not gpu" 排除 GPU 测试
+└── 本地手动跑 GPU 测试验证
+
+阶段 3：自托管 GPU Runner（按需实施）
+├── 准备 GPU 服务器
+├── 安装 NVIDIA 驱动 + Docker + Container Toolkit
+├── 注册 GitHub Actions Runner
+├── 配置 GPU CI 工作流
+└── 验证 GPU 测试在 CI 中通过
+```
+
+**阶段 1 可以在半天内完成**，而且已经能覆盖 90% 的质量门控需求——大部分测试用 mock，不需要真 GPU。阶段 3 是锦上添花，等团队有需要再投入。
+
+### 13.7 常见问题
+
+#### Q: CPU 版 torch 和 CUDA 版 torch 的测试结果会不一样吗？
+
+大部分不会。纯 Python 逻辑的计算结果在 CPU 和 GPU 上完全一致。只有以下情况可能不同：
+- 浮点精度（GPU 的 FP16 和 CPU 的 FP32 有微小差异）
+- CUDA 特有 API（如 `torch.cuda.synchronize()`）
+- 显存相关行为（如 OOM 只在 GPU 上出现）
+
+所以 CPU CI 跑的是"逻辑正确性"，GPU CI 跑的是"GPU 兼容性"。两者互补。
+
+#### Q: pixi feature 机制成熟吗？
+
+pixi 的 feature/environments 是其核心功能之一，已经稳定可用。详见 [pixi 官方文档](https://pixi.sh/latest/features/multi_environment/)。
+
+#### Q: 自托管 Runner 安全吗？
+
+自托管 Runner 有安全风险：恶意 PR 可能执行任意代码。建议：
+- 只对可信的仓库启用
+- 使用 Docker 容器隔离
+- PR 中只跑 lint + unit test，不跑需要 secrets 的任务
+- 参考 [GitHub 官方安全指南](https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions)
+
+---
+
 ## 相关文档
 
 - [Lint 与 pre-commit 入门指南](lint-and-precommit.md) — Linter/Ruff/pre-commit 概念入门
@@ -686,3 +1316,4 @@ pixi run pytest tests/test_file.py::TestClass::test_method -v
 - [测试运行指南](testing.md) — 如何运行和管理项目测试
 - [测试分层与耗时预算](test-layering-and-time-budgets.md) — 分层原则与耗时预算
 - [Commit Conventions](commit-conventions.md) — 提交规范深度参考
+- [CI/CD 接入计划书](../.archive/v0.1.9-dual-eval-era/project-hygiene/cicd-integration-plan.md) — 本项目 CI/CD 接入的详细分析
