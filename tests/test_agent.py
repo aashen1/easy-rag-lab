@@ -255,3 +255,182 @@ class TestBackupToTrashbin:
 
         result = _backup_to_trashbin(Path("/nonexistent/path"), "test")
         assert result is None
+
+
+class TestScrollBySource:
+    def test_scroll_by_source_returns_points(self):
+        from unittest.mock import MagicMock, patch
+
+        from src.indexer import VectorIndexer
+
+        with patch.object(VectorIndexer, "__init__", lambda self, *a, **kw: None):
+            indexer = VectorIndexer.__new__(VectorIndexer)
+            indexer.client = MagicMock()
+            indexer.collection_name = "test_collection"
+            mock_record = MagicMock()
+            mock_record.id = "point1"
+            mock_record.payload = {"metadata": {"source": "test.pdf"}}
+            indexer.client.scroll.return_value = ([mock_record], None)
+
+            result = indexer.scroll_by_source("test.pdf")
+            assert len(result) == 1
+            assert result[0]["id"] == "point1"
+            assert result[0]["payload"] == {"metadata": {"source": "test.pdf"}}
+
+    def test_scroll_by_source_empty(self):
+        from unittest.mock import MagicMock, patch
+
+        from src.indexer import VectorIndexer
+
+        with patch.object(VectorIndexer, "__init__", lambda self, *a, **kw: None):
+            indexer = VectorIndexer.__new__(VectorIndexer)
+            indexer.client = MagicMock()
+            indexer.collection_name = "test_collection"
+            indexer.client.scroll.return_value = ([], None)
+
+            result = indexer.scroll_by_source("nonexistent.pdf")
+            assert result == []
+
+
+class TestDeleteSourceBackup:
+    def test_delete_source_creates_backup(self, tmp_path):
+        from unittest.mock import MagicMock, patch
+
+        from src.agent.tools import delete_source
+
+        mock_indexer = MagicMock()
+        mock_indexer.scroll_by_source.return_value = [
+            {"id": "p1", "payload": {"metadata": {"source": "test.pdf"}}}
+        ]
+        mock_indexer.delete_by_source.return_value = 1
+
+        mock_pipeline = MagicMock()
+        mock_pipeline.indexer = mock_indexer
+
+        with (
+            patch("src.pipeline.RAGPipeline", return_value=mock_pipeline),
+            patch("src.agent.tools.Path") as mock_path_cls,
+        ):
+            mock_path_cls.return_value = tmp_path / ".trashbin"
+            result = delete_source.invoke({"meal_name": "test", "source": "test.pdf"})
+
+        assert "backup_path" in result or "deleted" in result
+
+
+class TestParseExceptionHandling:
+    def test_parse_pdf_logs_and_reraises(self):
+        from unittest.mock import patch
+
+        from src.core.ops.parse import parse_pdf
+
+        with (
+            patch("src.core.ops.parse.Path.exists", return_value=True),
+            patch(
+                "src.core.ops.parse.ParserRegistry.get_composite",
+                side_effect=RuntimeError("parser crash"),
+            ),
+            pytest.raises(RuntimeError, match="parser crash"),
+        ):
+            parse_pdf(
+                "dummy.pdf", parser_name="pymupdf4llm", enhancer_name="pdfplumber"
+            )
+
+    def test_enhance_page_logs_and_reraises(self):
+        from unittest.mock import patch
+
+        from src.core.ops.parse import enhance_page
+
+        with (
+            patch("src.core.ops.parse.Path.exists", return_value=True),
+            patch(
+                "src.core.ops.parse.ParserRegistry.get_enhancer",
+                side_effect=RuntimeError("enhancer crash"),
+            ),
+            pytest.raises(RuntimeError, match="enhancer crash"),
+        ):
+            enhance_page("dummy.pdf", 1, "text", enhancer_name="pdfplumber")
+
+    def test_enhance_table_logs_and_reraises(self):
+        from unittest.mock import patch
+
+        from src.core.ops.parse import enhance_table
+
+        with (
+            patch("src.core.ops.parse.Path.exists", return_value=True),
+            patch(
+                "src.core.ops.parse.ParserRegistry.get_enhancer",
+                side_effect=RuntimeError("enhancer crash"),
+            ),
+            pytest.raises(RuntimeError, match="enhancer crash"),
+        ):
+            enhance_table("dummy.pdf", 1, 1, "text", enhancer_name="pdfplumber")
+
+
+class TestAgentConfig:
+    def test_get_agent_default_returns_configured_value(self):
+        from unittest.mock import patch
+
+        from src.agent.config import get_agent_default
+
+        with patch(
+            "src.utils.load_config",
+            return_value={"agent": {"defaults": {"parser_name": "fitz"}}},
+        ):
+            assert get_agent_default("parser_name", "pymupdf4llm") == "fitz"
+
+    def test_get_agent_default_returns_fallback(self):
+        from unittest.mock import patch
+
+        from src.agent.config import get_agent_default
+
+        with patch("src.utils.load_config", return_value={}):
+            assert get_agent_default("parser_name", "pymupdf4llm") == "pymupdf4llm"
+
+    def test_get_agent_config_returns_section(self):
+        from unittest.mock import patch
+
+        from src.agent.config import get_agent_config
+
+        with patch(
+            "src.utils.load_config",
+            return_value={"agent": {"defaults": {"chunk_size": 1024}}},
+        ):
+            result = get_agent_config()
+            assert result == {"defaults": {"chunk_size": 1024}}
+
+
+class TestLLMClientCaching:
+    def test_get_llm_returns_cached_instance(self):
+        from unittest.mock import patch
+
+        from src.agent.graph import _get_llm
+
+        _get_llm.cache_clear()
+        with (
+            patch("src.llm_client.create_langchain_anthropic_client") as mock_create,
+            patch(
+                "src.utils.get_llm_config",
+                return_value={
+                    "api_key": "k",
+                    "base_url": "u",
+                    "model_name": "m",
+                    "temperature": 0,
+                    "max_tokens": 100,
+                },
+            ),
+            patch("src.utils.load_config", return_value={}),
+        ):
+            llm1 = _get_llm()
+            llm2 = _get_llm()
+            assert llm1 is llm2
+            assert mock_create.call_count == 1
+        _get_llm.cache_clear()
+
+    def test_get_tools_returns_cached_list(self):
+        from src.agent.graph import _get_tools
+
+        _get_tools.cache_clear()
+        tools1 = _get_tools()
+        tools2 = _get_tools()
+        assert tools1 is tools2
+        _get_tools.cache_clear()
