@@ -33,18 +33,23 @@ def run_agent():
     Returns:
         Exit code (0 for normal exit).
     """
+    from langgraph.store.memory import InMemoryStore
+
     from src.agent.config import get_agent_default
     from src.agent.graph import compile_agent
 
     checkpointer = MemorySaver()
-    agent = compile_agent(checkpointer=checkpointer)
+    store = InMemoryStore()
+    agent = compile_agent(checkpointer=checkpointer, store=store)
 
     thread_id = get_agent_default("thread_id", "maintenance-session")
     config = {"configurable": {"thread_id": thread_id}}
 
     print("🔧 RAG 维修工 Agent 已启动")
-    print("输入问题进行诊断，输入 'quit' 或 'exit' 退出")
+    print("输入问题进行诊断，输入 'quit' 或 'exit' 退出，':review on/off' 切换自动审查")
     print("-" * 50)
+
+    auto_review = False
 
     while True:
         try:
@@ -60,6 +65,15 @@ def run_agent():
         if not user_input:
             continue
 
+        if user_input == ":review on":
+            auto_review = True
+            print("📋 自动审查已开启")
+            continue
+        if user_input == ":review off":
+            auto_review = False
+            print("📋 自动审查已关闭")
+            continue
+
         state = {
             "messages": [{"role": "user", "content": user_input}],
             "current_meal": None,
@@ -68,6 +82,8 @@ def run_agent():
             "pending_action": None,
             "approved": None,
             "execution_log": [],
+            "stage_history": [],
+            "auto_review": auto_review,
         }
 
         while True:
