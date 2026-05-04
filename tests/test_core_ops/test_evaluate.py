@@ -95,9 +95,21 @@ class TestEvaluateSingle:
         from src.core.ops.evaluate import evaluate_single
 
         result = evaluate_single(
-            question="alpha beta gamma",
-            answer="delta epsilon zeta",
-            contexts=["delta epsilon zeta"],
+            question="猫狗鼠",
+            answer="红蓝绿",
+            contexts=["红蓝绿"],
         )
 
         assert result["answer_relevancy"] == 0.0
+
+    def test_chinese_overlap(self):
+        from src.core.ops.evaluate import evaluate_single
+
+        result = evaluate_single(
+            question="净资产收益率是多少",
+            answer="净资产收益率为15%",
+            contexts=["净资产收益率ROE"],
+        )
+
+        assert result["answer_relevancy"] > 0.0
+        assert result["context_relevance"] > 0.0

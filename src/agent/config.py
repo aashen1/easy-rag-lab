@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import functools
 from typing import Any
 
 
+@functools.lru_cache(maxsize=1)
 def get_agent_config() -> dict[str, Any]:
     from src.utils import load_config
 

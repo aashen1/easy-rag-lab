@@ -300,3 +300,132 @@ Phase 0 + Phase 1 已验收通过，维修工 Agent 具备了基本的 LangGraph
 ## REMOVED Requirements
 
 无移除的需求。
+
+---
+
+## 验收勘误（2026-05-05 深度验收）
+
+以下问题在深度验收中发现，作为 Spec 的补充说明：
+
+### 勘误 1: 架构简化——ReAct 单节点 vs 多节点
+
+Spec 原始设计包含 `parse_node`, `chunk_node`, `embed_node` 等独立节点 + `Command(goto=...)` 跳转。实际实现为 ReAct 单节点模式（所有工具在 `tool_node` 统一执行，`agent_node` 每次重新决策）。
+
+**决策理由**：Phase 2 plan 中有明确记录——ReAct 模式下不需要 Command(goto=...)，LLM 自然会根据上下文选择工具。
+
+**结论**：可接受的架构简化。`stage_history` 替代了显式跳转，LLM 通过提示词感知历史。
+
+### 勘误 2: 安全拦截为"软拦截"而非"硬拦截"
+
+Spec 要求"系统 SHALL 维护一个危险操作白名单，禁止删除整个 Qdrant collection"。实际实现：
+- `FORBIDDEN_OPERATIONS` 集合拦截已知危险操作名
+- `HIGH_RISK_TOOLS` + interrupt 审批高风险操作
+- **但** LLM 可通过组合合法工具达到类似效果（如先 `delete_source` 逐个删除）
+
+**结论**：部分可接受。当前实现为"软拦截"，依赖 LLM 不主动绕过。硬拦截需要工具级别的权限控制，属于 Phase 3 范围。
+
+### 勘误 3: 经验自动保存保存的是"空壳经验"
+
+Spec 要求"当发现好的配置组合时，自动保存经验"。实际实现中，只要执行了 `parse_pdf_tool` 或 `chunk_parsed_tool` 就自动保存，但保存的经验中 `best_parser`、`best_chunk_strategy`、`best_chunk_size` 全是 `None`，只有 `tools_used` 和 `reason` 有值。
+
+**结论**：需要修复。要么填充有意义的值，要么暂时关闭自动保存。此问题涉及 `graph.py`，与 Phase 3 冲突，待合并后修复。
+
+### 勘误 4: CLI 状态不跨轮次保持
+
+Spec 要求 `auto_review` 可通过 `:review on/off` 切换。实际实现中，CLI 每轮对话重建 state，`auto_review`、`execution_log`、`stage_history` 等非 messages 字段不跨轮次保持。
+
+**结论**：需要修复。Phase 3 T1(SqliteSaver)+T3(CLI增强) 会重构 cli.py，届时一并修复。
+
+### 勘误 5: `search_experiences` 方法从未被调用
+
+Spec 要求实现 `search_experiences(namespace, query)` 方法。实际实现中 `agent_node` 使用 `get_all_experiences` 而非 `search_experiences`，因为 `InMemoryStore` 不支持语义搜索。
+
+**结论**：方法保留为未来使用（已标注 docstring），当采用支持搜索的持久化存储时启用。
+
+### 勘误 6: `query.py` 共享单元缺少异常处理
+
+Spec 只要求修复 `parse.py` 的异常处理，遗漏了 `query.py`。
+
+**结论**：已在本次验收中修复（commit: fix: add try/except to query_rag）。
+
+### 勘误 7: `evaluate_single` 的 `_word_overlap` 对中文不友好
+
+Spec 未涉及此问题，但验收中发现 `_word_overlap` 使用 `str.split()` 按空格分词，中文句子被当作单个 token。
+
+**结论**：已在本次验收中修复（commit: fix: use character bigrams in _word_overlap）。
+
+### 勘误 8: `enhance_page`/`enhance_table` 单页操作遍历全 PDF
+
+Spec 未涉及此性能问题，但验收中发现 `_extract_all_tables` 会遍历所有页面。
+
+**结论**：已在本次验收中修复（commit: perf: add _extract_single_page_tables）。
+
+### 勘误 9: `create_meal_manual()` 的 `creation_mode` 未写入 manifest
+
+Spec 要求 `create_curated_meal` 工具创建手动 Meal。实际实现中 `creation_mode = "manual"` 在 `_build_pipeline()` 返回后才设置，但 manifest 已写盘。
+
+**结论**：已在本次验收中修复（commit: fix: pass creation_mode to _build_pipeline）。
+
+---
+
+## Phase 3 验收勘误（2026-05-05）
+
+### 勘误 10: 空壳经验自动保存（P0-3 续）
+
+Phase 2 验收中发现经验自动保存中 `best_parser`/`best_chunk_strategy`/`best_chunk_size` 全是 None，推迟到 Phase 3 修复。Phase 3 实现后问题仍然存在。
+
+**结论**：已在本次验收中修复。从 `tool_call["args"]` 中提取实际使用的 parser_name、strategy、chunk_size 填充经验记录（commit: fix: extract actual parser/chunk params from tool_call args for experience）。
+
+### 勘误 11: ComparisonReporter 推荐逻辑假设所有指标越大越好
+
+`ComparisonReporter.generate()` 使用 `max()` 选择最优方案，但某些指标（如 error_rate、latency_ms）越小越好。
+
+**结论**：已在本次验收中修复。添加 `LOWER_IS_BETTER_KEYS` 集合，对这些指标使用 `min()`（commit: fix: support lower-is-better metrics in ComparisonReporter）。
+
+### 勘误 12: Streamlit interrupt 处理可能无法恢复
+
+`maintenance.py` 中 interrupt 后的批准/拒绝按钮在 `st.rerun()` 后可能丢失 interrupt 上下文。LangGraph 的 interrupt 机制设计用于同步执行流，而 Streamlit 的 rerun 模式会丢失中间状态。
+
+**结论**：已知风险，暂不修复。需要手动测试验证，修复涉及 Streamlit 架构重构。
+
+### 勘误 13: 报告工具依赖 LLM 传参
+
+`generate_maintenance_report_tool` 要求 LLM 传入 `execution_log`、`stage_history` 等参数，但 LLM 无法直接访问 state，只能从对话上下文推断。
+
+**结论**：已知限制，暂不修复。更好的做法是让工具从 checkpointer 读取当前 state，但需要传入 thread_id 和 config，改动较大。
+
+### 勘误 14: locked_tool 冗余 prompt
+
+当 `locked_tool` 存在时，LLM 不会被调用，但 `build_system_prompt()` 仍被调用并传入 `locked_tool` 参数。
+
+**结论**：已在本次验收中修复。移除了 `locked_tool` 参数和对应的 prompt 段落（commit: refactor: remove locked_tool from build_system_prompt since LLM is skipped）。
+
+### 勘误 15: CLI review 空壳测试
+
+`TestCLIReviewCommand` 两个方法只有 `assert True`，没有实际测试逻辑。
+
+**结论**：已在本次验收中修复。补充了实际测试，验证 `:review on/off` 不被 `_handle_cli_command` 处理（commit: fix: replace empty TestCLIReviewCommand with actual tests）。
+
+### 勘误 16: config 读取无缓存
+
+`get_agent_config()` 每次调用都重新 `load_config()`，在 `chunk_parsed_tool` 中被调用 3 次。
+
+**结论**：已在本次验收中修复。添加 `@functools.lru_cache`（commit: perf: add lru_cache to get_agent_config）。
+
+### 勘误 17: _get_tool_names 不必要地清除缓存
+
+`maintenance.py` 中 `_get_tool_names()` 每次调用 `_get_tools.cache_clear()`，抵消 LRU 缓存优势。
+
+**结论**：已在本次验收中修复。移除了 `cache_clear()` 调用（commit: perf: remove unnecessary cache_clear in _get_tool_names）。
+
+### 仍未解决的问题
+
+| 问题 | 严重度 | 原因 |
+|------|--------|------|
+| Streamlit interrupt 处理 | P0 | 需架构重构 |
+| MaintenanceState 改 TypedDict | P1 | LangGraph 兼容性待验证 |
+| 报告工具从 checkpointer 读 state | P1 | 改动较大 |
+| Streamlit 双重状态管理 | P1 | 需重构 maintenance.py |
+| 操作时间线缺时间列 | P2 | 改动链路长 |
+| Streamlit 报告展示/下载 | P2 | UI 功能增强 |
+| WAL 模式 | P2 | 性能优化 |

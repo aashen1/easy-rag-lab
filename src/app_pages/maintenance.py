@@ -10,7 +10,6 @@ def _get_tool_names() -> list[str]:
     """Return list of available tool names for the lock dropdown."""
     from src.agent.graph import _get_tools
 
-    _get_tools.cache_clear()
     tools = _get_tools()
     names = ["自动"] + [t.name for t in tools]
     return names

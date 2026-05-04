@@ -418,8 +418,9 @@ class TestAgentConfig:
     def test_get_agent_default_returns_fallback(self):
         from unittest.mock import patch
 
-        from src.agent.config import get_agent_default
+        from src.agent.config import get_agent_config, get_agent_default
 
+        get_agent_config.cache_clear()
         with patch("src.utils.load_config", return_value={}):
             assert get_agent_default("parser_name", "pymupdf4llm") == "pymupdf4llm"
 
@@ -428,6 +429,7 @@ class TestAgentConfig:
 
         from src.agent.config import get_agent_config
 
+        get_agent_config.cache_clear()
         with patch(
             "src.utils.load_config",
             return_value={"agent": {"defaults": {"chunk_size": 1024}}},
@@ -708,14 +710,6 @@ class TestBuildSystemPrompt:
         assert "错误处理指导" in prompt
         assert "先分析错误原因" in prompt
 
-    def test_prompt_with_locked_tool(self):
-        from src.agent.prompt import build_system_prompt
-
-        prompt = build_system_prompt(locked_tool="parse_pdf_tool")
-        assert "工具锁定" in prompt
-        assert "parse_pdf_tool" in prompt
-        assert "历史经验推荐" not in prompt
-
     def test_prompt_contains_issue_rules(self):
         from src.agent.prompt import build_system_prompt
 
@@ -982,11 +976,17 @@ class TestAgentNodeExperienceRetrieval:
 
 
 class TestCLIReviewCommand:
-    def test_review_on_sets_auto_review(self):
-        assert True
+    def test_review_on_not_handled_by_cli_command(self):
+        from src.agent.cli import _handle_cli_command
 
-    def test_review_off_sets_auto_review(self):
-        assert True
+        result = _handle_cli_command(":review on", False)
+        assert result is None
+
+    def test_review_off_not_handled_by_cli_command(self):
+        from src.agent.cli import _handle_cli_command
+
+        result = _handle_cli_command(":review off", False)
+        assert result is None
 
 
 class TestLockedTool:

@@ -22,10 +22,13 @@ def query_rag(question: str, pipeline: Any) -> dict[str, Any]:
         ``scores``, ``sources``, ``chunk_ids``, and optionally ``token_usage``.
 
     Raises:
-        AttributeError: If *pipeline* does not have a ``query`` method.
         RetrievalError: If the pipeline fails to process the question.
     """
-    logger.debug(f"query_rag called with question: {question[:50]}...")
-    result = pipeline.query(question)
-    logger.debug("query_rag completed successfully")
-    return result
+    try:
+        logger.debug(f"query_rag called with question: {question[:50]}...")
+        result = pipeline.query(question)
+        logger.debug("query_rag completed successfully")
+        return result
+    except Exception as e:
+        logger.error(f"query_rag failed: {e}")
+        raise

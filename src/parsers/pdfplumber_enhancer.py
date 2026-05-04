@@ -176,8 +176,7 @@ class PdfPlumberEnhancer(TableEnhancer):
             Enhanced page text with improved table formatting.
         """
         page_idx = page_number - 1
-        all_tables = self._extract_all_tables(pdf_path, page_number)
-        plumber_tables = all_tables.get(page_idx, [])
+        plumber_tables = self._extract_single_page_tables(pdf_path, page_idx)
 
         if not plumber_tables:
             return existing_text
@@ -213,8 +212,7 @@ class PdfPlumberEnhancer(TableEnhancer):
         """
         page_idx = page_number - 1
         table_idx = table_index - 1
-        all_tables = self._extract_all_tables(pdf_path, page_number)
-        page_tables = all_tables.get(page_idx, [])
+        page_tables = self._extract_single_page_tables(pdf_path, page_idx)
 
         if table_idx >= len(page_tables):
             return existing_text
@@ -275,6 +273,59 @@ class PdfPlumberEnhancer(TableEnhancer):
             spans.append((table_start, pos))
 
         return spans
+
+    def _extract_single_page_tables(self, pdf_path: str, page_idx: int) -> list[str]:
+        """Extract tables from a single page of a PDF.
+
+        Opens the PDF, extracts tables from the specified page only,
+        and returns them as markdown strings.  More efficient than
+        ``_extract_all_tables`` when only one page is needed.
+
+        Args:
+            pdf_path: Path to the PDF file.
+            page_idx: 0-indexed page number to extract tables from.
+
+        Returns:
+            List of markdown table strings for the specified page.
+        """
+        tables: list[str] = []
+
+        try:
+            import pdfplumber
+
+            settings = dict(self._table_settings)
+            v_strategy = self._vertical_strategy or self._strategy
+            h_strategy = self._horizontal_strategy or self._strategy
+            settings["vertical_strategy"] = v_strategy
+            settings["horizontal_strategy"] = h_strategy
+
+            with warnings.catch_warnings():
+                warnings.filterwarnings("once", message="Could not get FontBBox")
+                with pdfplumber.open(pdf_path) as pdf:
+                    if page_idx >= len(pdf.pages):
+                        return tables
+                    page = pdf.pages[page_idx]
+                    try:
+                        plumber_tables = page.find_tables(table_settings=settings)
+                    except Exception as e:
+                        logger.warning(
+                            f"pdfplumber find_tables failed for page "
+                            f"{page_idx + 1}: {str(e)}"
+                        )
+                        return tables
+
+                    for table in plumber_tables:
+                        table_data = table.extract()
+                        if not table_data or not table_data[0]:
+                            continue
+                        md = self._table_to_markdown(table_data)
+                        if md:
+                            tables.append(md)
+
+        except Exception as e:
+            logger.warning(f"pdfplumber open failed for {pdf_path}: {str(e)}")
+
+        return tables
 
     def _extract_all_tables(
         self, pdf_path: str, page_count: int

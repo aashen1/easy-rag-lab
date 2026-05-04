@@ -13,7 +13,9 @@ class TestPdfPlumberEnhancerEnhancePage:
 
         with (
             patch.object(
-                enhancer, "_extract_all_tables", return_value={0: [["table1"]]}
+                enhancer,
+                "_extract_single_page_tables",
+                return_value=["| table |", "md"],
             ),
             patch.object(
                 enhancer, "_filter_low_quality", return_value=(["| table |", "md"], [])
@@ -29,26 +31,28 @@ class TestPdfPlumberEnhancerEnhancePage:
 
         enhancer = PdfPlumberEnhancer()
 
-        with patch.object(enhancer, "_extract_all_tables", return_value={}):
+        with patch.object(enhancer, "_extract_single_page_tables", return_value=[]):
             result = enhancer.enhance_page("test.pdf", 1, "original text")
 
         assert result == "original text"
 
-    def test_enhance_page_uses_1_indexed(self):
+    def test_enhance_page_uses_0_indexed_page_idx(self):
         from src.parsers.pdfplumber_enhancer import PdfPlumberEnhancer
 
         enhancer = PdfPlumberEnhancer()
 
         with (
             patch.object(
-                enhancer, "_extract_all_tables", return_value={4: [["table1"]]}
+                enhancer,
+                "_extract_single_page_tables",
+                return_value=["md"],
             ) as mock_extract,
             patch.object(enhancer, "_filter_low_quality", return_value=(["md"], [])),
             patch.object(enhancer, "_append_tables", return_value="enhanced"),
         ):
             enhancer.enhance_page("test.pdf", 5, "text")
 
-        mock_extract.assert_called_once_with("test.pdf", 5)
+        mock_extract.assert_called_once_with("test.pdf", 4)
 
 
 class TestPdfPlumberEnhancerEnhanceTable:
@@ -60,8 +64,8 @@ class TestPdfPlumberEnhancerEnhanceTable:
         with (
             patch.object(
                 enhancer,
-                "_extract_all_tables",
-                return_value={0: [["table1"], ["table2"]]},
+                "_extract_single_page_tables",
+                return_value=["table1", "table2"],
             ),
             patch.object(
                 enhancer,
@@ -84,27 +88,29 @@ class TestPdfPlumberEnhancerEnhanceTable:
         enhancer = PdfPlumberEnhancer()
 
         with patch.object(
-            enhancer, "_extract_all_tables", return_value={0: [["table1"]]}
+            enhancer, "_extract_single_page_tables", return_value=["table1"]
         ):
             result = enhancer.enhance_table("test.pdf", 1, 5, "original text")
 
         assert result == "original text"
 
-    def test_enhance_table_uses_1_indexed(self):
+    def test_enhance_table_uses_0_indexed_page_idx(self):
         from src.parsers.pdfplumber_enhancer import PdfPlumberEnhancer
 
         enhancer = PdfPlumberEnhancer()
 
         with (
             patch.object(
-                enhancer, "_extract_all_tables", return_value={2: [["table1"]]}
+                enhancer,
+                "_extract_single_page_tables",
+                return_value=["md"],
             ) as mock_extract,
             patch.object(enhancer, "_filter_low_quality", return_value=(["md"], [])),
             patch.object(enhancer, "_find_md_table_spans", return_value=[(0, 5)]),
         ):
             enhancer.enhance_table("test.pdf", 3, 1, "text")
 
-        mock_extract.assert_called_once_with("test.pdf", 3)
+        mock_extract.assert_called_once_with("test.pdf", 2)
 
 
 class TestParserRegistryGetEnhancer:
