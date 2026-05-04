@@ -10,7 +10,7 @@ from loguru import logger
 
 from src.agent.prompt import build_system_prompt
 from src.agent.state import MaintenanceState
-from src.agent.tools import HIGH_RISK_TOOLS
+from src.agent.tools import FORBIDDEN_OPERATIONS, HIGH_RISK_TOOLS
 
 _agent_store = None
 
@@ -154,7 +154,16 @@ def approval_node(state: MaintenanceState) -> dict[str, Any]:
     remaining_tool_calls = []
 
     for tool_call in last_message.tool_calls:
-        if tool_call["name"] in HIGH_RISK_TOOLS:
+        if tool_call["name"] in FORBIDDEN_OPERATIONS:
+            rejected_messages.append(
+                ToolMessage(
+                    content=f"禁止的操作：{tool_call['name']} 不允许执行（安全策略）",
+                    tool_call_id=tool_call["id"],
+                )
+            )
+            log_entries.append(f"FORBIDDEN: {tool_call['name']}")
+            logger.warning(f"Forbidden operation blocked: {tool_call['name']}")
+        elif tool_call["name"] in HIGH_RISK_TOOLS:
             decision = interrupt(
                 {
                     "question": f"高风险操作需要确认：{tool_call['name']}",

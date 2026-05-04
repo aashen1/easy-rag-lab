@@ -667,6 +667,15 @@ HIGH_RISK_TOOLS = {
     "delete_and_reindex_tool",
 }
 
+FORBIDDEN_OPERATIONS = {
+    "delete_collection",
+    "drop_collection",
+    "delete_all",
+    "drop_all",
+    "delete_meal",
+    "remove_meal",
+}
+
 
 @tool
 def embed_chunks_tool(chunks: list[dict], collection_name: str | None = None) -> str:

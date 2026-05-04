@@ -6,7 +6,9 @@ from pathlib import Path
 import pytest
 
 from src.agent.state import MaintenanceState
-from src.agent.tools import HIGH_RISK_TOOLS
+from src.agent.tools import FORBIDDEN_OPERATIONS, HIGH_RISK_TOOLS
+
+pytestmark = pytest.mark.agent
 
 
 @pytest.fixture
@@ -61,11 +63,26 @@ class TestHighRiskTools:
         assert "rebuild_index" in HIGH_RISK_TOOLS
         assert "delete_source" in HIGH_RISK_TOOLS
         assert "update_meal" in HIGH_RISK_TOOLS
+        assert "delete_and_reindex_tool" in HIGH_RISK_TOOLS
 
     def test_safe_tools_not_in_high_risk(self):
         assert "list_meals" not in HIGH_RISK_TOOLS
         assert "get_meal_detail" not in HIGH_RISK_TOOLS
         assert "query_rag_tool" not in HIGH_RISK_TOOLS
+
+
+class TestForbiddenOperations:
+    def test_forbidden_operations_set(self):
+        assert "delete_collection" in FORBIDDEN_OPERATIONS
+        assert "drop_collection" in FORBIDDEN_OPERATIONS
+        assert "delete_all" in FORBIDDEN_OPERATIONS
+        assert "drop_all" in FORBIDDEN_OPERATIONS
+        assert "delete_meal" in FORBIDDEN_OPERATIONS
+        assert "remove_meal" in FORBIDDEN_OPERATIONS
+
+    def test_forbidden_not_in_high_risk(self):
+        for op in FORBIDDEN_OPERATIONS:
+            assert op not in HIGH_RISK_TOOLS
 
 
 class TestToolFunctions:
