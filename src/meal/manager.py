@@ -142,6 +142,7 @@ class MealManager:
         meal_dir: Path | None = None,
         force_chunk: bool = False,
         profiler: Any | None = None,
+        creation_mode: str = "random",
     ) -> MealConfig:
         """Execute the shared parse-chunk-index-stats-manifest-config-save pipeline.
 
@@ -288,6 +289,7 @@ class MealManager:
             stats=stats,
             equivalence_groups=equivalence_groups,
             composition=composition if composition is not None else {},
+            creation_mode=creation_mode,
         )
 
         if meal_dir is None:
@@ -630,9 +632,8 @@ class MealManager:
             meal_name=name,
             force_chunk=force_chunk,
             profiler=profiler or self.profiler,
+            creation_mode="manual",
         )
-
-        meal_config.creation_mode = "manual"
 
         logger.success(
             f"Manual meal '{name}' created successfully "
