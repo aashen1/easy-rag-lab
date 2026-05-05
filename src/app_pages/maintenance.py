@@ -16,10 +16,18 @@ def _get_tool_names() -> list[str]:
 def _get_compiled_agent():
     from langgraph.store.memory import InMemoryStore
 
+    from src.agent.checkpoint import get_checkpointer_direct
+    from src.agent.config import get_agent_default
     from src.agent.graph import compile_agent
+    from src.agent.memory.experience_store import ExperienceStore
 
     store = InMemoryStore()
-    return compile_agent(checkpointer=None, store=store)
+    persist_path = get_agent_default(
+        "experience_persist_path", "data/agent_experience.json"
+    )
+    ExperienceStore(store, persist_path=persist_path)
+    checkpointer = get_checkpointer_direct()
+    return compile_agent(checkpointer=checkpointer, store=store)
 
 
 def render_maintenance():
@@ -42,6 +50,14 @@ def render_maintenance():
         }
     if "maintenance_mode" not in st.session_state:
         st.session_state.maintenance_mode = "light"
+    if "maintenance_interrupted" not in st.session_state:
+        st.session_state.maintenance_interrupted = False
+    if "maintenance_interrupt_payload" not in st.session_state:
+        st.session_state.maintenance_interrupt_payload = None
+    if "maintenance_thread_id" not in st.session_state:
+        import uuid
+
+        st.session_state.maintenance_thread_id = f"maintenance-{uuid.uuid4().hex[:8]}"
 
     with st.sidebar:
         st.markdown("### 🔧 维修工控制面板")
@@ -97,6 +113,8 @@ def render_maintenance():
                 "stage_history": [],
                 "delete_count": 0,
             }
+            st.session_state.maintenance_interrupted = False
+            st.session_state.maintenance_interrupt_payload = None
             st.rerun()
 
     for msg in st.session_state.maintenance_messages:
@@ -113,6 +131,11 @@ def render_maintenance():
         with st.chat_message("assistant"), st.spinner("维修工思考中..."):
             try:
                 agent = _get_compiled_agent()
+                config = {
+                    "configurable": {
+                        "thread_id": st.session_state.maintenance_thread_id
+                    }
+                }
                 current = st.session_state.maintenance_current_state
                 state = {
                     "messages": [{"role": "user", "content": prompt}],
@@ -130,12 +153,14 @@ def render_maintenance():
                     "mode": st.session_state.maintenance_mode,
                 }
 
-                result = agent.invoke(state)
+                result = agent.invoke(state, config=config)
 
                 if result.get("__interrupt__"):
+                    st.session_state.maintenance_interrupted = True
                     for interrupt_info in result.get("__interrupt__", []):
                         payload = interrupt_info.value
                         if isinstance(payload, dict) and "question" in payload:
+                            st.session_state.maintenance_interrupt_payload = payload
                             st.warning(f"⚠️ {payload['question']}")
                             tool_info = payload.get("tool_call", {})
                             if tool_info:
@@ -145,12 +170,10 @@ def render_maintenance():
                             col_a, col_b = st.columns(2)
                             with col_a:
                                 if st.button("✅ 批准", key="approve_btn"):
-                                    _resume_interrupt(agent, True)
-                                    st.rerun()
+                                    _resume_interrupt(agent, True, config)
                             with col_b:
                                 if st.button("❌ 拒绝", key="reject_btn"):
-                                    _resume_interrupt(agent, False)
-                                    st.rerun()
+                                    _resume_interrupt(agent, False, config)
                 else:
                     response_text = _extract_response_text(result)
                     st.markdown(response_text)
@@ -175,6 +198,38 @@ def render_maintenance():
                 logger.error(f"Maintenance agent error: {e}")
                 st.error(f"维修工出错: {e}")
 
+    if (
+        st.session_state.maintenance_interrupted
+        and st.session_state.maintenance_interrupt_payload is not None
+    ):
+        payload = st.session_state.maintenance_interrupt_payload
+        with st.chat_message("assistant"):
+            st.warning(f"⚠️ {payload.get('question', '等待确认')}")
+            tool_info = payload.get("tool_call", {})
+            if tool_info:
+                st.info(
+                    f"工具: {tool_info.get('name')} | 参数: {tool_info.get('args', {})}"
+                )
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if st.button("✅ 批准", key="approve_btn_persist"):
+                    agent = _get_compiled_agent()
+                    config = {
+                        "configurable": {
+                            "thread_id": st.session_state.maintenance_thread_id
+                        }
+                    }
+                    _resume_interrupt(agent, True, config)
+            with col_b:
+                if st.button("❌ 拒绝", key="reject_btn_persist"):
+                    agent = _get_compiled_agent()
+                    config = {
+                        "configurable": {
+                            "thread_id": st.session_state.maintenance_thread_id
+                        }
+                    }
+                    _resume_interrupt(agent, False, config)
+
     current = st.session_state.maintenance_current_state
     col_log, col_hist = st.columns(2)
     with col_log, st.expander("📋 执行日志", expanded=False):
@@ -193,10 +248,36 @@ def render_maintenance():
             st.text("暂无阶段历史")
 
 
-def _resume_interrupt(agent, decision):
+def _resume_interrupt(agent, decision, config):
     from langgraph.types import Command
 
-    agent.invoke(Command(resume=decision))
+    try:
+        result = agent.invoke(Command(resume=decision), config=config)
+        st.session_state.maintenance_interrupted = False
+        st.session_state.maintenance_interrupt_payload = None
+        if result and not result.get("__interrupt__"):
+            response_text = _extract_response_text(result)
+            st.session_state.maintenance_messages.append(
+                {"role": "assistant", "content": response_text}
+            )
+            for key in (
+                "current_meal",
+                "current_source",
+                "diagnosis",
+                "execution_log",
+                "stage_history",
+                "delete_count",
+            ):
+                if key in result:
+                    st.session_state.maintenance_current_state[key] = result[key]
+            st.session_state.maintenance_locked_tool = None
+        st.rerun()
+    except Exception as e:
+        logger.error(f"Resume interrupt error: {e}")
+        st.session_state.maintenance_interrupted = False
+        st.session_state.maintenance_interrupt_payload = None
+        st.error(f"恢复中断出错: {e}")
+        st.rerun()
 
 
 def _extract_response_text(result: dict) -> str:
