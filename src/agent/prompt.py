@@ -113,7 +113,7 @@ def build_system_prompt(
     if mode == "light":
         prompt += "\n\n## 当前模式：轻量模式\n\n- 仅处理用户指定的 1-2 个 PDF\n- 不触发 Meal 批量体系\n- 专注于单文件精细诊断和修复"
     elif mode == "full":
-        prompt += "\n\n## 当前模式：全量模式\n\n- 可调用 Meal 批量体系处理完整数据集\n- 可使用 create_curated_meal 创建新的 Meal\n- 注意：全量操作影响范围大，执行前务必确认"
+        prompt += "\n\n## 当前模式：全量模式\n\n- 可调用 Meal 批量体系处理完整数据集\n- 可使用 create_curated_meal 创建新的 Meal\n- 注意：全量操作影响范围大，执行前务必确认\n\n全量模式批量操作指导：\n- 使用 create_curated_meal 创建新 Meal，然后用 rebuild_index 重建索引\n- 可以对多个 PDF 依次调用 parse_pdf_tool → chunk_parsed_tool 进行批量解析和分块\n- 使用 evaluate_answer_tool 对多个查询进行批量评测\n- 全量操作影响范围大，每次批量操作前务必向用户确认"
 
     if stage_history:
         steps = "\n".join(f"  {i + 1}. {s}" for i, s in enumerate(stage_history))

@@ -149,16 +149,9 @@ pixi run python main.py --meal <meal_name>
 
 ### 基础评测
 
-> ⚠️ `eval/run_eval.py` 已废弃，请使用 `eval/run_experiment.py`。
-
 ```bash
 # 运行完整评测（推荐使用实验系统）
 pixi run python eval/run_experiment.py --config exp_configs/your_config.yaml
-
-# 旧方式（已废弃）
-# pixi run python eval/run_eval.py
-# pixi run python eval/run_eval.py --sample-count 5
-# pixi run python eval/run_eval.py --build-index
 ```
 
 ### 实验系统

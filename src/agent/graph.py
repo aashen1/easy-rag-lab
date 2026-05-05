@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import functools
+import json
+from datetime import datetime
 from typing import Any, Literal
 
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
@@ -12,8 +14,6 @@ from src.agent.config import get_delete_count_threshold
 from src.agent.prompt import build_system_prompt
 from src.agent.state import MaintenanceState
 from src.agent.tools import FORBIDDEN_OPERATIONS, HIGH_RISK_TOOLS
-
-_agent_store = None
 
 DIAGNOSIS_TOOLS = {
     "list_meals",
@@ -109,7 +109,7 @@ def _infer_pdf_type(source: str) -> str:
     return "generic"
 
 
-def agent_node(state: MaintenanceState) -> dict[str, Any]:
+def agent_node(state: MaintenanceState, *, store: Any = None) -> dict[str, Any]:
     """LLM decision node: invoke the model with tools bound.
 
     If a tool is locked (``locked_tool`` is set), skip LLM decision and
@@ -142,14 +142,15 @@ def agent_node(state: MaintenanceState) -> dict[str, Any]:
 
     llm = _get_llm()
     tools = _get_tools()
+    logger.info(f"Agent node: binding {len(tools)} tools to LLM")
     llm_with_tools = llm.bind_tools(tools)
 
     experiences = None
-    if _agent_store is not None:
+    if store is not None:
         try:
             from src.agent.memory.experience_store import ExperienceStore
 
-            exp_store = ExperienceStore(_agent_store)
+            exp_store = ExperienceStore(store)
             current_source = state.get("current_source")
             if current_source:
                 pdf_type = _infer_pdf_type(current_source)
@@ -163,8 +164,37 @@ def agent_node(state: MaintenanceState) -> dict[str, Any]:
         experiences=experiences,
         mode=state.get("mode", "light"),
     )
+
+    if state.get("mode", "light") == "full":
+        try:
+            from src.meal.manager import MealManager
+            from src.utils import load_config
+
+            config = load_config()
+            mgr = MealManager(config)
+            meals = mgr.list_meals()
+            if meals:
+                meal_summary = ", ".join(
+                    f"{m.name} ({len(m.pdf_files)} PDFs)" for m in meals
+                )
+                system_content += f"\n\n当前 Meal 列表: {meal_summary}"
+        except Exception as e:
+            logger.warning(f"Failed to inject Meal status into prompt: {e}")
     messages = [SystemMessage(content=system_content)] + state["messages"]
+    logger.info(f"Agent node: invoking LLM with {len(messages)} messages")
     response = llm_with_tools.invoke(messages)
+
+    has_tool_calls = (
+        bool(response.tool_calls) if hasattr(response, "tool_calls") else False
+    )
+    logger.info(
+        f"Agent node: LLM response - tool_calls={has_tool_calls}, content_preview={response.content[:200] if response.content else '(empty)'}"
+    )
+    if has_tool_calls:
+        for tc in response.tool_calls:
+            logger.info(
+                f"  tool_call: name={tc['name']}, args_keys={list(tc.get('args', {}).keys())}"
+            )
 
     return {"messages": [response]}
 
@@ -206,7 +236,16 @@ def approval_node(state: MaintenanceState) -> dict[str, Any]:
                     tool_call_id=tool_call["id"],
                 )
             )
-            log_entries.append(f"FORBIDDEN: {tool_call['name']}")
+            log_entries.append(
+                json.dumps(
+                    {
+                        "tool": tool_call["name"],
+                        "time": datetime.now().isoformat(),
+                        "status": "forbidden",
+                    },
+                    ensure_ascii=False,
+                )
+            )
             logger.warning(f"Forbidden operation blocked: {tool_call['name']}")
         elif tool_call["name"] in HIGH_RISK_TOOLS:
             decision = interrupt(
@@ -226,10 +265,28 @@ def approval_node(state: MaintenanceState) -> dict[str, Any]:
                         tool_call_id=tool_call["id"],
                     )
                 )
-                log_entries.append(f"REJECTED: {tool_call['name']}")
+                log_entries.append(
+                    json.dumps(
+                        {
+                            "tool": tool_call["name"],
+                            "time": datetime.now().isoformat(),
+                            "status": "rejected",
+                        },
+                        ensure_ascii=False,
+                    )
+                )
             else:
                 remaining_tool_calls.append(tool_call)
-                log_entries.append(f"APPROVED: {tool_call['name']}")
+                log_entries.append(
+                    json.dumps(
+                        {
+                            "tool": tool_call["name"],
+                            "time": datetime.now().isoformat(),
+                            "status": "approved",
+                        },
+                        ensure_ascii=False,
+                    )
+                )
         else:
             remaining_tool_calls.append(tool_call)
 
@@ -268,7 +325,7 @@ def _route_after_approval(state: MaintenanceState) -> Literal["tools", "agent"]:
     return "agent"
 
 
-def tool_node(state: MaintenanceState) -> dict[str, Any]:
+def tool_node(state: MaintenanceState, *, store: Any = None) -> dict[str, Any]:
     """Execute tool calls from the last AI message and return results.
 
     Implements two safety mechanisms:
@@ -278,8 +335,8 @@ def tool_node(state: MaintenanceState) -> dict[str, Any]:
        message telling the LLM to diagnose first.
     2. **Delete count**: Tracks how many ``delete_source`` calls have
        been made.  When the count reaches ``DELETE_COUNT_THRESHOLD``,
-       an interrupt is triggered to warn the user about cumulative
-       impact.
+       the call is hard-blocked with an error ToolMessage telling the
+       user to start a new session.
 
     Args:
         state: Current graph state.
@@ -324,26 +381,45 @@ def tool_node(state: MaintenanceState) -> dict[str, Any]:
                     tool_call_id=tool_call["id"],
                 )
             )
-            log_entries.append(f"GUARD: {tool_call['name']} blocked - no diagnosis")
+            log_entries.append(
+                json.dumps(
+                    {
+                        "tool": tool_call["name"],
+                        "time": datetime.now().isoformat(),
+                        "status": "blocked",
+                        "reason": "no diagnosis",
+                    },
+                    ensure_ascii=False,
+                )
+            )
             continue
 
-        if (
-            tool_call["name"] == "delete_source"
-            and new_delete_count >= get_delete_count_threshold()
+        if tool_call[
+            "name"
+        ] == "delete_source" and new_delete_count >= get_delete_count_threshold(
+            mode=state.get("mode", "light")
         ):
-            interrupt(
-                {
-                    "question": (
-                        f"⚠️ 累计删除警告：已执行 {new_delete_count} 次删除操作，"
-                        f"继续删除可能严重影响数据完整性。请确认是否继续。"
-                    ),
-                    "tool_call": {
-                        "name": tool_call["name"],
-                        "args": tool_call["args"],
-                        "id": tool_call["id"],
-                    },
-                }
+            logger.warning(
+                f"BLOCKED: {tool_call['name']} - delete count {new_delete_count} >= threshold"
             )
+            results.append(
+                ToolMessage(
+                    content=f"本次会话已删除 {new_delete_count} 个数据源，为防止误操作，请开启新会话继续",
+                    tool_call_id=tool_call["id"],
+                )
+            )
+            log_entries.append(
+                json.dumps(
+                    {
+                        "tool": tool_call["name"],
+                        "time": datetime.now().isoformat(),
+                        "status": "blocked",
+                        "reason": f"delete count {new_delete_count} >= threshold",
+                    },
+                    ensure_ascii=False,
+                )
+            )
+            continue
 
         try:
             tool_args = dict(tool_call["args"])
@@ -354,11 +430,26 @@ def tool_node(state: MaintenanceState) -> dict[str, Any]:
                 tool_args.setdefault("stage_history", state.get("stage_history", []))
                 tool_args.setdefault("diagnosis", state.get("diagnosis", []))
             observation = tool_fn.invoke(tool_args)
-            log_entry = f"TOOL: {tool_call['name']}"
+            log_entry = json.dumps(
+                {
+                    "tool": tool_call["name"],
+                    "time": datetime.now().isoformat(),
+                    "status": "ok",
+                },
+                ensure_ascii=False,
+            )
         except Exception as e:
             logger.error(f"Tool {tool_call['name']} failed: {e}")
             observation = f"Error: {e}"
-            log_entry = f"TOOL_ERROR: {tool_call['name']} - {e}"
+            log_entry = json.dumps(
+                {
+                    "tool": tool_call["name"],
+                    "time": datetime.now().isoformat(),
+                    "status": "error",
+                    "error": str(e)[:200],
+                },
+                ensure_ascii=False,
+            )
 
         results.append(
             ToolMessage(content=str(observation), tool_call_id=tool_call["id"])
@@ -369,13 +460,13 @@ def tool_node(state: MaintenanceState) -> dict[str, Any]:
         if tool_call["name"] == "delete_source":
             new_delete_count += 1
 
-    if _agent_store is not None and executed_tools:
+    if store is not None and executed_tools:
         experience_tools = {"parse_pdf_tool", "chunk_parsed_tool"}
         if any(t in experience_tools for t in executed_tools):
             try:
                 from src.agent.memory.experience_store import ExperienceStore
 
-                exp_store = ExperienceStore(_agent_store)
+                exp_store = ExperienceStore(store)
                 current_source = state.get("current_source")
                 if current_source:
                     pdf_type = _infer_pdf_type(current_source)
@@ -482,8 +573,5 @@ def compile_agent(checkpointer=None, store=None):
     Returns:
         Compiled graph ready for invocation.
     """
-    global _agent_store
-    _agent_store = store
-
     graph = build_graph()
     return graph.compile(checkpointer=checkpointer, store=store)

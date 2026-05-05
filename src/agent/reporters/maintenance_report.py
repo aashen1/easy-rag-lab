@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -37,10 +38,17 @@ class MaintenanceReporter:
         sections.append("## 操作时间线")
         exec_log = state.get("execution_log", [])
         if exec_log:
-            sections.append("| # | 记录 |")
-            sections.append("|---|------|")
+            sections.append("| # | 时间 | 工具 | 状态 |")
+            sections.append("|---|------|------|------|")
             for i, entry in enumerate(exec_log):
-                sections.append(f"| {i + 1} | {entry} |")
+                try:
+                    data = json.loads(entry)
+                    time_str = data.get("time", "")[11:19]
+                    tool = data.get("tool", "")
+                    status = data.get("status", "")
+                    sections.append(f"| {i + 1} | {time_str} | {tool} | {status} |")
+                except (json.JSONDecodeError, TypeError):
+                    sections.append(f"| {i + 1} | - | {entry} | - |")
         else:
             sections.append("无操作记录")
 

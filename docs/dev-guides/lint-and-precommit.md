@@ -89,7 +89,7 @@ Linter 是**静态分析**工具——它只读代码，不运行代码。所以
 | 规则 | 说明 | 典型场景 |
 |------|------|----------|
 | SIM108 (三元表达式) | 有时可读性更差 | 复杂条件分支用 if-else 更清晰时 |
-| E402 (import 不在文件顶部) | `sys.path.insert` 或 `warnings.warn` 后的 import 必须延迟 | `run_eval.py`、`run_experiment.py` |
+| E402 (import 不在文件顶部) | `sys.path.insert` 后的 import 必须延迟 | `run_experiment.py` |
 
 ### 日常使用
 

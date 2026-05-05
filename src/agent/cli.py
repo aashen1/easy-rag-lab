@@ -111,10 +111,15 @@ def run_agent(argv: list[str] | None = None):
     from src.agent.checkpoint import get_checkpointer
     from src.agent.config import get_agent_default
     from src.agent.graph import compile_agent
+    from src.agent.memory.experience_store import ExperienceStore
 
     args = _parse_cli_args(argv)
 
     store = InMemoryStore()
+    persist_path = get_agent_default(
+        "experience_persist_path", "data/agent_experience.json"
+    )
+    ExperienceStore(store, persist_path=persist_path)
 
     with get_checkpointer() as checkpointer:
         agent = compile_agent(checkpointer=checkpointer, store=store)

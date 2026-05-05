@@ -28,5 +28,7 @@ def get_checkpoint_config() -> dict[str, Any]:
     return agent_config.get("checkpoint", {})
 
 
-def get_delete_count_threshold() -> int:
+def get_delete_count_threshold(mode: str | None = None) -> int:
+    if mode == "full":
+        return get_agent_config().get("full_mode_delete_threshold", 10)
     return get_agent_config().get("delete_count_threshold", 3)

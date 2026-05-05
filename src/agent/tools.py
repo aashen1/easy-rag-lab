@@ -937,7 +937,11 @@ def generate_maintenance_report_tool(
         report = reporter.generate(state, session_id)
         filepath = reporter.save(report, session_id)
         return json.dumps(
-            {"status": "generated", "report_path": str(filepath)},
+            {
+                "status": "generated",
+                "report_path": str(filepath),
+                "report_content": report,
+            },
             ensure_ascii=False,
             indent=2,
         )

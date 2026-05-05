@@ -65,6 +65,11 @@ def evaluate_single(
     requiring an LLM. The full implementation will delegate to
     ``BuiltinEvaluator`` in a later phase.
 
+    **Limitation (Phase A)**: These metrics use character bigram overlap
+    (Jaccard), which provides limited discrimination for Chinese text.
+    For production use with Chinese documents, migration to
+    ``BuiltinEvaluator`` or ``RagasEvaluator`` is recommended.
+
     Metrics computed:
         - ``context_relevance``: word overlap between *question* and
           concatenated *contexts*.
