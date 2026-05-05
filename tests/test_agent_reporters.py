@@ -113,6 +113,16 @@ class TestMaintenanceReporter:
         from src.agent.reporters.maintenance_report import MaintenanceReporter
 
         monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(
+            "src.agent.reporters.maintenance_report.load_config",
+            lambda: {
+                "agent": {
+                    "maintenance_reports_dir": str(
+                        tmp_path / "data" / "maintenance_reports"
+                    )
+                }
+            },
+        )
         reporter = MaintenanceReporter()
         report = "# Test Report"
         filepath = reporter.save(report, "test-session")
