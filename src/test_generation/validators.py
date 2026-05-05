@@ -976,7 +976,7 @@ def validate_evidence(
 
             logger.warning(
                 f"Potential hallucination detected: quote '{truncated_quote}' "
-                f"not found in segment {segment_index}. "
+                f"not found in segment {segment_index}/{len(segments)}. "
                 f"Question type: {question_type}"
             )
 

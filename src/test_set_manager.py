@@ -863,6 +863,11 @@ class TestSetManager:
                 continue
 
             if not source_files:
+                if question_type != "irrelevant":
+                    logger.warning(
+                        f"Question {question.get('id', 'unknown')} has empty "
+                        f"source_files for non-irrelevant type '{question_type}'"
+                    )
                 valid_questions.append(question)
                 continue
 

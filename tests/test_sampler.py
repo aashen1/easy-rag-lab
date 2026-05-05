@@ -146,8 +146,8 @@ class TestDetermineSample:
         mock_count_pages.side_effect = Exception("Cannot read")
         pdf_files = [Path(f"file_{i}.pdf") for i in range(3)]
         config = SamplingConfig(mode="pages", value=100)
-        result = determine_sample(pdf_files, config)
-        assert result == []
+        with pytest.raises(ConfigurationError, match="No PDFs could be read"):
+            determine_sample(pdf_files, config)
 
     def test_ratio_mode_basic(self):
         pdf_files = [Path(f"file_{i}.pdf") for i in range(100)]

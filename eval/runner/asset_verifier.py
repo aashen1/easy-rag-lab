@@ -104,6 +104,7 @@ def verify_experiment_assets(
     missing_files = []
     invalid_files = []
     pdf_issues: dict[str, str] = {}
+    meal_snapshot_data: dict | None = None
 
     required_files = [
         "manifest.json",
@@ -134,8 +135,8 @@ def verify_experiment_assets(
                             logger.warning(f"Invalid {filename}: empty or invalid YAML")
                 elif filename == "meal_snapshot.json":
                     with open(file_path, encoding="utf-8") as f:
-                        data = json.load(f)
-                        if "pdf_files" not in data:
+                        meal_snapshot_data = json.load(f)
+                        if "pdf_files" not in meal_snapshot_data:
                             invalid_files.append(filename)
                             logger.warning(
                                 f"Invalid {filename}: missing 'pdf_files' field"
@@ -152,13 +153,9 @@ def verify_experiment_assets(
 
     raw_dir = Path(system_config.get("parser", {}).get("input_dir", "data/raw"))
 
-    meal_snapshot_path = exp_dir / "meal_snapshot.json"
-    if meal_snapshot_path.exists():
+    if meal_snapshot_data is not None:
         try:
-            with open(meal_snapshot_path, encoding="utf-8") as f:
-                meal_snapshot = json.load(f)
-
-            pdf_files = meal_snapshot.get("pdf_files", [])
+            pdf_files = meal_snapshot_data.get("pdf_files", [])
             logger.info(f"Verifying {len(pdf_files)} PDF files...")
 
             for pdf_info in pdf_files:
@@ -191,8 +188,6 @@ def verify_experiment_assets(
                         logger.warning(
                             f"Failed to compute SHA256 for {pdf_path}: {str(e)}"
                         )
-        except json.JSONDecodeError as e:
-            logger.warning(f"Failed to parse meal_snapshot.json: {str(e)}")
         except Exception as e:
             logger.warning(f"Failed to verify PDF files: {str(e)}")
 

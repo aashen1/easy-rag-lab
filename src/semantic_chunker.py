@@ -415,6 +415,10 @@ def process_parsed_files_semantic(
             with open(md_file, encoding="utf-8") as f:
                 text = f.read()
 
+            if not text or not text.strip():
+                logger.warning(f"Skipping empty file: {md_file}")
+                continue
+
             chunks = chunk_text_semantic(
                 text,
                 embedder,

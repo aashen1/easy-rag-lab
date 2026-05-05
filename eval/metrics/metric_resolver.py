@@ -214,7 +214,7 @@ class MetricResolver:
                         assigned = True
                         break
                 if not assigned:
-                    logger.warning(
+                    logger.debug(
                         f"No backend supports {metric_type} metric '{metric}'. "
                         f"Checked backends: {self.backend_priority}"
                     )

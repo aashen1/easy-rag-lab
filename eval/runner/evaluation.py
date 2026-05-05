@@ -378,6 +378,13 @@ def _collect_rag_samples_serial(
 
         if not question_text:
             logger.warning(f"Question {question_id} has no text, skipping")
+            samples.append(
+                {
+                    "question_id": question_id,
+                    "question": "",
+                    "_skip": True,
+                }
+            )
             continue
 
         logger.info(f"Processing question {i + 1}/{len(questions)}: {question_id}")
@@ -440,16 +447,25 @@ def _collect_rag_samples_serial(
         samples.append(sample)
 
         if checkpoint_path is not None:
+            checkpoint_samples = [
+                {k: v for k, v in s.items() if k != "_skip"}
+                for s in samples
+                if not s.get("_skip")
+            ]
             _save_question_checkpoint(
                 checkpoint_path,
                 variant_name,
                 experiment_name,
-                samples,
+                checkpoint_samples,
                 len(questions),
                 model_name=model_name,
             )
 
-    return samples
+    return [
+        {k: v for k, v in s.items() if k != "_skip"}
+        for s in samples
+        if not s.get("_skip")
+    ]
 
 
 def _collect_rag_samples_concurrent(
