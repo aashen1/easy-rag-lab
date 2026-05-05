@@ -59,7 +59,7 @@ def count_pdf_pages(pdf_path: Path) -> int:
         Number of pages in the PDF.
 
     Raises:
-        Exception: If the PDF cannot be opened or read.
+        ParsingError: If the PDF cannot be opened or read.
     """
     try:
         import fitz
@@ -109,8 +109,7 @@ def determine_sample(pdf_files: list[Path], config: SamplingConfig) -> list[Path
                 logger.warning(f"Skipping {pdf_file} due to page count error: {str(e)}")
 
         if not pdf_page_counts:
-            logger.warning("No PDFs could be read for page-based sampling")
-            return []
+            raise ConfigurationError("No PDFs could be read for page-based sampling")
 
         random.shuffle(pdf_page_counts)
 
