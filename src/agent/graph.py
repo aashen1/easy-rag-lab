@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import functools
+import json
+from datetime import datetime
 from typing import Any, Literal
 
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
@@ -236,7 +238,16 @@ def approval_node(state: MaintenanceState) -> dict[str, Any]:
                     tool_call_id=tool_call["id"],
                 )
             )
-            log_entries.append(f"FORBIDDEN: {tool_call['name']}")
+            log_entries.append(
+                json.dumps(
+                    {
+                        "tool": tool_call["name"],
+                        "time": datetime.now().isoformat(),
+                        "status": "forbidden",
+                    },
+                    ensure_ascii=False,
+                )
+            )
             logger.warning(f"Forbidden operation blocked: {tool_call['name']}")
         elif tool_call["name"] in HIGH_RISK_TOOLS:
             decision = interrupt(
@@ -256,10 +267,28 @@ def approval_node(state: MaintenanceState) -> dict[str, Any]:
                         tool_call_id=tool_call["id"],
                     )
                 )
-                log_entries.append(f"REJECTED: {tool_call['name']}")
+                log_entries.append(
+                    json.dumps(
+                        {
+                            "tool": tool_call["name"],
+                            "time": datetime.now().isoformat(),
+                            "status": "rejected",
+                        },
+                        ensure_ascii=False,
+                    )
+                )
             else:
                 remaining_tool_calls.append(tool_call)
-                log_entries.append(f"APPROVED: {tool_call['name']}")
+                log_entries.append(
+                    json.dumps(
+                        {
+                            "tool": tool_call["name"],
+                            "time": datetime.now().isoformat(),
+                            "status": "approved",
+                        },
+                        ensure_ascii=False,
+                    )
+                )
         else:
             remaining_tool_calls.append(tool_call)
 
@@ -354,7 +383,17 @@ def tool_node(state: MaintenanceState) -> dict[str, Any]:
                     tool_call_id=tool_call["id"],
                 )
             )
-            log_entries.append(f"GUARD: {tool_call['name']} blocked - no diagnosis")
+            log_entries.append(
+                json.dumps(
+                    {
+                        "tool": tool_call["name"],
+                        "time": datetime.now().isoformat(),
+                        "status": "blocked",
+                        "reason": "no diagnosis",
+                    },
+                    ensure_ascii=False,
+                )
+            )
             continue
 
         if tool_call[
@@ -372,7 +411,15 @@ def tool_node(state: MaintenanceState) -> dict[str, Any]:
                 )
             )
             log_entries.append(
-                f"BLOCKED: {tool_call['name']} - delete count {new_delete_count} >= threshold"
+                json.dumps(
+                    {
+                        "tool": tool_call["name"],
+                        "time": datetime.now().isoformat(),
+                        "status": "blocked",
+                        "reason": f"delete count {new_delete_count} >= threshold",
+                    },
+                    ensure_ascii=False,
+                )
             )
             continue
 
@@ -385,11 +432,26 @@ def tool_node(state: MaintenanceState) -> dict[str, Any]:
                 tool_args.setdefault("stage_history", state.get("stage_history", []))
                 tool_args.setdefault("diagnosis", state.get("diagnosis", []))
             observation = tool_fn.invoke(tool_args)
-            log_entry = f"TOOL: {tool_call['name']}"
+            log_entry = json.dumps(
+                {
+                    "tool": tool_call["name"],
+                    "time": datetime.now().isoformat(),
+                    "status": "ok",
+                },
+                ensure_ascii=False,
+            )
         except Exception as e:
             logger.error(f"Tool {tool_call['name']} failed: {e}")
             observation = f"Error: {e}"
-            log_entry = f"TOOL_ERROR: {tool_call['name']} - {e}"
+            log_entry = json.dumps(
+                {
+                    "tool": tool_call["name"],
+                    "time": datetime.now().isoformat(),
+                    "status": "error",
+                    "error": str(e)[:200],
+                },
+                ensure_ascii=False,
+            )
 
         results.append(
             ToolMessage(content=str(observation), tool_call_id=tool_call["id"])

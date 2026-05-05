@@ -53,7 +53,16 @@ class TestMaintenanceState:
             diagnosis=[{"issue": "bad chunk"}],
             pending_action={"tool": "rebuild_index"},
             approved=True,
-            execution_log=["TOOL: list_meals"],
+            execution_log=[
+                json.dumps(
+                    {
+                        "tool": "list_meals",
+                        "time": "2026-05-05T10:00:00",
+                        "status": "ok",
+                    },
+                    ensure_ascii=False,
+                )
+            ],
             stage_history=[],
             auto_review=False,
             locked_tool=None,
@@ -1372,7 +1381,9 @@ class TestStageGuard:
             mock_tools.return_value = [mock_tool]
             result = tool_node(state)
         assert any("被拒绝" in str(m.content) for m in result["messages"])
-        assert "GUARD" in result["execution_log"][-1]
+        log_data = json.loads(result["execution_log"][-1])
+        assert log_data["status"] == "blocked"
+        assert log_data["tool"] == "rebuild_index"
 
     def test_repair_allowed_after_diagnosis(self):
         from src.agent.graph import tool_node
@@ -1495,7 +1506,24 @@ class TestReportToolStateInjection:
             diagnosis=[{"issue": "bad chunk"}],
             pending_action=None,
             approved=None,
-            execution_log=["TOOL: list_meals", "TOOL: rebuild_index"],
+            execution_log=[
+                json.dumps(
+                    {
+                        "tool": "list_meals",
+                        "time": "2026-05-05T10:00:00",
+                        "status": "ok",
+                    },
+                    ensure_ascii=False,
+                ),
+                json.dumps(
+                    {
+                        "tool": "rebuild_index",
+                        "time": "2026-05-05T10:01:00",
+                        "status": "ok",
+                    },
+                    ensure_ascii=False,
+                ),
+            ],
             stage_history=["list_meals", "get_index_info"],
             auto_review=False,
             locked_tool=None,
@@ -1512,7 +1540,20 @@ class TestReportToolStateInjection:
         call_args = mock_tool.invoke.call_args[0][0]
         assert call_args["current_meal"] == "test_meal"
         assert call_args["current_source"] == "test.pdf"
-        assert call_args["execution_log"] == ["TOOL: list_meals", "TOOL: rebuild_index"]
+        assert call_args["execution_log"] == [
+            json.dumps(
+                {"tool": "list_meals", "time": "2026-05-05T10:00:00", "status": "ok"},
+                ensure_ascii=False,
+            ),
+            json.dumps(
+                {
+                    "tool": "rebuild_index",
+                    "time": "2026-05-05T10:01:00",
+                    "status": "ok",
+                },
+                ensure_ascii=False,
+            ),
+        ]
         assert call_args["stage_history"] == ["list_meals", "get_index_info"]
         assert call_args["diagnosis"] == [{"issue": "bad chunk"}]
 
@@ -1606,7 +1647,9 @@ class TestDeleteCountHardBlock:
         assert "3" in result["messages"][0].content
         assert result["delete_count"] == 3
         assert "delete_source" not in result["stage_history"]
-        assert any("BLOCKED" in e for e in result["execution_log"])
+        assert any(
+            json.loads(e).get("status") == "blocked" for e in result["execution_log"]
+        )
 
     def test_delete_source_interrupt_below_threshold(self):
         from langchain_core.messages import AIMessage
@@ -1701,3 +1744,208 @@ class TestFullModeBehavior:
 
         prompt = build_system_prompt(mode="light")
         assert "批量操作指导" not in prompt
+
+
+class TestExecutionLogJsonFormat:
+    def test_tool_success_log_is_valid_json(self):
+        from unittest.mock import MagicMock, patch
+
+        from langchain_core.messages import AIMessage
+
+        from src.agent.graph import tool_node
+        from src.agent.state import MaintenanceState
+
+        state = MaintenanceState(
+            messages=[
+                AIMessage(
+                    content="",
+                    tool_calls=[{"name": "list_meals", "args": {}, "id": "tc1"}],
+                )
+            ],
+            current_meal=None,
+            current_source=None,
+            diagnosis=[],
+            pending_action=None,
+            approved=None,
+            execution_log=[],
+            stage_history=[],
+            auto_review=False,
+            locked_tool=None,
+            locked_tool_args=None,
+        )
+        with patch("src.agent.graph._get_tools") as mock_tools:
+            mock_tool = MagicMock()
+            mock_tool.name = "list_meals"
+            mock_tool.invoke.return_value = "[]"
+            mock_tools.return_value = [mock_tool]
+            result = tool_node(state)
+        entry = result["execution_log"][-1]
+        data = json.loads(entry)
+        assert data["tool"] == "list_meals"
+        assert data["status"] == "ok"
+        assert "time" in data
+
+    def test_tool_error_log_is_valid_json(self):
+        from unittest.mock import MagicMock, patch
+
+        from langchain_core.messages import AIMessage
+
+        from src.agent.graph import tool_node
+        from src.agent.state import MaintenanceState
+
+        state = MaintenanceState(
+            messages=[
+                AIMessage(
+                    content="",
+                    tool_calls=[{"name": "list_meals", "args": {}, "id": "tc1"}],
+                )
+            ],
+            current_meal=None,
+            current_source=None,
+            diagnosis=[],
+            pending_action=None,
+            approved=None,
+            execution_log=[],
+            stage_history=[],
+            auto_review=False,
+            locked_tool=None,
+            locked_tool_args=None,
+        )
+        with patch("src.agent.graph._get_tools") as mock_tools:
+            mock_tool = MagicMock()
+            mock_tool.name = "list_meals"
+            mock_tool.invoke.side_effect = RuntimeError("connection failed")
+            mock_tools.return_value = [mock_tool]
+            result = tool_node(state)
+        entry = result["execution_log"][-1]
+        data = json.loads(entry)
+        assert data["tool"] == "list_meals"
+        assert data["status"] == "error"
+        assert "connection failed" in data["error"]
+        assert "time" in data
+
+    def test_guard_log_is_valid_json(self):
+        from unittest.mock import MagicMock, patch
+
+        from langchain_core.messages import AIMessage
+
+        from src.agent.graph import tool_node
+        from src.agent.state import MaintenanceState
+
+        state = MaintenanceState(
+            messages=[
+                AIMessage(
+                    content="",
+                    tool_calls=[{"name": "rebuild_index", "args": {}, "id": "tc1"}],
+                )
+            ],
+            current_meal=None,
+            current_source=None,
+            diagnosis=[],
+            pending_action=None,
+            approved=None,
+            execution_log=[],
+            stage_history=[],
+            auto_review=False,
+            locked_tool=None,
+            locked_tool_args=None,
+            delete_count=0,
+            mode="light",
+        )
+        with patch("src.agent.graph._get_tools") as mock_tools:
+            mock_tool = MagicMock()
+            mock_tool.name = "rebuild_index"
+            mock_tools.return_value = [mock_tool]
+            result = tool_node(state)
+        entry = result["execution_log"][-1]
+        data = json.loads(entry)
+        assert data["tool"] == "rebuild_index"
+        assert data["status"] == "blocked"
+        assert data["reason"] == "no diagnosis"
+        assert "time" in data
+
+    def test_blocked_log_is_valid_json(self):
+        from unittest.mock import MagicMock, patch
+
+        from langchain_core.messages import AIMessage
+
+        from src.agent.graph import tool_node
+        from src.agent.state import MaintenanceState
+
+        state = MaintenanceState(
+            messages=[
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "delete_source",
+                            "args": {"source": "test.pdf"},
+                            "id": "tc1",
+                        }
+                    ],
+                )
+            ],
+            current_meal=None,
+            current_source=None,
+            diagnosis=[],
+            pending_action=None,
+            approved=None,
+            execution_log=[],
+            stage_history=["list_meals"],
+            auto_review=False,
+            locked_tool=None,
+            locked_tool_args=None,
+            delete_count=3,
+            mode="light",
+        )
+        with (
+            patch("src.agent.graph._get_tools") as mock_tools,
+            patch("src.agent.graph.interrupt"),
+        ):
+            mock_tool = MagicMock()
+            mock_tool.name = "delete_source"
+            mock_tools.return_value = [mock_tool]
+            result = tool_node(state)
+        entry = result["execution_log"][-1]
+        data = json.loads(entry)
+        assert data["tool"] == "delete_source"
+        assert data["status"] == "blocked"
+        assert "delete count" in data["reason"]
+        assert "time" in data
+
+    def test_error_truncated_to_200_chars(self):
+        from unittest.mock import MagicMock, patch
+
+        from langchain_core.messages import AIMessage
+
+        from src.agent.graph import tool_node
+        from src.agent.state import MaintenanceState
+
+        long_error = "x" * 500
+        state = MaintenanceState(
+            messages=[
+                AIMessage(
+                    content="",
+                    tool_calls=[{"name": "list_meals", "args": {}, "id": "tc1"}],
+                )
+            ],
+            current_meal=None,
+            current_source=None,
+            diagnosis=[],
+            pending_action=None,
+            approved=None,
+            execution_log=[],
+            stage_history=[],
+            auto_review=False,
+            locked_tool=None,
+            locked_tool_args=None,
+        )
+        with patch("src.agent.graph._get_tools") as mock_tools:
+            mock_tool = MagicMock()
+            mock_tool.name = "list_meals"
+            mock_tool.invoke.side_effect = RuntimeError(long_error)
+            mock_tools.return_value = [mock_tool]
+            result = tool_node(state)
+        entry = result["execution_log"][-1]
+        data = json.loads(entry)
+        assert len(data["error"]) <= 200
