@@ -292,8 +292,8 @@ def tool_node(state: MaintenanceState) -> dict[str, Any]:
        message telling the LLM to diagnose first.
     2. **Delete count**: Tracks how many ``delete_source`` calls have
        been made.  When the count reaches ``DELETE_COUNT_THRESHOLD``,
-       an interrupt is triggered to warn the user about cumulative
-       impact.
+       the call is hard-blocked with an error ToolMessage telling the
+       user to start a new session.
 
     Args:
         state: Current graph state.
@@ -345,19 +345,19 @@ def tool_node(state: MaintenanceState) -> dict[str, Any]:
             tool_call["name"] == "delete_source"
             and new_delete_count >= get_delete_count_threshold()
         ):
-            interrupt(
-                {
-                    "question": (
-                        f"⚠️ 累计删除警告：已执行 {new_delete_count} 次删除操作，"
-                        f"继续删除可能严重影响数据完整性。请确认是否继续。"
-                    ),
-                    "tool_call": {
-                        "name": tool_call["name"],
-                        "args": tool_call["args"],
-                        "id": tool_call["id"],
-                    },
-                }
+            logger.warning(
+                f"BLOCKED: {tool_call['name']} - delete count {new_delete_count} >= threshold"
             )
+            results.append(
+                ToolMessage(
+                    content=f"本次会话已删除 {new_delete_count} 个数据源，为防止误操作，请开启新会话继续",
+                    tool_call_id=tool_call["id"],
+                )
+            )
+            log_entries.append(
+                f"BLOCKED: {tool_call['name']} - delete count {new_delete_count} >= threshold"
+            )
+            continue
 
         try:
             tool_args = dict(tool_call["args"])

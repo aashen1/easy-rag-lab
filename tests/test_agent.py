@@ -1442,3 +1442,98 @@ class TestReportToolStateInjection:
             tool_node(state)
         call_args = mock_tool.invoke.call_args[0][0]
         assert call_args["current_meal"] == "explicit_meal"
+
+
+class TestDeleteCountHardBlock:
+    def test_delete_source_hard_blocked_at_threshold(self):
+        from langchain_core.messages import AIMessage, ToolMessage
+
+        from src.agent.graph import tool_node
+
+        state = MaintenanceState(
+            messages=[
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "delete_source",
+                            "args": {"source": "test.pdf"},
+                            "id": "tc1",
+                        }
+                    ],
+                )
+            ],
+            current_meal=None,
+            current_source=None,
+            diagnosis=[],
+            pending_action=None,
+            approved=None,
+            execution_log=[],
+            stage_history=["list_meals"],
+            auto_review=False,
+            locked_tool=None,
+            locked_tool_args=None,
+            delete_count=3,
+            mode="light",
+        )
+        with (
+            patch("src.agent.graph._get_tools") as mock_tools,
+            patch("src.agent.graph.interrupt") as mock_interrupt,
+        ):
+            mock_tool = MagicMock()
+            mock_tool.name = "delete_source"
+            mock_tool.invoke.return_value = "Deleted"
+            mock_tools.return_value = [mock_tool]
+            result = tool_node(state)
+        mock_interrupt.assert_not_called()
+        assert len(result["messages"]) == 1
+        assert isinstance(result["messages"][0], ToolMessage)
+        assert "防止误操作" in result["messages"][0].content
+        assert "3" in result["messages"][0].content
+        assert result["delete_count"] == 3
+        assert "delete_source" not in result["stage_history"]
+        assert any("BLOCKED" in e for e in result["execution_log"])
+
+    def test_delete_source_interrupt_below_threshold(self):
+        from langchain_core.messages import AIMessage
+
+        from src.agent.graph import tool_node
+
+        state = MaintenanceState(
+            messages=[
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "name": "delete_source",
+                            "args": {"source": "test.pdf"},
+                            "id": "tc1",
+                        }
+                    ],
+                )
+            ],
+            current_meal=None,
+            current_source=None,
+            diagnosis=[],
+            pending_action=None,
+            approved=None,
+            execution_log=[],
+            stage_history=["list_meals"],
+            auto_review=False,
+            locked_tool=None,
+            locked_tool_args=None,
+            delete_count=1,
+            mode="light",
+        )
+        with (
+            patch("src.agent.graph._get_tools") as mock_tools,
+            patch("src.agent.graph.interrupt") as mock_interrupt,
+        ):
+            mock_tool = MagicMock()
+            mock_tool.name = "delete_source"
+            mock_tool.invoke.return_value = "Deleted"
+            mock_tools.return_value = [mock_tool]
+            result = tool_node(state)
+        mock_interrupt.assert_not_called()
+        assert result["delete_count"] == 2
+        assert "delete_source" in result["stage_history"]
