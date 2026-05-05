@@ -786,6 +786,120 @@ class TestExperienceStore:
         assert "timestamp" in results[0]
 
 
+class TestExperienceStorePersistence:
+    def test_save_and_reload(self, tmp_path):
+        from langgraph.store.memory import InMemoryStore
+
+        from src.agent.memory.experience_store import ExperienceStore
+
+        ExperienceStore._default_persist_path = None
+
+        persist_file = tmp_path / "experience.json"
+        store1 = InMemoryStore()
+        exp_store1 = ExperienceStore(store1, persist_path=persist_file)
+        namespace = ("default", "maintenance_experience", "annual_report")
+        exp_store1.save_experience(
+            namespace,
+            {"pdf_type": "annual_report", "best_parser": "pymupdf4llm+pdfplumber"},
+        )
+
+        store2 = InMemoryStore()
+        exp_store2 = ExperienceStore(store2, persist_path=persist_file)
+        results = exp_store2.get_all_experiences(namespace)
+        assert len(results) >= 1
+        assert results[0]["best_parser"] == "pymupdf4llm+pdfplumber"
+        assert results[0]["pdf_type"] == "annual_report"
+
+        ExperienceStore._default_persist_path = None
+
+    def test_atomic_write(self, tmp_path):
+        import json
+
+        from langgraph.store.memory import InMemoryStore
+
+        from src.agent.memory.experience_store import ExperienceStore
+
+        ExperienceStore._default_persist_path = None
+
+        persist_file = tmp_path / "experience.json"
+        store = InMemoryStore()
+        exp_store = ExperienceStore(store, persist_path=persist_file)
+        namespace = ("default", "maintenance_experience", "annual_report")
+        exp_store.save_experience(
+            namespace,
+            {"pdf_type": "annual_report", "best_parser": "pymupdf4llm"},
+        )
+
+        with open(persist_file, encoding="utf-8") as f:
+            data = json.load(f)
+        assert "namespaces" in data
+        ns_key = "default/maintenance_experience/annual_report"
+        assert ns_key in data["namespaces"]
+        assert len(data["namespaces"][ns_key]) >= 1
+
+        ExperienceStore._default_persist_path = None
+
+    def test_empty_persist_path(self):
+        from langgraph.store.memory import InMemoryStore
+
+        from src.agent.memory.experience_store import ExperienceStore
+
+        ExperienceStore._default_persist_path = None
+
+        store = InMemoryStore()
+        exp_store = ExperienceStore(store)
+        namespace = ("default", "maintenance_experience", "annual_report")
+        key = exp_store.save_experience(
+            namespace,
+            {"pdf_type": "annual_report", "best_parser": "pymupdf4llm"},
+        )
+        assert key.startswith("exp_")
+
+        ExperienceStore._default_persist_path = None
+
+    def test_load_nonexistent_file(self, tmp_path):
+        from langgraph.store.memory import InMemoryStore
+
+        from src.agent.memory.experience_store import ExperienceStore
+
+        ExperienceStore._default_persist_path = None
+
+        persist_file = tmp_path / "nonexistent" / "experience.json"
+        store = InMemoryStore()
+        exp_store = ExperienceStore(store, persist_path=persist_file)
+        namespace = ("default", "maintenance_experience", "annual_report")
+        results = exp_store.get_all_experiences(namespace)
+        assert results == []
+
+        ExperienceStore._default_persist_path = None
+
+    def test_namespace_key_conversion(self):
+        from src.agent.memory.experience_store import ExperienceStore
+
+        ns = ("default", "maintenance_experience", "annual_report")
+        key = ExperienceStore._namespace_to_key(ns)
+        assert key == "default/maintenance_experience/annual_report"
+        restored = ExperienceStore._key_to_namespace(key)
+        assert restored == ns
+
+    def test_class_level_persist_path_propagation(self, tmp_path):
+        from langgraph.store.memory import InMemoryStore
+
+        from src.agent.memory.experience_store import ExperienceStore
+
+        ExperienceStore._default_persist_path = None
+
+        persist_file = tmp_path / "experience.json"
+        store = InMemoryStore()
+        ExperienceStore(store, persist_path=persist_file)
+
+        store2 = InMemoryStore()
+        exp_store2 = ExperienceStore(store2)
+        assert exp_store2._persist_path == persist_file
+
+        ExperienceStore._default_persist_path = None
+
+
 class TestCompileAgentWithStore:
     def test_compile_agent_with_store(self):
         from langgraph.store.memory import InMemoryStore
@@ -1537,3 +1651,53 @@ class TestDeleteCountHardBlock:
         mock_interrupt.assert_not_called()
         assert result["delete_count"] == 2
         assert "delete_source" in result["stage_history"]
+
+
+class TestFullModeBehavior:
+    def test_full_mode_higher_delete_threshold(self):
+        from unittest.mock import patch
+
+        from src.agent.config import get_agent_config, get_delete_count_threshold
+
+        get_agent_config.cache_clear()
+        with patch(
+            "src.utils.load_config",
+            return_value={
+                "agent": {
+                    "delete_count_threshold": 3,
+                    "full_mode_delete_threshold": 10,
+                }
+            },
+        ):
+            assert get_delete_count_threshold(mode="full") == 10
+        get_agent_config.cache_clear()
+
+    def test_light_mode_delete_threshold(self):
+        from unittest.mock import patch
+
+        from src.agent.config import get_agent_config, get_delete_count_threshold
+
+        get_agent_config.cache_clear()
+        with patch(
+            "src.utils.load_config",
+            return_value={
+                "agent": {
+                    "delete_count_threshold": 3,
+                    "full_mode_delete_threshold": 10,
+                }
+            },
+        ):
+            assert get_delete_count_threshold(mode="light") == 3
+        get_agent_config.cache_clear()
+
+    def test_full_mode_prompt_has_batch_guidance(self):
+        from src.agent.prompt import build_system_prompt
+
+        prompt = build_system_prompt(mode="full")
+        assert "批量操作指导" in prompt
+
+    def test_light_mode_no_batch_guidance(self):
+        from src.agent.prompt import build_system_prompt
+
+        prompt = build_system_prompt(mode="light")
+        assert "批量操作指导" not in prompt

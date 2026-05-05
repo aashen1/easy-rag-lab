@@ -164,6 +164,22 @@ def agent_node(state: MaintenanceState) -> dict[str, Any]:
         experiences=experiences,
         mode=state.get("mode", "light"),
     )
+
+    if state.get("mode", "light") == "full":
+        try:
+            from src.meal.manager import MealManager
+            from src.utils import load_config
+
+            config = load_config()
+            mgr = MealManager(config)
+            meals = mgr.list_meals()
+            if meals:
+                meal_summary = ", ".join(
+                    f"{m.name} ({len(m.pdf_files)} PDFs)" for m in meals
+                )
+                system_content += f"\n\n当前 Meal 列表: {meal_summary}"
+        except Exception as e:
+            logger.warning(f"Failed to inject Meal status into prompt: {e}")
     messages = [SystemMessage(content=system_content)] + state["messages"]
     logger.info(f"Agent node: invoking LLM with {len(messages)} messages")
     response = llm_with_tools.invoke(messages)
@@ -341,9 +357,10 @@ def tool_node(state: MaintenanceState) -> dict[str, Any]:
             log_entries.append(f"GUARD: {tool_call['name']} blocked - no diagnosis")
             continue
 
-        if (
-            tool_call["name"] == "delete_source"
-            and new_delete_count >= get_delete_count_threshold()
+        if tool_call[
+            "name"
+        ] == "delete_source" and new_delete_count >= get_delete_count_threshold(
+            mode=state.get("mode", "light")
         ):
             logger.warning(
                 f"BLOCKED: {tool_call['name']} - delete count {new_delete_count} >= threshold"
