@@ -7,7 +7,9 @@ from typing import Any
 import yaml
 from dotenv import load_dotenv
 from loguru import logger
+from pydantic import ValidationError
 
+from src.config_schema import AppConfig
 from src.exceptions import ConfigurationError
 
 load_dotenv()
@@ -24,6 +26,12 @@ def load_config(config_path: str = "config.yaml") -> dict[str, Any]:
     directory.  This allows users to point the entire data tree at a
     different location (e.g. a separate drive) without using symlinks.
 
+    After loading and path rewriting, the configuration is validated
+    against the Pydantic ``AppConfig`` schema.  This ensures type
+    correctness, range constraints, and cross-field dependencies are
+    satisfied before the config is used.  Validation errors raise
+    ``ConfigurationError`` with a detailed message.
+
     The result is cached by config_path so repeated calls (e.g. from
     Streamlit reruns) return the same dict without re-reading the file.
 
@@ -31,11 +39,12 @@ def load_config(config_path: str = "config.yaml") -> dict[str, Any]:
         config_path: Path to the YAML configuration file. Defaults to "config.yaml".
 
     Returns:
-        Parsed configuration as a dictionary.
+        Parsed and validated configuration as a dictionary.
 
     Raises:
         FileNotFoundError: If the configuration file does not exist.
         yaml.YAMLError: If the file contains invalid YAML.
+        ConfigurationError: If the configuration fails schema validation.
     """
     if config_path is None:
         config_path = "config.yaml"
@@ -49,6 +58,13 @@ def load_config(config_path: str = "config.yaml") -> dict[str, Any]:
     data_dir = config.get("data_dir", "data")
     if data_dir != "data":
         config = _resolve_data_paths(config, data_dir)
+
+    try:
+        validated = AppConfig(**config)
+        config = validated.model_dump()
+    except ValidationError as e:
+        logger.error(f"Configuration validation failed:\n{e}")
+        raise ConfigurationError(f"Invalid configuration: {e}") from e
 
     _config_cache[config_path] = config
     logger.info(f"Configuration loaded from {config_path}")
