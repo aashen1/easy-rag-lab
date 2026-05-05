@@ -97,6 +97,12 @@ def chunk_parsed(
         if embedder is None:
             raise ValueError("embedder is required for semantic chunking strategy")
         full_text = "\n\n".join(page.text for page in parse_result.pages)
+        if not full_text or not full_text.strip():
+            logger.warning(
+                f"Empty text after joining pages for document "
+                f"{parse_result.metadata.get('source', 'unknown')}"
+            )
+            return []
         chunks = chunk_text_semantic(
             full_text,
             embedder=embedder,
