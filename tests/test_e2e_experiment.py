@@ -1,4 +1,3 @@
-import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -559,28 +558,28 @@ class TestEndToEndEvaluationFlow:
         temp_project_dir,
         test_system_config,
     ):
-        with pytest.warns(DeprecationWarning, match="eval/run_eval.py is deprecated"):
-            from eval.run_eval import run_evaluation
+        from eval.evaluators.builtin_evaluator import BuiltinEvaluator
+        from eval.runner.evaluation import collect_rag_samples, evaluate_with_builtin
+        from eval.runner.metrics import compute_aggregate_metrics
 
-        test_data = [
-            {
-                "id": "q001",
-                "question": "What is the revenue?",
-                "source_files": ["report_a.pdf"],
-            },
-            {
-                "id": "q002",
-                "question": "What is the profit?",
-                "source_files": ["report_b.pdf"],
-            },
-        ]
-        test_data_path = temp_project_dir / "test_data.json"
-        with open(test_data_path, "w", encoding="utf-8") as f:
-            json.dump(test_data, f)
-
-        output_dir = temp_project_dir / "output"
+        test_set = {
+            "name": "test_set",
+            "questions": [
+                {
+                    "id": "q001",
+                    "question": "What is the revenue?",
+                    "source_files": ["report_a.pdf"],
+                },
+                {
+                    "id": "q002",
+                    "question": "What is the profit?",
+                    "source_files": ["report_b.pdf"],
+                },
+            ],
+        }
 
         mock_pipeline = MagicMock()
+        mock_pipeline.config = {"evaluation": {"concurrent_queries": 1}}
         mock_pipeline.query.side_effect = [
             {
                 "answer": "Revenue is 100M.",
@@ -595,18 +594,23 @@ class TestEndToEndEvaluationFlow:
         ]
 
         with (
-            patch("eval.run_eval.calculate_faithfulness") as mock_faithfulness,
-            patch("eval.run_eval.calculate_answer_relevancy") as mock_relevancy,
+            patch(
+                "eval.evaluators.builtin_evaluator.calculate_faithfulness"
+            ) as mock_faithfulness,
+            patch(
+                "eval.evaluators.builtin_evaluator.calculate_answer_relevancy"
+            ) as mock_relevancy,
         ):
             mock_faithfulness.return_value = 0.85
             mock_relevancy.return_value = 0.92
 
-            summary = run_evaluation(
-                pipeline=mock_pipeline,
-                test_data_path=str(test_data_path),
-                output_dir=str(output_dir),
-                metrics_config=["hit_rate", "mrr", "ndcg"],
-                generation_metrics_config=["faithfulness", "answer_relevancy"],
+            samples = collect_rag_samples(mock_pipeline, test_set)
+            evaluator = BuiltinEvaluator(config={})
+            results = evaluate_with_builtin(
+                samples=samples,
+                evaluator=evaluator,
+                retrieval_metrics=["hit_rate", "mrr", "ndcg"],
+                generation_metrics=["faithfulness", "answer_relevancy"],
                 llm_config={
                     "api_key": "test_key",
                     "base_url": "https://test.url",
@@ -614,11 +618,9 @@ class TestEndToEndEvaluationFlow:
                 },
             )
 
-            assert summary["total_test_cases"] == 2
-            assert "retrieval_metrics" in summary
-            assert "generation_metrics" in summary
+            assert len(results) == 2
 
-            for result in summary["results"]:
+            for result in results:
                 assert "retrieval" in result
                 assert "generation" in result
                 assert "hit_rate" in result["retrieval"]
@@ -627,8 +629,9 @@ class TestEndToEndEvaluationFlow:
                 assert "faithfulness" in result["generation"]
                 assert "answer_relevancy" in result["generation"]
 
-            report_path = output_dir / "baseline_report.json"
-            assert report_path.exists()
+            aggregate = compute_aggregate_metrics(results)
+            assert "avg_hit_rate" in aggregate
+            assert "generation_metrics" in aggregate
 
     @pytest.mark.unit
     def test_evaluation_flow_with_document_level_questions(
@@ -636,7 +639,10 @@ class TestEndToEndEvaluationFlow:
         temp_project_dir,
         test_system_config,
     ):
-        test_data = {
+        from eval.evaluators.builtin_evaluator import BuiltinEvaluator
+        from eval.runner.evaluation import collect_rag_samples, evaluate_with_builtin
+
+        test_set = {
             "name": "document_level_n10",
             "strategy": "document",
             "questions": [
@@ -656,13 +662,9 @@ class TestEndToEndEvaluationFlow:
                 },
             ],
         }
-        test_data_path = temp_project_dir / "test_data.json"
-        with open(test_data_path, "w", encoding="utf-8") as f:
-            json.dump(test_data, f)
-
-        output_dir = temp_project_dir / "output"
 
         mock_pipeline = MagicMock()
+        mock_pipeline.config = {"evaluation": {"concurrent_queries": 1}}
         mock_pipeline.query.side_effect = [
             {
                 "answer": "2024年光模块市场规模约为100亿美元。",
@@ -681,20 +683,23 @@ class TestEndToEndEvaluationFlow:
         ]
 
         with (
-            patch("eval.run_eval.calculate_faithfulness") as mock_faithfulness,
-            patch("eval.run_eval.calculate_answer_relevancy") as mock_relevancy,
+            patch(
+                "eval.evaluators.builtin_evaluator.calculate_faithfulness"
+            ) as mock_faithfulness,
+            patch(
+                "eval.evaluators.builtin_evaluator.calculate_answer_relevancy"
+            ) as mock_relevancy,
         ):
             mock_faithfulness.return_value = 0.90
             mock_relevancy.return_value = 0.95
 
-            from eval.run_eval import run_evaluation
-
-            summary = run_evaluation(
-                pipeline=mock_pipeline,
-                test_data_path=str(test_data_path),
-                output_dir=str(output_dir),
-                metrics_config=["hit_rate", "ndcg"],
-                generation_metrics_config=["faithfulness", "answer_relevancy"],
+            samples = collect_rag_samples(mock_pipeline, test_set)
+            evaluator = BuiltinEvaluator(config={})
+            results = evaluate_with_builtin(
+                samples=samples,
+                evaluator=evaluator,
+                retrieval_metrics=["hit_rate", "ndcg"],
+                generation_metrics=["faithfulness", "answer_relevancy"],
                 llm_config={
                     "api_key": "test_key",
                     "base_url": "https://test.url",
@@ -702,10 +707,9 @@ class TestEndToEndEvaluationFlow:
                 },
             )
 
-            assert summary["total_test_cases"] == 2
-            assert len(summary["results"]) == 2
+            assert len(results) == 2
 
-            for result in summary["results"]:
+            for result in results:
                 assert "hit_rate" in result["retrieval"]
                 assert "ndcg" in result["retrieval"]
                 assert "faithfulness" in result["generation"]
@@ -718,74 +722,42 @@ class TestBackwardCompatibility:
         temp_project_dir,
         test_system_config,
     ):
-        from eval.run_eval import run_evaluation
+        from eval.evaluators.builtin_evaluator import BuiltinEvaluator
+        from eval.runner.evaluation import collect_rag_samples, evaluate_with_builtin
+        from eval.runner.metrics import compute_aggregate_metrics
 
-        test_data = [
-            {
-                "id": "q001",
-                "question": "What is the revenue?",
-                "source_files": ["report_a.pdf"],
-            },
-        ]
-        test_data_path = temp_project_dir / "test_data.json"
-        with open(test_data_path, "w", encoding="utf-8") as f:
-            json.dump(test_data, f)
-
-        output_dir = temp_project_dir / "output"
+        test_set = {
+            "name": "test_set",
+            "questions": [
+                {
+                    "id": "q001",
+                    "question": "What is the revenue?",
+                    "source_files": ["report_a.pdf"],
+                },
+            ],
+        }
 
         mock_pipeline = MagicMock()
+        mock_pipeline.config = {"evaluation": {"concurrent_queries": 1}}
         mock_pipeline.query.return_value = {
             "answer": "Revenue is 100M.",
             "sources": ["report_a.pdf"],
         }
 
-        summary = run_evaluation(
-            pipeline=mock_pipeline,
-            test_data_path=str(test_data_path),
-            output_dir=str(output_dir),
-            metrics_config=["hit_rate", "mrr", "ndcg"],
-            generation_metrics_config=None,
+        samples = collect_rag_samples(mock_pipeline, test_set)
+        evaluator = BuiltinEvaluator(config={})
+        results = evaluate_with_builtin(
+            samples=samples,
+            evaluator=evaluator,
+            retrieval_metrics=["hit_rate", "mrr", "ndcg"],
+            generation_metrics=None,
             llm_config=None,
         )
 
-        assert "retrieval_metrics" in summary
-        assert "generation_metrics" not in summary
-        assert "generation" not in summary["results"][0]
-
-    @pytest.mark.unit
-    def test_test_data_format_list(
-        self,
-        temp_project_dir,
-        test_system_config,
-    ):
-        from eval.run_eval import run_evaluation
-
-        test_data = [
-            {
-                "id": "q001",
-                "question": "Question 1?",
-                "source_files": ["doc_a.pdf"],
-            },
-        ]
-        test_data_path = temp_project_dir / "test_data.json"
-        with open(test_data_path, "w", encoding="utf-8") as f:
-            json.dump(test_data, f)
-
-        output_dir = temp_project_dir / "output"
-
-        mock_pipeline = MagicMock()
-        mock_pipeline.query.return_value = {
-            "answer": "Answer 1",
-            "sources": ["doc_a.pdf"],
-        }
-
-        summary = run_evaluation(
-            pipeline=mock_pipeline,
-            test_data_path=str(test_data_path),
-            output_dir=str(output_dir),
-        )
-
-        assert summary["total_test_cases"] == 1
+        aggregate = compute_aggregate_metrics(results)
+        assert "avg_hit_rate" in aggregate
+        assert "generation_metrics" not in aggregate
+        assert "generation" not in results[0]
 
     @pytest.mark.unit
     def test_test_data_format_dict_with_questions(
@@ -793,9 +765,10 @@ class TestBackwardCompatibility:
         temp_project_dir,
         test_system_config,
     ):
-        from eval.run_eval import run_evaluation
+        from eval.evaluators.builtin_evaluator import BuiltinEvaluator
+        from eval.runner.evaluation import collect_rag_samples, evaluate_with_builtin
 
-        test_data = {
+        test_set = {
             "name": "test_set",
             "questions": [
                 {
@@ -805,25 +778,23 @@ class TestBackwardCompatibility:
                 },
             ],
         }
-        test_data_path = temp_project_dir / "test_data.json"
-        with open(test_data_path, "w", encoding="utf-8") as f:
-            json.dump(test_data, f)
-
-        output_dir = temp_project_dir / "output"
 
         mock_pipeline = MagicMock()
+        mock_pipeline.config = {"evaluation": {"concurrent_queries": 1}}
         mock_pipeline.query.return_value = {
             "answer": "Answer 1",
             "sources": ["doc_a.pdf"],
         }
 
-        summary = run_evaluation(
-            pipeline=mock_pipeline,
-            test_data_path=str(test_data_path),
-            output_dir=str(output_dir),
+        samples = collect_rag_samples(mock_pipeline, test_set)
+        evaluator = BuiltinEvaluator(config={})
+        results = evaluate_with_builtin(
+            samples=samples,
+            evaluator=evaluator,
+            retrieval_metrics=["hit_rate", "mrr", "ndcg"],
         )
 
-        assert summary["total_test_cases"] == 1
+        assert len(results) == 1
 
     @pytest.mark.unit
     def test_expected_sources_fallback(
@@ -831,35 +802,36 @@ class TestBackwardCompatibility:
         temp_project_dir,
         test_system_config,
     ):
-        from eval.run_eval import run_evaluation
+        from eval.evaluators.builtin_evaluator import BuiltinEvaluator
+        from eval.runner.evaluation import collect_rag_samples, evaluate_with_builtin
 
-        test_data = [
-            {
-                "id": "q001",
-                "question": "Question 1?",
-                "source_files": ["doc_a.pdf"],
-            },
-        ]
-        test_data_path = temp_project_dir / "test_data.json"
-        with open(test_data_path, "w", encoding="utf-8") as f:
-            json.dump(test_data, f)
-
-        output_dir = temp_project_dir / "output"
+        test_set = {
+            "name": "test_set",
+            "questions": [
+                {
+                    "id": "q001",
+                    "question": "Question 1?",
+                    "source_files": ["doc_a.pdf"],
+                },
+            ],
+        }
 
         mock_pipeline = MagicMock()
+        mock_pipeline.config = {"evaluation": {"concurrent_queries": 1}}
         mock_pipeline.query.return_value = {
             "answer": "Answer 1",
             "sources": ["doc_a.pdf"],
         }
 
-        summary = run_evaluation(
-            pipeline=mock_pipeline,
-            test_data_path=str(test_data_path),
-            output_dir=str(output_dir),
-            metrics_config=["hit_rate"],
+        samples = collect_rag_samples(mock_pipeline, test_set)
+        evaluator = BuiltinEvaluator(config={})
+        results = evaluate_with_builtin(
+            samples=samples,
+            evaluator=evaluator,
+            retrieval_metrics=["hit_rate"],
         )
 
-        assert summary["results"][0]["retrieval"]["hit_rate"] == 1.0
+        assert results[0]["retrieval"]["hit_rate"] == 1.0
 
     @pytest.mark.unit
     def test_experiment_config_without_generation_metrics(
