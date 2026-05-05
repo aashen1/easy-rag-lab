@@ -65,7 +65,6 @@ PDF 解析 → 分块 → Embedding → 向量索引 → 检索 → [重排序] 
 | `evaluators/base.py` | 评测器抽象基类，定义统一接口 |
 | `evaluators/builtin_evaluator.py` | 自研评测器，封装现有指标计算 |
 | `evaluators/ragas_evaluator.py` | RAGAS 评测器，集成 RAGAS 框架指标 |
-| `run_eval.py` | 基础评测脚本（已废弃，请使用 `run_experiment.py`） |
 | `run_experiment.py` | 自动化实验系统 |
 | `experiment_reporter.py` | 实验报告生成 |
 | `visualize.py` | 实验结果可视化（对比柱状图、趋势折线图） |
@@ -148,7 +147,6 @@ easy-rag-lab/
 │   │   ├── base.py      # 评测器基类
 │   │   ├── builtin_evaluator.py  # 自研评测器
 │   │   └── ragas_evaluator.py    # RAGAS 评测器
-│   ├── run_eval.py          # 已废弃
 │   ├── run_experiment.py
 │   ├── experiment_reporter.py
 │   └── visualize.py

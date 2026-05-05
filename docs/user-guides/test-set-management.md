@@ -186,7 +186,6 @@ test_sets:
 - [`src/test_generator.py`](../../src/test_generator.py) - 输出新 metadata 结构
 - [`src/experiment.py`](../../src/experiment.py) - 新格式校验
 - [`eval/run_experiment.py`](../../eval/run_experiment.py) - 重构为使用 TestSetManager
-- [`eval/run_eval.py`](../../eval/run_eval.py) - 支持按名称查找（已废弃，请使用 `run_experiment.py`）
 - [`main.py`](../../main.py) - CLI 支持 --name 参数
 - [`exp_configs/templates/_minimal.yaml`](../../exp_configs/templates/_minimal.yaml) - 新格式示例
 - [`exp_configs/templates/_complete.yaml`](../../exp_configs/templates/_complete.yaml) - 新格式完整示例
