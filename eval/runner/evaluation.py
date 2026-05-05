@@ -378,6 +378,13 @@ def _collect_rag_samples_serial(
 
         if not question_text:
             logger.warning(f"Question {question_id} has no text, skipping")
+            samples.append(
+                {
+                    "question_id": question_id,
+                    "question": "",
+                    "_skip": True,
+                }
+            )
             continue
 
         logger.info(f"Processing question {i + 1}/{len(questions)}: {question_id}")
