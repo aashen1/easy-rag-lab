@@ -1,7 +1,10 @@
+import json
+
 import streamlit as st
 
 
 def _render_mermaid(chart: str):
+    js_chart = json.dumps(chart)
     escaped = chart.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     st.iframe(
         f"""
@@ -36,10 +39,14 @@ def _render_mermaid(chart: str):
                 <button id="btn-diagram" class="active" onclick="switchView('diagram')">Diagram</button>
                 <button id="btn-code" onclick="switchView('code')">Code</button>
             </div>
-            <div id="diagram-view" class="mermaid">{chart}</div>
+            <div id="diagram-view" class="mermaid"></div>
             <div id="code-view">{escaped}</div>
         </div>
         <script>
+            (function() {{
+                var chartText = {js_chart};
+                document.getElementById('diagram-view').textContent = chartText;
+            }})();
             function switchView(mode) {{
                 var dv = document.getElementById('diagram-view');
                 var cv = document.getElementById('code-view');
@@ -62,10 +69,11 @@ def _render_mermaid(chart: str):
                 s.src = src;
                 s.onload = function() {{
                     mermaid.initialize({{
-                        startOnLoad: true,
+                        startOnLoad: false,
                         theme: 'dark',
                         flowchart: {{ useMaxWidth: true, htmlLabels: true, curve: 'basis' }}
                     }});
+                    mermaid.run();
                 }};
                 s.onerror = function() {{
                     if (fallback) {{
@@ -79,12 +87,12 @@ def _render_mermaid(chart: str):
                 document.head.appendChild(s);
             }}
             loadMermaid(
-                'https://cdn.bootcdn.net/ajax/libs/mermaid/11.4.1/mermaid.min.js',
-                'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js'
+                'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js',
+                'https://cdn.bootcdn.net/ajax/libs/mermaid/11.4.1/mermaid.min.js'
             );
         </script>
         """,
-        height="content",
+        height=400,
     )
 
 
