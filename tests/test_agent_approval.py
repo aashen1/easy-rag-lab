@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
 import pytest
@@ -69,7 +70,11 @@ class TestApprovalNode:
 
         assert "messages" in result
         assert "execution_log" in result
-        assert any("FORBIDDEN" in e for e in result["execution_log"])
+        assert any(
+            json.loads(e).get("status") == "forbidden"
+            for e in result["execution_log"]
+            if e.startswith("{")
+        )
 
         tool_msgs = [m for m in result["messages"] if isinstance(m, ToolMessage)]
         assert len(tool_msgs) == 1
@@ -106,7 +111,11 @@ class TestApprovalNode:
 
         assert "messages" in result
         assert "execution_log" in result
-        assert any("REJECTED" in e for e in result["execution_log"])
+        assert any(
+            json.loads(e).get("status") == "rejected"
+            for e in result["execution_log"]
+            if e.startswith("{")
+        )
 
         tool_msgs = [m for m in result["messages"] if isinstance(m, ToolMessage)]
         assert len(tool_msgs) == 1
@@ -132,8 +141,16 @@ class TestApprovalNode:
             result = approval_node(state)
 
         assert "messages" in result
-        assert any("FORBIDDEN" in e for e in result["execution_log"])
-        assert any("APPROVED" in e for e in result["execution_log"])
+        assert any(
+            json.loads(e).get("status") == "forbidden"
+            for e in result["execution_log"]
+            if e.startswith("{")
+        )
+        assert any(
+            json.loads(e).get("status") == "approved"
+            for e in result["execution_log"]
+            if e.startswith("{")
+        )
 
         updated_ai_msgs = [m for m in result["messages"] if isinstance(m, AIMessage)]
         assert len(updated_ai_msgs) == 1
@@ -199,7 +216,11 @@ class TestApprovalNode:
             result = approval_node(state)
 
         assert "PREVIOUS_ENTRY" in result["execution_log"]
-        assert any("FORBIDDEN" in e for e in result["execution_log"])
+        assert any(
+            json.loads(e).get("status") == "forbidden"
+            for e in result["execution_log"]
+            if e.startswith("{")
+        )
 
 
 class TestRouteAfterApproval:
