@@ -6,6 +6,17 @@ from pathlib import Path
 import streamlit as st
 from loguru import logger
 
+from src.app_pages.about import _render_mermaid
+
+
+@st.cache_data
+def _get_agent_graph_mermaid() -> str:
+    from src.agent.graph import build_graph
+
+    graph = build_graph()
+    compiled = graph.compile()
+    return compiled.get_graph().draw_mermaid()
+
 
 def _get_tool_names() -> list[str]:
     from src.agent.graph import _get_tools
@@ -266,6 +277,16 @@ def render_maintenance():
                 mime="text/markdown",
                 key="download_maintenance_report",
             )
+
+    st.markdown("---")
+    st.markdown("### 🗺️ 维修工架构图")
+    st.caption("由 LangGraph 自动生成，修改 graph.py 后重启应用即可更新")
+    try:
+        mermaid_chart = _get_agent_graph_mermaid()
+        _render_mermaid(mermaid_chart)
+    except Exception as e:
+        logger.warning(f"Failed to render agent graph: {e}")
+        st.info("架构图渲染失败，请检查 LangGraph 依赖是否完整")
 
 
 def _resume_interrupt(agent, decision, config):
