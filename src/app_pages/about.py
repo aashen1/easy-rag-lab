@@ -1,7 +1,10 @@
+import json
+
 import streamlit as st
 
 
 def _render_mermaid(chart: str):
+    js_chart = json.dumps(chart)
     escaped = chart.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
     st.iframe(
         f"""
@@ -36,10 +39,14 @@ def _render_mermaid(chart: str):
                 <button id="btn-diagram" class="active" onclick="switchView('diagram')">Diagram</button>
                 <button id="btn-code" onclick="switchView('code')">Code</button>
             </div>
-            <div id="diagram-view" class="mermaid">{chart}</div>
+            <div id="diagram-view" class="mermaid"></div>
             <div id="code-view">{escaped}</div>
         </div>
         <script>
+            (function() {{
+                var chartText = {js_chart};
+                document.getElementById('diagram-view').textContent = chartText;
+            }})();
             function switchView(mode) {{
                 var dv = document.getElementById('diagram-view');
                 var cv = document.getElementById('code-view');
