@@ -1,7 +1,6 @@
 import re
 
 import streamlit as st
-from streamlit_mermaid_interactive import mermaid
 
 
 def _clean_mermaid_chart(chart: str) -> str:
@@ -26,9 +25,26 @@ def _render_mermaid(chart: str, key: str = "mermaid"):
 
     if st.session_state[f"{key}_view"] == "diagram":
         cleaned_chart = _clean_mermaid_chart(chart)
-        mermaid(cleaned_chart, theme="dark", key=key)
+        _render_mermaid_html(cleaned_chart, key=key)
     else:
         st.code(chart, language="markdown")
+
+
+def _render_mermaid_html(chart: str, key: str = "mermaid"):
+    import json
+
+    chart_json = json.dumps(chart)
+    mermaid_html = f"""
+    <div id="mermaid-{key}"></div>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({{ startOnLoad: false, theme: 'dark' }});
+        const chart = {chart_json};
+        const {{ svg }} = await mermaid.render('mermaid-svg-{key}', chart);
+        document.getElementById('mermaid-{key}').innerHTML = svg;
+    </script>
+    """
+    st.html(mermaid_html, unsafe_allow_javascript=True)
 
 
 _RAG_FLOWCHART = """flowchart LR
