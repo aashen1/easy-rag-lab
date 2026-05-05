@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import streamlit as st
 from loguru import logger
@@ -44,6 +45,182 @@ def _get_compiled_agent():
     return compile_agent(checkpointer=checkpointer, store=store)
 
 
+_TOOL_DISPLAY_NAMES = {
+    "list_meals": "📋 列出 Meals",
+    "get_meal_detail": "📊 查看 Meal 详情",
+    "query_rag_tool": "🔍 测试 RAG 查询",
+    "get_index_info": "📈 查看索引信息",
+    "evaluate_answer_tool": "📝 评估答案质量",
+    "list_pdfs": "📄 列出 PDF 文件",
+    "list_issues": "🚨 列出问题",
+    "parse_pdf_tool": "📑 解析 PDF",
+    "enhance_page_tool": "✨ 增强页面",
+    "chunk_parsed_tool": "✂️ 分块",
+    "embed_chunks_tool": "🔢 向量化",
+    "index_chunks_tool": "🗂️ 索引构建",
+    "delete_and_reindex_tool": "🗑️ 删除并重建索引",
+    "create_curated_meal": "🍱 创建精选 Meal",
+    "rebuild_index": "🔨 重建索引",
+    "delete_source": "🗑️ 删除数据源",
+    "update_meal": "🔄 更新 Meal",
+    "create_issue": "📝 创建 Issue",
+    "close_issue": "✅ 关闭 Issue",
+    "generate_maintenance_report_tool": "📋 生成维修报告",
+    "generate_comparison_report_tool": "📊 生成对比报告",
+}
+
+
+def _format_tool_name(tool_name: str) -> str:
+    return _TOOL_DISPLAY_NAMES.get(tool_name, f"🔧 {tool_name}")
+
+
+def _render_streaming_agent(agent, state: dict, config: dict) -> dict | None:
+    from langchain_core.messages import AIMessage, ToolMessage
+
+    collapse = st.session_state.get("maintenance_collapse_thinking", True)
+    final_result: dict | None = None
+    thinking_parts: list[dict[str, Any]] = []
+    interrupt_payload = None
+
+    thinking_container = st.container()
+
+    for event in agent.stream(state, config=config, stream_mode="updates"):
+        for node_name, node_output in event.items():
+            if node_name == "agent":
+                messages = node_output.get("messages", [])
+                for msg in messages:
+                    if isinstance(msg, AIMessage):
+                        if msg.content:
+                            thinking_parts.append(
+                                {"type": "thinking", "content": msg.content}
+                            )
+                        if hasattr(msg, "tool_calls") and msg.tool_calls:
+                            for tc in msg.tool_calls:
+                                thinking_parts.append(
+                                    {
+                                        "type": "tool_call",
+                                        "tool": tc["name"],
+                                        "args": tc.get("args", {}),
+                                    }
+                                )
+
+            elif node_name == "tools":
+                messages = node_output.get("messages", [])
+                for msg in messages:
+                    if isinstance(msg, ToolMessage):
+                        content_preview = str(msg.content)[:300]
+                        thinking_parts.append(
+                            {
+                                "type": "tool_result",
+                                "tool_id": msg.tool_call_id,
+                                "content": content_preview,
+                            }
+                        )
+                for key in (
+                    "execution_log",
+                    "stage_history",
+                ):
+                    if key in node_output:
+                        st.session_state.maintenance_current_state[key] = node_output[
+                            key
+                        ]
+                if "delete_count" in node_output:
+                    st.session_state.maintenance_current_state["delete_count"] = (
+                        node_output["delete_count"]
+                    )
+
+            elif node_name == "approval":
+                pass
+
+        with thinking_container:
+            thinking_container.empty()
+            if thinking_parts:
+                if collapse:
+                    with st.expander(
+                        f"💭 思考与工具调用过程 ({len(thinking_parts)} 步)",
+                        expanded=False,
+                    ):
+                        _render_thinking_parts(thinking_parts)
+                else:
+                    _render_thinking_parts(thinking_parts)
+
+    try:
+        graph_state = agent.get_state(config)
+        final_result = graph_state.values if graph_state else None
+    except Exception:
+        final_result = None
+
+    if final_result is not None:
+        if final_result.get("__interrupt__"):
+            for interrupt_info in final_result.get("__interrupt__", []):
+                payload = interrupt_info.value
+                if isinstance(payload, dict) and "question" in payload:
+                    interrupt_payload = payload
+        else:
+            response_text = _extract_response_text(final_result)
+            if response_text:
+                st.markdown("---")
+                st.markdown(response_text)
+                st.session_state.maintenance_messages.append(
+                    {"role": "assistant", "content": response_text}
+                )
+            report_data = _try_extract_report(response_text)
+            if report_data:
+                st.session_state.maintenance_latest_report = report_data
+            for key in (
+                "current_meal",
+                "current_source",
+                "diagnosis",
+                "execution_log",
+                "stage_history",
+                "delete_count",
+            ):
+                if key in final_result:
+                    st.session_state.maintenance_current_state[key] = final_result[key]
+            st.session_state.maintenance_locked_tool = None
+
+    if interrupt_payload is not None:
+        st.session_state.maintenance_interrupted = True
+        st.session_state.maintenance_interrupt_payload = interrupt_payload
+        st.warning(f"⚠️ {interrupt_payload['question']}")
+        tool_info = interrupt_payload.get("tool_call", {})
+        if tool_info:
+            st.info(
+                f"工具: {tool_info.get('name')} | 参数: {tool_info.get('args', {})}"
+            )
+        col_a, col_b = st.columns(2)
+        with col_a:
+            if st.button("✅ 批准", key="approve_btn"):
+                _resume_interrupt_streaming(agent, True, config)
+        with col_b:
+            if st.button("❌ 拒绝", key="reject_btn"):
+                _resume_interrupt_streaming(agent, False, config)
+
+    return final_result
+
+
+def _render_thinking_parts(parts: list[dict[str, Any]]) -> None:
+    for part in parts:
+        if part["type"] == "thinking":
+            st.markdown(f"**💭 思考：** {part['content']}")
+        elif part["type"] == "tool_call":
+            tool_display = _format_tool_name(part["tool"])
+            args_display = ""
+            if part.get("args"):
+                args_str = json.dumps(part["args"], ensure_ascii=False)
+                if len(args_str) > 200:
+                    args_str = args_str[:200] + "..."
+                args_display = f" | 参数: `{args_str}`"
+            st.markdown(f"**{tool_display}**{args_display}")
+        elif part["type"] == "tool_result":
+            content = part.get("content", "")
+            st.markdown(
+                f"<div style='background:#f8f9fa;padding:6px 10px;border-radius:4px;"
+                f"font-size:0.85em;margin:2px 0;'>↳ {content}</div>",
+                unsafe_allow_html=True,
+            )
+
+
 def render_maintenance():
     st.subheader("🔧 RAG 维修工")
 
@@ -72,6 +249,8 @@ def render_maintenance():
         import uuid
 
         st.session_state.maintenance_thread_id = f"maintenance-{uuid.uuid4().hex[:8]}"
+    if "maintenance_collapse_thinking" not in st.session_state:
+        st.session_state.maintenance_collapse_thinking = True
 
     with st.sidebar:
         st.markdown("### 🔧 维修工控制面板")
@@ -101,6 +280,13 @@ def render_maintenance():
             key="maintenance_auto_review_toggle",
         )
         st.session_state.maintenance_auto_review = auto_review
+
+        collapse_thinking = st.toggle(
+            "折叠思考过程",
+            value=st.session_state.maintenance_collapse_thinking,
+            key="maintenance_collapse_toggle",
+        )
+        st.session_state.maintenance_collapse_thinking = collapse_thinking
 
         st.markdown("#### 快捷操作")
         col1, col2 = st.columns(2)
@@ -135,6 +321,38 @@ def render_maintenance():
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
 
+    if (
+        st.session_state.maintenance_interrupted
+        and st.session_state.maintenance_interrupt_payload is not None
+    ):
+        payload = st.session_state.maintenance_interrupt_payload
+        with st.chat_message("assistant"):
+            st.warning(f"⚠️ {payload.get('question', '等待确认')}")
+            tool_info = payload.get("tool_call", {})
+            if tool_info:
+                st.info(
+                    f"工具: {tool_info.get('name')} | 参数: {tool_info.get('args', {})}"
+                )
+            col_a, col_b = st.columns(2)
+            with col_a:
+                if st.button("✅ 批准", key="approve_btn_persist"):
+                    agent = _get_compiled_agent()
+                    config = {
+                        "configurable": {
+                            "thread_id": st.session_state.maintenance_thread_id
+                        }
+                    }
+                    _resume_interrupt_streaming(agent, True, config)
+            with col_b:
+                if st.button("❌ 拒绝", key="reject_btn_persist"):
+                    agent = _get_compiled_agent()
+                    config = {
+                        "configurable": {
+                            "thread_id": st.session_state.maintenance_thread_id
+                        }
+                    }
+                    _resume_interrupt_streaming(agent, False, config)
+
     if prompt := st.chat_input("输入问题进行诊断...", key="maintenance_chat_input"):
         st.session_state.maintenance_messages.append(
             {"role": "user", "content": prompt}
@@ -142,7 +360,7 @@ def render_maintenance():
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        with st.chat_message("assistant"), st.spinner("维修工思考中..."):
+        with st.chat_message("assistant"):
             try:
                 agent = _get_compiled_agent()
                 config = {
@@ -167,85 +385,11 @@ def render_maintenance():
                     "mode": st.session_state.maintenance_mode,
                 }
 
-                result = agent.invoke(state, config=config)
-
-                if result.get("__interrupt__"):
-                    st.session_state.maintenance_interrupted = True
-                    for interrupt_info in result.get("__interrupt__", []):
-                        payload = interrupt_info.value
-                        if isinstance(payload, dict) and "question" in payload:
-                            st.session_state.maintenance_interrupt_payload = payload
-                            st.warning(f"⚠️ {payload['question']}")
-                            tool_info = payload.get("tool_call", {})
-                            if tool_info:
-                                st.info(
-                                    f"工具: {tool_info.get('name')} | 参数: {tool_info.get('args', {})}"
-                                )
-                            col_a, col_b = st.columns(2)
-                            with col_a:
-                                if st.button("✅ 批准", key="approve_btn"):
-                                    _resume_interrupt(agent, True, config)
-                            with col_b:
-                                if st.button("❌ 拒绝", key="reject_btn"):
-                                    _resume_interrupt(agent, False, config)
-                else:
-                    response_text = _extract_response_text(result)
-                    st.markdown(response_text)
-                    st.session_state.maintenance_messages.append(
-                        {"role": "assistant", "content": response_text}
-                    )
-                    report_data = _try_extract_report(response_text)
-                    if report_data:
-                        st.session_state.maintenance_latest_report = report_data
-                    for key in (
-                        "current_meal",
-                        "current_source",
-                        "diagnosis",
-                        "execution_log",
-                        "stage_history",
-                        "delete_count",
-                    ):
-                        if key in result:
-                            st.session_state.maintenance_current_state[key] = result[
-                                key
-                            ]
-                    st.session_state.maintenance_locked_tool = None
+                _render_streaming_agent(agent, state, config)
 
             except Exception as e:
                 logger.error(f"Maintenance agent error: {e}")
                 st.error(f"维修工出错: {e}")
-
-    if (
-        st.session_state.maintenance_interrupted
-        and st.session_state.maintenance_interrupt_payload is not None
-    ):
-        payload = st.session_state.maintenance_interrupt_payload
-        with st.chat_message("assistant"):
-            st.warning(f"⚠️ {payload.get('question', '等待确认')}")
-            tool_info = payload.get("tool_call", {})
-            if tool_info:
-                st.info(
-                    f"工具: {tool_info.get('name')} | 参数: {tool_info.get('args', {})}"
-                )
-            col_a, col_b = st.columns(2)
-            with col_a:
-                if st.button("✅ 批准", key="approve_btn_persist"):
-                    agent = _get_compiled_agent()
-                    config = {
-                        "configurable": {
-                            "thread_id": st.session_state.maintenance_thread_id
-                        }
-                    }
-                    _resume_interrupt(agent, True, config)
-            with col_b:
-                if st.button("❌ 拒绝", key="reject_btn_persist"):
-                    agent = _get_compiled_agent()
-                    config = {
-                        "configurable": {
-                            "thread_id": st.session_state.maintenance_thread_id
-                        }
-                    }
-                    _resume_interrupt(agent, False, config)
 
     current = st.session_state.maintenance_current_state
     col_log, col_hist = st.columns(2)
@@ -289,18 +433,70 @@ def render_maintenance():
         st.info("架构图渲染失败，请检查 LangGraph 依赖是否完整")
 
 
-def _resume_interrupt(agent, decision, config):
+def _resume_interrupt_streaming(agent, decision, config):
+    from langchain_core.messages import AIMessage
     from langgraph.types import Command
 
     try:
-        result = agent.invoke(Command(resume=decision), config=config)
+        thinking_parts: list[dict[str, Any]] = []
+
+        for event in agent.stream(
+            Command(resume=decision), config=config, stream_mode="updates"
+        ):
+            for node_name, node_output in event.items():
+                if node_name == "agent":
+                    messages = node_output.get("messages", [])
+                    for msg in messages:
+                        if isinstance(msg, AIMessage):
+                            if msg.content:
+                                thinking_parts.append(
+                                    {"type": "thinking", "content": msg.content}
+                                )
+                            if hasattr(msg, "tool_calls") and msg.tool_calls:
+                                for tc in msg.tool_calls:
+                                    thinking_parts.append(
+                                        {
+                                            "type": "tool_call",
+                                            "tool": tc["name"],
+                                            "args": tc.get("args", {}),
+                                        }
+                                    )
+                elif node_name == "tools":
+                    from langchain_core.messages import ToolMessage
+
+                    messages = node_output.get("messages", [])
+                    for msg in messages:
+                        if isinstance(msg, ToolMessage):
+                            content_preview = str(msg.content)[:300]
+                            thinking_parts.append(
+                                {
+                                    "type": "tool_result",
+                                    "tool_id": msg.tool_call_id,
+                                    "content": content_preview,
+                                }
+                            )
+                    for key in ("execution_log", "stage_history"):
+                        if key in node_output:
+                            st.session_state.maintenance_current_state[key] = (
+                                node_output[key]
+                            )
+                    if "delete_count" in node_output:
+                        st.session_state.maintenance_current_state["delete_count"] = (
+                            node_output["delete_count"]
+                        )
+
+        result = agent.get_state(config)
+        final_values = result.values if result else {}
+
         st.session_state.maintenance_interrupted = False
         st.session_state.maintenance_interrupt_payload = None
-        if result and not result.get("__interrupt__"):
-            response_text = _extract_response_text(result)
-            st.session_state.maintenance_messages.append(
-                {"role": "assistant", "content": response_text}
-            )
+
+        if final_values and not final_values.get("__interrupt__"):
+            response_text = _extract_response_text(final_values)
+            if response_text:
+                st.session_state.maintenance_messages.append(
+                    {"role": "assistant", "content": response_text}
+                )
             for key in (
                 "current_meal",
                 "current_source",
@@ -309,8 +505,8 @@ def _resume_interrupt(agent, decision, config):
                 "stage_history",
                 "delete_count",
             ):
-                if key in result:
-                    st.session_state.maintenance_current_state[key] = result[key]
+                if key in final_values:
+                    st.session_state.maintenance_current_state[key] = final_values[key]
             st.session_state.maintenance_locked_tool = None
         st.rerun()
     except Exception as e:

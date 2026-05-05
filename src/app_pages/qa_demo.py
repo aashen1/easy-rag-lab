@@ -6,6 +6,7 @@ from typing import Any
 
 import streamlit as st
 from loguru import logger
+from streamlit_searchbox import st_searchbox
 
 from src.app_pages.pdf_server import PdfServer, get_or_create_pdf_server
 from src.case_collector import (
@@ -90,6 +91,7 @@ def _open_pdf_preview(file_path: str, file_name: str) -> None:
     st.session_state._pdf_preview_path = file_path
     st.session_state._pdf_preview_name = file_name
     st.session_state._pdf_preview_page = 1
+    st.session_state._switch_to_pdf_tab = True
 
 
 @st.cache_data
@@ -123,48 +125,49 @@ def render_pdf_preview() -> None:
             st.session_state.pop("_pdf_preview_page", None)
             st.rerun()
 
-    total_pages = _get_pdf_page_count(file_path)
     current_page = st.session_state.get("_pdf_preview_page", 1)
 
-    col_prev, col_info, col_next = st.columns([1, 3, 1])
-    with col_prev:
-        if st.button("◀ 上一页", disabled=(current_page <= 1), key="prev_page"):
-            st.session_state._pdf_preview_page = current_page - 1
-            st.rerun()
-    with col_info:
-        page_label = (
-            f"第 **{current_page}** / {total_pages} 页"
-            if total_pages > 0
-            else f"第 **{current_page}** 页"
-        )
-        st.markdown(
-            f"<div style='text-align:center; padding-top:8px'>{page_label}</div>",
-            unsafe_allow_html=True,
-        )
-    with col_next:
-        if st.button(
-            "下一页 ▶",
-            disabled=(total_pages > 0 and current_page >= total_pages),
-            key="next_page",
-        ):
-            st.session_state._pdf_preview_page = current_page + 1
-            st.rerun()
-
-    with st.form("pdf_page_jump_form"):
-        col_page, col_jump = st.columns([1, 1])
-        with col_page:
-            page_num = st.number_input(
-                "跳转到页码",
-                min_value=1,
-                max_value=total_pages if total_pages > 0 else 9999,
-                value=current_page,
-            )
-        with col_jump:
-            st.markdown("<br>", unsafe_allow_html=True)
-            submitted = st.form_submit_button("跳转")
-        if submitted:
-            st.session_state._pdf_preview_page = page_num
-            st.rerun()
+    # NOTE: Page navigation controls hidden because Edge built-in PDF
+    # viewer provides its own navigation. Restore if needed.
+    # col_prev, col_info, col_next = st.columns([1, 3, 1])
+    # with col_prev:
+    #     if st.button("◀ 上一页", disabled=(current_page <= 1), key="prev_page"):
+    #         st.session_state._pdf_preview_page = current_page - 1
+    #         st.rerun()
+    # with col_info:
+    #     page_label = (
+    #         f"第 **{current_page}** / {total_pages} 页"
+    #         if total_pages > 0
+    #         else f"第 **{current_page}** 页"
+    #     )
+    #     st.markdown(
+    #         f"<div style='text-align:center; padding-top:8px'>{page_label}</div>",
+    #         unsafe_allow_html=True,
+    #     )
+    # with col_next:
+    #     if st.button(
+    #         "下一页 ▶",
+    #         disabled=(total_pages > 0 and current_page >= total_pages),
+    #         key="next_page",
+    #     ):
+    #         st.session_state._pdf_preview_page = current_page + 1
+    #         st.rerun()
+    #
+    # with st.form("pdf_page_jump_form"):
+    #     col_page, col_jump = st.columns([1, 1])
+    #     with col_page:
+    #         page_num = st.number_input(
+    #             "跳转到页码",
+    #             min_value=1,
+    #             max_value=total_pages if total_pages > 0 else 9999,
+    #             value=current_page,
+    #         )
+    #     with col_jump:
+    #         st.markdown("<br>", unsafe_allow_html=True)
+    #         submitted = st.form_submit_button("跳转")
+    #     if submitted:
+    #         st.session_state._pdf_preview_page = page_num
+    #         st.rerun()
 
     server = _ensure_pdf_server()
     raw_dir = _get_raw_dir()
@@ -367,16 +370,38 @@ def _render_meal_files(meal_config: MealConfig | None) -> None:
         return
     with st.expander(f"📂 当前 Meal 文件 ({len(pdf_files)})"):
         raw_dir = _get_raw_dir()
-        for mf in pdf_files:
-            file_name = Path(mf.path).name
-            size_str = _format_file_size(mf.size_bytes)
-            company = _extract_company_name(mf.path)
-            show_company = company is not None and company not in file_name
-            col_name, col_btn = st.columns([4, 1])
-            with col_name:
+
+        def _search_pdf_files(searchterm: str) -> list[tuple[str, str]]:
+            results = []
+            for mf in pdf_files:
+                file_name = Path(mf.path).name
+                if (
+                    not searchterm
+                    or searchterm.lower() in file_name.lower()
+                    or searchterm.lower() in mf.path.lower()
+                ):
+                    results.append((file_name, mf.path))
+            return results
+
+        default_options = [(Path(mf.path).name, mf.path) for mf in pdf_files[:50]]
+        selected = st_searchbox(
+            _search_pdf_files,
+            placeholder="搜索 PDF 文件名...",
+            key=f"meal_pdf_search_{meal_config.name}",
+            default_options=default_options,
+            label="搜索 PDF",
+        )
+
+        if selected:
+            mf_match = next((mf for mf in pdf_files if mf.path == selected), None)
+            if mf_match:
+                file_name = Path(mf_match.path).name
+                size_str = _format_file_size(mf_match.size_bytes)
+                company = _extract_company_name(mf_match.path)
+                show_company = company is not None and company not in file_name
                 if show_company:
                     st.markdown(
-                        f"{file_name} "
+                        f"📄 **{file_name}** "
                         f'<span style="background-color:#e8f0fe;color:#1a73e8;'
                         f"padding:1px 6px;border-radius:4px;font-size:0.75em;"
                         f'vertical-align:middle;">🏢 {company}</span>'
@@ -384,20 +409,19 @@ def _render_meal_files(meal_config: MealConfig | None) -> None:
                         unsafe_allow_html=True,
                     )
                 else:
-                    st.text(f"{file_name}  ({size_str})")
-            with col_btn:
-                full_path = str(raw_dir / mf.path)
+                    st.markdown(f"📄 **{file_name}**  ({size_str})")
+                full_path = str(raw_dir / mf_match.path)
                 if Path(full_path).exists():
                     if st.button(
-                        "📄",
-                        key=f"meal_file_preview_{mf.path}",
+                        "📄 预览",
+                        key=f"meal_file_preview_{mf_match.path}",
                         help=f"预览 {file_name}",
                         on_click=_open_pdf_preview,
                         args=(full_path, file_name),
                     ):
                         st.toast("📄 已打开 PDF 预览，请点击「PDF 预览」标签页查看")
                 else:
-                    st.caption("缺失")
+                    st.caption("文件缺失")
 
 
 def render_qa_demo():

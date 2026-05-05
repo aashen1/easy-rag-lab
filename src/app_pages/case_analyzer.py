@@ -6,6 +6,7 @@ from typing import Any
 
 import streamlit as st
 from loguru import logger
+from streamlit_searchbox import st_searchbox
 
 from src.case_collector import (
     list_cases,
@@ -256,26 +257,30 @@ def _render_ground_truth_annotation(case_data: dict[str, Any], case_id: str) -> 
         st.warning("Meal 快照中无 PDF 文件信息，无法标注")
         return
 
-    pdf_search = st.text_input(
-        "搜索 PDF 文件名",
-        value="",
-        key=f"gt_pdf_search_{case_id}",
-    )
-    filtered_pdfs = (
-        [p for p in pdf_options if pdf_search.lower() in p.lower()]
-        if pdf_search
-        else pdf_options
-    )
-    if not filtered_pdfs:
-        st.warning("无匹配的 PDF 文件")
-        return
+    def _search_gt_pdfs(searchterm: str) -> list[tuple[str, str]]:
+        results = []
+        for p in pdf_options:
+            name = Path(p).name
+            if (
+                not searchterm
+                or searchterm.lower() in name.lower()
+                or searchterm.lower() in p.lower()
+            ):
+                results.append((name, p))
+        return results
 
-    selected_pdf = st.selectbox(
-        "选择 PDF 文件",
-        filtered_pdfs,
-        index=0,
+    default_pdf_options = [(Path(p).name, p) for p in pdf_options[:50]]
+    selected_pdf = st_searchbox(
+        _search_gt_pdfs,
+        placeholder="搜索或选择 PDF 文件...",
         key=f"gt_pdf_{case_id}",
+        default_options=default_pdf_options,
+        label="选择 PDF 文件",
     )
+
+    if not selected_pdf:
+        st.info("请从上方搜索框选择一个 PDF 文件")
+        return
 
     page_number = st.number_input(
         "页码",

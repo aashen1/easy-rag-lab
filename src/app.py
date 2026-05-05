@@ -34,6 +34,16 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+st.html(
+    """
+<style>
+[data-testid="stDecoration"] { display: none !important; }
+.stApp > header { display: none !important; }
+[data-testid="stCodeBlock"] pre { white-space: pre-wrap !important; word-break: break-word !important; }
+</style>
+"""
+)
+
 tab_names = ["💬 问答演示", "🔍 Case 分析", "🔧 维修工", "📖 系统信息"]
 has_pdf = bool(st.session_state.get("_pdf_preview_path"))
 if has_pdf:
@@ -56,3 +66,25 @@ with tabs[3]:
 if has_pdf:
     with tabs[4]:
         render_pdf_preview()
+
+if st.session_state.get("_switch_to_pdf_tab"):
+    st.html(
+        """
+<script>
+setTimeout(function() {
+    var tabList = document.querySelector('[data-testid="stTabs"] [role="tablist"]');
+    if (tabList) {
+        var tabs = tabList.querySelectorAll('button[role="tab"]');
+        for (var i = 0; i < tabs.length; i++) {
+            if (tabs[i].textContent.includes("PDF")) {
+                tabs[i].click();
+                break;
+            }
+        }
+    }
+}, 300);
+</script>
+""",
+        unsafe_allow_javascript=True,
+    )
+    st.session_state._switch_to_pdf_tab = False
