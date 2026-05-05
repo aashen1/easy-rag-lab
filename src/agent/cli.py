@@ -1,11 +1,22 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import sys
 
 from langchain_core.messages import AIMessage
 from langgraph.types import Command
 from loguru import logger
+
+
+def _sanitize_text(text: str) -> str:
+    try:
+        text.encode("utf-8", errors="strict")
+        return text
+    except UnicodeEncodeError:
+        return text.encode("utf-8", errors="surrogatepass").decode(
+            "utf-8", errors="replace"
+        )
 
 
 def _format_agent_response(result: dict) -> None:
@@ -112,6 +123,11 @@ def run_agent(argv: list[str] | None = None):
     from src.agent.config import get_agent_default
     from src.agent.graph import compile_agent
     from src.agent.memory.experience_store import ExperienceStore
+
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        if stream and hasattr(stream, "reconfigure"):
+            with contextlib.suppress(Exception):
+                stream.reconfigure(encoding="utf-8", errors="replace")
 
     args = _parse_cli_args(argv)
 
@@ -221,6 +237,7 @@ def run_agent(argv: list[str] | None = None):
                 continue
 
             message_content = cli_result if cli_result is not None else user_input
+            message_content = _sanitize_text(message_content)
 
             state = {
                 "messages": [{"role": "user", "content": message_content}],
@@ -237,7 +254,12 @@ def run_agent(argv: list[str] | None = None):
             }
 
             while True:
-                result = agent.invoke(state, config=config)
+                try:
+                    result = agent.invoke(state, config=config)
+                except UnicodeEncodeError as e:
+                    logger.error(f"Encoding error in agent invocation: {e}")
+                    print("⚠️ 编码错误，请重新输入问题")
+                    break
 
                 if result.get("__interrupt__"):
                     for interrupt_info in result["__interrupt__"]:
