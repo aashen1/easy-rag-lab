@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import streamlit as st
 from loguru import logger
 
@@ -180,6 +183,9 @@ def render_maintenance():
                     st.session_state.maintenance_messages.append(
                         {"role": "assistant", "content": response_text}
                     )
+                    report_data = _try_extract_report(response_text)
+                    if report_data:
+                        st.session_state.maintenance_latest_report = report_data
                     for key in (
                         "current_meal",
                         "current_source",
@@ -247,6 +253,20 @@ def render_maintenance():
         else:
             st.text("暂无阶段历史")
 
+    latest_report = st.session_state.get("maintenance_latest_report")
+    if latest_report:
+        with st.expander("📄 维修报告", expanded=True):
+            st.markdown(latest_report["report_content"])
+            report_path = latest_report.get("report_path", "report.md")
+            filename = Path(report_path).name if report_path else "report.md"
+            st.download_button(
+                "⬇️ 下载报告",
+                data=latest_report["report_content"],
+                file_name=filename,
+                mime="text/markdown",
+                key="download_maintenance_report",
+            )
+
 
 def _resume_interrupt(agent, decision, config):
     from langgraph.types import Command
@@ -288,3 +308,17 @@ def _extract_response_text(result: dict) -> str:
         if isinstance(msg, AIMessage) and msg.content:
             return msg.content
     return "（维修工已完成操作，无文字回复）"
+
+
+def _try_extract_report(text: str) -> dict | None:
+    try:
+        data = json.loads(text)
+        if (
+            isinstance(data, dict)
+            and "report_path" in data
+            and "report_content" in data
+        ):
+            return data
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return None
