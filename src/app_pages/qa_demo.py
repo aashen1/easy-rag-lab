@@ -91,6 +91,7 @@ def _open_pdf_preview(file_path: str, file_name: str) -> None:
     st.session_state._pdf_preview_path = file_path
     st.session_state._pdf_preview_name = file_name
     st.session_state._pdf_preview_page = 1
+    st.session_state._switch_to_pdf_tab = True
 
 
 @st.cache_data
@@ -124,48 +125,49 @@ def render_pdf_preview() -> None:
             st.session_state.pop("_pdf_preview_page", None)
             st.rerun()
 
-    total_pages = _get_pdf_page_count(file_path)
     current_page = st.session_state.get("_pdf_preview_page", 1)
 
-    col_prev, col_info, col_next = st.columns([1, 3, 1])
-    with col_prev:
-        if st.button("◀ 上一页", disabled=(current_page <= 1), key="prev_page"):
-            st.session_state._pdf_preview_page = current_page - 1
-            st.rerun()
-    with col_info:
-        page_label = (
-            f"第 **{current_page}** / {total_pages} 页"
-            if total_pages > 0
-            else f"第 **{current_page}** 页"
-        )
-        st.markdown(
-            f"<div style='text-align:center; padding-top:8px'>{page_label}</div>",
-            unsafe_allow_html=True,
-        )
-    with col_next:
-        if st.button(
-            "下一页 ▶",
-            disabled=(total_pages > 0 and current_page >= total_pages),
-            key="next_page",
-        ):
-            st.session_state._pdf_preview_page = current_page + 1
-            st.rerun()
-
-    with st.form("pdf_page_jump_form"):
-        col_page, col_jump = st.columns([1, 1])
-        with col_page:
-            page_num = st.number_input(
-                "跳转到页码",
-                min_value=1,
-                max_value=total_pages if total_pages > 0 else 9999,
-                value=current_page,
-            )
-        with col_jump:
-            st.markdown("<br>", unsafe_allow_html=True)
-            submitted = st.form_submit_button("跳转")
-        if submitted:
-            st.session_state._pdf_preview_page = page_num
-            st.rerun()
+    # NOTE: Page navigation controls hidden because Edge built-in PDF
+    # viewer provides its own navigation. Restore if needed.
+    # col_prev, col_info, col_next = st.columns([1, 3, 1])
+    # with col_prev:
+    #     if st.button("◀ 上一页", disabled=(current_page <= 1), key="prev_page"):
+    #         st.session_state._pdf_preview_page = current_page - 1
+    #         st.rerun()
+    # with col_info:
+    #     page_label = (
+    #         f"第 **{current_page}** / {total_pages} 页"
+    #         if total_pages > 0
+    #         else f"第 **{current_page}** 页"
+    #     )
+    #     st.markdown(
+    #         f"<div style='text-align:center; padding-top:8px'>{page_label}</div>",
+    #         unsafe_allow_html=True,
+    #     )
+    # with col_next:
+    #     if st.button(
+    #         "下一页 ▶",
+    #         disabled=(total_pages > 0 and current_page >= total_pages),
+    #         key="next_page",
+    #     ):
+    #         st.session_state._pdf_preview_page = current_page + 1
+    #         st.rerun()
+    #
+    # with st.form("pdf_page_jump_form"):
+    #     col_page, col_jump = st.columns([1, 1])
+    #     with col_page:
+    #         page_num = st.number_input(
+    #             "跳转到页码",
+    #             min_value=1,
+    #             max_value=total_pages if total_pages > 0 else 9999,
+    #             value=current_page,
+    #         )
+    #     with col_jump:
+    #         st.markdown("<br>", unsafe_allow_html=True)
+    #         submitted = st.form_submit_button("跳转")
+    #     if submitted:
+    #         st.session_state._pdf_preview_page = page_num
+    #         st.rerun()
 
     server = _ensure_pdf_server()
     raw_dir = _get_raw_dir()

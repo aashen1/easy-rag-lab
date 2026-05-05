@@ -66,3 +66,25 @@ with tabs[3]:
 if has_pdf:
     with tabs[4]:
         render_pdf_preview()
+
+if st.session_state.get("_switch_to_pdf_tab"):
+    st.html(
+        """
+<script>
+setTimeout(function() {
+    var tabList = document.querySelector('[data-testid="stTabs"] [role="tablist"]');
+    if (tabList) {
+        var tabs = tabList.querySelectorAll('button[role="tab"]');
+        for (var i = 0; i < tabs.length; i++) {
+            if (tabs[i].textContent.includes("PDF")) {
+                tabs[i].click();
+                break;
+            }
+        }
+    }
+}, 300);
+</script>
+""",
+        unsafe_allow_javascript=True,
+    )
+    st.session_state._switch_to_pdf_tab = False
