@@ -658,7 +658,7 @@ class RAGPipeline:
 
             t0 = time.perf_counter()
             rewritten = rewrite_strategy.rewrite(question)
-            if capture_trace:
+            if capture_trace and effective_rewrite_enabled:
                 trace.steps.append(
                     TraceStep(
                         stage="query_rewrite",

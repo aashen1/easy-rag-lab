@@ -283,7 +283,7 @@ def render_maintenance():
     st.caption("由 LangGraph 自动生成，修改 graph.py 后重启应用即可更新")
     try:
         mermaid_chart = _get_agent_graph_mermaid()
-        _render_mermaid(mermaid_chart)
+        _render_mermaid(mermaid_chart, key="agent_graph")
     except Exception as e:
         logger.warning(f"Failed to render agent graph: {e}")
         st.info("架构图渲染失败，请检查 LangGraph 依赖是否完整")
