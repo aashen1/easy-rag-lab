@@ -15,8 +15,6 @@ from src.agent.prompt import build_system_prompt
 from src.agent.state import MaintenanceState
 from src.agent.tools import FORBIDDEN_OPERATIONS, HIGH_RISK_TOOLS
 
-_agent_store = None
-
 DIAGNOSIS_TOOLS = {
     "list_meals",
     "get_meal_detail",
@@ -111,7 +109,7 @@ def _infer_pdf_type(source: str) -> str:
     return "generic"
 
 
-def agent_node(state: MaintenanceState) -> dict[str, Any]:
+def agent_node(state: MaintenanceState, *, store: Any = None) -> dict[str, Any]:
     """LLM decision node: invoke the model with tools bound.
 
     If a tool is locked (``locked_tool`` is set), skip LLM decision and
@@ -148,11 +146,11 @@ def agent_node(state: MaintenanceState) -> dict[str, Any]:
     llm_with_tools = llm.bind_tools(tools)
 
     experiences = None
-    if _agent_store is not None:
+    if store is not None:
         try:
             from src.agent.memory.experience_store import ExperienceStore
 
-            exp_store = ExperienceStore(_agent_store)
+            exp_store = ExperienceStore(store)
             current_source = state.get("current_source")
             if current_source:
                 pdf_type = _infer_pdf_type(current_source)
@@ -327,7 +325,7 @@ def _route_after_approval(state: MaintenanceState) -> Literal["tools", "agent"]:
     return "agent"
 
 
-def tool_node(state: MaintenanceState) -> dict[str, Any]:
+def tool_node(state: MaintenanceState, *, store: Any = None) -> dict[str, Any]:
     """Execute tool calls from the last AI message and return results.
 
     Implements two safety mechanisms:
@@ -462,13 +460,13 @@ def tool_node(state: MaintenanceState) -> dict[str, Any]:
         if tool_call["name"] == "delete_source":
             new_delete_count += 1
 
-    if _agent_store is not None and executed_tools:
+    if store is not None and executed_tools:
         experience_tools = {"parse_pdf_tool", "chunk_parsed_tool"}
         if any(t in experience_tools for t in executed_tools):
             try:
                 from src.agent.memory.experience_store import ExperienceStore
 
-                exp_store = ExperienceStore(_agent_store)
+                exp_store = ExperienceStore(store)
                 current_source = state.get("current_source")
                 if current_source:
                     pdf_type = _infer_pdf_type(current_source)
@@ -575,8 +573,5 @@ def compile_agent(checkpointer=None, store=None):
     Returns:
         Compiled graph ready for invocation.
     """
-    global _agent_store
-    _agent_store = store
-
     graph = build_graph()
     return graph.compile(checkpointer=checkpointer, store=store)

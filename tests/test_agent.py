@@ -1055,49 +1055,43 @@ class TestAgentNodeExperienceRetrieval:
 
         from langgraph.store.memory import InMemoryStore
 
-        import src.agent.graph as graph_module
         from src.agent.graph import agent_node
         from src.agent.state import MaintenanceState
 
         store = InMemoryStore()
-        original_store = graph_module._agent_store
-        graph_module._agent_store = store
 
-        try:
-            from src.agent.memory.experience_store import ExperienceStore
+        from src.agent.memory.experience_store import ExperienceStore
 
-            exp_store = ExperienceStore(store)
-            namespace = ("default", "maintenance_experience", "annual_report")
-            exp_store.save_experience(
-                namespace,
-                {"pdf_type": "annual_report", "best_parser": "pymupdf4llm+pdfplumber"},
-            )
+        exp_store = ExperienceStore(store)
+        namespace = ("default", "maintenance_experience", "annual_report")
+        exp_store.save_experience(
+            namespace,
+            {"pdf_type": "annual_report", "best_parser": "pymupdf4llm+pdfplumber"},
+        )
 
-            state = MaintenanceState(
-                messages=[{"role": "user", "content": "test"}],
-                current_meal=None,
-                current_source="2025年报.pdf",
-                diagnosis=[],
-                pending_action=None,
-                approved=None,
-                execution_log=[],
-                stage_history=[],
-                auto_review=False,
-            )
+        state = MaintenanceState(
+            messages=[{"role": "user", "content": "test"}],
+            current_meal=None,
+            current_source="2025年报.pdf",
+            diagnosis=[],
+            pending_action=None,
+            approved=None,
+            execution_log=[],
+            stage_history=[],
+            auto_review=False,
+        )
 
-            mock_llm = MagicMock()
-            mock_response = MagicMock()
-            mock_response.content = "test response"
-            mock_llm.bind_tools.return_value.invoke.return_value = mock_response
+        mock_llm = MagicMock()
+        mock_response = MagicMock()
+        mock_response.content = "test response"
+        mock_llm.bind_tools.return_value.invoke.return_value = mock_response
 
-            with (
-                patch("src.agent.graph._get_llm", return_value=mock_llm),
-                patch("src.agent.graph._get_tools", return_value=[]),
-            ):
-                result = agent_node(state)
-                assert "messages" in result
-        finally:
-            graph_module._agent_store = original_store
+        with (
+            patch("src.agent.graph._get_llm", return_value=mock_llm),
+            patch("src.agent.graph._get_tools", return_value=[]),
+        ):
+            result = agent_node(state, store=store)
+            assert "messages" in result
 
 
 class TestCLIReviewCommand:
