@@ -39,6 +39,7 @@ st.html(
 <style>
 [data-testid="stDecoration"] { display: none !important; }
 .stApp > header { display: none !important; }
+[data-testid="stCodeBlock"] pre { white-space: pre-wrap !important; word-break: break-word !important; }
 </style>
 """
 )
