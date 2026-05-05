@@ -3,34 +3,35 @@ import streamlit as st
 
 def _render_mermaid(chart: str):
     escaped = chart.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    html = f"""
+    st.iframe(
+        f"""
         <style>
-            .mermaid-container {{ position:relative; min-height:100px; padding:8px; }}
-            .mermaid-container .toggle-bar {{
+            #mc {{ position:relative; min-height:100px; padding:8px; }}
+            #mc .toggle-bar {{
                 position:absolute; top:8px; right:8px; z-index:10;
                 display:inline-flex; border-radius:6px; overflow:hidden;
                 border:1px solid #d1d5db; background:#fff;
             }}
-            .mermaid-container .toggle-bar button {{
+            #mc .toggle-bar button {{
                 border:none; padding:4px 12px; font-size:12px; cursor:pointer;
                 background:#fff; color:#6b7280; font-family:system-ui,sans-serif;
                 transition:all .15s;
             }}
-            .mermaid-container .toggle-bar button.active {{
+            #mc .toggle-bar button.active {{
                 background:#4b5563; color:#fff;
             }}
-            .mermaid-container .toggle-bar button:not(.active):hover {{
+            #mc .toggle-bar button:not(.active):hover {{
                 background:#f3f4f6;
             }}
-            .mermaid-container #code-view {{
+            #mc #code-view {{
                 display:none; font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
                 white-space:pre; background:#1e293b; padding:16px; border-radius:8px;
                 font-size:13px; line-height:1.6; color:#e2e8f0; margin-top:36px;
                 border:1px solid #334155;
             }}
-            .mermaid-container #diagram-view {{ margin-top:36px; background:#1e293b; border-radius:8px; padding:12px; }}
+            #mc #diagram-view {{ margin-top:36px; background:#1e293b; border-radius:8px; padding:12px; }}
         </style>
-        <div class="mermaid-container">
+        <div id="mc">
             <div class="toggle-bar">
                 <button id="btn-diagram" class="active" onclick="switchView('diagram')">Diagram</button>
                 <button id="btn-code" onclick="switchView('code')">Code</button>
@@ -61,10 +62,11 @@ def _render_mermaid(chart: str):
                 s.src = src;
                 s.onload = function() {{
                     mermaid.initialize({{
-                        startOnLoad: true,
+                        startOnLoad: false,
                         theme: 'dark',
                         flowchart: {{ useMaxWidth: true, htmlLabels: true, curve: 'basis' }}
                     }});
+                    mermaid.run();
                 }};
                 s.onerror = function() {{
                     if (fallback) {{
@@ -82,8 +84,9 @@ def _render_mermaid(chart: str):
                 'https://cdn.bootcdn.net/ajax/libs/mermaid/11.4.1/mermaid.min.js'
             );
         </script>
-        """
-    st.html(html, unsafe_allow_javascript=True)
+        """,
+        height=400,
+    )
 
 
 _RAG_FLOWCHART = """flowchart LR
