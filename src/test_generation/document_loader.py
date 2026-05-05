@@ -58,10 +58,23 @@ def resolve_chunks_dir(config: dict, meal_config: MealConfig) -> Path | None:
             if chunks_dir.exists():
                 logger.debug(f"Resolved chunks dir via ArtifactCache: {chunks_dir}")
                 return chunks_dir
+            logger.warning(
+                f"Could not resolve chunks dir via ArtifactCache for "
+                f"meal_config data_id={meal_config.data_id}: "
+                f"computed path does not exist (chunks_dir={chunks_dir})"
+            )
+            return None
 
+    reason = "unknown"
+    if not meal_config.data_id:
+        reason = "data_id is empty"
+    elif not meal_config.config_hashes:
+        reason = "config_hashes is empty"
+    elif not meal_config.config_hashes.get("chunker"):
+        reason = "config_hashes missing 'chunker' key"
     logger.warning(
         f"Could not resolve chunks dir via ArtifactCache for "
-        f"meal_config data_id={meal_config.data_id}"
+        f"meal_config data_id={meal_config.data_id}: {reason}"
     )
     return None
 
@@ -131,8 +144,14 @@ def load_document_chunks(
     else:
         chunks_path = resolve_chunks_dir(config, meal_config)
 
-    if not chunks_path or not chunks_path.exists():
-        logger.warning(f"Chunks directory not found: {chunks_path}")
+    if not chunks_path:
+        logger.warning(
+            f"Chunks directory could not be resolved for "
+            f"meal_config data_id={meal_config.data_id}"
+        )
+        return {doc_name: [] for doc_name in document_contents}
+    if not chunks_path.exists():
+        logger.warning(f"Chunks directory does not exist: {chunks_path}")
         return {doc_name: [] for doc_name in document_contents}
 
     source_to_doc_name: dict[str, str] = {}
