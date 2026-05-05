@@ -98,7 +98,11 @@ class TestSetComposer:
             filtered = filtered[:max_questions]
 
         if not filtered:
-            logger.warning("Filter returned zero questions")
+            logger.warning(
+                f"Filter returned zero questions. "
+                f"Filters: types={question_types}, categories={categories}, "
+                f"difficulties={difficulties}, review_statuses={review_statuses}"
+            )
 
         now = datetime.now().isoformat()
         source_name = test_set.get("metadata", {}).get("name", "unknown")
