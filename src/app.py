@@ -34,6 +34,15 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+st.html(
+    """
+<style>
+[data-testid="stDecoration"] { display: none !important; }
+.stApp > header { display: none !important; }
+</style>
+"""
+)
+
 tab_names = ["💬 问答演示", "🔍 Case 分析", "🔧 维修工", "📖 系统信息"]
 has_pdf = bool(st.session_state.get("_pdf_preview_path"))
 if has_pdf:
