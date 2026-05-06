@@ -103,6 +103,9 @@ def build_index_from_chunks(
     Returns:
         Configured VectorIndexer instance with index built.
     """
+    import json
+
+    from src.core.ops.index import index_chunks
     from src.embedder import Embedder
     from src.indexer import VectorIndexer
 
@@ -111,6 +114,33 @@ def build_index_from_chunks(
         for jsonl_file in chunks_dir.rglob("*.jsonl"):
             rel = jsonl_file.relative_to(chunks_dir).as_posix()
             source_filter_jsonl.add(rel)
+
+    all_chunks: list[dict[str, Any]] = []
+    if chunks_dir.exists():
+        for jsonl_file in chunks_dir.rglob("*.jsonl"):
+            if (
+                source_filter_jsonl
+                and jsonl_file.relative_to(chunks_dir).as_posix()
+                not in source_filter_jsonl
+            ):
+                continue
+            try:
+                with open(jsonl_file, encoding="utf-8") as f:
+                    for line in f:
+                        chunk = json.loads(line.strip())
+                        all_chunks.append(chunk)
+            except Exception as e:
+                logger.error(f"Failed to load {jsonl_file}: {str(e)}")
+                continue
+
+    if not all_chunks:
+        logger.warning("No chunks found in JSONL files")
+        indexer = VectorIndexer(
+            persist_dir=vector_store_config.get("persist_dir", "data/vector_store"),
+            collection_name=collection_name,
+            distance=vector_store_config.get("distance", "Cosine"),
+        )
+        return indexer
 
     embedder = Embedder(
         model_name=embedding_config.get("model_name"),
@@ -123,13 +153,17 @@ def build_index_from_chunks(
         distance=vector_store_config.get("distance", "Cosine"),
     )
 
-    indexer.build_index(
-        chunks_dir=str(chunks_dir),
-        embedder=embedder,
+    if profiler:
+        profiler.begin_stage("S3")
+    index_chunks(
+        all_chunks,
+        embedder,
+        collection_name=collection_name,
         batch_size=embedding_config.get("batch_size", 32),
-        rebuild=True,
-        source_filter=source_filter_jsonl,
-        profiler=profiler,
+        recreate=True,
+        indexer=indexer,
     )
+    if profiler:
+        profiler.end_stage()
 
     return indexer

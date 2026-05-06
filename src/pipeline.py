@@ -396,13 +396,38 @@ class RAGPipeline:
                 distance=vector_store_config["distance"],
             )
             self._setup_retrievers()
-        self.indexer.build_index(
-            chunks_dir=str(chunks_dir),
-            embedder=self.embedder,
-            batch_size=embedding_config["batch_size"],
-            rebuild=rebuild,
-            source_filter=source_filter_jsonl,
-        )
+
+        import json as _json
+
+        from src.core.ops.index import index_chunks
+
+        _all_chunks: list[dict] = []
+        _chunks_path = Path(str(chunks_dir))
+        if _chunks_path.exists():
+            for _jsonl_file in _chunks_path.rglob("*.jsonl"):
+                if (
+                    source_filter_jsonl is not None
+                    and _jsonl_file.relative_to(_chunks_path).as_posix()
+                    not in source_filter_jsonl
+                ):
+                    continue
+                try:
+                    with open(_jsonl_file, encoding="utf-8") as _f:
+                        for _line in _f:
+                            _all_chunks.append(_json.loads(_line.strip()))
+                except Exception as _e:
+                    logger.error(f"Failed to load {_jsonl_file}: {str(_e)}")
+                    continue
+
+        if _all_chunks:
+            index_chunks(
+                _all_chunks,
+                self.embedder,
+                collection_name=self.indexer.collection_name,
+                batch_size=embedding_config["batch_size"],
+                recreate=rebuild,
+                indexer=self.indexer,
+            )
 
         if self.profiler:
             self.profiler.end_stage()

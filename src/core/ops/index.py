@@ -13,6 +13,7 @@ def index_chunks(
     collection_name: str,
     batch_size: int = 32,
     source_filter: set | None = None,
+    recreate: bool = False,
     indexer: VectorIndexer | None = None,
 ) -> int:
     """Embed chunks and insert them into a Qdrant vector collection.
@@ -32,6 +33,8 @@ def index_chunks(
         source_filter: Optional set of source paths to filter chunks
             before indexing. Currently unused but reserved for future
             filtering logic.
+        recreate: If True, delete and re-create the collection before
+            indexing. Defaults to False.
         indexer: Optional pre-created ``VectorIndexer`` instance. When
             provided the function will reuse it and **will not** close it
             (the caller is responsible for lifecycle management). When
@@ -56,7 +59,7 @@ def index_chunks(
         embeddings = embedder.embed_texts(texts, batch_size=batch_size)
 
         vector_size = embedder.get_embedding_dimension()
-        indexer.create_collection(vector_size=vector_size, recreate=False)
+        indexer.create_collection(vector_size=vector_size, recreate=recreate)
 
         indexer.index_chunks(chunks, embeddings, batch_size=100)
 
