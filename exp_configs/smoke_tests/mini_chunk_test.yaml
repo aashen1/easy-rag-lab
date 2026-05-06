@@ -1,0 +1,42 @@
+name: "mini_chunk_test"
+description: "迷你分块对比 - 3题2变体，快速验证实验流程"
+
+data:
+  meal: "mini_chunk"
+  create_if_missing:
+    sample_ratio: 0.05
+    seed: 42
+
+test_sets:
+  - name: "mini_chunk_test"
+    on_missing: "auto"
+    generation:
+      strategy: "hybrid"
+      num_questions: 3
+
+variants:
+  - name: "chunk_512"
+    description: "基线: chunk_size=512, overlap=0"
+    config_overrides:
+      chunker:
+        strategy: "fixed"
+        chunk_size: 512
+        chunk_overlap: 0
+
+  - name: "chunk_256"
+    description: "小块: chunk_size=256, overlap=0"
+    config_overrides:
+      chunker:
+        strategy: "fixed"
+        chunk_size: 256
+        chunk_overlap: 0
+
+evaluation:
+  backends: ["builtin"]
+  llm_preset: "default"
+  metrics_preset: "core"
+  resolution_strategy: "priority_fallback"
+
+llm:
+  question_generation: "default"
+  answering: "default"
