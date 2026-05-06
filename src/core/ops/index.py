@@ -10,9 +10,10 @@ from src.indexer import VectorIndexer
 def index_chunks(
     chunks: list[dict[str, Any]],
     embedder: Any,
-    collection_name: str | None = None,
+    collection_name: str,
     batch_size: int = 32,
     source_filter: set | None = None,
+    indexer: VectorIndexer | None = None,
 ) -> int:
     """Embed chunks and insert them into a Qdrant vector collection.
 
@@ -25,12 +26,16 @@ def index_chunks(
             keys.
         embedder: An object with ``embed_texts(texts, batch_size)`` and
             ``get_embedding_dimension()`` methods.
-        collection_name: Name of the Qdrant collection. Defaults to
-            value from config or ``"financial_reports"``.
+        collection_name: Name of the Qdrant collection. **Required** –
+            callers must provide this explicitly.
         batch_size: Batch size for the embedding call. Defaults to 32.
         source_filter: Optional set of source paths to filter chunks
             before indexing. Currently unused but reserved for future
             filtering logic.
+        indexer: Optional pre-created ``VectorIndexer`` instance. When
+            provided the function will reuse it and **will not** close it
+            (the caller is responsible for lifecycle management). When
+            omitted a new indexer is created and closed automatically.
 
     Returns:
         The number of chunks indexed.
@@ -38,17 +43,14 @@ def index_chunks(
     Raises:
         Exception: If embedding or indexing fails.
     """
-    if collection_name is None:
-        from src.agent.config import get_agent_default
-
-        collection_name = get_agent_default("collection_name", "financial_reports")
     if not chunks:
         logger.warning("No chunks provided for indexing")
         return 0
 
-    indexer: VectorIndexer | None = None
+    own_indexer = indexer is None
     try:
-        indexer = VectorIndexer(collection_name=collection_name)
+        if own_indexer:
+            indexer = VectorIndexer(collection_name=collection_name)
 
         texts = [chunk["text"] for chunk in chunks]
         embeddings = embedder.embed_texts(texts, batch_size=batch_size)
@@ -64,7 +66,7 @@ def index_chunks(
         logger.error(f"Failed to index chunks: {e}")
         raise
     finally:
-        if indexer is not None:
+        if own_indexer and indexer is not None:
             indexer.close()
 
 
@@ -72,7 +74,8 @@ def delete_source_and_reindex(
     source: str,
     new_chunks: list[dict[str, Any]],
     embedder: Any,
-    collection_name: str | None = None,
+    collection_name: str,
+    indexer: VectorIndexer | None = None,
 ) -> int:
     """Delete vectors belonging to a source and re-insert updated chunks.
 
@@ -86,8 +89,12 @@ def delete_source_and_reindex(
             as ``index_chunks``).
         embedder: An object with ``embed_texts(texts, batch_size)`` and
             ``get_embedding_dimension()`` methods.
-        collection_name: Name of the Qdrant collection. Defaults to
-            value from config or ``"financial_reports"``.
+        collection_name: Name of the Qdrant collection. **Required** –
+            callers must provide this explicitly.
+        indexer: Optional pre-created ``VectorIndexer`` instance. When
+            provided the function will reuse it and **will not** close it
+            (the caller is responsible for lifecycle management). When
+            omitted a new indexer is created and closed automatically.
 
     Returns:
         The number of new chunks indexed.
@@ -95,13 +102,10 @@ def delete_source_and_reindex(
     Raises:
         Exception: If deletion, embedding, or indexing fails.
     """
-    if collection_name is None:
-        from src.agent.config import get_agent_default
-
-        collection_name = get_agent_default("collection_name", "financial_reports")
-    indexer: VectorIndexer | None = None
+    own_indexer = indexer is None
     try:
-        indexer = VectorIndexer(collection_name=collection_name)
+        if own_indexer:
+            indexer = VectorIndexer(collection_name=collection_name)
 
         logger.info(f"Deleting vectors for source '{source}' from '{collection_name}'")
         indexer.delete_by_source(source)
@@ -127,5 +131,5 @@ def delete_source_and_reindex(
         logger.error(f"Failed to delete source and reindex: {e}")
         raise
     finally:
-        if indexer is not None:
+        if own_indexer and indexer is not None:
             indexer.close()

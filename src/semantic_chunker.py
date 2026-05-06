@@ -419,18 +419,22 @@ def process_parsed_files_semantic(
                 logger.warning(f"Skipping empty file: {md_file}")
                 continue
 
-            chunks = chunk_text_semantic(
-                text,
-                embedder,
+            relative_path = md_file.relative_to(input_path)
+            source_name = relative_path.stem
+
+            from src.core.ops.chunk import _parse_result_from_md, chunk_parsed
+
+            parse_result = _parse_result_from_md(text, source=source_name)
+            chunks = chunk_parsed(
+                parse_result,
+                strategy="semantic",
                 chunk_size=chunk_size,
                 similarity_threshold=similarity_threshold,
                 breakpoint_percentile=breakpoint_percentile,
                 min_chunk_size=min_chunk_size,
                 encoding_name=encoding_name,
+                embedder=embedder,
             )
-
-            relative_path = md_file.relative_to(input_path)
-            source_name = relative_path.stem
 
             category = detect_document_category(str(md_file))
 
