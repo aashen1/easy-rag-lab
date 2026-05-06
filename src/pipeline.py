@@ -49,6 +49,7 @@ class RAGPipeline:
         meal_name: str | None = None,
         token_tracker: TokenTracker | None = None,
         profiler: PipelineProfiler | None = None,
+        embedder: Embedder | None = None,
     ):
         """Initialize the RAG pipeline with all components.
 
@@ -69,6 +70,9 @@ class RAGPipeline:
             token_tracker: Optional TokenTracker for recording LLM API usage.
                 When None, creates a new TokenTracker instance.
             profiler: Optional PipelineProfiler for performance profiling.
+            embedder: Optional pre-initialized Embedder instance to share
+                across pipelines. When provided, skips model loading (~1.3 GB
+                saved per variant in experiments).
 
         Raises:
             ConfigurationError: If the config file is invalid or missing.
@@ -93,12 +97,18 @@ class RAGPipeline:
 
         logger.info("Initializing RAG Pipeline")
 
-        embedding_config = self.config["embedding"]
-        self.embedder = Embedder(
-            model_name=embedding_config["model_name"],
-            device=embedding_config["device"],
-            query_instruction=embedding_config.get("query_instruction"),
-        )
+        if embedder is not None:
+            self.embedder = embedder
+            self._shared_embedder = True
+            logger.debug("Using shared Embedder instance")
+        else:
+            embedding_config = self.config["embedding"]
+            self.embedder = Embedder(
+                model_name=embedding_config["model_name"],
+                device=embedding_config["device"],
+                query_instruction=embedding_config.get("query_instruction"),
+            )
+            self._shared_embedder = False
 
         vector_store_config = self.config["vector_store"]
         collection_name = vector_store_config["collection_name"]
@@ -431,14 +441,37 @@ class RAGPipeline:
             )
 
     def close(self) -> None:
-        """Close the pipeline and release resources.
+        """Close the pipeline and release all heavy resources.
 
-        Closes the Qdrant client held by the indexer to prevent
-        resource leaks (file handles, WAL locks, etc.).
+        Releases the Qdrant client, embedding model weights, BM25 index
+        data, and reranker model weights.  After calling this method the
+        pipeline instance must not be reused.
         """
+        import gc
+
         if hasattr(self, "indexer") and self.indexer is not None:
             self.indexer.close()
-            logger.info("RAGPipeline indexer closed")
+            self.indexer = None
+            logger.debug("RAGPipeline indexer closed")
+
+        if hasattr(self, "bm25_retriever") and self.bm25_retriever is not None:
+            self.bm25_retriever.clear()
+            self.bm25_retriever = None
+            logger.debug("RAGPipeline BM25 retriever cleared")
+
+        if hasattr(self, "reranker") and self.reranker is not None:
+            self.reranker.unload()
+            self.reranker = None
+            logger.debug("RAGPipeline reranker unloaded")
+
+        if hasattr(self, "embedder") and self.embedder is not None:
+            if not getattr(self, "_shared_embedder", False):
+                self.embedder.unload()
+            self.embedder = None
+            logger.debug("RAGPipeline embedder released")
+
+        gc.collect()
+        logger.info("RAGPipeline closed, all heavy resources released")
 
     def clone_for_concurrency(self) -> RAGPipeline:
         """Create a lightweight clone for concurrent query execution.
