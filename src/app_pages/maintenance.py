@@ -182,19 +182,7 @@ def _render_streaming_agent(agent, state: dict, config: dict) -> dict | None:
     if interrupt_payload is not None:
         st.session_state.maintenance_interrupted = True
         st.session_state.maintenance_interrupt_payload = interrupt_payload
-        st.warning(f"⚠️ {interrupt_payload['question']}")
-        tool_info = interrupt_payload.get("tool_call", {})
-        if tool_info:
-            st.info(
-                f"工具: {tool_info.get('name')} | 参数: {tool_info.get('args', {})}"
-            )
-        col_a, col_b = st.columns(2)
-        with col_a:
-            if st.button("✅ 批准", key="approve_btn"):
-                _resume_interrupt_streaming(agent, True, config)
-        with col_b:
-            if st.button("❌ 拒绝", key="reject_btn"):
-                _resume_interrupt_streaming(agent, False, config)
+        st.rerun()
 
     return final_result
 
