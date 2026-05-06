@@ -1089,7 +1089,7 @@ class TestProcessParsedFilesBGE:
         md_file = input_dir / "test.md"
         md_file.write_text("# Test\n\n" + "Content " * 50)
 
-        with patch("src.chunker.chunk_text") as mock_chunk:
+        with patch("src.core.ops.chunk.chunk_parsed") as mock_chunk:
             mock_chunk.return_value = [
                 {
                     "text": "chunk text",
@@ -1112,13 +1112,8 @@ class TestProcessParsedFilesBGE:
 
             mock_chunk.assert_called()
             call_kwargs = mock_chunk.call_args
-            assert call_kwargs.kwargs.get("encoding_name") == "bge" or (
-                len(call_kwargs.args) > 3 and call_kwargs.args[3] == "bge"
-            )
-            assert call_kwargs.kwargs.get("model_name") == "BAAI/bge-large-zh-v1.5" or (
-                len(call_kwargs.args) > 4
-                and call_kwargs.args[4] == "BAAI/bge-large-zh-v1.5"
-            )
+            assert call_kwargs.kwargs.get("encoding_name") == "bge"
+            assert call_kwargs.kwargs.get("model_name") == "BAAI/bge-large-zh-v1.5"
 
 
 class TestBuildTokenCharOffsets:

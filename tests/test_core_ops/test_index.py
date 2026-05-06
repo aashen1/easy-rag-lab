@@ -31,8 +31,28 @@ class TestIndexChunks:
     def test_index_chunks_empty_list(self):
         from src.core.ops.index import index_chunks
 
-        result = index_chunks([], MagicMock())
+        result = index_chunks([], MagicMock(), collection_name="test_col")
         assert result == 0
+
+    def test_index_chunks_with_external_indexer(self):
+        from src.core.ops.index import index_chunks
+
+        mock_embedder = MagicMock()
+        mock_embedder.embed_texts.return_value = np.ones((1, 128), dtype=np.float32)
+        mock_embedder.get_embedding_dimension.return_value = 128
+
+        mock_indexer = MagicMock()
+
+        chunks = [{"text": "chunk1", "metadata": {"source": "a.pdf"}}]
+
+        result = index_chunks(
+            chunks, mock_embedder, collection_name="test_col", indexer=mock_indexer
+        )
+
+        assert result == 1
+        mock_indexer.create_collection.assert_called_once()
+        mock_indexer.index_chunks.assert_called_once()
+        mock_indexer.close.assert_not_called()
 
 
 class TestDeleteSourceAndReindex:
@@ -71,3 +91,27 @@ class TestDeleteSourceAndReindex:
         assert result == 0
         mock_indexer.delete_by_source.assert_called_once_with("a.pdf")
         mock_indexer.close.assert_called_once()
+
+    def test_delete_and_reindex_with_external_indexer(self):
+        from src.core.ops.index import delete_source_and_reindex
+
+        mock_embedder = MagicMock()
+        mock_embedder.embed_texts.return_value = np.ones((1, 128), dtype=np.float32)
+        mock_embedder.get_embedding_dimension.return_value = 128
+
+        mock_indexer = MagicMock()
+
+        new_chunks = [{"text": "new chunk", "metadata": {"source": "a.pdf"}}]
+
+        result = delete_source_and_reindex(
+            "a.pdf",
+            new_chunks,
+            mock_embedder,
+            collection_name="test_col",
+            indexer=mock_indexer,
+        )
+
+        assert result == 1
+        mock_indexer.delete_by_source.assert_called_once_with("a.pdf")
+        mock_indexer.upsert_chunks.assert_called_once()
+        mock_indexer.close.assert_not_called()

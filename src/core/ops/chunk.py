@@ -5,8 +5,52 @@ from typing import Any
 from loguru import logger
 
 from src.chunker import chunk_text, chunk_text_page_aware
-from src.parsers.base import ParseResult
+from src.parsers.base import ParsedPage, ParseResult
 from src.semantic_chunker import chunk_text_semantic
+
+
+def _parse_result_from_pages_json(
+    pages_data: list[dict[str, Any]], source: str
+) -> ParseResult:
+    """Convert .pages.json file data into a ParseResult.
+
+    Args:
+        pages_data: List of page dictionaries from a .pages.json file.
+            Each dict should contain ``"text"`` and ``"metadata"`` keys.
+        source: Source identifier (typically the file stem) to embed in
+            the ParseResult metadata.
+
+    Returns:
+        A ParseResult with one ParsedPage per entry in *pages_data*.
+    """
+    pages = []
+    for entry in pages_data:
+        page_number = entry.get("metadata", {}).get("page_number", 0)
+        pages.append(
+            ParsedPage(
+                page_number=page_number,
+                text=entry.get("text", ""),
+                metadata=entry.get("metadata", {}),
+            )
+        )
+    return ParseResult(pages=pages, metadata={"source": source})
+
+
+def _parse_result_from_md(text: str, source: str) -> ParseResult:
+    """Convert a Markdown text blob into a single-page ParseResult.
+
+    Args:
+        text: The full Markdown text content.
+        source: Source identifier (typically the file stem) to embed in
+            the ParseResult metadata.
+
+    Returns:
+        A ParseResult with a single ParsedPage containing *text*.
+    """
+    return ParseResult(
+        pages=[ParsedPage(page_number=1, text=text, metadata={})],
+        metadata={"source": source},
+    )
 
 
 def chunk_parsed(
@@ -19,6 +63,7 @@ def chunk_parsed(
     cross_page_overlap: int = 0,
     similarity_threshold: float = 0.5,
     breakpoint_percentile: float | None = None,
+    min_chunk_size: int = 100,
     embedder: Any | None = None,
     parent_chunk_config: dict | None = None,
 ) -> list[dict[str, Any]]:
@@ -47,6 +92,8 @@ def chunk_parsed(
         breakpoint_percentile: Percentile-based threshold for semantic
             chunking. Overrides *similarity_threshold* if set.
             Defaults to None.
+        min_chunk_size: Minimum tokens per chunk for semantic strategy.
+            Merges small chunks with neighbors. Defaults to 100.
         embedder: Embedder instance with ``embed_texts()`` method.
             Required for ``"semantic"`` strategy. Defaults to None.
         parent_chunk_config: Configuration for parent-child chunk
@@ -109,6 +156,7 @@ def chunk_parsed(
             chunk_size=chunk_size,
             similarity_threshold=similarity_threshold,
             breakpoint_percentile=breakpoint_percentile,
+            min_chunk_size=min_chunk_size,
             encoding_name=encoding_name,
         )
     else:

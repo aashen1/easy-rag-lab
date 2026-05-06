@@ -354,10 +354,20 @@ def process_parsed_files(
             with open(md_file, encoding="utf-8") as f:
                 text = f.read()
 
-            chunks = chunk_text(text, chunk_size, overlap, encoding_name, model_name)
-
             relative_path = md_file.relative_to(input_path)
             source_name = relative_path.stem
+
+            from src.core.ops.chunk import _parse_result_from_md, chunk_parsed
+
+            parse_result = _parse_result_from_md(text, source=source_name)
+            chunks = chunk_parsed(
+                parse_result,
+                strategy="fixed",
+                chunk_size=chunk_size,
+                overlap=overlap,
+                encoding_name=encoding_name,
+                model_name=model_name,
+            )
 
             category = detect_document_category(str(md_file))
 
@@ -637,9 +647,14 @@ def process_parsed_files_page_aware(
 
             category = detect_document_category(str(pages_file))
 
-            chunks = chunk_text_page_aware(
-                page_chunks_data,
-                source_name=source_name,
+            from src.core.ops.chunk import _parse_result_from_pages_json, chunk_parsed
+
+            parse_result = _parse_result_from_pages_json(
+                page_chunks_data, source=source_name
+            )
+            chunks = chunk_parsed(
+                parse_result,
+                strategy="page_aware",
                 chunk_size=chunk_size,
                 overlap=overlap,
                 encoding_name=encoding_name,
