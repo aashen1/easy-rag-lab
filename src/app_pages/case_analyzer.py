@@ -8,6 +8,7 @@ import streamlit as st
 from loguru import logger
 from streamlit_searchbox import st_searchbox
 
+from src.app_pages._utils import make_pdf_label
 from src.case_collector import (
     list_cases,
     load_case,
@@ -266,10 +267,10 @@ def _render_ground_truth_annotation(case_data: dict[str, Any], case_id: str) -> 
                 or searchterm.lower() in name.lower()
                 or searchterm.lower() in p.lower()
             ):
-                results.append((name, p))
+                results.append((make_pdf_label(p), p))
         return results
 
-    default_pdf_options = [(Path(p).name, p) for p in pdf_options[:50]]
+    default_pdf_options = [(make_pdf_label(p), p) for p in pdf_options]
     selected_pdf = st_searchbox(
         _search_gt_pdfs,
         placeholder="搜索或选择 PDF 文件...",

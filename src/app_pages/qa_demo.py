@@ -1,5 +1,4 @@
 import os
-import re
 import urllib.parse
 from pathlib import Path
 from typing import Any
@@ -8,6 +7,7 @@ import streamlit as st
 from loguru import logger
 from streamlit_searchbox import st_searchbox
 
+from src.app_pages._utils import extract_company_name, make_pdf_label
 from src.app_pages.pdf_server import PdfServer, get_or_create_pdf_server
 from src.case_collector import (
     CASE_TYPE_BAD,
@@ -346,22 +346,6 @@ def _init_session_state():
         st.session_state.query_error = None
 
 
-def _extract_company_name(rel_path: str) -> str | None:
-    parts = Path(rel_path).parts
-    if len(parts) < 3:
-        return None
-    top_level_categories = {"annual_reports", "research_reports"}
-    if parts[0] not in top_level_categories:
-        return None
-    if re.match(r"^\d{4}$", parts[-2]):
-        if len(parts) >= 4:
-            return parts[-3]
-        return None
-    if parts[-2] in top_level_categories:
-        return None
-    return parts[-2]
-
-
 def _render_meal_files(meal_config: MealConfig | None) -> None:
     if meal_config is None:
         return
@@ -380,10 +364,10 @@ def _render_meal_files(meal_config: MealConfig | None) -> None:
                     or searchterm.lower() in file_name.lower()
                     or searchterm.lower() in mf.path.lower()
                 ):
-                    results.append((file_name, mf.path))
+                    results.append((make_pdf_label(mf.path), mf.path))
             return results
 
-        default_options = [(Path(mf.path).name, mf.path) for mf in pdf_files[:50]]
+        default_options = [(make_pdf_label(mf.path), mf.path) for mf in pdf_files]
         selected = st_searchbox(
             _search_pdf_files,
             placeholder="搜索 PDF 文件名...",
@@ -397,7 +381,7 @@ def _render_meal_files(meal_config: MealConfig | None) -> None:
             if mf_match:
                 file_name = Path(mf_match.path).name
                 size_str = _format_file_size(mf_match.size_bytes)
-                company = _extract_company_name(mf_match.path)
+                company = extract_company_name(mf_match.path)
                 show_company = company is not None and company not in file_name
                 if show_company:
                     st.markdown(
