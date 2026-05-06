@@ -21,6 +21,6 @@ def extract_company_name(rel_path: str) -> str | None:
 def make_pdf_label(rel_path: str) -> str:
     file_name = Path(rel_path).name
     company = extract_company_name(rel_path)
-    if company:
-        return f"{file_name} 🏢 {company}"
+    if company and company not in file_name:
+        return f"🏢 {company} {file_name}"
     return file_name
