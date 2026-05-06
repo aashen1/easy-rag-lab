@@ -225,6 +225,12 @@ def _render_thinking_parts(parts: list[dict[str, Any]]) -> None:
             )
 
 
+def _on_chat_submit():
+    st.session_state.maintenance_pending_prompt = (
+        st.session_state.maintenance_chat_input
+    )
+
+
 def render_maintenance():
     st.subheader("🔧 RAG 维修工")
 
@@ -255,6 +261,8 @@ def render_maintenance():
         st.session_state.maintenance_thread_id = f"maintenance-{uuid.uuid4().hex[:8]}"
     if "maintenance_collapse_thinking" not in st.session_state:
         st.session_state.maintenance_collapse_thinking = True
+    if "maintenance_pending_prompt" not in st.session_state:
+        st.session_state.maintenance_pending_prompt = None
 
     with st.sidebar:
         st.markdown("### 🔧 维修工控制面板")
@@ -321,6 +329,37 @@ def render_maintenance():
             st.session_state.maintenance_interrupt_payload = None
             st.rerun()
 
+    current = st.session_state.maintenance_current_state
+    col_log, col_hist = st.columns(2)
+    with col_log, st.expander("📋 执行日志", expanded=False):
+        exec_log = current.get("execution_log", [])
+        if exec_log:
+            for entry in exec_log:
+                st.text(entry)
+        else:
+            st.text("暂无执行日志")
+    with col_hist, st.expander("📊 阶段历史", expanded=False):
+        stage_history = current.get("stage_history", [])
+        if stage_history:
+            for i, step in enumerate(stage_history):
+                st.text(f"{i + 1}. {step}")
+        else:
+            st.text("暂无阶段历史")
+
+    latest_report = st.session_state.get("maintenance_latest_report")
+    if latest_report:
+        with st.expander("📄 维修报告", expanded=True):
+            st.markdown(latest_report["report_content"])
+            report_path = latest_report.get("report_path", "report.md")
+            filename = Path(report_path).name if report_path else "report.md"
+            st.download_button(
+                "⬇️ 下载报告",
+                data=latest_report["report_content"],
+                file_name=filename,
+                mime="text/markdown",
+                key="download_maintenance_report",
+            )
+
     for msg in st.session_state.maintenance_messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
@@ -357,12 +396,13 @@ def render_maintenance():
                     }
                     _resume_interrupt_streaming(agent, False, config)
 
-    if prompt := st.chat_input("输入问题进行诊断...", key="maintenance_chat_input"):
+    pending = st.session_state.pop("maintenance_pending_prompt", None)
+    if pending:
         st.session_state.maintenance_messages.append(
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": pending}
         )
         with st.chat_message("user"):
-            st.markdown(prompt)
+            st.markdown(pending)
 
         with st.chat_message("assistant"):
             try:
@@ -374,7 +414,7 @@ def render_maintenance():
                 }
                 current = st.session_state.maintenance_current_state
                 state = {
-                    "messages": [{"role": "user", "content": prompt}],
+                    "messages": [{"role": "user", "content": pending}],
                     "current_meal": current.get("current_meal"),
                     "current_source": current.get("current_source"),
                     "diagnosis": current.get("diagnosis", []),
@@ -395,36 +435,11 @@ def render_maintenance():
                 logger.error(f"Maintenance agent error: {e}")
                 st.error(f"维修工出错: {e}")
 
-    current = st.session_state.maintenance_current_state
-    col_log, col_hist = st.columns(2)
-    with col_log, st.expander("📋 执行日志", expanded=False):
-        exec_log = current.get("execution_log", [])
-        if exec_log:
-            for entry in exec_log:
-                st.text(entry)
-        else:
-            st.text("暂无执行日志")
-    with col_hist, st.expander("📊 阶段历史", expanded=False):
-        stage_history = current.get("stage_history", [])
-        if stage_history:
-            for i, step in enumerate(stage_history):
-                st.text(f"{i + 1}. {step}")
-        else:
-            st.text("暂无阶段历史")
-
-    latest_report = st.session_state.get("maintenance_latest_report")
-    if latest_report:
-        with st.expander("📄 维修报告", expanded=True):
-            st.markdown(latest_report["report_content"])
-            report_path = latest_report.get("report_path", "report.md")
-            filename = Path(report_path).name if report_path else "report.md"
-            st.download_button(
-                "⬇️ 下载报告",
-                data=latest_report["report_content"],
-                file_name=filename,
-                mime="text/markdown",
-                key="download_maintenance_report",
-            )
+    st.chat_input(
+        "输入问题进行诊断...",
+        key="maintenance_chat_input",
+        on_submit=_on_chat_submit,
+    )
 
     st.markdown("---")
     st.markdown("### 🗺️ 维修工架构图")
