@@ -74,6 +74,20 @@ def _format_tool_name(tool_name: str) -> str:
     return _TOOL_DISPLAY_NAMES.get(tool_name, f"🔧 {tool_name}")
 
 
+def _extract_text_from_content(content: str | list) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "text":
+                parts.append(item.get("text", ""))
+            elif isinstance(item, str):
+                parts.append(item)
+        return "\n".join(parts)
+    return str(content)
+
+
 def _render_streaming_agent(agent, state: dict, config: dict) -> dict | None:
     from langchain_core.messages import AIMessage, ToolMessage
 
@@ -90,10 +104,12 @@ def _render_streaming_agent(agent, state: dict, config: dict) -> dict | None:
                 messages = node_output.get("messages", [])
                 for msg in messages:
                     if isinstance(msg, AIMessage):
-                        if msg.content:
-                            thinking_parts.append(
-                                {"type": "thinking", "content": msg.content}
-                            )
+                        if msg.content and msg.tool_calls:
+                            text = _extract_text_from_content(msg.content)
+                            if text:
+                                thinking_parts.append(
+                                    {"type": "thinking", "content": text}
+                                )
                         if hasattr(msg, "tool_calls") and msg.tool_calls:
                             for tc in msg.tool_calls:
                                 thinking_parts.append(
@@ -182,19 +198,7 @@ def _render_streaming_agent(agent, state: dict, config: dict) -> dict | None:
     if interrupt_payload is not None:
         st.session_state.maintenance_interrupted = True
         st.session_state.maintenance_interrupt_payload = interrupt_payload
-        st.warning(f"⚠️ {interrupt_payload['question']}")
-        tool_info = interrupt_payload.get("tool_call", {})
-        if tool_info:
-            st.info(
-                f"工具: {tool_info.get('name')} | 参数: {tool_info.get('args', {})}"
-            )
-        col_a, col_b = st.columns(2)
-        with col_a:
-            if st.button("✅ 批准", key="approve_btn"):
-                _resume_interrupt_streaming(agent, True, config)
-        with col_b:
-            if st.button("❌ 拒绝", key="reject_btn"):
-                _resume_interrupt_streaming(agent, False, config)
+        st.rerun()
 
     return final_result
 
@@ -219,6 +223,12 @@ def _render_thinking_parts(parts: list[dict[str, Any]]) -> None:
                 f"font-size:0.85em;margin:2px 0;'>↳ {content}</div>",
                 unsafe_allow_html=True,
             )
+
+
+def _on_chat_submit():
+    st.session_state.maintenance_pending_prompt = (
+        st.session_state.maintenance_chat_input
+    )
 
 
 def render_maintenance():
@@ -251,6 +261,8 @@ def render_maintenance():
         st.session_state.maintenance_thread_id = f"maintenance-{uuid.uuid4().hex[:8]}"
     if "maintenance_collapse_thinking" not in st.session_state:
         st.session_state.maintenance_collapse_thinking = True
+    if "maintenance_pending_prompt" not in st.session_state:
+        st.session_state.maintenance_pending_prompt = None
 
     with st.sidebar:
         st.markdown("### 🔧 维修工控制面板")
@@ -317,6 +329,37 @@ def render_maintenance():
             st.session_state.maintenance_interrupt_payload = None
             st.rerun()
 
+    current = st.session_state.maintenance_current_state
+    col_log, col_hist = st.columns(2)
+    with col_log, st.expander("📋 执行日志", expanded=False):
+        exec_log = current.get("execution_log", [])
+        if exec_log:
+            for entry in exec_log:
+                st.text(entry)
+        else:
+            st.text("暂无执行日志")
+    with col_hist, st.expander("📊 阶段历史", expanded=False):
+        stage_history = current.get("stage_history", [])
+        if stage_history:
+            for i, step in enumerate(stage_history):
+                st.text(f"{i + 1}. {step}")
+        else:
+            st.text("暂无阶段历史")
+
+    latest_report = st.session_state.get("maintenance_latest_report")
+    if latest_report:
+        with st.expander("📄 维修报告", expanded=True):
+            st.markdown(latest_report["report_content"])
+            report_path = latest_report.get("report_path", "report.md")
+            filename = Path(report_path).name if report_path else "report.md"
+            st.download_button(
+                "⬇️ 下载报告",
+                data=latest_report["report_content"],
+                file_name=filename,
+                mime="text/markdown",
+                key="download_maintenance_report",
+            )
+
     for msg in st.session_state.maintenance_messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
@@ -353,12 +396,13 @@ def render_maintenance():
                     }
                     _resume_interrupt_streaming(agent, False, config)
 
-    if prompt := st.chat_input("输入问题进行诊断...", key="maintenance_chat_input"):
+    pending = st.session_state.pop("maintenance_pending_prompt", None)
+    if pending:
         st.session_state.maintenance_messages.append(
-            {"role": "user", "content": prompt}
+            {"role": "user", "content": pending}
         )
         with st.chat_message("user"):
-            st.markdown(prompt)
+            st.markdown(pending)
 
         with st.chat_message("assistant"):
             try:
@@ -370,7 +414,7 @@ def render_maintenance():
                 }
                 current = st.session_state.maintenance_current_state
                 state = {
-                    "messages": [{"role": "user", "content": prompt}],
+                    "messages": [{"role": "user", "content": pending}],
                     "current_meal": current.get("current_meal"),
                     "current_source": current.get("current_source"),
                     "diagnosis": current.get("diagnosis", []),
@@ -391,36 +435,11 @@ def render_maintenance():
                 logger.error(f"Maintenance agent error: {e}")
                 st.error(f"维修工出错: {e}")
 
-    current = st.session_state.maintenance_current_state
-    col_log, col_hist = st.columns(2)
-    with col_log, st.expander("📋 执行日志", expanded=False):
-        exec_log = current.get("execution_log", [])
-        if exec_log:
-            for entry in exec_log:
-                st.text(entry)
-        else:
-            st.text("暂无执行日志")
-    with col_hist, st.expander("📊 阶段历史", expanded=False):
-        stage_history = current.get("stage_history", [])
-        if stage_history:
-            for i, step in enumerate(stage_history):
-                st.text(f"{i + 1}. {step}")
-        else:
-            st.text("暂无阶段历史")
-
-    latest_report = st.session_state.get("maintenance_latest_report")
-    if latest_report:
-        with st.expander("📄 维修报告", expanded=True):
-            st.markdown(latest_report["report_content"])
-            report_path = latest_report.get("report_path", "report.md")
-            filename = Path(report_path).name if report_path else "report.md"
-            st.download_button(
-                "⬇️ 下载报告",
-                data=latest_report["report_content"],
-                file_name=filename,
-                mime="text/markdown",
-                key="download_maintenance_report",
-            )
+    st.chat_input(
+        "输入问题进行诊断...",
+        key="maintenance_chat_input",
+        on_submit=_on_chat_submit,
+    )
 
     st.markdown("---")
     st.markdown("### 🗺️ 维修工架构图")
@@ -448,10 +467,12 @@ def _resume_interrupt_streaming(agent, decision, config):
                     messages = node_output.get("messages", [])
                     for msg in messages:
                         if isinstance(msg, AIMessage):
-                            if msg.content:
-                                thinking_parts.append(
-                                    {"type": "thinking", "content": msg.content}
-                                )
+                            if msg.content and msg.tool_calls:
+                                text = _extract_text_from_content(msg.content)
+                                if text:
+                                    thinking_parts.append(
+                                        {"type": "thinking", "content": text}
+                                    )
                             if hasattr(msg, "tool_calls") and msg.tool_calls:
                                 for tc in msg.tool_calls:
                                     thinking_parts.append(
@@ -523,7 +544,7 @@ def _extract_response_text(result: dict) -> str:
     messages = result.get("messages", [])
     for msg in reversed(messages):
         if isinstance(msg, AIMessage) and msg.content:
-            return msg.content
+            return _extract_text_from_content(msg.content)
     return "（维修工已完成操作，无文字回复）"
 
 
