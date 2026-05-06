@@ -74,6 +74,20 @@ def _format_tool_name(tool_name: str) -> str:
     return _TOOL_DISPLAY_NAMES.get(tool_name, f"🔧 {tool_name}")
 
 
+def _extract_text_from_content(content: str | list) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "text":
+                parts.append(item.get("text", ""))
+            elif isinstance(item, str):
+                parts.append(item)
+        return "\n".join(parts)
+    return str(content)
+
+
 def _render_streaming_agent(agent, state: dict, config: dict) -> dict | None:
     from langchain_core.messages import AIMessage, ToolMessage
 
@@ -90,10 +104,12 @@ def _render_streaming_agent(agent, state: dict, config: dict) -> dict | None:
                 messages = node_output.get("messages", [])
                 for msg in messages:
                     if isinstance(msg, AIMessage):
-                        if msg.content:
-                            thinking_parts.append(
-                                {"type": "thinking", "content": msg.content}
-                            )
+                        if msg.content and msg.tool_calls:
+                            text = _extract_text_from_content(msg.content)
+                            if text:
+                                thinking_parts.append(
+                                    {"type": "thinking", "content": text}
+                                )
                         if hasattr(msg, "tool_calls") and msg.tool_calls:
                             for tc in msg.tool_calls:
                                 thinking_parts.append(
@@ -436,10 +452,12 @@ def _resume_interrupt_streaming(agent, decision, config):
                     messages = node_output.get("messages", [])
                     for msg in messages:
                         if isinstance(msg, AIMessage):
-                            if msg.content:
-                                thinking_parts.append(
-                                    {"type": "thinking", "content": msg.content}
-                                )
+                            if msg.content and msg.tool_calls:
+                                text = _extract_text_from_content(msg.content)
+                                if text:
+                                    thinking_parts.append(
+                                        {"type": "thinking", "content": text}
+                                    )
                             if hasattr(msg, "tool_calls") and msg.tool_calls:
                                 for tc in msg.tool_calls:
                                     thinking_parts.append(
@@ -511,7 +529,7 @@ def _extract_response_text(result: dict) -> str:
     messages = result.get("messages", [])
     for msg in reversed(messages):
         if isinstance(msg, AIMessage) and msg.content:
-            return msg.content
+            return _extract_text_from_content(msg.content)
     return "（维修工已完成操作，无文字回复）"
 
 
