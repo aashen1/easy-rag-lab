@@ -1,4 +1,4 @@
-# 维修工三 issue 修复计划
+# 维修工三 issue 修复计划（修订版）
 
 ## 涉及 Issue
 
@@ -14,65 +14,28 @@
 
 ***
 
-## Issue 1: FEAT-005 — 对话框位置修复
+## Issue 1: FEAT-006 — 高风险操作确认 UI 重复（最简单，先修）
 
 ### 问题分析
 
-当前代码流程：
+确认 UI 出现在两处：
 
-```
-L320: for msg in session_state.messages:  → 渲染历史消息（第1轮对话）
-L356: if prompt := st.chat_input(...):    → 渲染输入框
-L359-392: [if prompt 块内]               → 渲染当前轮对话（第2轮）
-L394-433: 日志/报告/架构图
-```
+1. `_render_streaming_agent()` L182-197：流式过程中即时渲染确认按钮
+2. `render_maintenance()` L324-354：持久化版本，正常工作
 
-**实际视觉效果**（用户提交了两轮后）：
+当流式过程中发生 interrupt 时，两处 UI 同时渲染，导致确认框出现两次。用户点掉一个后，另一个留在页面上无法交互。
 
-```
-我的第一次输入          ← L320 渲染
-维修工第一次输出        ← L320 渲染
-[输入问题进行诊断...]   ← L356 chat_input 在这里
-我的第二次输入          ← L359-361 if prompt 块内渲染
-维修工第二次输出        ← L363-392 if prompt 块内渲染
----
-执行日志  阶段历史      ← L394-409
-维修工架构图            ← L425-433
-```
-
-**根因**：`st.chat_input` 返回值触发 `if prompt` 块，新消息在 chat\_input 之后渲染，导致输入框被夹在旧消息和新消息之间。
+**根因**：`_render_streaming_agent()` 中的确认按钮在 `if prompt` 块内渲染。当用户点击按钮触发 rerun 时，没有新的 prompt 输入，`if prompt` 块不执行，按钮不存在于新页面上——所以"点了没反应"。而持久化版本在 `if prompt` 块之外，始终存在，能正常工作。
 
 ### 修复方案
 
-使用 `on_submit` 回调模式，将 prompt 存入 session\_state，然后在消息渲染区统一处理：
-
-1. 定义 `_on_chat_submit()` 回调，将 prompt 存入 `st.session_state.maintenance_pending_prompt`
-2. 在消息渲染循环之前，检查是否有 pending prompt
-3. 如有，先调用 agent 处理，将结果追加到 `maintenance_messages`
-4. 统一从 `maintenance_messages` 渲染所有消息
-5. 将 `st.chat_input` 移到函数末尾（架构图之后），使用 `on_submit` 回调
-
-**修复后视觉效果**：
-
-```
-执行日志  阶段历史      ← 移到消息上方
-维修报告
-我的第一次输入          ← 统一从 session_state 渲染
-维修工第一次输出
-我的第二次输入
-维修工第二次输出
-维修工架构图
-[输入问题进行诊断...]   ← chat_input 在最底部
-```
+删除 `_render_streaming_agent()` 中的确认 UI（L185-197），只保留 session state 设置（L183-184）。检测到 interrupt 后立即 `st.rerun()`，让持久化版本接管显示。
 
 ### 具体步骤
 
-1. 新增 `_on_chat_submit()` 回调函数
-2. 新增 `maintenance_pending_prompt` session state 初始化
-3. 在消息渲染循环之前，检测 pending prompt 并调用 agent
-4. 将 `st.chat_input` 从 L356 移到函数末尾，改用 `on_submit` 回调
-5. 删除原 `if prompt` 块中的内联渲染逻辑
-6. 将日志/报告移到消息区上方
+1. 删除 L185-197 的确认 UI 代码（warning、info、columns、buttons）
+2. 保留 L183-184 的 session state 设置
+3. 在 L184 之后添加 `st.rerun()`，确保 interrupt 后页面刷新显示持久化确认 UI
 
 ***
 
@@ -80,66 +43,125 @@ L394-433: 日志/报告/架构图
 
 ### 问题分析
 
-当前 `_render_streaming_agent()` 中 L92-96 处理 AIMessage 时：
+当前 `_render_streaming_agent()` L93-96 和 `_resume_interrupt_streaming()` L451-453：
 
 ```python
 if msg.content:
     thinking_parts.append({"type": "thinking", "content": msg.content})
 ```
 
-`msg.content` 在包含 tool\_calls 时是一个 list of dicts，例如：
+`msg.content` 在包含 tool\_calls 时是 list of dicts：
 
 ```python
 [{'text': '嗯，只返回了 1 页内容...', 'type': 'text'},
  {'id': 'call_98ccc6b00c974cde9e5640f9', 'input': {...}, 'name': 'parse_pdf_tool', 'type': 'tool_use'}]
 ```
 
-直接 `str(msg.content)` 会输出原始 JSON，非常不美观。而 tool\_use 部分实际上已被 L97-105 的 `msg.tool_calls` 单独处理，不应在 thinking 中重复显示。
+直接存入 thinking\_parts 后，`_render_thinking_parts()` 用 `str()` 拼接显示，输出原始 JSON。
 
-### 修复方案
+### ⚠️ 前次修复的教训
 
-1. 解析 `msg.content`：如果是 list，只提取 `type='text'` 的部分拼接显示；如果是 str，直接显示
-2. 过滤掉 `type='tool_use'` 的部分（已由 `msg.tool_calls` 处理）
-3. 同样修复 `_resume_interrupt_streaming()` 中的相同逻辑（L447-463）
+前次修复提取了 `_extract_text_from_content()` 辅助函数，但导致**思考内容与最终回复一模一样**——重复显示。原因：最终 AIMessage 的 content 也被提取为纯文本放入 thinking\_parts，和 `_extract_response_text()` 提取的回复文本完全相同。
+
+### 修复方案（修订）
+
+1. 提取 `_extract_text_from_content(content)` 辅助函数：str 直接返回；list 只提取 `type='text'` 部分，过滤 `type='tool_use'`
+2. **关键防重复**：只在 AIMessage **同时包含 tool\_calls** 时，才将其 content 加入 thinking\_parts。不含 tool\_calls 的 AIMessage 是最终回复，不应出现在思考区（它会被 `_extract_response_text()` 单独提取显示）
+3. 同样修复 `_resume_interrupt_streaming()` 中的相同逻辑
+4. 修复 `_extract_response_text()`：当 `msg.content` 为 list 时，也用辅助函数提取文本
+5. 修复 `_render_thinking_parts()`：确保 content 始终为 str（辅助函数已保证）
 
 ### 具体步骤
 
-* 提取一个 `_extract_text_from_content(content)` 辅助函数，处理 str / list 两种格式
-
-* 在 `_render_streaming_agent()` 和 `_resume_interrupt_streaming()` 中使用该函数替代直接 `msg.content`
+1. 新增 `_extract_text_from_content(content: str | list) -> str` 辅助函数
+2. `_render_streaming_agent()` L92-96：改为 `if msg.content and msg.tool_calls:` 条件 + 使用辅助函数
+3. `_resume_interrupt_streaming()` L451-453：同上
+4. `_extract_response_text()` L525-526：使用辅助函数处理 list 格式的 content
 
 ***
 
-## Issue 3: FEAT-006 — 高风险操作确认 UI 重复
+## Issue 3: FEAT-005 — 对话框位置修复（改动最大，最后修）
 
 ### 问题分析
 
-确认 UI 出现在两处：
+当前代码流程：
 
-1. `_render_streaming_agent()` L182-197：流式过程中即时渲染，但按钮点击后没有 `st.rerun()`，导致点了没反应
-2. `render_maintenance()` L324-354：持久化版本，按钮点击后调用 `_resume_interrupt_streaming()` 并 `st.rerun()`，正常工作
+```
+L320-322: for msg in maintenance_messages → 渲染历史消息
+L324-354: if interrupted → 渲染确认 UI
+L356:     if prompt := st.chat_input(...) → 渲染输入框
+L359-392: [if prompt 块内] → 渲染当前轮对话
+L394-433: 日志/报告/架构图
+```
 
-当流式过程中发生 interrupt 时，两处 UI 同时渲染，导致确认框出现两次。
+**当前视觉效果**（用户提交了两轮后，无新输入时）：
 
-### 修复方案
+```
+我的第一次输入
+维修工第一次输出
+我的第二次输入
+维修工第二次输出
+[输入问题进行诊断...]   ← chat_input
+执行日志  阶段历史
+维修工架构图
+```
 
-删除 `_render_streaming_agent()` 中的确认 UI（L182-197），只保留 `render_maintenance()` 中的持久化版本。
+**期望视觉效果**：
 
-流式过程中检测到 interrupt 时，只设置 session state（`maintenance_interrupted` / `maintenance_interrupt_payload`），不渲染按钮。页面继续执行到持久化版本时，自动渲染确认 UI。
+```
+执行日志  阶段历史      ← 移到消息上方
+维修报告
+我的第一次输入
+维修工第一次输出
+我的第二次输入
+维修工第二次输出
+[输入问题进行诊断...]   ← chat_input 在最底部
+====
+维修工架构图            ← 架构图在输入框下方
+```
+
+### ⚠️ 前次修复的教训
+
+前次使用 `on_submit` 回调模式时，**消息历史丢失**——每次只显示最近一条对话。原因：在处理 pending prompt 时，可能**替换**了 `maintenance_messages` 而非**追加**，或在回调中错误地重置了消息列表。
+
+### 修复方案（修订）
+
+使用 `on_submit` 回调模式，但**严格保证消息追加语义**：
+
+1. 新增 `_on_chat_submit()` 回调，仅将 prompt 存入 `st.session_state.maintenance_pending_prompt`
+2. 新增 `maintenance_pending_prompt` session state 初始化
+3. 页面渲染顺序调整为：
+   - 日志/报告（顶部）
+   - 所有消息（从 `maintenance_messages` 渲染）
+   - 中断确认 UI（持久化版本）
+   - pending prompt 处理（追加用户消息 → 调用 agent → agent 追加回复）
+   - `st.chat_input`（底部，使用 `on_submit`）
+   - 分隔线 + 架构图
+4. **防消息丢失关键约束**：
+   - 用户消息：`maintenance_messages.append(...)`，绝不用 `= [...]` 替换
+   - Agent 回复：`_render_streaming_agent()` 内部已有 `maintenance_messages.append(...)`，保持不变
+   - 清空对话按钮：只有此处可以重置 `maintenance_messages`
 
 ### 具体步骤
 
-* 删除 `_render_streaming_agent()` 中 L182-197 的确认 UI 代码
-
-* 保留 L182-184 的 session state 设置逻辑
+1. 新增 `_on_chat_submit()` 回调函数
+2. 新增 `maintenance_pending_prompt` session state 初始化（默认 None）
+3. 将日志/报告区块从 L394-423 移到消息渲染之前
+4. 将消息渲染循环（L320-322）保持不变
+5. 将中断确认 UI（L324-354）保持不变
+6. 将 `if prompt` 块替换为 pending prompt 检测：
+   - `pending = st.session_state.pop("maintenance_pending_prompt", None)`
+   - 如有 pending：追加用户消息到 `maintenance_messages`，渲染用户消息，调用 agent
+7. 将 `st.chat_input` 移到 pending prompt 处理之后，改用 `on_submit=_on_chat_submit`
+8. 将架构图移到 chat\_input 之后
 
 ***
 
 ## 执行顺序
 
-1. 先修 FEAT-006（最简单，删代码）
-2. 再修 FEAT-004（提取辅助函数，改两处逻辑）
-3. 最后修 FEAT-005（回调模式重构 + 布局调整，改动最大）
+1. 先修 FEAT-006（删代码 + 加 rerun）
+2. 再修 FEAT-004（辅助函数 + 防重复逻辑）
+3. 最后修 FEAT-005（回调模式 + 布局调整 + 防消息丢失）
 4. 每步完成后运行 `pixi run lint` 检查
 5. 运行 `pixi run test` 验证测试通过
 
