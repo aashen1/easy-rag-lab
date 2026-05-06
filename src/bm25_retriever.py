@@ -52,6 +52,22 @@ class BM25Retriever:
         self._doc_data: list[dict[str, Any]] = []
         self._is_indexed: bool = False
 
+    def clear(self) -> None:
+        """Release all index data from memory.
+
+        After calling this method the retriever must be re-indexed
+        before it can be used for retrieval.
+        """
+        self._corpus_tokens.clear()
+        self._corpus_size = 0
+        self._avgdl = 0.0
+        self._doc_freqs.clear()
+        self._doc_lens.clear()
+        self._idf.clear()
+        self._doc_data.clear()
+        self._is_indexed = False
+        logger.debug("BM25Retriever index data cleared")
+
     @staticmethod
     def tokenize(text: str) -> list[str]:
         """Tokenize Chinese text using jieba segmentation.
