@@ -82,6 +82,26 @@ class Embedder:
             logger.error(error_msg)
             raise IndexingError(error_msg) from e
 
+    def unload(self) -> None:
+        """Release the model weights and tokenizer from memory.
+
+        After calling this method the Embedder instance must not be
+        reused for encoding.  The class-level tokenizer cache is
+        preserved so that a subsequent ``Embedder()`` construction can
+        reuse the cached tokenizer without re-downloading.
+        """
+        if hasattr(self, "_model") and self._model is not None:
+            import gc
+
+            del self._model
+            self._model = None
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            gc.collect()
+            logger.debug(f"Embedder model unloaded: {self.model_name}")
+        if hasattr(self, "_tokenizer") and self._tokenizer is not None:
+            self._tokenizer = None
+
     @classmethod
     def get_tokenizer(cls, model_name: str = "BAAI/bge-large-zh-v1.5") -> AutoTokenizer:
         """Get or create a tokenizer for the specified model.

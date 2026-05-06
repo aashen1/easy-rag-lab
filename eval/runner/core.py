@@ -59,6 +59,41 @@ def _add_experiment_log_handler(exp_dir: Path) -> int:
     )
 
 
+def _cleanup_pipeline(
+    pipeline: RAGPipeline | None,
+    indexer_cache: dict[str, Any] | None,
+    shared_embedder: Any | None,
+) -> None:
+    """Release heavy resources held by a variant pipeline.
+
+    When ``indexer_cache`` is provided the indexer is detached (not
+    closed) so it can be reused by subsequent variants.  A shared
+    embedder is never unloaded here — its lifetime is managed by the
+    experiment loop.
+    """
+    import gc
+
+    if pipeline is None:
+        return
+    with contextlib.suppress(Exception):
+        if indexer_cache is None:
+            pipeline.close()
+        else:
+            pipeline.indexer = None
+            if pipeline.bm25_retriever is not None:
+                pipeline.bm25_retriever.clear()
+                pipeline.bm25_retriever = None
+            if pipeline.reranker is not None:
+                pipeline.reranker.unload()
+                pipeline.reranker = None
+            if pipeline.embedder is not None and shared_embedder is None:
+                pipeline.embedder.unload()
+            pipeline.embedder = None
+    with contextlib.suppress(Exception):
+        del pipeline
+    gc.collect()
+
+
 def run_variant_evaluation(
     system_config: dict[str, Any],
     exp_config: ExperimentConfig,
@@ -70,6 +105,7 @@ def run_variant_evaluation(
     profiler: PipelineProfiler | None = None,
     force_index: bool = False,
     indexer_cache: dict[str, Any] | None = None,
+    shared_embedder: Any | None = None,
 ) -> dict[str, Any]:
     """
     Run evaluation for a single variant.
@@ -86,6 +122,8 @@ def run_variant_evaluation(
         force_index: If True, delete existing index and rebuild from scratch.
         indexer_cache: Optional dict mapping chunker_hash to VectorIndexer for
             index reuse across variants with identical chunker configs.
+        shared_embedder: Optional pre-initialized Embedder to share across
+            variants, avoiding repeated ~1.3 GB model loading.
 
     Returns:
         Evaluation result dictionary.
@@ -136,7 +174,6 @@ def run_variant_evaluation(
 
     try:
         variant_tracker = TokenTracker()
-        indexer_from_cache = False
 
         pipeline = RAGPipeline(
             config=merged_config,
@@ -144,6 +181,7 @@ def run_variant_evaluation(
             meal_name=meal_name,
             token_tracker=variant_tracker,
             profiler=profiler,
+            embedder=shared_embedder,
         )
 
         from src.meal import compute_chunker_config_hash
@@ -170,7 +208,6 @@ def run_variant_evaluation(
                     if not cached_indexer.is_closed():
                         cached_indexer.close()
                 indexer.reopen()
-            indexer_from_cache = True
         else:
             if indexer_cache is not None:
                 for cached_indexer in indexer_cache.values():
@@ -185,7 +222,6 @@ def run_variant_evaluation(
             )
             if indexer_cache is not None and not force_index:
                 indexer_cache[chunker_hash] = indexer
-            indexer_from_cache = False
 
         pipeline.indexer = indexer
 
@@ -242,8 +278,6 @@ def run_variant_evaluation(
         total_start_time = time.time()
         all_results = []
 
-        llm_config = get_llm_config(merged_config, llm_preset)
-
         checkpoint_dir = exp_dir / "checkpoints"
         max_questions = exp_config.evaluation.get("max_questions")
 
@@ -267,7 +301,6 @@ def run_variant_evaluation(
         metrics = compute_aggregate_metrics(all_results)
 
         if profiler:
-            s6_metrics = profiler.get_stage_metrics("S6")
             s7_metrics = profiler.get_stage_metrics("S7")
             rag_total = variant_tracker.get_total()
             if s7_metrics:
@@ -334,10 +367,7 @@ def run_variant_evaluation(
             f"total={token_total.total_tokens:,}"
         )
 
-        if indexer_cache is None:
-            pipeline.close()
-        else:
-            pipeline.indexer = None
+        _cleanup_pipeline(pipeline, indexer_cache, shared_embedder)
 
         checkpoint_dir = exp_dir / "checkpoints"
         if checkpoint_dir.exists():
@@ -354,12 +384,7 @@ def run_variant_evaluation(
 
     except Exception as e:
         logger.error(f"Failed to evaluate variant '{variant_name}': {str(e)}")
-        if "pipeline" in locals():
-            with contextlib.suppress(Exception):
-                if indexer_cache is None:
-                    pipeline.close()
-                else:
-                    pipeline.indexer = None
+        _cleanup_pipeline(pipeline, indexer_cache, shared_embedder)
         raise
 
 
@@ -764,6 +789,16 @@ def run_experiment(
 
         indexer_cache: dict[str, Any] = {}
 
+        from src.embedder import Embedder as _Embedder
+
+        embedding_cfg = system_config.get("embedding", {})
+        shared_embedder = _Embedder(
+            model_name=embedding_cfg.get("model_name", "BAAI/bge-large-zh-v1.5"),
+            device=embedding_cfg.get("device", "cuda"),
+            query_instruction=embedding_cfg.get("query_instruction"),
+        )
+        logger.info("Shared Embedder loaded for all variants")
+
         for i, variant in enumerate(exp_config.variants, 1):
             variant_name = variant.get("name", f"variant_{i}")
 
@@ -852,6 +887,7 @@ def run_experiment(
                     profiler=profiler,
                     force_index=force_vector,
                     indexer_cache=indexer_cache,
+                    shared_embedder=shared_embedder,
                 )
 
                 merged = merge_config(system_config, exp_config, variant)
@@ -898,6 +934,14 @@ def run_experiment(
                 }
                 exp_manager.save_variant_result(exp_dir, variant_name, error_result)
                 all_variant_results.append(error_result)
+
+        if shared_embedder is not None:
+            shared_embedder.unload()
+            del shared_embedder
+            import gc
+
+            gc.collect()
+            logger.info("Shared Embedder unloaded after all variants")
 
         experiment_tracker.merge(test_generation_tracker)
 

@@ -64,6 +64,24 @@ class Reranker:
             logger.error(error_msg)
             raise GenerationError(error_msg) from e
 
+    def unload(self) -> None:
+        """Release the model weights and tokenizer from memory.
+
+        After calling this method the Reranker instance must not be
+        reused for re-ranking.
+        """
+        if hasattr(self, "_model") and self._model is not None:
+            import gc
+
+            del self._model
+            self._model = None
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            gc.collect()
+            logger.debug(f"Reranker model unloaded: {self.model_name}")
+        if hasattr(self, "_tokenizer") and self._tokenizer is not None:
+            self._tokenizer = None
+
     def rerank(
         self,
         query: str,
