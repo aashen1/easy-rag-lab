@@ -229,7 +229,7 @@ def _render_thinking_parts(parts: list[dict[str, Any]]) -> None:
         elif part["type"] == "tool_result":
             content = part.get("content", "")
             st.markdown(
-                f"<div style='background:#f8f9fa;padding:6px 10px;border-radius:4px;"
+                f"<div style='background:#3d3d3d;padding:6px 10px;border-radius:4px;"
                 f"font-size:0.85em;margin:2px 0;'>↳ {content}</div>",
                 unsafe_allow_html=True,
             )
