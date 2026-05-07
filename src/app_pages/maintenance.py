@@ -240,6 +240,7 @@ def _on_chat_submit():
     st.session_state.maintenance_pending_prompt = (
         st.session_state.maintenance_chat_input
     )
+    st.session_state.maintenance_streaming = True
 
 
 def render_maintenance():
