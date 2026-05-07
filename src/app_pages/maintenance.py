@@ -92,8 +92,10 @@ def _render_streaming_agent(agent, state: dict, config: dict) -> dict | None:
     from langchain_core.messages import AIMessage, ToolMessage
 
     collapse = st.session_state.get("maintenance_collapse_thinking", True)
+    st.session_state.maintenance_streaming = True
+    st.session_state.maintenance_thinking_parts = []
+    thinking_parts = st.session_state.maintenance_thinking_parts
     final_result: dict | None = None
-    thinking_parts: list[dict[str, Any]] = []
     interrupt_payload = None
 
     thinking_container = st.container()
@@ -178,7 +180,14 @@ def _render_streaming_agent(agent, state: dict, config: dict) -> dict | None:
                 st.markdown("---")
                 st.markdown(response_text)
                 st.session_state.maintenance_messages.append(
-                    {"role": "assistant", "content": response_text}
+                    {
+                        "role": "assistant",
+                        "content": response_text,
+                        "thinking_parts": list(
+                            st.session_state.maintenance_thinking_parts
+                        ),
+                        "thinking_expanded": not collapse,
+                    }
                 )
             report_data = _try_extract_report(response_text)
             if report_data:
@@ -195,12 +204,13 @@ def _render_streaming_agent(agent, state: dict, config: dict) -> dict | None:
                     st.session_state.maintenance_current_state[key] = final_result[key]
             st.session_state.maintenance_locked_tool = None
 
+    st.session_state.maintenance_streaming = False
+
     if interrupt_payload is not None:
         st.session_state.maintenance_interrupted = True
         st.session_state.maintenance_interrupt_payload = interrupt_payload
-        st.rerun()
 
-    return final_result
+    st.rerun()
 
 
 def _render_thinking_parts(parts: list[dict[str, Any]]) -> None:
@@ -219,7 +229,7 @@ def _render_thinking_parts(parts: list[dict[str, Any]]) -> None:
         elif part["type"] == "tool_result":
             content = part.get("content", "")
             st.markdown(
-                f"<div style='background:#f8f9fa;padding:6px 10px;border-radius:4px;"
+                f"<div style='background:#3d3d3d;padding:6px 10px;border-radius:4px;"
                 f"font-size:0.85em;margin:2px 0;'>↳ {content}</div>",
                 unsafe_allow_html=True,
             )
@@ -229,6 +239,7 @@ def _on_chat_submit():
     st.session_state.maintenance_pending_prompt = (
         st.session_state.maintenance_chat_input
     )
+    st.session_state.maintenance_streaming = True
 
 
 def render_maintenance():
@@ -261,17 +272,26 @@ def render_maintenance():
         st.session_state.maintenance_thread_id = f"maintenance-{uuid.uuid4().hex[:8]}"
     if "maintenance_collapse_thinking" not in st.session_state:
         st.session_state.maintenance_collapse_thinking = True
+    if "maintenance_thinking_parts" not in st.session_state:
+        st.session_state.maintenance_thinking_parts = []
+    if "maintenance_streaming" not in st.session_state:
+        st.session_state.maintenance_streaming = False
     if "maintenance_pending_prompt" not in st.session_state:
         st.session_state.maintenance_pending_prompt = None
 
     with st.sidebar:
         st.markdown("### 🔧 维修工控制面板")
 
+        is_streaming = st.session_state.get("maintenance_streaming", False)
+        if is_streaming:
+            st.caption("⏳ Agent 正在思考中，控件暂时禁用...")
+
         st.session_state.maintenance_mode = st.selectbox(
             "模式",
             options=["light", "full"],
             format_func=lambda x: "轻量模式" if x == "light" else "全量模式",
             index=0 if st.session_state.maintenance_mode == "light" else 1,
+            disabled=is_streaming,
         )
 
         tool_names = _get_tool_names()
@@ -280,6 +300,7 @@ def render_maintenance():
             tool_names,
             index=0,
             key="maintenance_tool_lock",
+            disabled=is_streaming,
         )
         if selected_tool == "自动":
             st.session_state.maintenance_locked_tool = None
@@ -290,6 +311,7 @@ def render_maintenance():
             "自动审查",
             value=st.session_state.maintenance_auto_review,
             key="maintenance_auto_review_toggle",
+            disabled=is_streaming,
         )
         st.session_state.maintenance_auto_review = auto_review
 
@@ -297,25 +319,58 @@ def render_maintenance():
             "折叠思考过程",
             value=st.session_state.maintenance_collapse_thinking,
             key="maintenance_collapse_toggle",
+            disabled=is_streaming,
         )
         st.session_state.maintenance_collapse_thinking = collapse_thinking
+
+        col_expand, col_collapse = st.columns(2)
+        with col_expand:
+            if st.button(
+                "📂 展开所有", key="btn_expand_all_thinking", disabled=is_streaming
+            ):
+                for msg in st.session_state.maintenance_messages:
+                    if msg["role"] == "assistant" and msg.get("thinking_parts"):
+                        msg["thinking_expanded"] = True
+                keys_to_clear = [
+                    k for k in st.session_state if k.startswith("thinking_expander_")
+                ]
+                for k in keys_to_clear:
+                    del st.session_state[k]
+                st.rerun()
+        with col_collapse:
+            if st.button(
+                "📁 折叠所有", key="btn_collapse_all_thinking", disabled=is_streaming
+            ):
+                for msg in st.session_state.maintenance_messages:
+                    if msg["role"] == "assistant" and msg.get("thinking_parts"):
+                        msg["thinking_expanded"] = False
+                keys_to_clear = [
+                    k for k in st.session_state if k.startswith("thinking_expander_")
+                ]
+                for k in keys_to_clear:
+                    del st.session_state[k]
+                st.rerun()
 
         st.markdown("#### 快捷操作")
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("📋 生成维修报告", key="btn_maint_report"):
+            if st.button(
+                "📋 生成维修报告", key="btn_maint_report", disabled=is_streaming
+            ):
                 st.session_state.maintenance_messages.append(
                     {"role": "user", "content": "生成维修报告"}
                 )
                 st.rerun()
         with col2:
-            if st.button("📊 生成对比报告", key="btn_comp_report"):
+            if st.button(
+                "📊 生成对比报告", key="btn_comp_report", disabled=is_streaming
+            ):
                 st.session_state.maintenance_messages.append(
                     {"role": "user", "content": "生成对比报告"}
                 )
                 st.rerun()
 
-        if st.button("🗑️ 清空对话", key="btn_clear_chat"):
+        if st.button("🗑️ 清空对话", key="btn_clear_chat", disabled=is_streaming):
             st.session_state.maintenance_messages = []
             st.session_state.maintenance_current_state = {
                 "current_meal": None,
@@ -360,8 +415,16 @@ def render_maintenance():
                 key="download_maintenance_report",
             )
 
-    for msg in st.session_state.maintenance_messages:
+    for i, msg in enumerate(st.session_state.maintenance_messages):
         with st.chat_message(msg["role"]):
+            if msg["role"] == "assistant" and msg.get("thinking_parts"):
+                expanded = msg.get("thinking_expanded", True)
+                with st.expander(
+                    f"💭 思考与工具调用过程 ({len(msg['thinking_parts'])} 步)",
+                    expanded=expanded,
+                    key=f"thinking_expander_{i}",
+                ):
+                    _render_thinking_parts(msg["thinking_parts"])
             st.markdown(msg["content"])
 
     if (
@@ -433,6 +496,7 @@ def render_maintenance():
 
             except Exception as e:
                 logger.error(f"Maintenance agent error: {e}")
+                st.session_state.maintenance_streaming = False
                 st.error(f"维修工出错: {e}")
 
     st.chat_input(
@@ -456,9 +520,12 @@ def _resume_interrupt_streaming(agent, decision, config):
     from langchain_core.messages import AIMessage
     from langgraph.types import Command
 
-    try:
-        thinking_parts: list[dict[str, Any]] = []
+    collapse = st.session_state.get("maintenance_collapse_thinking", True)
+    st.session_state.maintenance_streaming = True
+    st.session_state.maintenance_thinking_parts = []
+    thinking_parts = st.session_state.maintenance_thinking_parts
 
+    try:
         for event in agent.stream(
             Command(resume=decision), config=config, stream_mode="updates"
         ):
@@ -516,7 +583,14 @@ def _resume_interrupt_streaming(agent, decision, config):
             response_text = _extract_response_text(final_values)
             if response_text:
                 st.session_state.maintenance_messages.append(
-                    {"role": "assistant", "content": response_text}
+                    {
+                        "role": "assistant",
+                        "content": response_text,
+                        "thinking_parts": list(
+                            st.session_state.maintenance_thinking_parts
+                        ),
+                        "thinking_expanded": not collapse,
+                    }
                 )
             for key in (
                 "current_meal",
@@ -529,11 +603,13 @@ def _resume_interrupt_streaming(agent, decision, config):
                 if key in final_values:
                     st.session_state.maintenance_current_state[key] = final_values[key]
             st.session_state.maintenance_locked_tool = None
+        st.session_state.maintenance_streaming = False
         st.rerun()
     except Exception as e:
         logger.error(f"Resume interrupt error: {e}")
         st.session_state.maintenance_interrupted = False
         st.session_state.maintenance_interrupt_payload = None
+        st.session_state.maintenance_streaming = False
         st.error(f"恢复中断出错: {e}")
         st.rerun()
 

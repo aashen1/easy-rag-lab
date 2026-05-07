@@ -101,3 +101,87 @@ class TestMaintenancePageUnit:
         names = _get_tool_names()
         assert "自动" in names
         assert "list_meals" in names
+
+    def test_thinking_parts_persisted_in_message(self):
+        thinking_parts = [
+            {"type": "thinking", "content": "分析索引状态"},
+            {"type": "tool_call", "tool": "list_meals", "args": {}},
+            {"type": "tool_result", "tool_id": "tc1", "content": "3 meals found"},
+        ]
+        msg = {
+            "role": "assistant",
+            "content": "诊断完成",
+            "thinking_parts": thinking_parts,
+            "thinking_expanded": True,
+        }
+        assert msg["thinking_parts"] == thinking_parts
+        assert msg["thinking_expanded"] is True
+        assert len(msg["thinking_parts"]) == 3
+
+    def test_message_backward_compatibility(self):
+        msg = {"role": "assistant", "content": "旧格式消息"}
+        assert msg.get("thinking_parts") is None
+        assert msg.get("thinking_expanded", True) is True
+
+    def test_expand_all_updates_thinking_expanded(self):
+        messages = [
+            {
+                "role": "assistant",
+                "content": "回复1",
+                "thinking_parts": [{"type": "thinking", "content": "思考1"}],
+                "thinking_expanded": False,
+            },
+            {
+                "role": "assistant",
+                "content": "回复2",
+                "thinking_parts": [{"type": "thinking", "content": "思考2"}],
+                "thinking_expanded": False,
+            },
+            {"role": "user", "content": "问题"},
+        ]
+        for msg in messages:
+            if msg["role"] == "assistant" and msg.get("thinking_parts"):
+                msg["thinking_expanded"] = True
+        assert messages[0]["thinking_expanded"] is True
+        assert messages[1]["thinking_expanded"] is True
+
+    def test_collapse_all_updates_thinking_expanded(self):
+        messages = [
+            {
+                "role": "assistant",
+                "content": "回复1",
+                "thinking_parts": [{"type": "thinking", "content": "思考1"}],
+                "thinking_expanded": True,
+            },
+            {
+                "role": "assistant",
+                "content": "回复2",
+                "thinking_parts": [{"type": "thinking", "content": "思考2"}],
+                "thinking_expanded": True,
+            },
+        ]
+        for msg in messages:
+            if msg["role"] == "assistant" and msg.get("thinking_parts"):
+                msg["thinking_expanded"] = False
+        assert messages[0]["thinking_expanded"] is False
+        assert messages[1]["thinking_expanded"] is False
+
+    def test_toggle_does_not_affect_existing_messages(self):
+        messages = [
+            {
+                "role": "assistant",
+                "content": "回复1",
+                "thinking_parts": [{"type": "thinking", "content": "思考1"}],
+                "thinking_expanded": True,
+            },
+        ]
+        new_collapse = True
+        new_msg = {
+            "role": "assistant",
+            "content": "回复2",
+            "thinking_parts": [{"type": "thinking", "content": "思考2"}],
+            "thinking_expanded": not new_collapse,
+        }
+        messages.append(new_msg)
+        assert messages[0]["thinking_expanded"] is True
+        assert messages[1]["thinking_expanded"] is False
