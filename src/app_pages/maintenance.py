@@ -209,9 +209,8 @@ def _render_streaming_agent(agent, state: dict, config: dict) -> dict | None:
     if interrupt_payload is not None:
         st.session_state.maintenance_interrupted = True
         st.session_state.maintenance_interrupt_payload = interrupt_payload
-        st.rerun()
 
-    return final_result
+    st.rerun()
 
 
 def _render_thinking_parts(parts: list[dict[str, Any]]) -> None:
