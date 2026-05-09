@@ -279,6 +279,39 @@ def render_maintenance():
     if "maintenance_pending_prompt" not in st.session_state:
         st.session_state.maintenance_pending_prompt = None
 
+    if not st.session_state.maintenance_interrupted:
+        try:
+            agent = _get_compiled_agent()
+            config = {
+                "configurable": {"thread_id": st.session_state.maintenance_thread_id}
+            }
+            graph_state = agent.get_state(config)
+            if (
+                graph_state
+                and graph_state.values
+                and graph_state.values.get("__interrupt__")
+            ):
+                for interrupt_info in graph_state.values.get("__interrupt__", []):
+                    payload = interrupt_info.value
+                    if isinstance(payload, dict) and "question" in payload:
+                        st.session_state.maintenance_interrupted = True
+                        st.session_state.maintenance_interrupt_payload = payload
+                        for key in (
+                            "current_meal",
+                            "current_source",
+                            "diagnosis",
+                            "execution_log",
+                            "stage_history",
+                            "delete_count",
+                        ):
+                            if key in graph_state.values:
+                                st.session_state.maintenance_current_state[key] = (
+                                    graph_state.values[key]
+                                )
+                        break
+        except Exception as e:
+            logger.warning(f"Failed to restore interrupt state from checkpointer: {e}")
+
     with st.sidebar:
         st.markdown("### 🔧 维修工控制面板")
 
