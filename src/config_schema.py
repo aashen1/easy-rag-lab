@@ -792,7 +792,6 @@ class AgentDefaultsConfig(BaseModel):
         mode: Default agent mode
         delete_count_threshold: Threshold for light mode deletion alert
         full_mode_delete_threshold: Threshold for full mode deletion alert
-        experience_persist_path: Path for agent experience persistence
     """
 
     model_config = {"extra": "allow"}

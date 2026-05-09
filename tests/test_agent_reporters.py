@@ -287,12 +287,12 @@ class TestReportTools:
         assert parsed["status"] == "generated"
         assert "report_path" in parsed
 
-    def test_get_tools_returns_21_tools(self):
+    def test_get_tools_returns_22_tools(self):
         from src.agent.graph import _get_tools
 
         _get_tools.cache_clear()
         tools = _get_tools()
-        assert len(tools) == 21
+        assert len(tools) == 22
         tool_names = {t.name for t in tools}
         assert "generate_maintenance_report_tool" in tool_names
         assert "generate_comparison_report_tool" in tool_names
