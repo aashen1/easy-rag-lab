@@ -576,12 +576,12 @@ class TestNewTools:
             result = close_issue.invoke({"issue_id": "BUG-20260504-001-wt1"})
             assert "closed" in result
 
-    def test_get_tools_returns_all_21_tools(self):
+    def test_get_tools_returns_all_22_tools(self):
         from src.agent.graph import _get_tools
 
         _get_tools.cache_clear()
         tools = _get_tools()
-        assert len(tools) == 21
+        assert len(tools) == 22
         tool_names = {t.name for t in tools}
         assert "embed_chunks_tool" in tool_names
         assert "index_chunks_tool" in tool_names
@@ -741,7 +741,22 @@ class TestBuildSystemPrompt:
 
 
 class TestExperienceStore:
-    def test_save_experience(self):
+    def test_save_experience_new_api(self):
+        from langgraph.store.memory import InMemoryStore
+
+        from src.agent.memory.experience_store import ExperienceStore
+
+        store = InMemoryStore()
+        exp_store = ExperienceStore(store)
+        key = exp_store.save_experience(
+            summary="test summary",
+            category="tool_execution",
+            details="some details",
+            pdf_type="annual_report",
+        )
+        assert key.startswith("exp_")
+
+    def test_save_experience_legacy_compat(self):
         from langgraph.store.memory import InMemoryStore
 
         from src.agent.memory.experience_store import ExperienceStore
@@ -750,36 +765,38 @@ class TestExperienceStore:
         exp_store = ExperienceStore(store)
         namespace = ("default", "maintenance_experience", "annual_report")
         key = exp_store.save_experience(
-            namespace,
-            {"pdf_type": "annual_report", "best_parser": "pymupdf4llm+pdfplumber"},
+            namespace=namespace,
+            experience={
+                "pdf_type": "annual_report",
+                "best_parser": "pymupdf4llm+pdfplumber",
+            },
         )
         assert key.startswith("exp_")
 
-    def test_search_experiences(self):
+    def test_get_relevant_experiences(self):
         from langgraph.store.memory import InMemoryStore
 
         from src.agent.memory.experience_store import ExperienceStore
 
         store = InMemoryStore()
         exp_store = ExperienceStore(store)
-        namespace = ("default", "maintenance_experience", "annual_report")
         exp_store.save_experience(
-            namespace,
-            {"pdf_type": "annual_report", "best_parser": "pymupdf4llm+pdfplumber"},
+            summary="test",
+            category="tool_execution",
+            details="details",
+            pdf_type="annual_report",
         )
-        results = exp_store.get_all_experiences(namespace)
+        results = exp_store.get_relevant_experiences(pdf_type="annual_report")
         assert len(results) >= 1
-        assert results[0]["best_parser"] == "pymupdf4llm+pdfplumber"
 
-    def test_get_all_experiences_empty(self):
+    def test_get_relevant_experiences_empty(self):
         from langgraph.store.memory import InMemoryStore
 
         from src.agent.memory.experience_store import ExperienceStore
 
         store = InMemoryStore()
         exp_store = ExperienceStore(store)
-        namespace = ("default", "maintenance_experience", "nonexistent")
-        results = exp_store.get_all_experiences(namespace)
+        results = exp_store.get_relevant_experiences(pdf_type="nonexistent")
         assert results == []
 
     def test_save_experience_includes_timestamp(self):
@@ -789,124 +806,144 @@ class TestExperienceStore:
 
         store = InMemoryStore()
         exp_store = ExperienceStore(store)
-        namespace = ("default", "maintenance_experience", "annual_report")
-        exp_store.save_experience(namespace, {"pdf_type": "annual_report"})
-        results = exp_store.get_all_experiences(namespace)
+        exp_store.save_experience(
+            summary="test",
+            pdf_type="annual_report",
+        )
+        results = exp_store.get_relevant_experiences(pdf_type="annual_report")
         assert "timestamp" in results[0]
 
-
-class TestExperienceStorePersistence:
-    def test_save_and_reload(self, tmp_path):
+    def test_list_experiences(self):
         from langgraph.store.memory import InMemoryStore
 
         from src.agent.memory.experience_store import ExperienceStore
-
-        ExperienceStore._default_persist_path = None
-
-        persist_file = tmp_path / "experience.json"
-        store1 = InMemoryStore()
-        exp_store1 = ExperienceStore(store1, persist_path=persist_file)
-        namespace = ("default", "maintenance_experience", "annual_report")
-        exp_store1.save_experience(
-            namespace,
-            {"pdf_type": "annual_report", "best_parser": "pymupdf4llm+pdfplumber"},
-        )
-
-        store2 = InMemoryStore()
-        exp_store2 = ExperienceStore(store2, persist_path=persist_file)
-        results = exp_store2.get_all_experiences(namespace)
-        assert len(results) >= 1
-        assert results[0]["best_parser"] == "pymupdf4llm+pdfplumber"
-        assert results[0]["pdf_type"] == "annual_report"
-
-        ExperienceStore._default_persist_path = None
-
-    def test_atomic_write(self, tmp_path):
-        import json
-
-        from langgraph.store.memory import InMemoryStore
-
-        from src.agent.memory.experience_store import ExperienceStore
-
-        ExperienceStore._default_persist_path = None
-
-        persist_file = tmp_path / "experience.json"
-        store = InMemoryStore()
-        exp_store = ExperienceStore(store, persist_path=persist_file)
-        namespace = ("default", "maintenance_experience", "annual_report")
-        exp_store.save_experience(
-            namespace,
-            {"pdf_type": "annual_report", "best_parser": "pymupdf4llm"},
-        )
-
-        with open(persist_file, encoding="utf-8") as f:
-            data = json.load(f)
-        assert "namespaces" in data
-        ns_key = "default/maintenance_experience/annual_report"
-        assert ns_key in data["namespaces"]
-        assert len(data["namespaces"][ns_key]) >= 1
-
-        ExperienceStore._default_persist_path = None
-
-    def test_empty_persist_path(self):
-        from langgraph.store.memory import InMemoryStore
-
-        from src.agent.memory.experience_store import ExperienceStore
-
-        ExperienceStore._default_persist_path = None
 
         store = InMemoryStore()
         exp_store = ExperienceStore(store)
-        namespace = ("default", "maintenance_experience", "annual_report")
-        key = exp_store.save_experience(
-            namespace,
-            {"pdf_type": "annual_report", "best_parser": "pymupdf4llm"},
+        exp_store.save_experience(
+            summary="test",
+            category="tool_execution",
+            pdf_type="annual_report",
         )
-        assert key.startswith("exp_")
+        results = exp_store.list_experiences(pdf_type="annual_report")
+        assert len(results) >= 1
+        assert "namespace" in results[0]
+        assert "key" in results[0]
+        assert "value" in results[0]
 
-        ExperienceStore._default_persist_path = None
-
-    def test_load_nonexistent_file(self, tmp_path):
+    def test_delete_experience(self):
         from langgraph.store.memory import InMemoryStore
 
         from src.agent.memory.experience_store import ExperienceStore
 
-        ExperienceStore._default_persist_path = None
-
-        persist_file = tmp_path / "nonexistent" / "experience.json"
         store = InMemoryStore()
-        exp_store = ExperienceStore(store, persist_path=persist_file)
-        namespace = ("default", "maintenance_experience", "annual_report")
-        results = exp_store.get_all_experiences(namespace)
-        assert results == []
+        exp_store = ExperienceStore(store)
+        key = exp_store.save_experience(
+            summary="to delete",
+            pdf_type="annual_report",
+        )
+        ns = ExperienceStore.NAMESPACE_PREFIX + ("annual_report",)
+        exp_store.delete_experience(ns, key)
+        results = exp_store.get_relevant_experiences(pdf_type="annual_report")
+        assert all(r.get("summary") != "to delete" for r in results)
 
-        ExperienceStore._default_persist_path = None
-
-    def test_namespace_key_conversion(self):
+    def test_namespace_prefix_constant(self):
         from src.agent.memory.experience_store import ExperienceStore
 
-        ns = ("default", "maintenance_experience", "annual_report")
-        key = ExperienceStore._namespace_to_key(ns)
-        assert key == "default/maintenance_experience/annual_report"
-        restored = ExperienceStore._key_to_namespace(key)
-        assert restored == ns
+        assert ExperienceStore.NAMESPACE_PREFIX == ("maintenance", "experience")
 
-    def test_class_level_persist_path_propagation(self, tmp_path):
-        from langgraph.store.memory import InMemoryStore
+
+class TestExperienceStoreSqlitePersistence:
+    def test_save_and_reload_sqlite(self, tmp_path):
+        import sqlite3
+
+        from langgraph.store.sqlite import SqliteStore
 
         from src.agent.memory.experience_store import ExperienceStore
 
-        ExperienceStore._default_persist_path = None
+        db_path = tmp_path / "experience.db"
+        conn1 = sqlite3.connect(str(db_path))
+        conn1.autocommit = True
+        store1 = SqliteStore(conn1)
+        store1.setup()
+        exp_store1 = ExperienceStore(store1)
+        exp_store1.save_experience(
+            summary="test summary",
+            category="tool_execution",
+            details="best_parser=pymupdf4llm+pdfplumber",
+            pdf_type="annual_report",
+        )
+        conn1.close()
 
-        persist_file = tmp_path / "experience.json"
-        store = InMemoryStore()
-        ExperienceStore(store, persist_path=persist_file)
-
-        store2 = InMemoryStore()
+        conn2 = sqlite3.connect(str(db_path))
+        conn2.autocommit = True
+        store2 = SqliteStore(conn2)
+        store2.setup()
         exp_store2 = ExperienceStore(store2)
-        assert exp_store2._persist_path == persist_file
+        results = exp_store2.get_relevant_experiences(pdf_type="annual_report")
+        assert len(results) >= 1
+        assert results[0]["summary"] == "test summary"
+        conn2.close()
 
-        ExperienceStore._default_persist_path = None
+    def test_migrate_from_json(self, tmp_path):
+        import json
+        import sqlite3
+
+        from langgraph.store.sqlite import SqliteStore
+
+        from src.agent.memory.experience_store import ExperienceStore
+
+        json_path = tmp_path / "experience.json"
+        data = {
+            "namespaces": {
+                "default/maintenance_experience/annual_report": [
+                    {
+                        "pdf_type": "annual_report",
+                        "best_parser": "pymupdf4llm+pdfplumber",
+                        "_store_key": "exp_legacy_001",
+                    }
+                ]
+            }
+        }
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+
+        db_path = tmp_path / "experience.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.autocommit = True
+        store = SqliteStore(conn)
+        store.setup()
+
+        ExperienceStore._migrate_from_json(store, json_path)
+
+        exp_store = ExperienceStore(store)
+        results = exp_store.get_all_experiences(
+            ("default", "maintenance_experience", "annual_report")
+        )
+        assert len(results) >= 1
+        assert results[0]["best_parser"] == "pymupdf4llm+pdfplumber"
+        assert "_store_key" not in results[0]
+
+        assert json_path.with_suffix(".json.migrated").exists()
+        assert not json_path.exists()
+        conn.close()
+
+    def test_migrate_from_json_no_file(self, tmp_path):
+        import sqlite3
+
+        from langgraph.store.sqlite import SqliteStore
+
+        from src.agent.memory.experience_store import ExperienceStore
+
+        json_path = tmp_path / "nonexistent.json"
+        db_path = tmp_path / "experience.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.autocommit = True
+        store = SqliteStore(conn)
+        store.setup()
+
+        ExperienceStore._migrate_from_json(store, json_path)
+        conn.close()
 
 
 class TestCompileAgentWithStore:
@@ -1063,10 +1100,11 @@ class TestAgentNodeExperienceRetrieval:
         from src.agent.memory.experience_store import ExperienceStore
 
         exp_store = ExperienceStore(store)
-        namespace = ("default", "maintenance_experience", "annual_report")
         exp_store.save_experience(
-            namespace,
-            {"pdf_type": "annual_report", "best_parser": "pymupdf4llm+pdfplumber"},
+            summary="test",
+            category="tool_execution",
+            details="best_parser=pymupdf4llm+pdfplumber",
+            pdf_type="annual_report",
         )
 
         state = MaintenanceState(

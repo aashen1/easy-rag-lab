@@ -4,8 +4,12 @@ import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from loguru import logger
+
+if TYPE_CHECKING:
+    from src.agent.session_manager import SessionManager
 
 
 def _resolve_db_path(db_path: str | None = None) -> Path:
@@ -61,3 +65,23 @@ def get_checkpointer_direct(db_path: str | None = None):
     except sqlite3.Error as e:
         logger.error(f"Failed to initialize SqliteSaver at {db_path_obj}: {e}")
         raise
+
+
+def get_session_manager(db_path: str | None = None) -> SessionManager:
+    """Create a SessionManager instance for session metadata management.
+
+    Uses the same database file as the checkpointer
+    (``data/agent_checkpoints.db`` by default).
+
+    Args:
+        db_path: Path to the SQLite database file. If None, reads from
+            config.yaml agent.checkpoint.db_path, falling back to
+            ``data/agent_checkpoints.db``.
+
+    Returns:
+        A SessionManager instance ready for session CRUD operations.
+    """
+    from src.agent.session_manager import SessionManager
+
+    db_path_obj = _resolve_db_path(db_path)
+    return SessionManager(str(db_path_obj))

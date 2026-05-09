@@ -1,129 +1,115 @@
 from __future__ import annotations
 
-import contextlib
 import json
-import os
-import tempfile
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any
 
 from loguru import logger
 
 
 class ExperienceStore:
-    _default_persist_path: ClassVar[Path | None] = None
+    NAMESPACE_PREFIX: tuple[str, ...] = ("maintenance", "experience")
 
-    def __init__(self, store: Any, persist_path: str | Path | None = None) -> None:
+    def __init__(self, store: Any) -> None:
         self._store = store
-        if persist_path is not None:
-            self._persist_path = Path(persist_path)
-            ExperienceStore._default_persist_path = self._persist_path
-            self._load_from_file()
-        else:
-            self._persist_path = ExperienceStore._default_persist_path
-
-    @staticmethod
-    def _namespace_to_key(namespace: tuple[str, ...]) -> str:
-        return "/".join(namespace)
-
-    @staticmethod
-    def _key_to_namespace(key: str) -> tuple[str, ...]:
-        return tuple(key.split("/"))
-
-    def _save_to_file(self) -> None:
-        if self._persist_path is None:
-            return
-        try:
-            namespaces_data: dict[str, list[dict[str, Any]]] = {}
-            namespaces = self._store.list_namespaces(limit=10000)
-            for ns in namespaces:
-                ns_key = self._namespace_to_key(ns)
-                items = self._store.search(ns, limit=10000)
-                namespaces_data[ns_key] = [item.value for item in items]
-
-            self._persist_path.parent.mkdir(parents=True, exist_ok=True)
-            data = {"namespaces": namespaces_data}
-
-            tmp_fd, tmp_path = tempfile.mkstemp(
-                dir=str(self._persist_path.parent), suffix=".json"
-            )
-            try:
-                with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
-                os.replace(tmp_path, str(self._persist_path))
-            except Exception:
-                with contextlib.suppress(OSError):
-                    os.unlink(tmp_path)
-                raise
-
-            logger.info(f"Persisted experiences to {self._persist_path}")
-        except Exception as e:
-            logger.error(f"Failed to persist experiences: {e}")
-
-    def _load_from_file(self) -> dict[str, list[dict[str, Any]]]:
-        if self._persist_path is None:
-            return {}
-        try:
-            if not self._persist_path.exists():
-                logger.debug(f"No persist file at {self._persist_path}, starting fresh")
-                return {}
-            with open(self._persist_path, encoding="utf-8") as f:
-                data = json.load(f)
-            namespaces = data.get("namespaces", {})
-            for ns_key, experiences in namespaces.items():
-                ns = self._key_to_namespace(ns_key)
-                for exp in experiences:
-                    key = exp.get("_store_key") or f"exp_{uuid.uuid4().hex[:8]}_loaded"
-                    exp_clean = {k: v for k, v in exp.items() if k != "_store_key"}
-                    try:
-                        self._store.put(ns, key, exp_clean)
-                    except Exception as e:
-                        logger.warning(f"Failed to load experience {ns_key}/{key}: {e}")
-            logger.info(
-                f"Loaded experiences from {self._persist_path} "
-                f"({len(namespaces)} namespaces)"
-            )
-            return namespaces
-        except (json.JSONDecodeError, OSError) as e:
-            logger.warning(f"Failed to load experiences from file: {e}")
-            return {}
 
     def save_experience(
-        self, namespace: tuple[str, ...], experience: dict[str, Any]
+        self,
+        summary: str | None = None,
+        category: str | None = None,
+        details: str | None = None,
+        session_id: str | None = None,
+        pdf_type: str | None = None,
+        source_path: str | None = None,
+        *,
+        namespace: tuple[str, ...] | None = None,
+        experience: dict[str, Any] | None = None,
     ) -> str:
-        key = f"exp_{uuid.uuid4().hex[:8]}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        experience["timestamp"] = datetime.now().isoformat()
+        if namespace is not None and experience is not None:
+            logger.warning(
+                "save_experience(namespace, experience) is deprecated. "
+                "Use save_experience(summary, category, details, ...) instead."
+            )
+            return self._save_experience_legacy(namespace, experience)
+
+        key = f"exp_{uuid.uuid4().hex[:12]}"
+        ns = self.NAMESPACE_PREFIX + ((pdf_type,) if pdf_type else ("generic",))
+        value: dict[str, Any] = {
+            "summary": summary or "",
+            "category": category or "",
+            "details": details or "",
+            "session_id": session_id,
+            "pdf_type": pdf_type,
+            "source_path": source_path,
+            "timestamp": datetime.now().isoformat(),
+        }
         try:
-            self._store.put(namespace, key, experience)
-            logger.info(f"Saved experience to {namespace}/{key}")
-            self._save_to_file()
+            self._store.put(ns, key, value)
+            logger.info(f"Saved experience to {ns}/{key}")
             return key
         except Exception as e:
             logger.error(f"Failed to save experience: {e}")
             raise
 
-    def search_experiences(
-        self, namespace: tuple[str, ...], query: str | None = None
-    ) -> list[dict[str, Any]]:
-        """Search experiences by query string.
-
-        NOTE: This method is currently unused in the agent graph.
-        ``agent_node`` uses ``get_all_experiences`` instead because
-        InMemoryStore does not support semantic search.  This method
-        is retained for future use when a persistent store with
-        search capability is adopted.
-        """
+    def _save_experience_legacy(
+        self, namespace: tuple[str, ...], experience: dict[str, Any]
+    ) -> str:
+        key = f"exp_{uuid.uuid4().hex[:12]}"
+        experience["timestamp"] = datetime.now().isoformat()
         try:
-            kwargs: dict[str, Any] = {}
-            if query:
-                kwargs["query"] = query
-            items = self._store.search(namespace, **kwargs)
+            self._store.put(namespace, key, experience)
+            logger.info(f"Saved experience (legacy) to {namespace}/{key}")
+            return key
+        except Exception as e:
+            logger.error(f"Failed to save experience (legacy): {e}")
+            raise
+
+    def get_relevant_experiences(self, pdf_type: str | None = None) -> list[dict]:
+        namespace_prefix = self.NAMESPACE_PREFIX + ((pdf_type,) if pdf_type else ())
+        try:
+            items = self._store.search(namespace_prefix, limit=20)
+            return [item.value for item in items]
+        except Exception as e:
+            logger.error(f"Failed to get relevant experiences: {e}")
+            return []
+
+    def search_experiences(self, query: str, limit: int = 10) -> list[dict]:
+        try:
+            items = self._store.search(self.NAMESPACE_PREFIX, query=query, limit=limit)
             return [item.value for item in items]
         except Exception as e:
             logger.error(f"Failed to search experiences: {e}")
             return []
+
+    def list_experiences(
+        self,
+        category: str | None = None,
+        pdf_type: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        namespace_prefix = self.NAMESPACE_PREFIX + ((pdf_type,) if pdf_type else ())
+        try:
+            kwargs: dict[str, Any] = {"limit": limit}
+            if category:
+                kwargs["filter"] = {"category": category}
+            items = self._store.search(namespace_prefix, **kwargs)
+            return [
+                {"namespace": item.namespace, "key": item.key, "value": item.value}
+                for item in items
+            ]
+        except Exception as e:
+            logger.error(f"Failed to list experiences: {e}")
+            return []
+
+    def delete_experience(self, namespace: tuple[str, ...], key: str) -> None:
+        try:
+            self._store.delete(namespace, key)
+            logger.info(f"Deleted experience {namespace}/{key}")
+        except Exception as e:
+            logger.error(f"Failed to delete experience {namespace}/{key}: {e}")
+            raise
 
     def get_all_experiences(self, namespace: tuple[str, ...]) -> list[dict[str, Any]]:
         try:
@@ -132,3 +118,37 @@ class ExperienceStore:
         except Exception as e:
             logger.error(f"Failed to get all experiences: {e}")
             return []
+
+    @classmethod
+    def _migrate_from_json(cls, store: Any, json_path: str | Path) -> None:
+        json_path = Path(json_path)
+        if not json_path.exists():
+            logger.debug(f"No JSON file at {json_path}, skipping migration")
+            return
+        try:
+            with open(json_path, encoding="utf-8") as f:
+                data = json.load(f)
+            namespaces = data.get("namespaces", {})
+            migrated_count = 0
+            for ns_key, experiences in namespaces.items():
+                ns = tuple(ns_key.split("/"))
+                for exp in experiences:
+                    key = (
+                        exp.get("_store_key") or f"exp_{uuid.uuid4().hex[:12]}_migrated"
+                    )
+                    exp_clean = {k: v for k, v in exp.items() if k != "_store_key"}
+                    try:
+                        store.put(ns, key, exp_clean)
+                        migrated_count += 1
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to migrate experience {ns_key}/{key}: {e}"
+                        )
+            migrated_path = json_path.with_suffix(".json.migrated")
+            json_path.rename(migrated_path)
+            logger.info(
+                f"Migrated {migrated_count} experiences from {json_path} "
+                f"-> {migrated_path}"
+            )
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"Failed to migrate from JSON: {e}")
