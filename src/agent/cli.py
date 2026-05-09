@@ -64,6 +64,17 @@ def _parse_cli_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=False,
         help="启用全量模式（默认为轻量模式）",
     )
+    parser.add_argument(
+        "--list-sessions",
+        action="store_true",
+        default=False,
+        help="列出历史会话",
+    )
+    parser.add_argument(
+        "--new-session",
+        default=None,
+        help="新建会话并指定标题",
+    )
     return parser.parse_args(argv)
 
 
@@ -104,6 +115,14 @@ def _handle_cli_command(user_input: str, auto_review: bool) -> str | None:
         return "__show_status__"
     if cmd == ":mode":
         return "__set_mode__"
+    if cmd == ":sessions":
+        return "__list_sessions__"
+    if cmd == ":switch":
+        return f"__switch_session__{arg}"
+    if cmd == ":new":
+        return f"__new_session__{arg}"
+    if cmd == ":copy":
+        return f"__copy_session__{arg}"
 
     return None
 
@@ -117,7 +136,9 @@ def run_agent(argv: list[str] | None = None):
     Returns:
         Exit code (0 for normal exit).
     """
-    from langgraph.store.memory import InMemoryStore
+    import sqlite3
+
+    from langgraph.store.sqlite import SqliteStore
 
     from src.agent.checkpoint import get_checkpointer
     from src.agent.config import get_agent_default
@@ -131,18 +152,66 @@ def run_agent(argv: list[str] | None = None):
 
     args = _parse_cli_args(argv)
 
-    store = InMemoryStore()
-    persist_path = get_agent_default(
-        "experience_persist_path", "data/agent_experience.json"
-    )
-    ExperienceStore(store, persist_path=persist_path)
+    if args.list_sessions:
+        from src.agent.checkpoint import get_session_manager
+
+        session_mgr = get_session_manager()
+        sessions = session_mgr.list_sessions(include_archived=True)
+        if not sessions:
+            print("暂无历史会话")
+        else:
+            print(f"{'会话ID':<20} {'标题':<20} {'更新时间':<20} {'归档'}")
+            print("-" * 70)
+            for s in sessions:
+                archived = "是" if s["is_archived"] else "否"
+                print(
+                    f"{s['session_id']:<20} {s['title']:<20} {s['updated_at'][:16]:<20} {archived}"
+                )
+        return 0
+
+    if args.new_session is not None:
+        from src.agent.checkpoint import get_session_manager
+
+        session_mgr = get_session_manager()
+        new_sess = session_mgr.create_session(title=args.new_session or "新对话")
+        args.session_id = new_sess["session_id"]
+        print(f"已创建新会话: {new_sess['session_id']} ({new_sess['title']})")
+
+    db_path = get_agent_default("checkpoint_db_path", "data/agent_checkpoints.db")
+    conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn.autocommit = True
+    conn.execute("PRAGMA journal_mode=WAL")
+    store = SqliteStore(conn)
+    store.setup()
+
+    ExperienceStore._migrate_from_json(store, "data/agent_experience.json")
 
     with get_checkpointer() as checkpointer:
         agent = compile_agent(checkpointer=checkpointer, store=store)
 
-        thread_id = args.session_id or get_agent_default(
-            "thread_id", "maintenance-session"
-        )
+        from src.agent.checkpoint import get_session_manager
+
+        session_mgr = get_session_manager()
+
+        if args.session_id:
+            sess = session_mgr.get_session(args.session_id)
+            if sess:
+                thread_id = sess["thread_id"]
+            else:
+                sess_by_thread = session_mgr.get_session_by_thread_id(args.session_id)
+                if sess_by_thread:
+                    thread_id = sess_by_thread["thread_id"]
+                else:
+                    thread_id = args.session_id
+        else:
+            sessions = session_mgr.list_sessions()
+            if sessions:
+                sess = sessions[0]
+                thread_id = sess["thread_id"]
+            else:
+                sess = session_mgr.create_session()
+                thread_id = sess["thread_id"]
+
         config = {"configurable": {"thread_id": thread_id}}
 
         print("🔧 RAG 维修工 Agent 已启动")
@@ -158,6 +227,10 @@ def run_agent(argv: list[str] | None = None):
         print("  :status          - 显示当前状态")
         print("  :review on/off   - 切换自动审查")
         print("  :mode light/full - 切换轻量/全量模式")
+        print("  :sessions        - 列出历史会话")
+        print("  :switch <id>     - 切换到指定会话")
+        print("  :new [title]     - 新建会话")
+        print("  :copy [id]       - 复制会话")
         print("-" * 50)
 
         auto_review = False
@@ -174,6 +247,10 @@ def run_agent(argv: list[str] | None = None):
             "delete_count": 0,
             "mode": current_mode,
         }
+
+        from src.agent.tools import save_experience_tool
+
+        save_experience_tool._store = store
 
         while True:
             try:
@@ -236,6 +313,81 @@ def run_agent(argv: list[str] | None = None):
                 print(f"   阶段历史: {len(current_state.get('stage_history', []))} 步")
                 continue
 
+            if cli_result == "__list_sessions__":
+                session_mgr_local = get_session_manager()
+                sessions = session_mgr_local.list_sessions(include_archived=True)
+                if not sessions:
+                    print("\n暂无历史会话")
+                else:
+                    print(f"\n{'会话ID':<20} {'标题':<20} {'更新时间':<16}")
+                    print("-" * 60)
+                    for s in sessions:
+                        marker = " ▶" if s["thread_id"] == thread_id else ""
+                        print(
+                            f"{s['session_id']:<20} {s['title']:<20} {s['updated_at'][:16]}{marker}"
+                        )
+                continue
+
+            if cli_result and cli_result.startswith("__switch_session__"):
+                target_id = cli_result[len("__switch_session__") :]
+                session_mgr_local = get_session_manager()
+                target_sess = session_mgr_local.get_session(target_id)
+                if target_sess:
+                    thread_id = target_sess["thread_id"]
+                    config = {"configurable": {"thread_id": thread_id}}
+                    current_state = {k: None for k in current_state}
+                    current_state.update(
+                        {
+                            "diagnosis": [],
+                            "execution_log": [],
+                            "stage_history": [],
+                            "auto_review": auto_review,
+                            "delete_count": 0,
+                            "mode": current_mode,
+                        }
+                    )
+                    print(f"已切换到会话: {target_sess['title']} ({target_id})")
+                else:
+                    print(f"会话 {target_id} 不存在")
+                continue
+
+            if cli_result and cli_result.startswith("__new_session__"):
+                title = cli_result[len("__new_session__") :] or "新对话"
+                session_mgr_local = get_session_manager()
+                new_sess = session_mgr_local.create_session(title=title)
+                thread_id = new_sess["thread_id"]
+                config = {"configurable": {"thread_id": thread_id}}
+                current_state = {k: None for k in current_state}
+                current_state.update(
+                    {
+                        "diagnosis": [],
+                        "execution_log": [],
+                        "stage_history": [],
+                        "auto_review": auto_review,
+                        "delete_count": 0,
+                        "mode": current_mode,
+                    }
+                )
+                print(f"已创建新会话: {new_sess['title']} ({new_sess['session_id']})")
+                continue
+
+            if cli_result and cli_result.startswith("__copy_session__"):
+                source_id = cli_result[len("__copy_session__") :]
+                session_mgr_local = get_session_manager()
+                new_sess = session_mgr_local.duplicate_session(
+                    source_id
+                    or session_mgr_local.get_session_by_thread_id(thread_id)[
+                        "session_id"
+                    ]
+                )
+                if new_sess:
+                    thread_id = new_sess["thread_id"]
+                    config = {"configurable": {"thread_id": thread_id}}
+                    print(f"已复制会话: {new_sess['title']} ({new_sess['session_id']})")
+                else:
+                    print("复制会话失败")
+                continue
+
             message_content = cli_result if cli_result is not None else user_input
             message_content = _sanitize_text(message_content)
 
@@ -279,6 +431,7 @@ def run_agent(argv: list[str] | None = None):
                             state = Command(resume=True)
                 else:
                     _format_agent_response(result)
+                    save_experience_tool._store = store
                     for key in (
                         "current_meal",
                         "current_source",
