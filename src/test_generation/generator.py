@@ -115,7 +115,6 @@ class TestSetGenerator:
         self.check_proper_nouns = validation_config.get("check_proper_nouns", True)
         self._doc_truncate_cache: dict[str, str] = {}
 
-    @staticmethod
     def generate_test_set(
         self,
         meal_name: str,

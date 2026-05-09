@@ -65,6 +65,10 @@ def build_system_prompt(
 - 检索不到相关内容 → 检查索引状态，必要时重建
 - 回答质量差 → 从解析阶段重新检查
 
+### 处理场景选择
+- **处理单个 PDF**：使用 parse_pdf_tool → chunk_parsed_tool → embed_chunks_tool → index_chunks_tool 依次处理
+- **处理一个 Meal**：使用 create_curated_meal 创建 Meal，然后使用 rebuild_index 重建索引（会自动处理所有 PDF）
+
 ## 高风险操作
 
 以下操作需要用户明确批准后才能执行：
@@ -73,7 +77,10 @@ def build_system_prompt(
 - 更新 meal 配置 (update_meal)
 - 删除并重新索引 (delete_and_reindex_tool)
 
-**重要**：连续删除多个数据源前，请向用户说明累计影响范围。
+**重要**：
+- 连续删除多个数据源前，请向用户说明累计影响范围
+- 轻量模式下，累计删除 3 个数据源后将被系统强制拦截，需要开启新会话继续
+- 全量模式下，累计删除 10 个数据源后将被系统强制拦截，需要开启新会话继续
 
 ## 约束规则
 
