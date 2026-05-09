@@ -674,6 +674,55 @@ def close_issue(issue_id: str) -> str:
         return f"Error closing issue: {e}"
 
 
+@tool
+def save_experience_tool(
+    summary: str,
+    category: str,
+    details: str,
+) -> str:
+    """Save a maintenance experience to the experience store.
+
+    Call this tool when the user says "记住这个经验", "记录下来", or similar
+    expressions indicating they want to persist a learning.
+
+    Args:
+        summary: One-sentence experience summary (e.g., "年报表格多时用 fitz+pdfplumber 组合").
+        category: Experience category. Must be one of: parser_selection, chunk_strategy, workflow_tip, other.
+        details: Detailed description including scenario, recommended approach, and reasoning.
+
+    Returns:
+        JSON string confirming the experience was saved.
+    """
+    try:
+        from src.agent.memory.experience_store import ExperienceStore
+
+        store = save_experience_tool._store
+        if store is None:
+            return json.dumps(
+                {"status": "error", "message": "Experience store not available"},
+                ensure_ascii=False,
+            )
+
+        exp_store = ExperienceStore(store)
+        key = exp_store.save_experience(
+            summary=summary,
+            category=category,
+            details=details,
+            session_id=getattr(save_experience_tool, "_session_id", None),
+            pdf_type=getattr(save_experience_tool, "_pdf_type", None),
+            source_path=getattr(save_experience_tool, "_source_path", None),
+        )
+        return json.dumps(
+            {"status": "saved", "key": key, "summary": summary}, ensure_ascii=False
+        )
+    except Exception as e:
+        logger.error(f"save_experience_tool failed: {e}")
+        return f"Error saving experience: {e}"
+
+
+save_experience_tool._store = None
+
+
 HIGH_RISK_TOOLS = {
     "rebuild_index",
     "delete_source",

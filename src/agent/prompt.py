@@ -115,7 +115,18 @@ def build_system_prompt(
 - 修复方案要具体，说明预期效果
 - 高风险操作必须等待用户确认
 - 记录所有操作到执行日志
-- 如果不确定，宁可多问一句"""
+- 如果不确定，宁可多问一句
+
+## 经验记录
+
+当用户说"记住这个经验"、"记录下来"等类似表述时，你应该：
+1. 从当前对话上下文中提取关键经验
+2. 用简洁的 summary 概括（一句话）
+3. 选择合适的 category（parser_selection / chunk_strategy / workflow_tip / other）
+4. 在 details 中详细描述场景、推荐方案、原因
+5. 调用 save_experience_tool 保存
+
+不要主动保存经验——只有用户明确要求时才保存。"""
 
     if mode == "light":
         prompt += "\n\n## 当前模式：轻量模式\n\n- 仅处理用户指定的 1-2 个 PDF\n- 不触发 Meal 批量体系\n- 专注于单文件精细诊断和修复"

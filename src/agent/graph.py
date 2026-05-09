@@ -56,6 +56,7 @@ def _get_tools():
         parse_pdf_tool,
         query_rag_tool,
         rebuild_index,
+        save_experience_tool,
         update_meal,
     )
 
@@ -81,6 +82,7 @@ def _get_tools():
         update_meal,
         generate_maintenance_report_tool,
         generate_comparison_report_tool,
+        save_experience_tool,
     ]
 
 
@@ -154,8 +156,7 @@ def agent_node(state: MaintenanceState, *, store: Any = None) -> dict[str, Any]:
             current_source = state.get("current_source")
             if current_source:
                 pdf_type = _infer_pdf_type(current_source)
-                namespace = ("default", "maintenance_experience", pdf_type)
-                experiences = exp_store.get_all_experiences(namespace)
+                experiences = exp_store.get_relevant_experiences(pdf_type=pdf_type)
         except Exception as e:
             logger.warning(f"Failed to retrieve experiences: {e}")
 
@@ -459,46 +460,6 @@ def tool_node(state: MaintenanceState, *, store: Any = None) -> dict[str, Any]:
 
         if tool_call["name"] == "delete_source":
             new_delete_count += 1
-
-    if store is not None and executed_tools:
-        experience_tools = {"parse_pdf_tool", "chunk_parsed_tool"}
-        if any(t in experience_tools for t in executed_tools):
-            try:
-                from src.agent.memory.experience_store import ExperienceStore
-
-                exp_store = ExperienceStore(store)
-                current_source = state.get("current_source")
-                if current_source:
-                    pdf_type = _infer_pdf_type(current_source)
-                    namespace = ("default", "maintenance_experience", pdf_type)
-
-                    best_parser = None
-                    best_chunk_strategy = None
-                    best_chunk_size = None
-                    for tool_call in last_message.tool_calls:
-                        args = tool_call.get("args", {})
-                        if tool_call["name"] == "parse_pdf_tool":
-                            best_parser = args.get("parser_name")
-                        elif tool_call["name"] == "chunk_parsed_tool":
-                            best_chunk_strategy = args.get("strategy")
-                            chunk_size_val = args.get("chunk_size")
-                            if chunk_size_val is not None:
-                                best_chunk_size = chunk_size_val
-                            if args.get("parser_name") and not best_parser:
-                                best_parser = args.get("parser_name")
-
-                    experience = {
-                        "pdf_type": pdf_type,
-                        "source": current_source,
-                        "best_parser": best_parser,
-                        "best_chunk_strategy": best_chunk_strategy,
-                        "best_chunk_size": best_chunk_size,
-                        "reason": f"Auto-saved after {', '.join(executed_tools)}",
-                        "tools_used": executed_tools,
-                    }
-                    exp_store.save_experience(namespace, experience)
-            except Exception as e:
-                logger.warning(f"Failed to save experience: {e}")
 
     auto_review = state.get("auto_review", False)
     if auto_review and executed_tools:
