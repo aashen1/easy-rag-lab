@@ -32,3 +32,25 @@ def get_delete_count_threshold(mode: str | None = None) -> int:
     if mode == "full":
         return get_agent_config().get("full_mode_delete_threshold", 10)
     return get_agent_config().get("delete_count_threshold", 3)
+
+
+def get_session_config() -> dict[str, Any]:
+    """Return the agent session configuration section.
+
+    Returns:
+        Dict with session settings (e.g., ``auto_title_max_length``,
+        ``default_title``, ``list_limit``).
+    """
+    agent_config = get_agent_config()
+    return agent_config.get("session", {})
+
+
+def get_experience_config() -> dict[str, Any]:
+    """Return the agent experience configuration section.
+
+    Returns:
+        Dict with experience settings (e.g., ``scan_max_candidates``,
+        ``categories``).
+    """
+    agent_config = get_agent_config()
+    return agent_config.get("experience", {})

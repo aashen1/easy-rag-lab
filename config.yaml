@@ -384,4 +384,14 @@ agent:
     mode: "light"
     delete_count_threshold: 3
     full_mode_delete_threshold: 10
-    experience_persist_path: "data/agent_experience.json"
+  session:
+    auto_title_max_length: 20
+    default_title: "新对话"
+    list_limit: 50
+  experience:
+    scan_max_candidates: 5
+    categories:
+      - parser_selection
+      - chunk_strategy
+      - workflow_tip
+      - other
