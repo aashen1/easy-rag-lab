@@ -1,6 +1,8 @@
 # Easy RAG Lab - “金融文档问答”评测实验室
 
-![Version](https://img.shields.io/badge/version-v0.1.14-blue)![Status](https://img.shields.io/badge/status-active-green)![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
+![Version](https://img.shields.io/badge/version-v0.1.17-blue) ![Status](https://img.shields.io/badge/status-active-green) ![License](https://img.shields.io/badge/license-AGPL--3.0-pink)
+
+![basic-rag-chat](assets/basic-rag-chat.png)
 
 ## 项目简介
 
@@ -51,6 +53,28 @@ RAG链路：
 > 重要：本项目的 LLM 代码调用为适应 LongCat API 配置，使用了特殊的`api_key="dummy"`请求格式，使用其他 API 源可能存在问题。
 
 ---
+
+## 效果展示
+
+除了文首图片展示的基本对话功能，项目还支持以下各项功能：
+
+一、 Meal 选择与 PDF 预览
+
+![pdf-preview-tool](assets/pdf-preview-tool.png)
+
+二、 Case 记录与溯源分析
+
+![case-analysis-tool](assets/case-analysis-tool.png)
+
+三、维修工 Agent
+
+![maintenance-agent](assets/maintenance-agent.png)
+
+四、实验系统（目前仅支持 CLI 模式）
+
+![exp-token-summary](assets/exp-token-summary.png)
+
+
 
 ## 快速开始
 
