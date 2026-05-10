@@ -232,9 +232,56 @@ def _resend_from_message(editing_idx: int, new_content: str):
         st.rerun()
 
 
-def _render_streaming_agent(agent, state: dict, config: dict) -> dict | None:
+def _handle_streaming_event(
+    node_name: str,
+    node_output: dict[str, Any],
+    thinking_parts: list[dict[str, Any]],
+) -> None:
     from langchain_core.messages import AIMessage, ToolMessage
 
+    if node_name == "agent":
+        messages = node_output.get("messages", [])
+        for msg in messages:
+            if isinstance(msg, AIMessage):
+                if msg.content and msg.tool_calls:
+                    text = _extract_text_from_content(msg.content)
+                    if text:
+                        thinking_parts.append({"type": "thinking", "content": text})
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                    for tc in msg.tool_calls:
+                        thinking_parts.append(
+                            {
+                                "type": "tool_call",
+                                "tool": tc["name"],
+                                "args": tc.get("args", {}),
+                            }
+                        )
+
+    elif node_name == "tools":
+        messages = node_output.get("messages", [])
+        for msg in messages:
+            if isinstance(msg, ToolMessage):
+                content_preview = str(msg.content)[:300]
+                thinking_parts.append(
+                    {
+                        "type": "tool_result",
+                        "tool_id": msg.tool_call_id,
+                        "content": content_preview,
+                    }
+                )
+        for key in (
+            "execution_log",
+            "stage_history",
+        ):
+            if key in node_output:
+                st.session_state.maintenance_current_state[key] = node_output[key]
+        if "delete_count" in node_output:
+            st.session_state.maintenance_current_state["delete_count"] = node_output[
+                "delete_count"
+            ]
+
+
+def _render_streaming_agent(agent, state: dict, config: dict) -> dict | None:
     collapse = st.session_state.get("maintenance_collapse_thinking", True)
     st.session_state.maintenance_streaming = True
     st.session_state.maintenance_thinking_parts = []
@@ -246,53 +293,7 @@ def _render_streaming_agent(agent, state: dict, config: dict) -> dict | None:
 
     for event in agent.stream(state, config=config, stream_mode="updates"):
         for node_name, node_output in event.items():
-            if node_name == "agent":
-                messages = node_output.get("messages", [])
-                for msg in messages:
-                    if isinstance(msg, AIMessage):
-                        if msg.content and msg.tool_calls:
-                            text = _extract_text_from_content(msg.content)
-                            if text:
-                                thinking_parts.append(
-                                    {"type": "thinking", "content": text}
-                                )
-                        if hasattr(msg, "tool_calls") and msg.tool_calls:
-                            for tc in msg.tool_calls:
-                                thinking_parts.append(
-                                    {
-                                        "type": "tool_call",
-                                        "tool": tc["name"],
-                                        "args": tc.get("args", {}),
-                                    }
-                                )
-
-            elif node_name == "tools":
-                messages = node_output.get("messages", [])
-                for msg in messages:
-                    if isinstance(msg, ToolMessage):
-                        content_preview = str(msg.content)[:300]
-                        thinking_parts.append(
-                            {
-                                "type": "tool_result",
-                                "tool_id": msg.tool_call_id,
-                                "content": content_preview,
-                            }
-                        )
-                for key in (
-                    "execution_log",
-                    "stage_history",
-                ):
-                    if key in node_output:
-                        st.session_state.maintenance_current_state[key] = node_output[
-                            key
-                        ]
-                if "delete_count" in node_output:
-                    st.session_state.maintenance_current_state["delete_count"] = (
-                        node_output["delete_count"]
-                    )
-
-            elif node_name == "approval":
-                pass
+            _handle_streaming_event(node_name, node_output, thinking_parts)
 
         with thinking_container:
             thinking_container.empty()
@@ -1019,7 +1020,6 @@ def render_maintenance():
 
 
 def _resume_interrupt_streaming(agent, decision, config):
-    from langchain_core.messages import AIMessage
     from langgraph.types import Command
 
     collapse = st.session_state.get("maintenance_collapse_thinking", True)
@@ -1032,48 +1032,7 @@ def _resume_interrupt_streaming(agent, decision, config):
             Command(resume=decision), config=config, stream_mode="updates"
         ):
             for node_name, node_output in event.items():
-                if node_name == "agent":
-                    messages = node_output.get("messages", [])
-                    for msg in messages:
-                        if isinstance(msg, AIMessage):
-                            if msg.content and msg.tool_calls:
-                                text = _extract_text_from_content(msg.content)
-                                if text:
-                                    thinking_parts.append(
-                                        {"type": "thinking", "content": text}
-                                    )
-                            if hasattr(msg, "tool_calls") and msg.tool_calls:
-                                for tc in msg.tool_calls:
-                                    thinking_parts.append(
-                                        {
-                                            "type": "tool_call",
-                                            "tool": tc["name"],
-                                            "args": tc.get("args", {}),
-                                        }
-                                    )
-                elif node_name == "tools":
-                    from langchain_core.messages import ToolMessage
-
-                    messages = node_output.get("messages", [])
-                    for msg in messages:
-                        if isinstance(msg, ToolMessage):
-                            content_preview = str(msg.content)[:300]
-                            thinking_parts.append(
-                                {
-                                    "type": "tool_result",
-                                    "tool_id": msg.tool_call_id,
-                                    "content": content_preview,
-                                }
-                            )
-                    for key in ("execution_log", "stage_history"):
-                        if key in node_output:
-                            st.session_state.maintenance_current_state[key] = (
-                                node_output[key]
-                            )
-                    if "delete_count" in node_output:
-                        st.session_state.maintenance_current_state["delete_count"] = (
-                            node_output["delete_count"]
-                        )
+                _handle_streaming_event(node_name, node_output, thinking_parts)
 
         result = agent.get_state(config)
         final_values = result.values if result else {}
