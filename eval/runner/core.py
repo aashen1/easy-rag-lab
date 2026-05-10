@@ -1036,13 +1036,13 @@ def run_experiment(
         except Exception as e:
             logger.warning(f"Failed to save token summary: {str(e)}")
 
-        print("\n" + experiment_tracker.get_detailed_table())
+        logger.info("\n" + experiment_tracker.get_detailed_table())
 
         if cost_info["total_cost"] > 0:
-            print(f"\nEstimated Cost (model: {cost_info['model']}):")
-            print(f"  Input:  ${cost_info['input_cost']:.4f}")
-            print(f"  Output: ${cost_info['output_cost']:.4f}")
-            print(f"  Total:  ${cost_info['total_cost']:.4f}")
+            logger.info(f"\nEstimated Cost (model: {cost_info['model']}):")
+            logger.info(f"  Input:  ${cost_info['input_cost']:.4f}")
+            logger.info(f"  Output: ${cost_info['output_cost']:.4f}")
+            logger.info(f"  Total:  ${cost_info['total_cost']:.4f}")
 
         logger.success(f"Experiment completed successfully: {exp_dir}")
 
@@ -1082,21 +1082,21 @@ def list_experiments(system_config_path: str = "config.yaml") -> None:
     experiments = exp_manager.list_experiments()
 
     if not experiments:
-        print("No experiments found.")
+        logger.info("No experiments found.")
         return
 
-    print("\n" + "=" * 80)
-    print("EXPERIMENTS")
-    print("=" * 80)
+    logger.info("\n" + "=" * 80)
+    logger.info("EXPERIMENTS")
+    logger.info("=" * 80)
 
     for exp in experiments:
-        print(f"\nID: {exp['experiment_id']}")
-        print(f"Name: {exp['name']}")
-        print(f"Created: {exp['created_at']}")
-        print(f"Status: {exp['status']}")
-        print(f"Path: {exp['path']}")
+        logger.info(f"\nID: {exp['experiment_id']}")
+        logger.info(f"Name: {exp['name']}")
+        logger.info(f"Created: {exp['created_at']}")
+        logger.info(f"Status: {exp['status']}")
+        logger.info(f"Path: {exp['path']}")
 
-    print("\n" + "=" * 80)
+    logger.info("\n" + "=" * 80)
 
 
 def show_experiment_info(exp_id: str, system_config_path: str = "config.yaml") -> None:
@@ -1113,42 +1113,44 @@ def show_experiment_info(exp_id: str, system_config_path: str = "config.yaml") -
     try:
         info = exp_manager.get_experiment_info(exp_id)
 
-        print("\n" + "=" * 80)
-        print(f"EXPERIMENT: {info['name']}")
-        print("=" * 80)
+        logger.info("\n" + "=" * 80)
+        logger.info(f"EXPERIMENT: {info['name']}")
+        logger.info("=" * 80)
 
-        print(f"\nID: {info['experiment_id']}")
-        print(f"Description: {info['description']}")
-        print(f"Created: {info['created_at']}")
-        print(f"Status: {info['status']}")
+        logger.info(f"\nID: {info['experiment_id']}")
+        logger.info(f"Description: {info['description']}")
+        logger.info(f"Created: {info['created_at']}")
+        logger.info(f"Status: {info['status']}")
 
         if info.get("meal_snapshot"):
-            print(f"\nMeal: {info['meal_snapshot'].get('name', 'N/A')}")
-            print(f"Data ID: {info['meal_snapshot'].get('data_id', 'N/A')[:12]}...")
+            logger.info(f"\nMeal: {info['meal_snapshot'].get('name', 'N/A')}")
+            logger.info(
+                f"Data ID: {info['meal_snapshot'].get('data_id', 'N/A')[:12]}..."
+            )
 
         if info.get("test_set_snapshots"):
-            print(f"\nTest Sets ({len(info['test_set_snapshots'])}):")
+            logger.info(f"\nTest Sets ({len(info['test_set_snapshots'])}):")
             for ts in info["test_set_snapshots"]:
-                print(
+                logger.info(
                     f"  - {ts.get('strategy', 'unknown')}: {ts.get('num_questions', 0)} questions"
                 )
 
         if info.get("variant_results"):
-            print(f"\nVariant Results ({len(info['variant_results'])}):")
+            logger.info(f"\nVariant Results ({len(info['variant_results'])}):")
             for vr in info["variant_results"]:
                 name = vr.get("variant_name", "unknown")
                 if "retrieval_metrics" in vr:
                     metrics = vr["retrieval_metrics"]
-                    print(
+                    logger.info(
                         f"  - {name}: HR={metrics.get('avg_hit_rate', 0):.4f}, "
                         f"MRR={metrics.get('avg_mrr', 0):.4f}, "
                         f"NDCG={metrics.get('avg_ndcg', 0):.4f}"
                     )
                 else:
-                    print(f"  - {name}: {vr.get('error', 'No metrics')}")
+                    logger.info(f"  - {name}: {vr.get('error', 'No metrics')}")
 
-        print("\n" + "=" * 80)
+        logger.info("\n" + "=" * 80)
 
     except FileNotFoundError:
-        print(f"Experiment not found: {exp_id}")
+        logger.error(f"Experiment not found: {exp_id}")
         sys.exit(1)
