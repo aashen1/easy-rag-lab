@@ -40,6 +40,7 @@ from src.test_generation.models import (
     TYPE_DISTRIBUTION,
     VALIDATION_STRICTNESS,
 )
+from src.test_generation.question_generator import QuestionGenerator
 from src.test_generation.segment_builder import (
     build_segments_from_pages,
     compact_segments,
@@ -114,6 +115,15 @@ class TestSetGenerator:
         validation_config = tg_config.get("validation", {})
         self.check_proper_nouns = validation_config.get("check_proper_nouns", True)
         self._doc_truncate_cache: dict[str, str] = {}
+
+        self._question_generator = QuestionGenerator(
+            config=config,
+            max_retries=self.max_retries,
+            multi_hop_candidate_count=self.multi_hop_candidate_count,
+            segment_sampling_strategy=self.segment_sampling_strategy,
+            compact_segment_max_chars=self.compact_segment_max_chars,
+            quote_fuzzy_match_threshold=self.quote_fuzzy_match_threshold,
+        )
 
     def generate_test_set(
         self,
@@ -641,7 +651,7 @@ class TestSetGenerator:
             segments, doc_chunks, q_type, source_path, doc_name, doc_content
         ):
             gen = assign_generator()
-            qa = self._generate_hybrid_question(
+            qa = self._question_generator.generate_hybrid_question(
                 segments=segments,
                 doc_chunks=doc_chunks,
                 question_type=q_type,
@@ -716,7 +726,7 @@ class TestSetGenerator:
                                 qa["source_files"] = [src_path]
 
                             with _list_lock:
-                                if self._post_process_question(
+                                if self._question_generator.post_process_question(
                                     qa, doc_content, seen_questions
                                 ):
                                     questions.append(qa)
@@ -737,7 +747,7 @@ class TestSetGenerator:
                         f"(type={q_type}, doc={doc_name})..."
                     )
 
-                    qa = self._generate_hybrid_question(
+                    qa = self._question_generator.generate_hybrid_question(
                         segments=segments,
                         doc_chunks=doc_chunks,
                         question_type=q_type,
@@ -764,7 +774,9 @@ class TestSetGenerator:
                         else:
                             qa["source_files"] = [source_path]
 
-                        if self._post_process_question(qa, doc_content, seen_questions):
+                        if self._question_generator.post_process_question(
+                            qa, doc_content, seen_questions
+                        ):
                             questions.append(qa)
                             question_id += 1
                         else:
@@ -807,7 +819,7 @@ class TestSetGenerator:
                     f"(type={q_type}, doc={doc_name})..."
                 )
 
-                qa = self._generate_hybrid_question(
+                qa = self._question_generator.generate_hybrid_question(
                     segments=segments,
                     doc_chunks=doc_chunks,
                     question_type=q_type,
@@ -821,7 +833,9 @@ class TestSetGenerator:
                     self._create_question_metadata(
                         qa, q_type, source_path, doc_name, question_id, "hybrid"
                     )
-                    if self._post_process_question(qa, doc_content, seen_questions):
+                    if self._question_generator.post_process_question(
+                        qa, doc_content, seen_questions
+                    ):
                         questions.append(qa)
                         question_id += 1
                     else:
@@ -1007,7 +1021,7 @@ class TestSetGenerator:
                     f"(type={q_type}, doc={doc_name})..."
                 )
 
-                qa = self._generate_hybrid_question(
+                qa = self._question_generator.generate_hybrid_question(
                     segments=segments,
                     doc_chunks=doc_chunks,
                     question_type=q_type,
@@ -1021,12 +1035,14 @@ class TestSetGenerator:
                     self._create_question_metadata(
                         qa, q_type, source_path, doc_name, question_id, "golden"
                     )
-                    if self._post_process_question(
+                    if self._question_generator.post_process_question(
                         qa,
                         doc_content,
                         seen_questions,
                         check_answer_consistency=True,
                         golden_metadata={},
+                        validation_strictness=self.VALIDATION_STRICTNESS,
+                        check_proper_nouns=self.check_proper_nouns,
                     ):
                         questions.append(qa)
                         question_id += 1
@@ -1093,7 +1109,7 @@ class TestSetGenerator:
                     f"(type={q_type}, doc={doc_name})..."
                 )
 
-                qa = self._generate_hybrid_question(
+                qa = self._question_generator.generate_hybrid_question(
                     segments=segments,
                     doc_chunks=doc_chunks,
                     question_type=q_type,
@@ -1108,12 +1124,14 @@ class TestSetGenerator:
                         qa, q_type, source_path, doc_name, question_id, "golden"
                     )
 
-                    if self._post_process_question(
+                    if self._question_generator.post_process_question(
                         qa,
                         doc_content,
                         seen_questions,
                         check_answer_consistency=True,
                         golden_metadata={},
+                        validation_strictness=self.VALIDATION_STRICTNESS,
+                        check_proper_nouns=self.check_proper_nouns,
                     ):
                         questions.append(qa)
                         question_id += 1

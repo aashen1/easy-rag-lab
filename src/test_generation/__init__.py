@@ -52,6 +52,7 @@ from src.test_generation.prompts import (
     MULTI_HOP_PROMPT,
     QUESTION_TYPE_SUPPLEMENTS,
 )
+from src.test_generation.question_generator import QuestionGenerator
 from src.test_generation.segment_builder import (
     build_segments_from_pages,
     compact_segments,
@@ -67,6 +68,7 @@ from src.test_generation.supplement import (
     generate_document_based_questions,
     supplement_document_based_questions,
 )
+from src.test_generation.testset_orchestrator import TestSetOrchestrator
 from src.test_generation.validators import (
     build_primary_pool,
     calculate_hybrid_quality_metrics,
@@ -103,8 +105,10 @@ __all__ = [
     "MULTI_HOP_PROMPT",
     "QUESTION_TYPE_SUPPLEMENTS",
     "QUESTION_TYPES",
+    "QuestionGenerator",
     "TYPE_DISTRIBUTION",
     "TestSetGenerator",
+    "TestSetOrchestrator",
     "build_primary_pool",
     "build_segments_from_pages",
     "calculate_hybrid_quality_metrics",
