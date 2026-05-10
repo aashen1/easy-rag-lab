@@ -169,7 +169,7 @@ v0.1.13 让 RAG 有了可展示的界面，但底层四个巨型文件已经成�
 - **Golden testset 生成质量提升**：自适应 CJK 引文长度、对抗性过滤、证据自动补充、per-type max_tokens、missing-type 专用 prompt
 - **硬编码清除**：API URL 和模型名移入配置
 - **文档重组**：user-guides / dev-guides 分离 + 归档按版本叙事重构
-- **验收报告**：[acceptance-report.md](.archive/v0.1.14-code-health-era/release/v0.1.14/acceptance-report.md)
+- **验收报告**：[acceptance-report.md](./.archive/v0.1.14-code-health/release/v0.1.14/acceptance-report.md)
 
 ### 版本验收
 

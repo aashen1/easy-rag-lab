@@ -14,10 +14,10 @@
 | v0.1.7 | 04-19 | 评测增强 | 有了更准的尺子 | [evaluation-era/](v0.1.7-evaluation-era/) |
 | v0.1.8 | 04-20 | TestSet 管理 | 有了独立的测试集 | [testset-era/](v0.1.8-testset-era/) |
 | v0.1.9 | 04-21 | 评测双引擎 | 有了可信的尺子 | [dual-eval-era/](v0.1.9-dual-eval-era/) |
-| v0.1.10 | 04-22 | 解析新纪元 | 有了自由的源头 | [parsing-era/](v0.1.10-parsing-era/) |
+| v0.1.10 | 04-22 | 解析新纪元 | 有了自由的源头 | [parsing-era/](v0.1.10-parsing) |
 | v0.1.11 | 04-26 | 链路统一 | 有了统一的基准 | [unification-era/](v0.1.11-unification-era/) |
 | v0.1.12 | 04-28 | 项目治理 | 有了可持续的节奏 | [governance-era/](v0.1.12-governance-era/) |
-| v0.1.13 | 04-28 | RAG 可视化 | 有了可展示的产品 | [visualization-era/](v0.1.13-visualization-era/) |
+| v0.1.13 | 04-28 | RAG 可视化 | 有了可展示的产品 | [visualization-era/](v0.1.13-visualization) |
 
 ---
 
@@ -102,8 +102,8 @@
 
 **主题目录**：
 
-- [parsing-pipeline/](v0.1.10-parsing-era/parsing-pipeline/) — 多解析器框架 + Artifact 体系
-- [doc-system/](v0.1.10-parsing-era/doc-system/) — 文档更新
+- [parsing-pipeline/](v0.1.10-parsing/parsing-pipeline) — 多解析器框架 + Artifact 体系
+- [doc-system/](v0.1.10-parsing/doc-system) — 文档更新
 
 ### v0.1.11 — 链路统一时代
 
@@ -140,8 +140,8 @@
 
 **主题目录**：
 
-- [visualization/](v0.1.13-visualization-era/visualization/) — Streamlit Web Demo
-- [experiment-framework/](v0.1.13-visualization-era/experiment-framework/) — 实验框架
+- [visualization/](v0.1.13-visualization/visualization) — Streamlit Web Demo
+- [experiment-framework/](v0.1.13-visualization/experiment-framework) — 实验框架
 
 ### 跨版本
 
