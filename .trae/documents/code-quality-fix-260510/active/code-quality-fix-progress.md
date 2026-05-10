@@ -1764,10 +1764,10 @@
 - [x] 开始日期: 2026-05-10
 - [ ] 完成日期: ___
 - [x] 消除重复代码: 10/10 完成 (2.2.1-2.2.10)
-- [ ] 拆分 God 函数: 2/7 完成
+- [ ] 拆分 God 函数: 3/7 完成
   - ✅ compute_aggregate_metrics() - 已拆分为 8 个辅助函数
   - ✅ evaluate_single() - 已拆分为 5 个辅助方法
-  - ❌ run_experiment() - 待处理
+  - ✅ run_experiment() - 已拆分为 7 个辅助函数，主函数从 655 行减少到约 105 行
   - ❌ generator.py - 待处理
   - ❌ maintenance.py - 待处理
   - ❌ tools.py - 待处理
