@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 from datetime import datetime
@@ -190,22 +189,6 @@ class ParserBenchmarkRunner:
             primary_config=primary_config,
             enhancer_config=enhancer_config,
         )
-
-    @staticmethod
-    def _compute_config_hash(pipeline: dict, pdf_path: str) -> str:
-        """Compute a deterministic hash for a pipeline + PDF combination.
-
-        Args:
-            pipeline: Pipeline configuration dict.
-            pdf_path: Path to the test PDF.
-
-        Returns:
-            First 12 characters of the SHA-256 hex digest.
-        """
-        payload = {"pipeline": pipeline, "pdf": pdf_path}
-        return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[
-            :12
-        ]
 
     @staticmethod
     def _metrics_to_dict(metrics: DocumentMetrics) -> dict:
