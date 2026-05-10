@@ -241,7 +241,7 @@ def collect_environment_info() -> dict[str, Any]:
             "langchain",
             "langchain-community",
             "pymupdf",
-            "pymupdf4llllm",
+            "pymupdf4llm",
             "sentence-transformers",
             "rank-bm25",
             "loguru",
