@@ -15,6 +15,7 @@ from eval.metrics.utils import (
     DEFAULT_EVAL_BASE_CONFIG,
     create_llm_client,
     get_eval_config,
+    llm_judge,
 )
 from src.exceptions import EvaluationError
 
@@ -133,27 +134,20 @@ def extract_statements(
     prompt = FAITHFULNESS_STATEMENT_PROMPT.format(answer=answer)
 
     try:
-        message = call_with_retry(
-            client.messages.create,
-            model=model_name,
+        result = llm_judge(
+            client=client,
+            prompt=prompt,
+            model_name=model_name,
             max_tokens=max_tokens,
             temperature=temperature,
-            messages=[{"role": "user", "content": prompt}],
         )
 
-        response_text = message.content[0].text.strip()
-
-        json_match = re.search(r"\{[\s\S]*\}", response_text)
-        if json_match:
-            result = json.loads(json_match.group(), strict=False)
+        if result:
             return result.get("statements", [])
 
-        logger.warning(f"Could not parse JSON from response: {response_text[:100]}")
+        logger.warning("Could not parse JSON from response")
         return []
 
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse JSON response: {str(e)}")
-        return []
     except Exception as e:
         error_msg = f"Failed to extract statements: {str(e)}"
         logger.error(error_msg)
@@ -221,27 +215,20 @@ def verify_statements(
     )
 
     try:
-        message = call_with_retry(
-            client.messages.create,
-            model=model_name,
+        result = llm_judge(
+            client=client,
+            prompt=prompt,
+            model_name=model_name,
             max_tokens=max_tokens,
             temperature=temperature,
-            messages=[{"role": "user", "content": prompt}],
         )
 
-        response_text = message.content[0].text.strip()
-
-        json_match = re.search(r"\{[\s\S]*\}", response_text)
-        if json_match:
-            result = json.loads(json_match.group(), strict=False)
+        if result:
             return result.get("verdict", [])
 
-        logger.warning(f"Could not parse JSON from response: {response_text[:100]}")
+        logger.warning("Could not parse JSON from response")
         return []
 
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse JSON response: {str(e)}")
-        return []
     except Exception as e:
         error_msg = f"Failed to verify statements: {str(e)}"
         logger.error(error_msg)

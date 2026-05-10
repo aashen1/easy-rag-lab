@@ -1,4 +1,3 @@
-import json
 import re
 from typing import Any
 
@@ -8,8 +7,8 @@ from eval.metrics.utils import (
     DEFAULT_EVAL_BASE_CONFIG,
     create_llm_client,
     get_eval_config,
+    llm_judge,
 )
-from src.llm_retry import call_with_retry
 
 DEFAULT_EVAL_CONFIG = {
     **DEFAULT_EVAL_BASE_CONFIG,
@@ -88,19 +87,15 @@ def judge_context_relevance(
     )
 
     try:
-        message = call_with_retry(
-            client.messages.create,
-            model=model_name,
+        result = llm_judge(
+            client=client,
+            prompt=prompt,
+            model_name=model_name,
             max_tokens=256,
             temperature=0.0,
-            messages=[{"role": "user", "content": prompt}],
         )
 
-        response_text = message.content[0].text.strip()
-
-        json_match = re.search(r"\{[\s\S]*\}", response_text)
-        if json_match:
-            result = json.loads(json_match.group(), strict=False)
+        if result:
             verdict = result.get("verdict", "否")
             return verdict.strip() == "是"
 
@@ -254,19 +249,15 @@ def can_infer_from_context(
     )
 
     try:
-        message = call_with_retry(
-            client.messages.create,
-            model=model_name,
+        result = llm_judge(
+            client=client,
+            prompt=prompt,
+            model_name=model_name,
             max_tokens=64,
             temperature=0.0,
-            messages=[{"role": "user", "content": prompt}],
         )
 
-        response_text = message.content[0].text.strip()
-
-        json_match = re.search(r"\{[\s\S]*\}", response_text)
-        if json_match:
-            result = json.loads(json_match.group(), strict=False)
+        if result:
             verdict = result.get("verdict", "否")
             return verdict.strip() == "是"
 
