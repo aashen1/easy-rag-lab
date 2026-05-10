@@ -12,6 +12,43 @@ from langchain_core.tools import tool
 from loguru import logger
 
 
+def _json_response(data: Any) -> str:
+    """Convert data to JSON string with consistent formatting.
+
+    Args:
+        data: Data to serialize.
+
+    Returns:
+        JSON string with ensure_ascii=False and indent=2.
+    """
+    return json.dumps(data, ensure_ascii=False, indent=2, default=str)
+
+
+def _error_response(operation: str, error: Exception) -> str:
+    """Create error response string.
+
+    Args:
+        operation: Name of the operation that failed.
+        error: The exception that was raised.
+
+    Returns:
+        Error message string.
+    """
+    logger.error(f"{operation} failed: {error}")
+    return f"Error {operation}: {error}"
+
+
+def _get_config() -> dict[str, Any]:
+    """Load application configuration.
+
+    Returns:
+        Configuration dictionary.
+    """
+    from src.utils import load_config
+
+    return load_config()
+
+
 def _resolve_pdf_path(pdf_path: str) -> str:
     """Resolve a PDF path, trying the raw data directory if the file is not found.
 
@@ -47,10 +84,7 @@ def _resolve_pdf_path(pdf_path: str) -> str:
 
 
 def _get_agent_config(key: str, default: Any = None) -> Any:
-    from src.utils import load_config
-
-    config = load_config()
-    return config.get("agent", {}).get(key, default)
+    return _get_config().get("agent", {}).get(key, default)
 
 
 def _backup_to_trashbin(source_path: Path, label: str) -> str | None:
@@ -86,25 +120,21 @@ def list_meals(meal_dir: str | None = None) -> str:
     """
     try:
         from src.meal.manager import MealManager
-        from src.utils import load_config
 
-        config = load_config()
-        mgr = MealManager(config)
+        mgr = MealManager(_get_config())
         meals = mgr.list_meals()
-        result = []
-        for m in meals:
-            result.append(
-                {
-                    "name": m.name,
-                    "data_id": m.data_id,
-                    "pdf_count": len(m.pdf_files),
-                    "creation_mode": m.creation_mode,
-                }
-            )
-        return json.dumps(result, ensure_ascii=False, indent=2)
+        result = [
+            {
+                "name": m.name,
+                "data_id": m.data_id,
+                "pdf_count": len(m.pdf_files),
+                "creation_mode": m.creation_mode,
+            }
+            for m in meals
+        ]
+        return _json_response(result)
     except Exception as e:
-        logger.error(f"list_meals failed: {e}")
-        return f"Error listing meals: {e}"
+        return _error_response("listing meals", e)
 
 
 @tool
@@ -119,11 +149,8 @@ def get_meal_detail(meal_name: str) -> str:
     """
     try:
         from src.meal.manager import MealManager
-        from src.utils import load_config
 
-        config = load_config()
-        mgr = MealManager(config)
-        meal = mgr.load_meal(meal_name)
+        meal = MealManager(_get_config()).load_meal(meal_name)
         if meal is None:
             return f"Meal '{meal_name}' not found."
         result = {
@@ -137,10 +164,9 @@ def get_meal_detail(meal_name: str) -> str:
             "stats": meal.stats,
             "config_snapshot": meal.config_snapshot,
         }
-        return json.dumps(result, ensure_ascii=False, indent=2)
+        return _json_response(result)
     except Exception as e:
-        logger.error(f"get_meal_detail failed: {e}")
-        return f"Error getting meal detail: {e}"
+        return _error_response("getting meal detail", e)
 
 
 @tool
@@ -159,10 +185,9 @@ def query_rag_tool(question: str, meal_name: str) -> str:
 
         pipeline = RAGPipeline(meal_name=meal_name)
         result = pipeline.query(question)
-        return json.dumps(result, ensure_ascii=False, indent=2, default=str)
+        return _json_response(result)
     except Exception as e:
-        logger.error(f"query_rag_tool failed: {e}")
-        return f"Error querying RAG: {e}"
+        return _error_response("querying RAG", e)
 
 
 @tool
@@ -200,10 +225,9 @@ def parse_pdf_tool(
             "pages": pages,
             "total_pages": len(result.pages),
         }
-        return json.dumps(output, ensure_ascii=False, indent=2)
+        return _json_response(output)
     except Exception as e:
-        logger.error(f"parse_pdf_tool failed: {e}")
-        return f"Error parsing PDF: {e}"
+        return _error_response("parsing PDF", e)
 
 
 @tool
@@ -232,13 +256,11 @@ def enhance_page_tool(
         from src.core.ops.parse import enhance_page
 
         resolved_path = _resolve_pdf_path(pdf_path)
-        result = enhance_page(
+        return enhance_page(
             resolved_path, page_number, existing_text, enhancer_name=enhancer_name
         )
-        return result
     except Exception as e:
-        logger.error(f"enhance_page_tool failed: {e}")
-        return f"Error enhancing page: {e}"
+        return _error_response("enhancing page", e)
 
 
 @tool
@@ -264,20 +286,16 @@ def chunk_parsed_tool(
         JSON string with chunk count and first few chunks preview.
     """
     try:
-        if parser_name is None:
-            from src.agent.config import get_agent_default
-
-            parser_name = get_agent_default("parser_name", "pymupdf4llm")
-        if chunk_size is None:
-            from src.agent.config import get_agent_default
-
-            chunk_size = get_agent_default("chunk_size", 512)
-        if overlap is None:
-            from src.agent.config import get_agent_default
-
-            overlap = get_agent_default("chunk_overlap", 0)
+        from src.agent.config import get_agent_default
         from src.core.ops.chunk import chunk_parsed
         from src.core.ops.parse import parse_pdf
+
+        if parser_name is None:
+            parser_name = get_agent_default("parser_name", "pymupdf4llm")
+        if chunk_size is None:
+            chunk_size = get_agent_default("chunk_size", 512)
+        if overlap is None:
+            overlap = get_agent_default("chunk_overlap", 0)
 
         resolved_path = _resolve_pdf_path(pdf_path)
         parse_result = parse_pdf(
@@ -290,11 +308,9 @@ def chunk_parsed_tool(
             {"text": c["text"][:200] + "...", "metadata": c.get("metadata", {})}
             for c in chunks[:5]
         ]
-        output = {"total_chunks": len(chunks), "preview": preview}
-        return json.dumps(output, ensure_ascii=False, indent=2)
+        return _json_response({"total_chunks": len(chunks), "preview": preview})
     except Exception as e:
-        logger.error(f"chunk_parsed_tool failed: {e}")
-        return f"Error chunking: {e}"
+        return _error_response("chunking", e)
 
 
 @tool
@@ -324,10 +340,9 @@ def evaluate_answer_tool(
             contexts=contexts,
             expected_answer=expected_answer,
         )
-        return json.dumps(result, ensure_ascii=False, indent=2)
+        return _json_response(result)
     except Exception as e:
-        logger.error(f"evaluate_answer_tool failed: {e}")
-        return f"Error evaluating: {e}"
+        return _error_response("evaluating", e)
 
 
 @tool
@@ -342,9 +357,8 @@ def get_index_info(meal_name: str) -> str:
     """
     try:
         from src.indexer import VectorIndexer
-        from src.utils import load_config
 
-        config = load_config()
+        config = _get_config()
         prefix = config.get("meals", {}).get("collection_prefix", "m_")
         collection_name = f"{prefix}{meal_name}"
         persist_dir = str(
@@ -359,10 +373,9 @@ def get_index_info(meal_name: str) -> str:
             indexer.close()
         if info is None:
             return f"No index found for meal '{meal_name}'."
-        return json.dumps(info, ensure_ascii=False, indent=2, default=str)
+        return _json_response(info)
     except Exception as e:
-        logger.error(f"get_index_info failed: {e}")
-        return f"Error getting index info: {e}"
+        return _error_response("getting index info", e)
 
 
 @tool
@@ -400,20 +413,16 @@ def rebuild_index(meal_name: str, rebuild: bool = True) -> str:
 
         pipeline.build_index(rebuild=rebuild)
         info = pipeline.indexer.get_collection_info()
-        return json.dumps(
+        return _json_response(
             {
                 "status": "rebuilt",
                 "meal_name": meal_name,
                 "collection_info": info,
                 **backup_info,
-            },
-            ensure_ascii=False,
-            indent=2,
-            default=str,
+            }
         )
     except Exception as e:
-        logger.error(f"rebuild_index failed: {e}")
-        return f"Error rebuilding index: {e}"
+        return _error_response("rebuilding index", e)
 
 
 @tool
@@ -449,9 +458,7 @@ def delete_source(meal_name: str, source: str) -> str:
                 trashbin.mkdir(parents=True, exist_ok=True)
                 backup_file = trashbin / f"source_backup_{source_hash}_{timestamp}.json"
                 backup_file.write_text(
-                    json.dumps(
-                        points_metadata, ensure_ascii=False, indent=2, default=str
-                    ),
+                    _json_response(points_metadata),
                     encoding="utf-8",
                 )
                 backup_path = str(backup_file)
@@ -462,20 +469,17 @@ def delete_source(meal_name: str, source: str) -> str:
             logger.warning(f"Backup failed for source '{source}': {e}")
 
         deleted_count = indexer.delete_by_source(source)
-        return json.dumps(
+        return _json_response(
             {
                 "status": "deleted",
                 "meal_name": meal_name,
                 "source": source,
                 "deleted_points": deleted_count,
                 "backup_path": backup_path,
-            },
-            ensure_ascii=False,
-            indent=2,
+            }
         )
     except Exception as e:
-        logger.error(f"delete_source failed: {e}")
-        return f"Error deleting source: {e}"
+        return _error_response("deleting source", e)
 
 
 @tool
@@ -494,21 +498,17 @@ def update_meal(meal_name: str, updates: dict) -> str:
     """
     try:
         from src.meal.manager import MealManager
-        from src.utils import load_config
 
-        config = load_config()
-        mgr = MealManager(config)
+        mgr = MealManager(_get_config())
         meal = mgr.load_meal(meal_name)
         if meal is None:
             return f"Meal '{meal_name}' not found."
 
         allowed_fields = {"description", "tags"}
-        applied = {}
-        for key, value in updates.items():
-            if key in allowed_fields:
-                applied[key] = value
-            else:
-                logger.warning(f"Skipping disallowed field: {key}")
+        applied = {k: v for k, v in updates.items() if k in allowed_fields}
+        skipped = [k for k in updates if k not in allowed_fields]
+        for k in skipped:
+            logger.warning(f"Skipping disallowed field: {k}")
 
         if not applied:
             return "No valid fields to update. Allowed fields: " + ", ".join(
@@ -528,19 +528,16 @@ def update_meal(meal_name: str, updates: dict) -> str:
             if not success:
                 return f"Failed to update field '{key}'."
 
-        return json.dumps(
+        return _json_response(
             {
                 "status": "updated",
                 "meal_name": meal_name,
                 "applied_updates": applied,
                 **backup_info,
-            },
-            ensure_ascii=False,
-            indent=2,
+            }
         )
     except Exception as e:
-        logger.error(f"update_meal failed: {e}")
-        return f"Error updating meal: {e}"
+        return _error_response("updating meal", e)
 
 
 @tool
@@ -580,22 +577,13 @@ def create_issue(
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         if result.returncode != 0:
             logger.warning(f"create_issue command failed: {result.stderr}")
-            return json.dumps(
-                {"status": "error", "stderr": result.stderr.strip()},
-                ensure_ascii=False,
-                indent=2,
-            )
-        return json.dumps(
-            {"status": "created", "output": result.stdout.strip()},
-            ensure_ascii=False,
-            indent=2,
-        )
+            return _json_response({"status": "error", "stderr": result.stderr.strip()})
+        return _json_response({"status": "created", "output": result.stdout.strip()})
     except subprocess.TimeoutExpired:
         logger.error("create_issue timed out")
         return f"Error: create_issue timed out after {timeout} seconds"
     except Exception as e:
-        logger.error(f"create_issue failed: {e}")
-        return f"Error creating issue: {e}"
+        return _error_response("creating issue", e)
 
 
 @tool
@@ -622,22 +610,13 @@ def list_issues(
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         if result.returncode != 0:
             logger.warning(f"list_issues command failed: {result.stderr}")
-            return json.dumps(
-                {"status": "error", "stderr": result.stderr.strip()},
-                ensure_ascii=False,
-                indent=2,
-            )
-        return json.dumps(
-            {"status": "ok", "output": result.stdout.strip()},
-            ensure_ascii=False,
-            indent=2,
-        )
+            return _json_response({"status": "error", "stderr": result.stderr.strip()})
+        return _json_response({"status": "ok", "output": result.stdout.strip()})
     except subprocess.TimeoutExpired:
         logger.error("list_issues timed out")
         return f"Error: list_issues timed out after {timeout} seconds"
     except Exception as e:
-        logger.error(f"list_issues failed: {e}")
-        return f"Error listing issues: {e}"
+        return _error_response("listing issues", e)
 
 
 @tool
@@ -656,22 +635,15 @@ def close_issue(issue_id: str) -> str:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         if result.returncode != 0:
             logger.warning(f"close_issue command failed: {result.stderr}")
-            return json.dumps(
-                {"status": "error", "stderr": result.stderr.strip()},
-                ensure_ascii=False,
-                indent=2,
-            )
-        return json.dumps(
-            {"status": "closed", "issue_id": issue_id, "output": result.stdout.strip()},
-            ensure_ascii=False,
-            indent=2,
+            return _json_response({"status": "error", "stderr": result.stderr.strip()})
+        return _json_response(
+            {"status": "closed", "issue_id": issue_id, "output": result.stdout.strip()}
         )
     except subprocess.TimeoutExpired:
         logger.error("close_issue timed out")
         return f"Error: close_issue timed out after {timeout} seconds"
     except Exception as e:
-        logger.error(f"close_issue failed: {e}")
-        return f"Error closing issue: {e}"
+        return _error_response("closing issue", e)
 
 
 @tool
@@ -698,9 +670,8 @@ def save_experience_tool(
 
         store = save_experience_tool._store
         if store is None:
-            return json.dumps(
-                {"status": "error", "message": "Experience store not available"},
-                ensure_ascii=False,
+            return _json_response(
+                {"status": "error", "message": "Experience store not available"}
             )
 
         exp_store = ExperienceStore(store)
@@ -712,12 +683,9 @@ def save_experience_tool(
             pdf_type=getattr(save_experience_tool, "_pdf_type", None),
             source_path=getattr(save_experience_tool, "_source_path", None),
         )
-        return json.dumps(
-            {"status": "saved", "key": key, "summary": summary}, ensure_ascii=False
-        )
+        return _json_response({"status": "saved", "key": key, "summary": summary})
     except Exception as e:
-        logger.error(f"save_experience_tool failed: {e}")
-        return f"Error saving experience: {e}"
+        return _error_response("saving experience", e)
 
 
 save_experience_tool._store = None
@@ -755,25 +723,20 @@ def embed_chunks_tool(chunks: list[dict], collection_name: str | None = None) ->
         from src.agent.config import get_agent_default
         from src.core.ops.embed import embed_chunks
         from src.embedder import Embedder
-        from src.utils import load_config
 
         if collection_name is None:
             collection_name = get_agent_default("collection_name", "financial_reports")
 
-        config = load_config()
-        embedder = Embedder(config)
+        embedder = Embedder(_get_config())
         result = embed_chunks(chunks, embedder)
-        return json.dumps(
+        return _json_response(
             {
                 "embedding_dim": len(result[0]) if result else 0,
                 "chunk_count": len(result),
-            },
-            ensure_ascii=False,
-            indent=2,
+            }
         )
     except Exception as e:
-        logger.error(f"embed_chunks_tool failed: {e}")
-        return f"Error embedding chunks: {e}"
+        return _error_response("embedding chunks", e)
 
 
 @tool
@@ -791,22 +754,17 @@ def index_chunks_tool(chunks: list[dict], collection_name: str | None = None) ->
         from src.agent.config import get_agent_default
         from src.core.ops.index import index_chunks
         from src.embedder import Embedder
-        from src.utils import load_config
 
         if collection_name is None:
             collection_name = get_agent_default("collection_name", "financial_reports")
 
-        config = load_config()
-        embedder = Embedder(config)
+        embedder = Embedder(_get_config())
         indexed = index_chunks(chunks, embedder, collection_name=collection_name)
-        return json.dumps(
-            {"indexed_count": indexed, "collection_name": collection_name},
-            ensure_ascii=False,
-            indent=2,
+        return _json_response(
+            {"indexed_count": indexed, "collection_name": collection_name}
         )
     except Exception as e:
-        logger.error(f"index_chunks_tool failed: {e}")
-        return f"Error indexing chunks: {e}"
+        return _error_response("indexing chunks", e)
 
 
 @tool
@@ -830,28 +788,23 @@ def delete_and_reindex_tool(
         from src.agent.config import get_agent_default
         from src.core.ops.index import delete_source_and_reindex
         from src.embedder import Embedder
-        from src.utils import load_config
 
         if collection_name is None:
             collection_name = get_agent_default("collection_name", "financial_reports")
 
-        config = load_config()
-        embedder = Embedder(config)
+        embedder = Embedder(_get_config())
         reindexed = delete_source_and_reindex(
             source, new_chunks, embedder, collection_name=collection_name
         )
-        return json.dumps(
+        return _json_response(
             {
                 "reindexed_count": reindexed,
                 "source": source,
                 "collection_name": collection_name,
-            },
-            ensure_ascii=False,
-            indent=2,
+            }
         )
     except Exception as e:
-        logger.error(f"delete_and_reindex_tool failed: {e}")
-        return f"Error deleting and reindexing: {e}"
+        return _error_response("deleting and reindexing", e)
 
 
 @tool
@@ -878,11 +831,8 @@ def create_curated_meal(
     """
     try:
         from src.meal.manager import MealManager
-        from src.utils import load_config
 
-        config = load_config()
-        mgr = MealManager(config)
-        meal = mgr.create_meal_manual(
+        meal = MealManager(_get_config()).create_meal_manual(
             name=name,
             pdf_files=pdf_files,
             source_dir=source_dir,
@@ -890,16 +840,16 @@ def create_curated_meal(
             tags=tags,
             description=description,
         )
-        result = {
-            "name": meal.name,
-            "data_id": meal.data_id,
-            "creation_mode": meal.creation_mode,
-            "pdf_count": len(meal.pdf_files),
-        }
-        return json.dumps(result, ensure_ascii=False, indent=2)
+        return _json_response(
+            {
+                "name": meal.name,
+                "data_id": meal.data_id,
+                "creation_mode": meal.creation_mode,
+                "pdf_count": len(meal.pdf_files),
+            }
+        )
     except Exception as e:
-        logger.error(f"create_curated_meal failed: {e}")
-        return f"Error creating curated meal: {e}"
+        return _error_response("creating curated meal", e)
 
 
 @tool
@@ -913,28 +863,22 @@ def list_pdfs(pattern: str = "*.pdf") -> str:
         JSON string with list of PDF files.
     """
     try:
-        from src.utils import load_config
-
-        config = load_config()
-        raw_dir = Path(config.get("parser", {}).get("input_dir", "data/raw"))
+        raw_dir = Path(_get_config().get("parser", {}).get("input_dir", "data/raw"))
         if not raw_dir.exists():
             return f"Raw data directory not found: {raw_dir}"
 
-        pdf_files = []
-        for f in sorted(raw_dir.rglob(pattern)):
-            stat = f.stat()
-            pdf_files.append(
-                {
-                    "name": f.name,
-                    "path": str(f),
-                    "size_bytes": stat.st_size,
-                    "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
-                }
-            )
-        return json.dumps(pdf_files, ensure_ascii=False, indent=2)
+        pdf_files = [
+            {
+                "name": f.name,
+                "path": str(f),
+                "size_bytes": (stat := f.stat()).st_size,
+                "modified": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            }
+            for f in sorted(raw_dir.rglob(pattern))
+        ]
+        return _json_response(pdf_files)
     except Exception as e:
-        logger.error(f"list_pdfs failed: {e}")
-        return f"Error listing PDFs: {e}"
+        return _error_response("listing PDFs", e)
 
 
 @tool
@@ -985,18 +929,15 @@ def generate_maintenance_report_tool(
         }
         report = reporter.generate(state, session_id)
         filepath = reporter.save(report, session_id)
-        return json.dumps(
+        return _json_response(
             {
                 "status": "generated",
                 "report_path": str(filepath),
                 "report_content": report,
-            },
-            ensure_ascii=False,
-            indent=2,
+            }
         )
     except Exception as e:
-        logger.error(f"generate_maintenance_report_tool failed: {e}")
-        return f"Error generating maintenance report: {e}"
+        return _error_response("generating maintenance report", e)
 
 
 @tool
@@ -1023,11 +964,6 @@ def generate_comparison_report_tool(
             reporter.add_result(r["label"], r["metrics"])
         report = reporter.generate()
         filepath = reporter.save(report, session_id)
-        return json.dumps(
-            {"status": "generated", "report_path": str(filepath)},
-            ensure_ascii=False,
-            indent=2,
-        )
+        return _json_response({"status": "generated", "report_path": str(filepath)})
     except Exception as e:
-        logger.error(f"generate_comparison_report_tool failed: {e}")
-        return f"Error generating comparison report: {e}"
+        return _error_response("generating comparison report", e)
