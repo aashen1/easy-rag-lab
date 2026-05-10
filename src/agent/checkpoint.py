@@ -3,29 +3,14 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loguru import logger
 
+from src.agent.db_utils import resolve_db_path
+
 if TYPE_CHECKING:
     from src.agent.session_manager import SessionManager
-
-
-def _resolve_db_path(db_path: str | None = None) -> Path:
-    if db_path is None:
-        from src.agent.config import get_checkpoint_config
-
-        ckpt_config = get_checkpoint_config()
-        db_path = ckpt_config.get("db_path", "data/agent_checkpoints.db")
-
-    db_path_obj = Path(db_path)
-    try:
-        db_path_obj.parent.mkdir(parents=True, exist_ok=True)
-    except OSError as e:
-        logger.error(f"Failed to create checkpoint directory {db_path_obj.parent}: {e}")
-        raise
-    return db_path_obj
 
 
 @contextmanager
@@ -45,7 +30,7 @@ def get_checkpointer(db_path: str | None = None) -> Generator:
     """
     from langgraph.checkpoint.sqlite import SqliteSaver
 
-    db_path_obj = _resolve_db_path(db_path)
+    db_path_obj = resolve_db_path(db_path)
 
     logger.info(f"Initializing SqliteSaver at {db_path_obj}")
     with SqliteSaver.from_conn_string(str(db_path_obj)) as checkpointer:
@@ -55,7 +40,7 @@ def get_checkpointer(db_path: str | None = None) -> Generator:
 def get_checkpointer_direct(db_path: str | None = None):
     from langgraph.checkpoint.sqlite import SqliteSaver
 
-    db_path_obj = _resolve_db_path(db_path)
+    db_path_obj = resolve_db_path(db_path)
 
     logger.info(f"Initializing SqliteSaver (direct) at {db_path_obj}")
     try:
@@ -83,5 +68,5 @@ def get_session_manager(db_path: str | None = None) -> SessionManager:
     """
     from src.agent.session_manager import SessionManager
 
-    db_path_obj = _resolve_db_path(db_path)
+    db_path_obj = resolve_db_path(db_path)
     return SessionManager(str(db_path_obj))
