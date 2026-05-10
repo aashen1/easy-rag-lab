@@ -426,10 +426,6 @@ mock_embedder.assert_called_once_with(
 
 `list_experiments()` 和 `show_experiment_info()` 使用 `print()` 输出，项目规范要求使用 `loguru`。
 
-### 8.2 `eval/runner/preparation.py` — `shutil.rmtree()` 违反 trashbin 规则
-
-第 128 行直接删除目录，违反项目的 trashbin 规则（应移入 `.trashbin/`）。
-
 ### 8.3 `src/agent/tools.py` — 函数属性作为全局状态
 
 ```python

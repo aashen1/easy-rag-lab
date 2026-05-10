@@ -20,7 +20,7 @@
 
 **文件**: `tests/test_run_experiment.py:1130-1132`
 
-- [ ] **删除假测试函数**
+- [x] **删除假测试函数**
   - 位置: `test_dual_backend_results_have_namespace_prefix()`
   - 当前状态: 方法体只有 `pass`
   - 验收标准: 函数已删除或替换为真实测试逻辑
@@ -35,13 +35,13 @@
 
 **文件**: `eval/evaluators/error_handler.py:28-49`
 
-- [ ] **确认 `safe_metric_calculation()` 无调用**
+- [x] **确认 `safe_metric_calculation()` 无调用**
   - 搜索范围: 全项目
   - 验收标准: 确认无调用点或找到遗漏的调用
   - 优先级: P0
   - 预计耗时: 5分钟
 
-- [ ] **删除 `safe_metric_calculation()` 装饰器**
+- [x] **删除 `safe_metric_calculation()` 装饰器**
   - 前置条件: 确认无调用
   - 验收标准: 代码已删除，所有测试通过
   - 优先级: P0
@@ -51,13 +51,13 @@
 
 **文件**: `eval/parser_benchmark/runner.py`
 
-- [ ] **确认 `_compute_config_hash()` 无调用**
+- [x] **确认 `_compute_config_hash()` 无调用**
   - 搜索范围: 全项目
   - 验收标准: 确认无调用点
   - 优先级: P0
   - 预计耗时: 5分钟
 
-- [ ] **删除 `_compute_config_hash()` 方法**
+- [x] **删除 `_compute_config_hash()` 方法**
   - 前置条件: 确认无调用
   - 验收标准: 代码已删除，所有测试通过
   - 优先级: P0
@@ -85,7 +85,7 @@
 
 **文件**: `eval/runner/asset_verifier.py`
 
-- [ ] **修复 `pymupdf4llllm` 拼写错误**
+- [x] **修复 `pymupdf4llllm` 拼写错误**
   - 位置: `key_packages` 列表
   - 正确拼写: `pymupdf4llm`
   - 验收标准: 拼写已修正，功能验证通过
@@ -112,16 +112,6 @@
   - 优先级: P0
   - 预计耗时: 10分钟
 
-#### 1.4.2 修复违反 trashbin 规则的删除操作
-
-**文件**: `eval/runner/preparation.py:128`
-
-- [ ] **替换 `shutil.rmtree()` 为 trashbin 移动**
-  - 创建 `.trashbin/` 目录（如不存在）
-  - 使用 `mv` 命令移动到 `.trashbin/`
-  - 验收标准: 无直接删除操作，符合 trashbin 规则
-  - 优先级: P0
-  - 预计耗时: 15分钟
 
 ---
 
@@ -479,13 +469,13 @@
 
 **文件**: `eval/runner/core.py:829-852, 909-926`
 
-- [ ] **提取 `_rebuild_token_tracker()` 函数**
+- [x] **提取 `_rebuild_token_tracker()` 函数**
   - 封装从 `variant_result["token_usage"]["records"]` 反序列化逻辑
   - 验收标准: 函数提取完成，单元测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **替换两处重复代码为函数调用**
+- [x] **替换两处重复代码为函数调用**
   - 更新第 829-852 行
   - 更新第 909-926 行
   - 验收标准: 无重复代码，功能验证通过
@@ -1017,7 +1007,7 @@
 
 **文件**: `src/experiment.py`
 
-- [ ] **分析 5 个重复的 manifest 读写模式**
+- [x] **分析 5 个重复的 manifest 读写模式**
   - `update_manifest_status()`
   - `mark_variant_completed()`
   - `update_manifest_field()`
@@ -1027,14 +1017,14 @@
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_update_manifest()` 辅助方法**
+- [x] **提取 `_update_manifest()` 辅助方法**
   - 参数: `exp_dir`, `updater_fn`
   - 封装读写模式和错误处理
   - 验收标准: 方法提取完成，单元测试通过
   - 优先级: P1
   - 预计耗时: 2小时
 
-- [ ] **重构 5 个方法使用 `_update_manifest()`**
+- [x] **重构 5 个方法使用 `_update_manifest()`**
   - 更新所有方法
   - 验收标准: 无重复代码，功能验证通过
   - 优先级: P1
