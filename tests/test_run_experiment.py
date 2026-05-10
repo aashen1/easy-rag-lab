@@ -1127,10 +1127,6 @@ class TestMetricNamespacePrefix:
 class TestDualBackendEvaluation:
     """Tests for dual-backend (builtin + ragas) evaluation."""
 
-    def test_dual_backend_results_have_namespace_prefix(self):
-        """Test that dual-backend results have namespace prefixes on generation metrics."""
-        pass
-
     def test_result_merging_builtin_and_ragas(self):
         """Test that builtin retrieval + ragas generation results merge correctly."""
         builtin_result = {
