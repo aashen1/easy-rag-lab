@@ -388,6 +388,29 @@ def run_variant_evaluation(
         raise
 
 
+def _rebuild_and_merge_token_tracker(
+    token_usage_data: dict,
+    variant_name: str,
+    experiment_tracker: TokenTracker,
+) -> None:
+    variant_tracker = TokenTracker()
+    for rec_data in token_usage_data.get("records", []):
+        usage = DetailedTokenUsage(
+            input_tokens=rec_data["usage"]["input_tokens"],
+            output_tokens=rec_data["usage"]["output_tokens"],
+            system_prompt_tokens=rec_data["usage"].get("system_prompt_tokens", 0),
+            contexts_tokens=rec_data["usage"].get("contexts_tokens", 0),
+            query_tokens=rec_data["usage"].get("query_tokens", 0),
+        )
+        variant_tracker.record(
+            category=rec_data["category"],
+            model_name=rec_data["model_name"],
+            usage=usage,
+            variant_name=variant_name,
+        )
+    experiment_tracker.merge(variant_tracker)
+
+
 def run_experiment(
     config_path: str,
     skip_preprocessing: bool = False,
@@ -826,30 +849,11 @@ def run_experiment(
                     if existing_result is not None:
                         all_variant_results.append(existing_result)
                         if "token_usage" in existing_result:
-                            variant_tracker = TokenTracker()
-                            for rec_data in existing_result["token_usage"].get(
-                                "records", []
-                            ):
-                                usage = DetailedTokenUsage(
-                                    input_tokens=rec_data["usage"]["input_tokens"],
-                                    output_tokens=rec_data["usage"]["output_tokens"],
-                                    system_prompt_tokens=rec_data["usage"].get(
-                                        "system_prompt_tokens", 0
-                                    ),
-                                    contexts_tokens=rec_data["usage"].get(
-                                        "contexts_tokens", 0
-                                    ),
-                                    query_tokens=rec_data["usage"].get(
-                                        "query_tokens", 0
-                                    ),
-                                )
-                                variant_tracker.record(
-                                    category=rec_data["category"],
-                                    model_name=rec_data["model_name"],
-                                    usage=usage,
-                                    variant_name=variant_name,
-                                )
-                            experiment_tracker.merge(variant_tracker)
+                            _rebuild_and_merge_token_tracker(
+                                existing_result["token_usage"],
+                                variant_name,
+                                experiment_tracker,
+                            )
                         continue
                     else:
                         logger.warning(
@@ -906,24 +910,11 @@ def run_experiment(
                 all_variant_results.append(variant_result)
 
                 if "token_usage" in variant_result:
-                    variant_tracker = TokenTracker()
-                    for rec_data in variant_result["token_usage"].get("records", []):
-                        usage = DetailedTokenUsage(
-                            input_tokens=rec_data["usage"]["input_tokens"],
-                            output_tokens=rec_data["usage"]["output_tokens"],
-                            system_prompt_tokens=rec_data["usage"].get(
-                                "system_prompt_tokens", 0
-                            ),
-                            contexts_tokens=rec_data["usage"].get("contexts_tokens", 0),
-                            query_tokens=rec_data["usage"].get("query_tokens", 0),
-                        )
-                        variant_tracker.record(
-                            category=rec_data["category"],
-                            model_name=rec_data["model_name"],
-                            usage=usage,
-                            variant_name=variant_name,
-                        )
-                    experiment_tracker.merge(variant_tracker)
+                    _rebuild_and_merge_token_tracker(
+                        variant_result["token_usage"],
+                        variant_name,
+                        experiment_tracker,
+                    )
 
             except Exception as e:
                 logger.error(f"Variant '{variant_name}' failed: {str(e)}")
