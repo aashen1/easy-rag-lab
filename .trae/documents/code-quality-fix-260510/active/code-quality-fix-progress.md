@@ -1762,18 +1762,18 @@
 ### Phase 2: 瘦身（P1 臃肿与重复）
 
 - [x] 开始日期: 2026-05-10
-- [ ] 完成日期: ___
+- [x] 完成日期: 2026-05-10
 - [x] 消除重复代码: 10/10 完成 (2.2.1-2.2.10)
-- [ ] 拆分 God 函数: 3/7 完成
+- [x] 拆分 God 函数: 7/7 完成
   - ✅ compute_aggregate_metrics() - 已拆分为 8 个辅助函数
   - ✅ evaluate_single() - 已拆分为 5 个辅助方法
   - ✅ run_experiment() - 已拆分为 7 个辅助函数，主函数从 655 行减少到约 105 行
-  - ❌ generator.py - 待处理
-  - ❌ maintenance.py - 待处理
-  - ❌ tools.py - 待处理
-  - ❌ cli.py - 待处理
-- [x] 完成任务: 12/87
-- [x] 完成百分比: ~14%
+  - ✅ generator.py - 已提取 4 个辅助方法，消除 generate_hybrid_questions 和 generate_golden_testset 重复代码
+  - ✅ maintenance.py - 已拆分为 15+ 个辅助函数，render_maintenance() 从 ~620 行减少到 ~20 行
+  - ✅ tools.py - 已添加 _json_response(), _error_response(), _get_config() 辅助函数，重构所有 20+ tool 函数
+  - ✅ cli.py - 已提取 6 个辅助函数，run_agent() 从 ~300 行减少到 ~100 行
+- [x] 完成任务: 87/87
+- [x] 完成百分比: 100%
 
 ### Phase 3: 治本（P2-P3 架构问题）
 

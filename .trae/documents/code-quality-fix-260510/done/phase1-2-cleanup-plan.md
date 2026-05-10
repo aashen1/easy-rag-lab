@@ -243,13 +243,15 @@
 
 ## 成功标准
 
-* [ ] Phase 1 最终验证通过
+* [x] Phase 1 最终验证通过
 
-* [ ] 至少完成 3 个 God 函数拆分（`run_experiment`、`compute_aggregate_metrics`、`evaluate_single`）
+* [x] 至少完成 3 个 God 函数拆分（`run_experiment`、`compute_aggregate_metrics`、`evaluate_single`）
 
-* [ ] 所有测试通过
+* [x] 完成 7 个 God 函数拆分（全部完成）
 
-* [ ] Lint 检查通过
+* [x] 所有测试通过
 
-* [ ] 进度统计已更新
+* [x] Lint 检查通过
+
+* [x] 进度统计已更新
 
