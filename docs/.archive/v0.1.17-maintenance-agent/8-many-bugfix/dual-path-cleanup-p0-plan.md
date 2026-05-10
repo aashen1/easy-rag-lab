@@ -265,4 +265,3 @@ Step 1 → Step 2/3/4 可并行 → Step 5 随时 → Step 6 最后
 | core/ops 对 Agent 的依赖 | 存在（index.py 引用 agent.config） | 消除               |
 | 死代码 query\_rag       | 存在                           | 删除               |
 | **改一处用两处**           | ❌ 不保证                        | ✅ 保证             |
-

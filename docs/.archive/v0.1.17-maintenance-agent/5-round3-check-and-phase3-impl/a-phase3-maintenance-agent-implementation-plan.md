@@ -643,4 +643,3 @@ B4-T8 Phase C 迁移 ──── (独立)
 | Phase C 迁移导致实验系统回归                            | 先跑全量测试确认，如有回归则回退                      |
 | 工具链锁定与 LLM 决策冲突                               | 锁定只影响单步，执行后自动清除                       |
 | Streamlit session\_state 与 LangGraph state 同步 | 使用 thread\_id 作为唯一关联键                 |
-

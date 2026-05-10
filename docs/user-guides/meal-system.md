@@ -2,7 +2,7 @@
 
 <!-- status: needs-update -->
 
-> ⚠️ **文档状态**：本文档缺少 v0.1.8 新增功能的说明，包括：等价组（equivalence group）推断、meal 的 `composition` 元数据结构、TestSetManager 集成（`--merge-test-sets`）、以及 `document` 策略的问题生成。`--generate-test-set` 的 `--strategy` 默认值已变更为 `document`，但文档仍显示 `factual`。建议全面更新。
+> ⚠️ **文档状态**：本文档缺少 v0.1.8 新增功能的说明，包括：等价组（equivalence group）推断、meal 的 `composition` 元数据结构、TestSetManager 集成（`--merge-test-sets`）。`--strategy` 默认值已修正为 `hybrid`。建议全面更新。
 
 > 最后更新: 2026-04-18
 
@@ -150,7 +150,7 @@ pixi run python main.py --generate-test-set <meal_name> [选项]
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `--strategy` | 生成策略（factual/boundary/multi_hop） | factual |
+| `--strategy` | 生成策略（factual/boundary/multi_hop/hybrid/irrelevant/missing/document） | hybrid |
 | `--num-questions` | 问题数量 | 20 |
 | `--seed` | 随机种子 | 随机 |
 

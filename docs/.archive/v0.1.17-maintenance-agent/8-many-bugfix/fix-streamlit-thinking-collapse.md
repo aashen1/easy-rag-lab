@@ -252,4 +252,3 @@ with col_collapse:
 1. **Streamlit expander widget 状态覆盖**：`st.expander` 的 widget state 优先级高于 `expanded` 参数。批量操作时必须清除 widget keys。
 2. **向后兼容**：旧格式的消息（不含 `thinking_parts` 字段）需兼容处理，使用 `msg.get("thinking_parts")` 而非 `msg["thinking_parts"]`。
 3. **流式中断兜底**：即使禁用了控件，极端情况下（如网络断开）流式仍可能中断。通过持久化 `thinking_parts` 到 session state，中断后已积累的内容不会丢失，但最终回复可能缺失。
-

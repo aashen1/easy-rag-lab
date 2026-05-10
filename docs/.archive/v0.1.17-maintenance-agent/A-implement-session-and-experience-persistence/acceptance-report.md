@@ -1,6 +1,6 @@
 # Session 管理与经验持久化功能验收报告
 
-**验收人**: GLM-5  
+**验收人**: GLM-5
 **验收时间**: 2026-05-09T23:40:20
 **验收依据**: `.trae/specs/implement-session-and-experience-persistence/spec.md`
 
@@ -74,7 +74,7 @@
 
 #### Scenario: 对话标题手动编辑
 - **要求**: 用户在对话列表中点击标题编辑按钮并修改标题，调用 `SessionManager.update_session(session_id, title=new_title)` 更新标题，UI 即时刷新显示新标题
-- **实现位置**: 
+- **实现位置**:
   - UI: `src/app_pages/maintenance.py:557-590`
   - 后端: `src/agent/session_manager.py:188-218`
 - **验证方式**: 代码审查
@@ -271,7 +271,7 @@
 
 #### Scenario: 用户要求保存经验
 - **要求**: 用户在对话中说"记住这个经验"或类似表述，Agent 调用 `save_experience_tool(summary, category, details)` 保存经验到经验库，经验关联当前 session_id
-- **实现位置**: 
+- **实现位置**:
   - Tool: `src/agent/tools.py:678-720`
   - Prompt: `src/agent/prompt.py:120-129`
 - **验证方式**: 代码审查
@@ -460,5 +460,5 @@ pixi run test tests/test_experience_store.py -v
 
 ---
 
-**验收人签名**: GLM-5  
+**验收人签名**: GLM-5
 **验收日期**: 2026-05-09T23:40:20

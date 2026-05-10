@@ -177,14 +177,14 @@ from langgraph.types import interrupt, Command
 
 def parse_node(state: MaintenanceState):
     result = parser.parse(state["pdf_path"])
-    
+
     # 暂停，展示结果给用户，等待反馈
     user_feedback = interrupt({
         "message": "解析完成，请检查结果",
         "page_count": len(result.pages),
         "table_count": ...,
     })
-    
+
     # 用户反馈后继续执行
     if user_feedback.get("action") == "retry_with_different_parser":
         return {"current_stage": "parse", "parser_name": user_feedback["parser_name"]}
@@ -209,10 +209,10 @@ graph = workflow.compile(checkpointer=checkpointer, store=store)
 def parse_node(state, *, store, config):
     user_id = config["configurable"]["user_id"]
     namespace = (user_id, "maintenance_notes")
-    
+
     # 读取历史维修笔记
     memories = store.search(namespace)
-    
+
     # 保存新的维修经验
     store.put(namespace, "case_001", {
         "pdf_type": "annual_report",
@@ -229,7 +229,7 @@ def parse_node(state, *, store, config):
 from langchain.tools import tool
 
 @tool
-def parse_pdf(pdf_path: str, parser_name: str = "pymupdf4llm", 
+def parse_pdf(pdf_path: str, parser_name: str = "pymupdf4llm",
               enhancer_name: str | None = None) -> dict:
     """解析 PDF 文件。可选解析器: pymupdf4llm, fitz。可选增强器: pdfplumber。"""
     parser = ParserRegistry.get_composite(primary=parser_name, enhancer=enhancer_name)
@@ -292,7 +292,7 @@ from langchain_anthropic import ChatAnthropic
 def create_langchain_anthropic_client(config: dict) -> ChatAnthropic:
     base_url = config.get("base_url", "https://api.anthropic.com")
     api_key = config.get("api_key")  # 从项目配置获取
-    
+
     return ChatAnthropic(
         model=config.get("model", "claude-sonnet-4-20250514"),
         anthropic_api_key=api_key,
@@ -356,7 +356,7 @@ def parse_pdf(
     enhancer_options: dict | None = None,
 ) -> ParseResult:
     """解析单个 PDF 文件
-    
+
     共享单元：实验系统和 Agent 都通过此函数调用解析功能。
     内部调用 ParserRegistry.get_composite() + parser.parse()。
     """
@@ -377,7 +377,7 @@ def enhance_page(
     enhancer_options: dict | None = None,
 ) -> str:
     """对单个页面执行表格增强
-    
+
     新增能力：支持指定页码，只增强目标页的表格。
     """
     enhancer = ParserRegistry.get_enhancer(enhancer_name, enhancer_options)
@@ -405,7 +405,7 @@ def chunk_parsed(
     embedder: Any | None = None,
 ) -> list[dict[str, Any]]:
     """对单个 ParseResult 执行分块
-    
+
     共享单元：统一入口，根据 strategy 分发到具体分块函数。
     """
     if strategy == "fixed":
@@ -431,7 +431,7 @@ def index_chunks(
     source_filter: set | None = None,
 ) -> int:
     """将 chunks 索引到向量库
-    
+
     共享单元：统一索引入口。
     """
     ...
@@ -443,7 +443,7 @@ def delete_source_and_reindex(
     collection_name: str,
 ) -> int:
     """删除指定 source 的旧向量并索引新 chunks
-    
+
     新增能力：支持增量更新单个 source 的向量。
     """
     ...
@@ -459,7 +459,7 @@ def query_rag(
     pipeline: RAGPipeline,
 ) -> dict[str, Any]:
     """执行单次 RAG 查询
-    
+
     共享单元：包装 RAGPipeline.query()，返回标准化结果。
     """
     return pipeline.query(question)
@@ -480,7 +480,7 @@ def evaluate_single(
     config: dict | None = None,
 ) -> dict[str, float]:
     """评测单个问答样本
-    
+
     共享单元：包装 BuiltinEvaluator.evaluate_batch()。
     """
     ...
@@ -506,7 +506,7 @@ def create_meal(
     description: str | None = None,            # 新增：描述
 ) -> MealConfig:
     """创建 Meal，支持手动指定和随机抽样两种模式
-    
+
     向后兼容：如果只传 sample_ratio/sample_count，行为与原来完全一致。
     新增模式：传入 pdf_files 列表直接指定，或传入 source_dir + file_pattern 搜索。
     """
@@ -522,7 +522,7 @@ def create_curated_meal(
     description: str | None = None,
 ) -> dict:
     """创建手动指定的 Meal（数据集）。
-    
+
     适用于：用户说"给我挑三四份煤炭行业的企业年报"，
     Agent 根据知识找到对应 PDF，创建 Meal。
     """
@@ -537,7 +537,7 @@ def create_curated_meal(
 
 class PdfPlumberEnhancer(TableEnhancer):
     # ... 现有代码不变 ...
-    
+
     def enhance_page(
         self,
         pdf_path: str,
@@ -545,22 +545,22 @@ class PdfPlumberEnhancer(TableEnhancer):
         existing_text: str,
     ) -> str:
         """对单个页面执行表格增强
-        
+
         Args:
             pdf_path: PDF 文件路径
             page_number: 1-indexed 页码
             existing_text: 该页已有的 Markdown 文本
-            
+
         Returns:
             增强后的 Markdown 文本（表格部分被替换/补充）
         """
         page_count = self._get_page_count(pdf_path)
         tables_by_page = self._extract_all_tables(pdf_path, page_count)
-        
+
         page_idx = page_number - 1  # 转为 0-indexed
         if page_idx not in tables_by_page or not tables_by_page[page_idx]:
             return existing_text
-        
+
         enhanced_text = self._merge_tables_into_page(
             existing_text, tables_by_page[page_idx]
         )
@@ -705,7 +705,7 @@ class MaintenanceState(TypedDict):
 
 def build_maintenance_graph():
     workflow = StateGraph(MaintenanceState)
-    
+
     # 添加节点
     workflow.add_node("agent", agent_node)           # LLM 决策：选择工具和参数
     workflow.add_node("parse", parse_node)           # 解析 PDF
@@ -718,10 +718,10 @@ def build_maintenance_graph():
     workflow.add_node("evaluate", evaluate_node)     # 评测
     workflow.add_node("compare", compare_node)       # 对比结果
     workflow.add_node("report", report_node)         # 生成报告
-    
+
     # 边：从 START 到 agent
     workflow.add_edge(START, "agent")
-    
+
     # 条件边：agent 决定下一步
     workflow.add_conditional_edges("agent", route_from_agent, {
         "parse": "parse",
@@ -736,12 +736,12 @@ def build_maintenance_graph():
         "report": "report",
         "end": END,
     })
-    
+
     # 每个工具节点执行完后回到 agent（让 LLM 决定下一步）
-    for node in ["parse", "enhance_page", "chunk", "embed", "index", 
+    for node in ["parse", "enhance_page", "chunk", "embed", "index",
                  "retrieve", "generate", "evaluate", "compare", "report"]:
         workflow.add_edge(node, "agent")
-    
+
     # 编译
     checkpointer = InMemorySaver()  # 开发用；生产用 SqliteSaver
     store = InMemoryStore()
@@ -759,12 +759,12 @@ def build_maintenance_graph():
 
 def agent_node(state: MaintenanceState, *, store, config) -> dict:
     """LLM 决策节点：根据当前状态和用户消息，决定下一步调用什么工具"""
-    
+
     # 1. 读取历史维修经验
     user_id = config.get("configurable", {}).get("user_id", "default")
     namespace = (user_id, "maintenance_experience")
     experiences = store.search(namespace)
-    
+
     # 2. 构建决策 prompt
     system_prompt = MAINTENANCE_WORKER_SYSTEM_PROMPT.format(
         current_stage=state["current_stage"],
@@ -776,13 +776,13 @@ def agent_node(state: MaintenanceState, *, store, config) -> dict:
         past_experiences=[e.value for e in experiences],
         user_locked_tools=state.get("user_locked_tools"),
     )
-    
+
     # 3. 调用 LLM（带工具绑定）
     llm = get_llm_with_tools()
     response = llm.invoke(
         [{"role": "system", "content": system_prompt}] + state["messages"],
     )
-    
+
     # 4. 如果 LLM 返回工具调用，路由到对应节点
     if response.tool_calls:
         tool_call = response.tool_calls[0]
@@ -790,7 +790,7 @@ def agent_node(state: MaintenanceState, *, store, config) -> dict:
             "messages": [response],
             "current_stage": tool_call["name"],  # 路由到对应工具节点
         }
-    
+
     # 5. 如果 LLM 直接回复（无工具调用），可能是向用户提问
     return {"messages": [response]}
 
@@ -798,7 +798,7 @@ def agent_node(state: MaintenanceState, *, store, config) -> dict:
 def route_from_agent(state: MaintenanceState) -> str:
     """根据 agent 节点的输出决定路由"""
     last_message = state["messages"][-1]
-    
+
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
         tool_name = last_message.tool_calls[0]["name"]
         # 映射工具名到节点名
@@ -815,7 +815,7 @@ def route_from_agent(state: MaintenanceState) -> str:
             "generate_report": "report",
         }
         return tool_to_node.get(tool_name, "end")
-    
+
     return "end"
 ```
 
@@ -879,17 +879,17 @@ def parse_node(state: MaintenanceState) -> dict:
     last_message = state["messages"][-1]
     tool_call = last_message.tool_calls[0]
     args = tool_call["args"]
-    
+
     # 调用共享单元
     result = parse_pdf(
         pdf_path=args["pdf_path"],
         parser_name=args.get("parser_name", "pymupdf4llm"),
         enhancer_name=args.get("enhancer_name"),
     )
-    
+
     # 计算度量
     metrics = compute_document_metrics(result)
-    
+
     # 构建工具响应
     tool_response = {
         "page_count": len(result.pages),
@@ -897,14 +897,14 @@ def parse_node(state: MaintenanceState) -> dict:
         "table_count": metrics.total_tables,
         "parse_time_seconds": metrics.parse_time_seconds,
     }
-    
+
     # 更新状态
     config_key = f"{args.get('parser_name', 'pymupdf4llm')}+{args.get('enhancer_name', 'none')}"
     updated_parse_results = {**state.get("parse_results", {}), config_key: {
         "result": serialize_parse_result(result),
         "metrics": tool_response,
     }}
-    
+
     return {
         "messages": [ToolMessage(content=json.dumps(tool_response), tool_call_id=tool_call["id"])],
         "parse_results": updated_parse_results,
@@ -920,7 +920,7 @@ def parse_node(state: MaintenanceState) -> dict:
 def parse_node(state: MaintenanceState) -> dict:
     result = parse_pdf(...)
     metrics = compute_document_metrics(result)
-    
+
     # 暂停，展示结果给用户
     user_feedback = interrupt({
         "type": "parse_result_review",
@@ -933,7 +933,7 @@ def parse_node(state: MaintenanceState) -> dict:
             "view_page - 查看特定页面的解析结果",
         ],
     })
-    
+
     # 根据用户反馈决定下一步
     if user_feedback.get("action") == "retry":
         return {"current_stage": "parse", ...}  # 回到解析阶段
@@ -957,7 +957,7 @@ def agent_node(state: MaintenanceState) -> Command:
             goto="parse",  # 跳转到解析节点
             update={"parser_name": "fitz", "enhancer_name": "pdfplumber"},
         )
-    
+
     # 用户说"全部重来"
     if user_requests_restart:
         return Command(
@@ -1133,4 +1133,3 @@ def agent_node(state: MaintenanceState) -> Command:
 | WP6: 增量更新（ArtifactCache + Indexer） | Phase 2.11-2.12 | 依赖 WP1           |
 | WP7: Streamlit UI + CLI 完善         | Phase 3.1-3.3   | 依赖 WP3           |
 | WP8: 提示词优化 + 实验系统迁移                | Phase 3.4-3.5   | 依赖 WP3 + WP5     |
-
