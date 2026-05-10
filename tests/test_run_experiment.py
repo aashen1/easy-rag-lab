@@ -1127,42 +1127,6 @@ class TestMetricNamespacePrefix:
 class TestDualBackendEvaluation:
     """Tests for dual-backend (builtin + ragas) evaluation."""
 
-    def test_result_merging_builtin_and_ragas(self):
-        """Test that builtin retrieval + ragas generation results merge correctly."""
-        builtin_result = {
-            "id": "q1",
-            "question": "What is RAG?",
-            "answer": "RAG is retrieval-augmented generation.",
-            "retrieval": {"hit_rate": 1.0, "mrr": 1.0, "ndcg": 1.0},
-            "generation": {
-                "builtin_faithfulness": 0.8,
-                "builtin_answer_relevancy": 0.7,
-            },
-            "sources": ["doc1.pdf"],
-            "expected_sources": ["doc1.pdf"],
-        }
-
-        ragas_result = {
-            "id": "q1",
-            "question": "What is RAG?",
-            "answer": "RAG is retrieval-augmented generation.",
-            "generation": {"ragas_faithfulness": 0.85, "ragas_answer_relevancy": 0.72},
-            "sources": ["doc1.pdf"],
-            "expected_sources": ["doc1.pdf"],
-        }
-
-        merged = dict(builtin_result)
-        if "generation" in ragas_result:
-            if "generation" not in merged:
-                merged["generation"] = {}
-            merged["generation"].update(ragas_result["generation"])
-
-        assert "retrieval" in merged
-        assert "builtin_faithfulness" in merged["generation"]
-        assert "ragas_faithfulness" in merged["generation"]
-        assert merged["generation"]["builtin_faithfulness"] == 0.8
-        assert merged["generation"]["ragas_faithfulness"] == 0.85
-
     def test_single_backend_no_prefix(self):
         """Test that single backend results have no prefix."""
         result = {

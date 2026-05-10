@@ -26,53 +26,6 @@ def mock_config():
     }
 
 
-class TestMaintenanceState:
-    def test_state_has_required_fields(self):
-        state = MaintenanceState(
-            messages=[],
-            current_meal=None,
-            current_source=None,
-            diagnosis=[],
-            pending_action=None,
-            approved=None,
-            execution_log=[],
-            stage_history=[],
-            auto_review=False,
-            locked_tool=None,
-            locked_tool_args=None,
-        )
-        assert state["messages"] == []
-        assert state["current_meal"] is None
-        assert state["execution_log"] == []
-
-    def test_state_accepts_values(self):
-        state = MaintenanceState(
-            messages=[{"role": "user", "content": "test"}],
-            current_meal="test_meal",
-            current_source="test.pdf",
-            diagnosis=[{"issue": "bad chunk"}],
-            pending_action={"tool": "rebuild_index"},
-            approved=True,
-            execution_log=[
-                json.dumps(
-                    {
-                        "tool": "list_meals",
-                        "time": "2026-05-05T10:00:00",
-                        "status": "ok",
-                    },
-                    ensure_ascii=False,
-                )
-            ],
-            stage_history=[],
-            auto_review=False,
-            locked_tool=None,
-            locked_tool_args=None,
-        )
-        assert state["current_meal"] == "test_meal"
-        assert state["diagnosis"] == [{"issue": "bad chunk"}]
-        assert state["approved"] is True
-
-
 class TestHighRiskTools:
     def test_high_risk_tools_set(self):
         assert "rebuild_index" in HIGH_RISK_TOOLS
@@ -449,43 +402,6 @@ class TestAgentConfig:
             assert result == {"defaults": {"chunk_size": 1024}}
 
 
-class TestLLMClientCaching:
-    def test_get_llm_returns_cached_instance(self):
-        from unittest.mock import patch
-
-        from src.agent.graph import _get_llm
-
-        _get_llm.cache_clear()
-        with (
-            patch("src.llm_client.create_langchain_anthropic_client") as mock_create,
-            patch(
-                "src.utils.get_llm_config",
-                return_value={
-                    "api_key": "k",
-                    "base_url": "u",
-                    "model_name": "m",
-                    "temperature": 0,
-                    "max_tokens": 100,
-                },
-            ),
-            patch("src.utils.load_config", return_value={}),
-        ):
-            llm1 = _get_llm()
-            llm2 = _get_llm()
-            assert llm1 is llm2
-            assert mock_create.call_count == 1
-        _get_llm.cache_clear()
-
-    def test_get_tools_returns_cached_list(self):
-        from src.agent.graph import _get_tools
-
-        _get_tools.cache_clear()
-        tools1 = _get_tools()
-        tools2 = _get_tools()
-        assert tools1 is tools2
-        _get_tools.cache_clear()
-
-
 class TestNewTools:
     def test_embed_chunks_tool_exists(self):
         from src.agent.tools import embed_chunks_tool
@@ -592,41 +508,6 @@ class TestNewTools:
         assert "list_issues" in tool_names
         assert "close_issue" in tool_names
         _get_tools.cache_clear()
-
-
-class TestMaintenanceStateNewFields:
-    def test_state_with_stage_history(self):
-        state = MaintenanceState(
-            messages=[],
-            current_meal=None,
-            current_source=None,
-            diagnosis=[],
-            pending_action=None,
-            approved=None,
-            execution_log=[],
-            stage_history=["parse_pdf_tool"],
-            auto_review=False,
-            locked_tool=None,
-            locked_tool_args=None,
-        )
-        assert state["stage_history"] == ["parse_pdf_tool"]
-        assert state["auto_review"] is False
-
-    def test_state_auto_review_default(self):
-        state = MaintenanceState(
-            messages=[],
-            current_meal=None,
-            current_source=None,
-            diagnosis=[],
-            pending_action=None,
-            approved=None,
-            execution_log=[],
-            stage_history=[],
-            auto_review=True,
-            locked_tool=None,
-            locked_tool_args=None,
-        )
-        assert state["auto_review"] is True
 
 
 class TestToolNodeStageHistory:

@@ -8,65 +8,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from eval.evaluators.base import EvaluationResult, EvaluationSample
+from eval.evaluators.base import EvaluationSample
 from eval.evaluators.builtin_evaluator import BuiltinEvaluator
 from eval.evaluators.ragas_evaluator import RagasEvaluator
-
-
-class TestEvaluationResult:
-    """Tests for EvaluationResult dataclass."""
-
-    def test_evaluation_result_creation(self):
-        """Test creating an EvaluationResult instance."""
-        result = EvaluationResult(
-            question_id="test_001",
-            question="What is Python?",
-            answer="Python is a programming language.",
-            contexts=["Python is a high-level programming language."],
-            retrieval_metrics={"hit_rate": 1.0, "mrr": 1.0},
-            generation_metrics={"faithfulness": 0.9},
-        )
-
-        assert result.question_id == "test_001"
-        assert result.question == "What is Python?"
-        assert result.answer == "Python is a programming language."
-        assert len(result.contexts) == 1
-        assert result.retrieval_metrics["hit_rate"] == 1.0
-        assert result.generation_metrics["faithfulness"] == 0.9
-        assert result.error is None
-
-    def test_evaluation_result_with_error(self):
-        """Test creating an EvaluationResult with an error."""
-        result = EvaluationResult(
-            question_id="test_002",
-            question="What is Java?",
-            answer="",
-            contexts=[],
-            retrieval_metrics={},
-            generation_metrics={},
-            error="Failed to generate answer",
-        )
-
-        assert result.error == "Failed to generate answer"
-
-    def test_evaluation_result_to_dict(self):
-        """Test converting EvaluationResult to dictionary."""
-        result = EvaluationResult(
-            question_id="test_003",
-            question="What is C++?",
-            answer="C++ is a programming language.",
-            contexts=["C++ is a general-purpose programming language."],
-            retrieval_metrics={"ndcg": 0.8},
-            generation_metrics={"answer_relevancy": 0.85},
-        )
-
-        result_dict = result.to_dict()
-
-        assert isinstance(result_dict, dict)
-        assert result_dict["question_id"] == "test_003"
-        assert result_dict["question"] == "What is C++?"
-        assert "retrieval_metrics" in result_dict
-        assert "generation_metrics" in result_dict
 
 
 class TestEvaluationSample:

@@ -1155,19 +1155,21 @@
 
 **文件**: `tests/test_agent.py`, `tests/test_experiment.py`, `tests/test_meal.py`, `tests/test_run_experiment.py`, `tests/test_evaluators.py`
 
-- [ ] **删除 `TestLLMClientCaching` 测试类**
+- [x] **删除 `TestLLMClientCaching` 测试类**
   - 文件: `test_agent.py`
   - 原因: 测试 `functools.lru_cache` 的缓存行为
   - 验收标准: 测试类已删除
   - 优先级: P1
   - 预计耗时: 15分钟
+  - 完成日期: 2026-05-10
 
-- [ ] **删除 `TestMaintenanceStateNewFields` 测试类**
+- [x] **删除 `TestMaintenanceStateNewFields` 测试类**
   - 文件: `test_agent.py`
   - 原因: 测试 TypedDict 能否存储新字段
   - 验收标准: 测试类已删除
   - 优先级: P1
   - 预计耗时: 15分钟
+  - 完成日期: 2026-05-10
 
 - [ ] **删除 `test_to_dict` 测试（experiment.py）**
   - 文件: `test_experiment.py`
@@ -1175,6 +1177,7 @@
   - 验收标准: 测试已删除
   - 优先级: P1
   - 预计耗时: 15分钟
+  - 备注: 这些测试实际上是在测试自定义的 to_dict 方法，而非 dict 的赋值行为，建议保留
 
 - [ ] **删除 `test_to_dict` 测试（meal.py）**
   - 文件: `test_meal.py`
@@ -1182,27 +1185,31 @@
   - 验收标准: 测试已删除
   - 优先级: P1
   - 预计耗时: 15分钟
+  - 备注: 这些测试实际上是在测试自定义的 to_dict 方法，而非 dataclass 的序列化行为，建议保留
 
-- [ ] **删除 `test_result_merging_builtin_and_ragas` 测试**
+- [x] **删除 `test_result_merging_builtin_and_ragas` 测试**
   - 文件: `test_run_experiment.py`
   - 原因: 测试 `dict.update()` 的行为
   - 验收标准: 测试已删除
   - 优先级: P1
   - 预计耗时: 15分钟
+  - 完成日期: 2026-05-10
 
-- [ ] **删除 `TestEvaluationResult` 测试类**
+- [x] **删除 `TestEvaluationResult` 测试类**
   - 文件: `test_evaluators.py`
   - 原因: 测试 dataclass 的创建和 `to_dict`
   - 验收标准: 测试类已删除
   - 优先级: P1
   - 预计耗时: 15分钟
+  - 完成日期: 2026-05-10
 
-- [ ] **删除 `TestMaintenanceState` 测试类**
+- [x] **删除 `TestMaintenanceState` 测试类**
   - 文件: `test_agent.py`
   - 原因: 测试 Python TypedDict 的赋值和取值行为
   - 验收标准: 测试类已删除
   - 优先级: P1
   - 预计耗时: 15分钟
+  - 完成日期: 2026-05-10
 
 ---
 
@@ -1212,18 +1219,20 @@
 
 **文件**: `tests/test_metrics.py`
 
-- [ ] **分析 16 个测试的模式**
+- [x] **分析 16 个测试的模式**
   - 识别输入路径 → 断言归一化结果的模式
   - 验收标准: 完成模式分析文档
   - 优先级: P1
   - 预计耗时: 30分钟
+  - 完成日期: 2026-05-10
 
-- [ ] **创建参数化测试**
+- [x] **创建参数化测试**
   - 使用 `@pytest.mark.parametrize`
-  - 合并 16 个测试为 1 个
+  - 合并 16 个测试为 5 个（1 个参数化测试 + 4 个比较测试）
   - 验收标准: 测试数量减少，功能验证通过
   - 优先级: P1
   - 预计耗时: 1小时
+  - 完成日期: 2026-05-10
 
 ---
 
@@ -1784,10 +1793,19 @@
 
 ### Phase 4: 测试质量（P5 测试问题）
 
-- [ ] 开始日期: ___
+- [x] 开始日期: 2026-05-10
 - [ ] 完成日期: ___
-- [ ] 完成任务: 0/0
-- [ ] 完成百分比: 0%
+- [x] 删除框架测试: 5/7 完成
+  - ✅ TestMaintenanceState
+  - ✅ TestLLMClientCaching
+  - ✅ TestMaintenanceStateNewFields
+  - ✅ test_result_merging_builtin_and_ragas
+  - ✅ TestEvaluationResult
+  - ❓ test_to_dict (experiment.py) - 建议保留
+  - ❓ test_to_dict (meal.py) - 建议保留
+- [x] 参数化重构: 1/6 完成
+  - ✅ TestNormalizeSource (16→5)
+- [ ] 完成百分比: ~30%
 
 ### Phase 5: 清理（P4-P6 其他问题）
 
