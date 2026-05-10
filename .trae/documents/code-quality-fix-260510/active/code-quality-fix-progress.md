@@ -67,17 +67,18 @@
 
 **文件**: `src/testset_review/pdf_viewer.py`
 
-- [ ] **确认 `PDFViewer` 仅重新导出**
+- [x] **确认 `PDFViewer` 仅重新导出**
   - 检查文件内容
   - 验收标准: 确认只有 `from scripts.pdf_viewer import PDFViewer`
   - 优先级: P0
   - 预计耗时: 5分钟
+  - **决策**: 该文件被 `src/testset_cli/review.py` 和 `src/testset_review/__init__.py` 引用，作为包的公共API桥接层有实际用途。删除需要修改引用方import路径，收益不大。决定保留。
 
-- [ ] **删除 `pdf_viewer.py` 文件**
-  - 前置条件: 确认无其他依赖
-  - 验收标准: 文件已移入 `.trashbin/`，所有测试通过
+- [x] **决策：保留文件**
+  - 理由：作为包的公共API桥接层，被其他模块引用
+  - 验收标准: 文件保留，决策已记录
   - 优先级: P0
-  - 预计耗时: 5分钟
+  - 预计耗时: 已完成
 
 ---
 
