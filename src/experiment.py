@@ -1,6 +1,7 @@
 import copy
 import json
 import warnings
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -872,6 +873,34 @@ class ExperimentManager:
         result = self.load_experiment_result(exp_dir)
         return result.to_dict()
 
+    def _update_manifest(
+        self,
+        exp_dir: Path,
+        updater: Callable[[dict[str, Any]], None],
+        *,
+        not_found_msg: str | None = "Manifest not found, skipping update",
+        error_msg: str = "Failed to update manifest",
+        raise_on_error: bool = False,
+    ) -> None:
+        manifest_path = exp_dir / "manifest.json"
+        if not manifest_path.exists():
+            if not_found_msg:
+                logger.warning(not_found_msg)
+            return
+
+        try:
+            with open(manifest_path, encoding="utf-8") as f:
+                manifest = json.load(f)
+
+            updater(manifest)
+
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(manifest, f, ensure_ascii=False, indent=2)
+        except (json.JSONDecodeError, OSError) as e:
+            logger.error(f"{error_msg}: {str(e)}")
+            if raise_on_error:
+                raise
+
     def update_manifest_status(self, exp_dir: Path, status: str) -> None:
         """
         Update the status field in the manifest file.
@@ -883,26 +912,14 @@ class ExperimentManager:
         Raises:
             OSError: If file writing fails.
         """
-        manifest_path = exp_dir / "manifest.json"
-        if not manifest_path.exists():
-            logger.warning(
-                f"Manifest file not found: {manifest_path}, skipping status update"
-            )
-            return
-
-        try:
-            with open(manifest_path, encoding="utf-8") as f:
-                manifest = json.load(f)
-
-            manifest["status"] = status
-
-            with open(manifest_path, "w", encoding="utf-8") as f:
-                json.dump(manifest, f, ensure_ascii=False, indent=2)
-
-            logger.info(f"Updated experiment status to '{status}'")
-        except (json.JSONDecodeError, OSError) as e:
-            logger.error(f"Failed to update manifest status: {str(e)}")
-            raise
+        self._update_manifest(
+            exp_dir,
+            lambda m: m.__setitem__("status", status),
+            not_found_msg=f"Manifest file not found: {exp_dir / 'manifest.json'}, skipping status update",
+            error_msg="Failed to update manifest status",
+            raise_on_error=True,
+        )
+        logger.info(f"Updated experiment status to '{status}'")
 
     def mark_variant_completed(
         self, exp_dir: Path, variant_name: str, config_hash: str | None = None
@@ -924,33 +941,24 @@ class ExperimentManager:
         Raises:
             OSError: If file writing fails.
         """
-        manifest_path = exp_dir / "manifest.json"
-        if not manifest_path.exists():
-            logger.warning(
-                f"Manifest file not found: {manifest_path}, skipping variant completion mark"
-            )
-            return
 
-        try:
-            with open(manifest_path, encoding="utf-8") as f:
-                manifest = json.load(f)
-
-            completed = manifest.get("completed_variants", [])
+        def _updater(m: dict[str, Any]) -> None:
+            completed = m.get("completed_variants", [])
             if variant_name not in completed:
                 completed.append(variant_name)
-                manifest["completed_variants"] = completed
-
+                m["completed_variants"] = completed
             if config_hash is not None:
-                hashes = manifest.get("variant_config_hashes", {})
+                hashes = m.get("variant_config_hashes", {})
                 hashes[variant_name] = config_hash
-                manifest["variant_config_hashes"] = hashes
+                m["variant_config_hashes"] = hashes
 
-            with open(manifest_path, "w", encoding="utf-8") as f:
-                json.dump(manifest, f, ensure_ascii=False, indent=2)
-
-            logger.info(f"Marked variant '{variant_name}' as completed in manifest")
-        except (json.JSONDecodeError, OSError) as e:
-            logger.error(f"Failed to mark variant completed: {str(e)}")
+        self._update_manifest(
+            exp_dir,
+            _updater,
+            not_found_msg=f"Manifest file not found: {exp_dir / 'manifest.json'}, skipping variant completion mark",
+            error_msg="Failed to mark variant completed",
+        )
+        logger.info(f"Marked variant '{variant_name}' as completed in manifest")
 
     def update_manifest_field(self, exp_dir: Path, field: str, value: Any) -> None:
         """
@@ -964,25 +972,13 @@ class ExperimentManager:
         Raises:
             OSError: If file writing fails.
         """
-        manifest_path = exp_dir / "manifest.json"
-        if not manifest_path.exists():
-            logger.warning(
-                f"Manifest file not found: {manifest_path}, skipping field update"
-            )
-            return
-
-        try:
-            with open(manifest_path, encoding="utf-8") as f:
-                manifest = json.load(f)
-
-            manifest[field] = value
-
-            with open(manifest_path, "w", encoding="utf-8") as f:
-                json.dump(manifest, f, ensure_ascii=False, indent=2)
-
-            logger.info(f"Updated manifest field '{field}'")
-        except (json.JSONDecodeError, OSError) as e:
-            logger.error(f"Failed to update manifest field: {str(e)}")
+        self._update_manifest(
+            exp_dir,
+            lambda m: m.__setitem__(field, value),
+            not_found_msg=f"Manifest file not found: {exp_dir / 'manifest.json'}, skipping field update",
+            error_msg="Failed to update manifest field",
+        )
+        logger.info(f"Updated manifest field '{field}'")
 
     def mark_resumed(self, exp_dir: Path) -> None:
         """Record that the experiment was resumed in the manifest.
@@ -997,29 +993,22 @@ class ExperimentManager:
         Raises:
             OSError: If file writing fails.
         """
-        manifest_path = exp_dir / "manifest.json"
-        if not manifest_path.exists():
-            logger.warning(
-                f"Manifest file not found: {manifest_path}, skipping resume mark"
-            )
-            return
+        from datetime import datetime
 
-        try:
-            from datetime import datetime
+        resume_count = [0]
 
-            with open(manifest_path, encoding="utf-8") as f:
-                manifest = json.load(f)
+        def _updater(m: dict[str, Any]) -> None:
+            resume_count[0] = m.get("resume_count", 0) + 1
+            m["resume_count"] = resume_count[0]
+            m["resumed_at"] = datetime.now().isoformat()
 
-            resume_count = manifest.get("resume_count", 0) + 1
-            manifest["resume_count"] = resume_count
-            manifest["resumed_at"] = datetime.now().isoformat()
-
-            with open(manifest_path, "w", encoding="utf-8") as f:
-                json.dump(manifest, f, ensure_ascii=False, indent=2)
-
-            logger.info(f"Marked experiment as resumed (count={resume_count})")
-        except (json.JSONDecodeError, OSError) as e:
-            logger.error(f"Failed to mark experiment as resumed: {str(e)}")
+        self._update_manifest(
+            exp_dir,
+            _updater,
+            not_found_msg=f"Manifest file not found: {exp_dir / 'manifest.json'}, skipping resume mark",
+            error_msg="Failed to mark experiment as resumed",
+        )
+        logger.info(f"Marked experiment as resumed (count={resume_count[0]})")
 
     def get_completed_variants(self, exp_dir: Path) -> list[str]:
         """
@@ -1079,32 +1068,26 @@ class ExperimentManager:
         Raises:
             OSError: If file writing fails.
         """
-        manifest_path = exp_dir / "manifest.json"
-        if not manifest_path.exists():
-            return
 
-        try:
-            with open(manifest_path, encoding="utf-8") as f:
-                manifest = json.load(f)
-
-            completed = manifest.get("completed_variants", [])
+        def _updater(m: dict[str, Any]) -> None:
+            completed = m.get("completed_variants", [])
             if variant_name in completed:
                 completed.remove(variant_name)
-                manifest["completed_variants"] = completed
-
-            hashes = manifest.get("variant_config_hashes", {})
+                m["completed_variants"] = completed
+            hashes = m.get("variant_config_hashes", {})
             if variant_name in hashes:
                 del hashes[variant_name]
-                manifest["variant_config_hashes"] = hashes
+                m["variant_config_hashes"] = hashes
 
-            with open(manifest_path, "w", encoding="utf-8") as f:
-                json.dump(manifest, f, ensure_ascii=False, indent=2)
-
-            logger.info(
-                f"Invalidated variant '{variant_name}' — will re-run on next resume"
-            )
-        except (json.JSONDecodeError, OSError) as e:
-            logger.error(f"Failed to invalidate variant: {str(e)}")
+        self._update_manifest(
+            exp_dir,
+            _updater,
+            not_found_msg=None,
+            error_msg="Failed to invalidate variant",
+        )
+        logger.info(
+            f"Invalidated variant '{variant_name}' — will re-run on next resume"
+        )
 
     def load_variant_result(
         self, exp_dir: Path, variant_name: str
