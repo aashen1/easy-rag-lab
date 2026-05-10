@@ -101,17 +101,19 @@
 
 **文件**: `eval/runner/core.py`
 
-- [ ] **替换 `list_experiments()` 中的 `print()`**
+- [x] **替换 `list_experiments()` 中的 `print()`**
   - 使用 `loguru` logger
   - 验收标准: 无 `print()` 调用，日志输出正常
   - 优先级: P0
   - 预计耗时: 10分钟
+  - 完成日期: 2026-05-10
 
-- [ ] **替换 `show_experiment_info()` 中的 `print()`**
+- [x] **替换 `show_experiment_info()` 中的 `print()`**
   - 使用 `loguru` logger
   - 验收标准: 无 `print()` 调用，日志输出正常
   - 优先级: P0
   - 预计耗时: 10分钟
+  - 完成日期: 2026-05-10
 
 
 ---
@@ -489,24 +491,27 @@
 
 **文件**: `eval/runner/evaluation.py`
 
-- [ ] **分析 `_collect_rag_samples_serial()` 和 `_query_single_question()` 重复**
+- [x] **分析 `_collect_rag_samples_serial()` 和 `_query_single_question()` 重复**
   - 识别 ~120 行重复代码
   - 验收标准: 完成重复分析文档
   - 优先级: P1
   - 预计耗时: 1小时
+  - 完成日期: 2026-05-10
 
-- [ ] **提取 `_build_sample()` 函数**
+- [x] **提取 `_build_sample()` 函数**
   - 封装 sample 构建逻辑
   - 验收标准: 函数提取完成，单元测试通过
   - 优先级: P1
   - 预计耗时: 2小时
+  - 完成日期: 2026-05-10
 
-- [ ] **重构两个函数使用 `_build_sample()`**
+- [x] **重构两个函数使用 `_build_sample()`**
   - 更新 `_collect_rag_samples_serial()`
   - 更新 `_query_single_question()`
   - 验收标准: 无重复代码，功能验证通过
   - 优先级: P1
   - 预计耗时: 1小时
+  - 完成日期: 2026-05-10
 
 ---
 
