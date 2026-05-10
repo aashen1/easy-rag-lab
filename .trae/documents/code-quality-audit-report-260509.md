@@ -1,8 +1,8 @@
 # 代码质量审查报告
 
-> 审查日期：2026-05-09 | 版本：v0.1.16 | 审查范围：全量 Python 代码（~88K 行）
+> 审查日期：2026-05-09 | 版本：v0.1.16 | 审查范围：全量 Python 代码（\~88K 行）
 
----
+***
 
 ## 目录
 
@@ -16,21 +16,21 @@
 8. [P6 — 其他代码异味](#8-p6--其他代码异味)
 9. [修复优先级路线图](#9-修复优先级路线图)
 
----
+***
 
 ## 1. 总览：代码量与分布
 
-| 目录 | 文件数 | 行数 | 占比 |
-|------|--------|------|------|
-| `src/` | 113 | 35,714 | 40.6% |
-| `tests/` | 72 | 38,727 | 44.0% |
-| `eval/` | 42 | 12,284 | 14.0% |
-| `main.py` | 1 | 1,212 | 1.4% |
-| **总计** | **228** | **87,937** | **100%** |
+| 目录        | 文件数     | 行数         | 占比       |
+| --------- | ------- | ---------- | -------- |
+| `src/`    | 113     | 35,714     | 40.6%    |
+| `tests/`  | 72      | 38,727     | 44.0%    |
+| `eval/`   | 42      | 12,284     | 14.0%    |
+| `main.py` | 1       | 1,212      | 1.4%     |
+| **总计**    | **228** | **87,937** | **100%** |
 
 **核心发现**：测试代码比业务代码多，但测试质量堪忧——大量测试在测框架/库行为而非业务逻辑，存在假测试（`pass`），过度 mock 导致测试失去意义。
 
----
+***
 
 ## 2. P0 — 严重问题：God 文件与 God 函数
 
@@ -40,21 +40,21 @@
 
 `TestSetGenerator` 一个类承担了 10+ 种职责：
 
-| 方法 | 行数 | 职责 |
-|------|------|------|
-| `generate_test_set` | ~120 | 编排入口 |
-| `generate_hybrid_questions` | ~380 | 混合策略生成 |
-| `generate_golden_testset` | ~370 | 黄金测试集生成 |
-| `generate_document_based_questions` | ~150 | 文档级问题生成 |
-| `supplement_document_based_questions` | ~100 | 补充问题生成 |
-| `_post_process_question` | ~120 | 后处理 |
-| `_generate_hybrid_question` | ~170 | 单个混合问题生成 |
+| 方法                                    | 行数    | 职责       |
+| ------------------------------------- | ----- | -------- |
+| `generate_test_set`                   | \~120 | 编排入口     |
+| `generate_hybrid_questions`           | \~380 | 混合策略生成   |
+| `generate_golden_testset`             | \~370 | 黄金测试集生成  |
+| `generate_document_based_questions`   | \~150 | 文档级问题生成  |
+| `supplement_document_based_questions` | \~100 | 补充问题生成   |
+| `_post_process_question`              | \~120 | 后处理      |
+| `_generate_hybrid_question`           | \~170 | 单个混合问题生成 |
 
-**核心问题**：`generate_hybrid_questions` 和 `generate_golden_testset` 中有大量完全相同的逻辑（补充问题循环、source_files 赋值、segment 构建），估计有 200+ 行重复代码。
+**核心问题**：`generate_hybrid_questions` 和 `generate_golden_testset` 中有大量完全相同的逻辑（补充问题循环、source\_files 赋值、segment 构建），估计有 200+ 行重复代码。
 
 **建议**：拆分为 `QuestionGenerator`（核心生成逻辑）+ `TestSetOrchestrator`（编排逻辑），提取公共方法消除重复。
 
----
+***
 
 ### 2.2 `eval/runner/core.py` — `run_experiment()` 690 行 God 函数
 
@@ -62,13 +62,13 @@
 
 **这是不可测试、不可复用的典型反例。**
 
----
+***
 
 ### 2.3 `src/app_pages/maintenance.py` — 1160 行 God 文件
 
-`render_maintenance()` 函数长达 ~630 行，同时处理 15+ 个 session state 变量初始化、侧边栏渲染、聊天消息渲染、中断处理、经验扫描、报告下载、Agent 架构图渲染。
+`render_maintenance()` 函数长达 \~630 行，同时处理 15+ 个 session state 变量初始化、侧边栏渲染、聊天消息渲染、中断处理、经验扫描、报告下载、Agent 架构图渲染。
 
----
+***
 
 ### 2.4 `src/agent/tools.py` — 1033 行 God 文件
 
@@ -89,25 +89,25 @@ def xxx_tool(...) -> str:
 
 `load_config()` 调用重复 9+ 次，`json.dumps` 返回模式重复 15+ 次，`try/except` 错误处理模式重复 20 次。
 
----
+***
 
 ### 2.5 `src/agent/cli.py` — 330+ 行 God 函数
 
 `run_agent()` 函数同时处理 CLI 参数解析、数据库连接初始化、会话管理、交互式输入循环、CLI 命令分发、Agent 调用与结果处理、中断处理。
 
----
+***
 
 ### 2.6 `eval/runner/metrics.py` — `compute_aggregate_metrics()` 226 行 God 函数
 
 混合了 9 种聚合逻辑：文档级检索指标、生成指标、chunk 级指标、dedup 指标、FPR、多样性、幻觉率、按问题类型分组、LLM 检索指标。
 
----
+***
 
 ### 2.7 `eval/evaluators/builtin_evaluator.py` — `evaluate_single()` 200 行 God Method
 
 200 行 if-chain，每个 metric 是一个 if 判断 + 函数调用。应使用注册表/策略模式替代。
 
----
+***
 
 ## 3. P1 — 臃肿与屎山：大量重复代码
 
@@ -117,7 +117,7 @@ def xxx_tool(...) -> str:
 
 ### 3.2 serial/concurrent 采样逻辑重复
 
-`eval/runner/evaluation.py` 中 `_collect_rag_samples_serial()` 和 `_query_single_question()` 存在 ~120 行重复代码，sample 构建逻辑几乎完全相同。
+`eval/runner/evaluation.py` 中 `_collect_rag_samples_serial()` 和 `_query_single_question()` 存在 \~120 行重复代码，sample 构建逻辑几乎完全相同。
 
 ### 3.3 RAGAS evaluator ref/no-ref 分支重复
 
@@ -125,7 +125,7 @@ def xxx_tool(...) -> str:
 
 ### 3.4 LLM 调用 + JSON 解析重复模式
 
-`eval/metrics/llm_retrieval.py` 和 `eval/metrics/generation.py` 中 4+ 处完全相同的模式：创建 client → 构建 prompt → call_with_retry → 正则提取 JSON → 判断 verdict。应提取为通用的 `_llm_judge()` 辅助函数。
+`eval/metrics/llm_retrieval.py` 和 `eval/metrics/generation.py` 中 4+ 处完全相同的模式：创建 client → 构建 prompt → call\_with\_retry → 正则提取 JSON → 判断 verdict。应提取为通用的 `_llm_judge()` 辅助函数。
 
 ### 3.5 chunk 匹配逻辑重复
 
@@ -151,7 +151,7 @@ def xxx_tool(...) -> str:
 
 `src/app_pages/maintenance.py` 中 `_render_streaming_agent` 和 `_resume_interrupt_streaming` 共享几乎完全相同的事件处理代码。
 
----
+***
 
 ## 4. P2 — 过度设计：不该存在的抽象层
 
@@ -204,7 +204,7 @@ __all__ = ["PDFViewer"]
 
 项目同时使用 `@dataclass`（`ExperimentConfig`、`ResumeConfig`、`ReportReuseConfig`）和 Pydantic `BaseModel`（`AppConfig`、`ExperimentConfigSchema`）来定义配置模型。两套序列化/反序列化逻辑并存，增加了认知负担和维护成本。
 
----
+***
 
 ## 5. P3 — Pydantic 瞎写的地方
 
@@ -223,7 +223,7 @@ class ExperimentConfigSchema(BaseModel):
     force_overwrite: Any = []
 ```
 
-**所有字段都是 `Any`**，Pydantic 的类型检查、自动转换、验证能力全部被放弃。验证逻辑全部手动写在 `model_validator` 中的十几个 `_validate_*` 方法里。这等于用 Pydantic 写了一个手动的验证框架，完全背离了 Pydantic 的设计理念。
+**所有字段都是** **`Any`**，Pydantic 的类型检查、自动转换、验证能力全部被放弃。验证逻辑全部手动写在 `model_validator` 中的十几个 `_validate_*` 方法里。这等于用 Pydantic 写了一个手动的验证框架，完全背离了 Pydantic 的设计理念。
 
 **正确做法**：为每个字段定义具体的类型（`str`、`list[dict[str, Any]]` 等），用 `Field` 约束和 `model_validator` 做跨字段校验。
 
@@ -283,7 +283,7 @@ checkpoint: dict = Field(
 
 同上。
 
----
+***
 
 ## 6. P4 — 伪需求与根本没必要写的代码
 
@@ -328,7 +328,7 @@ Python 的 GC 不需要手动干预。`del` 只减少引用计数，`gc.collect(
 
 从 `backlog.md` 迁移到 issue 文件是一次性操作，不应长期驻留在生产代码库中。
 
----
+***
 
 ## 7. P5 — 测试覆盖不足与测试没测到点上
 
@@ -371,20 +371,20 @@ assert state["current_meal"] == "test_meal"
 
 ### 7.4 测试框架而非项目代码
 
-| 文件 | 测试内容 | 问题 |
-|------|----------|------|
-| `test_agent.py` | `TestLLMClientCaching` | 测试 `functools.lru_cache` 的缓存行为 |
-| `test_agent.py` | `TestMaintenanceStateNewFields` | 测试 TypedDict 能否存储新字段 |
-| `test_experiment.py` | `test_to_dict` | 测试 dict 的赋值行为 |
-| `test_meal.py` | `test_to_dict` | 测试 dataclass 的序列化行为 |
-| `test_run_experiment.py` | `test_result_merging_builtin_and_ragas` | 测试 `dict.update()` 的行为 |
-| `test_evaluators.py` | `TestEvaluationResult` | 测试 dataclass 的创建和 `to_dict` |
+| 文件                       | 测试内容                                    | 问题                             |
+| ------------------------ | --------------------------------------- | ------------------------------ |
+| `test_agent.py`          | `TestLLMClientCaching`                  | 测试 `functools.lru_cache` 的缓存行为 |
+| `test_agent.py`          | `TestMaintenanceStateNewFields`         | 测试 TypedDict 能否存储新字段           |
+| `test_experiment.py`     | `test_to_dict`                          | 测试 dict 的赋值行为                  |
+| `test_meal.py`           | `test_to_dict`                          | 测试 dataclass 的序列化行为            |
+| `test_run_experiment.py` | `test_result_merging_builtin_and_ragas` | 测试 `dict.update()` 的行为         |
+| `test_evaluators.py`     | `TestEvaluationResult`                  | 测试 dataclass 的创建和 `to_dict`    |
 
 这些测试验证的是 Python 标准库/语言本身的行为，不是项目逻辑。删除它们不会降低任何有效覆盖率。
 
 ### 7.5 过度 Mock
 
-**`tests/test_pipeline.py` 是最严重的案例**：每个测试方法都有 6 个 `@patch` 装饰器（`Generator`、`Retriever`、`VectorIndexer`、`Embedder`、`get_llm_config`、`load_config`），20+ 个测试方法全部如此。所有测试都在验证 mock 之间的交互，而非真实的 RAG 流程。
+**`tests/test_pipeline.py`** **是最严重的案例**：每个测试方法都有 6 个 `@patch` 装饰器（`Generator`、`Retriever`、`VectorIndexer`、`Embedder`、`get_llm_config`、`load_config`），20+ 个测试方法全部如此。所有测试都在验证 mock 之间的交互，而非真实的 RAG 流程。
 
 更糟糕的是，测试断言了构造函数的精确参数：
 
@@ -398,27 +398,27 @@ mock_embedder.assert_called_once_with(
 
 ### 7.6 应 parametrize 的复制粘贴测试
 
-| 文件 | 类 | 测试数 | 问题 |
-|------|-----|--------|------|
-| `test_metrics.py` | `TestNormalizeSource` | 16 | 全部模式相同：输入路径 → 断言归一化结果 |
-| `test_agent.py` | `TestToolFunctions` + `TestNewTools` | 15 | 全部是 `.name` 断言 |
-| `test_agent.py` | `TestBuildSystemPrompt` | 6 | 全部是字符串包含测试 |
-| `test_agent.py` | `TestCLICommands` | 8 | 全部是命令存在性测试 |
-| `test_chunker.py` | `TestChunkTextChineseRoundtrip` | 7 | 全部模式相同 |
-| `test_evaluators.py` | `TestRagasEvaluatorConfigReading` | 4 | 全部模式相同 |
+| 文件                   | 类                                    | 测试数 | 问题                    |
+| -------------------- | ------------------------------------ | --- | --------------------- |
+| `test_metrics.py`    | `TestNormalizeSource`                | 16  | 全部模式相同：输入路径 → 断言归一化结果 |
+| `test_agent.py`      | `TestToolFunctions` + `TestNewTools` | 15  | 全部是 `.name` 断言        |
+| `test_agent.py`      | `TestBuildSystemPrompt`              | 6   | 全部是字符串包含测试            |
+| `test_agent.py`      | `TestCLICommands`                    | 8   | 全部是命令存在性测试            |
+| `test_chunker.py`    | `TestChunkTextChineseRoundtrip`      | 7   | 全部模式相同                |
+| `test_evaluators.py` | `TestRagasEvaluatorConfigReading`    | 4   | 全部模式相同                |
 
 ### 7.7 缺少关键测试用例
 
-| 模块 | 缺失测试 |
-|------|----------|
-| `pipeline.py` | query 错误处理（retriever 失败、generator 超时）、`build_index` 文件系统操作、并发 query 线程安全 |
-| `generator.py` | LLM 调用失败/超时/重试机制、生成问题质量校验 |
-| `experiment.py` | `ExperimentManager` 核心流程（创建/运行/列出实验）、`deep_merge` 边界情况 |
-| `test_set_manager.py` | test set 合并冲突、失效策略、审计日志 |
-| `metrics.py` | `calculate_faithfulness`、`calculate_answer_relevancy`、`calculate_hallucination_rate` |
-| `agent` | 完整对话流程端到端测试、工具调用结果正确性 |
+| 模块                    | 缺失测试                                                                                 |
+| --------------------- | ------------------------------------------------------------------------------------ |
+| `pipeline.py`         | query 错误处理（retriever 失败、generator 超时）、`build_index` 文件系统操作、并发 query 线程安全             |
+| `generator.py`        | LLM 调用失败/超时/重试机制、生成问题质量校验                                                            |
+| `experiment.py`       | `ExperimentManager` 核心流程（创建/运行/列出实验）、`deep_merge` 边界情况                               |
+| `test_set_manager.py` | test set 合并冲突、失效策略、审计日志                                                              |
+| `metrics.py`          | `calculate_faithfulness`、`calculate_answer_relevancy`、`calculate_hallucination_rate` |
+| `agent`               | 完整对话流程端到端测试、工具调用结果正确性                                                                |
 
----
+***
 
 ## 8. P6 — 其他代码异味
 
@@ -483,79 +483,80 @@ except (json.JSONDecodeError, OSError) as e:
 
 `use_meal()` 方法中 `HybridRetriever` 的配置读取（615-626 行）与 `_setup_retrievers()` 中的（189-199 行）完全重复，都是逐层 `.get()` 取值。
 
----
+***
 
 ## 9. 修复优先级路线图
 
 ### Phase 1：止血（1-2 天）
 
-| 优先级 | 任务 | 预期收益 |
-|--------|------|----------|
-| P0 | 删除假测试（`test_run_experiment.py:1130-1132`） | 消除误导性绿色勾 |
-| P0 | 删除死代码（`error_handler.py`、`_compute_config_hash`、`pdf_viewer.py`） | 减少认知负担 |
-| P0 | 修复 `asset_verifier.py` 拼写错误 `pymupdf4llllm` | 修复 bug |
-| P1 | 提取 `ExperimentManager._update_manifest()` 辅助方法 | 消除 5 处重复 |
-| P1 | 提取 `token_tracker` 重建逻辑为独立函数 | 消除完全相同的两段代码 |
+| 优先级 | 任务                                                               | 预期收益        |
+| --- | ---------------------------------------------------------------- | ----------- |
+| P0  | 删除假测试（`test_run_experiment.py:1130-1132`）                        | 消除误导性绿色勾    |
+| P0  | 删除死代码（`error_handler.py`、`_compute_config_hash`、`pdf_viewer.py`） | 减少认知负担      |
+| P0  | 修复 `asset_verifier.py` 拼写错误 `pymupdf4llllm`                      | 修复 bug      |
+| P1  | 提取 `ExperimentManager._update_manifest()` 辅助方法                   | 消除 5 处重复    |
+| P1  | 提取 `token_tracker` 重建逻辑为独立函数                                     | 消除完全相同的两段代码 |
 
 ### Phase 2：瘦身（3-5 天）
 
-| 优先级 | 任务 | 预期收益 |
-|--------|------|----------|
-| P1 | 拆分 `run_experiment()` God 函数为 5-8 个子函数 | 可测试、可复用 |
-| P1 | 拆分 `TestSetGenerator` 为 `QuestionGenerator` + `TestSetOrchestrator` | 消除 200+ 行重复 |
-| P1 | 提取 `src/agent/tools.py` 公共模式为装饰器/基类 | 消除 20 处重复 |
-| P1 | 提取 LLM 调用+JSON 解析为 `_llm_judge()` 辅助函数 | 消除 4+ 处重复 |
-| P2 | 合并 `_resolve_db_path` 到共享模块 | 消除重复函数 |
-| P2 | 提取 Reporter `save` 方法到基类 | 消除重复 |
+| 优先级 | 任务                                                                  | 预期收益        |
+| --- | ------------------------------------------------------------------- | ----------- |
+| P1  | 拆分 `run_experiment()` God 函数为 5-8 个子函数                              | 可测试、可复用     |
+| P1  | 拆分 `TestSetGenerator` 为 `QuestionGenerator` + `TestSetOrchestrator` | 消除 200+ 行重复 |
+| P1  | 提取 `src/agent/tools.py` 公共模式为装饰器/基类                                 | 消除 20 处重复   |
+| P1  | 提取 LLM 调用+JSON 解析为 `_llm_judge()` 辅助函数                              | 消除 4+ 处重复   |
+| P2  | 合并 `_resolve_db_path` 到共享模块                                         | 消除重复函数      |
+| P2  | 提取 Reporter `save` 方法到基类                                            | 消除重复        |
 
 ### Phase 3：治本（1-2 周）
 
-| 优先级 | 任务 | 预期收益 |
-|--------|------|----------|
-| P2 | 重构 `ExperimentConfigSchema`：为字段定义具体类型 | Pydantic 真正发挥作用 |
-| P2 | 子模型 `extra = "forbid"` | 捕获配置拼写错误 |
-| P2 | 统一 dataclass/Pydantic 使用策略 | 减少认知负担 |
-| P2 | `LLMEvaluatorConfig` 改为 `dict[str, LLMEvaluatorSubConfig]` | 更灵活 |
-| P2 | 为裸 `dict` 字段定义 Pydantic 模型 | 类型安全 |
-| P2 | 移除 `src/issue/migrate.py` 到 scripts/ | 生产代码库瘦身 |
+| 优先级 | 任务                                                         | 预期收益            |
+| --- | ---------------------------------------------------------- | --------------- |
+| P2  | 重构 `ExperimentConfigSchema`：为字段定义具体类型                      | Pydantic 真正发挥作用 |
+| P2  | 子模型 `extra = "forbid"`                                     | 捕获配置拼写错误        |
+| P2  | 统一 dataclass/Pydantic 使用策略                                 | 减少认知负担          |
+| P2  | `LLMEvaluatorConfig` 改为 `dict[str, LLMEvaluatorSubConfig]` | 更灵活             |
+| P2  | 为裸 `dict` 字段定义 Pydantic 模型                                 | 类型安全            |
+| P2  | 移除 `src/issue/migrate.py` 到 scripts/                       | 生产代码库瘦身         |
 
 ### Phase 4：测试质量（1-2 周）
 
-| 优先级 | 任务 | 预期收益 |
-|--------|------|----------|
-| P1 | 批量 parametrize 重构（优先 `TestNormalizeSource` 16→1） | 测试行数减少 50%+ |
-| P1 | 删除框架测试（TypedDict、dict.update、lru_cache） | 测试更聚焦 |
-| P2 | 补充关键缺失测试（错误处理路径、并发安全） | 真正的覆盖率提升 |
-| P2 | 减少 `test_pipeline.py` 的 mock 层数 | 测试更有意义 |
-| P2 | 为 `test_agent.py` 的工具函数添加行为测试 | 测正确的东西 |
+| 优先级 | 任务                                               | 预期收益        |
+| --- | ------------------------------------------------ | ----------- |
+| P1  | 批量 parametrize 重构（优先 `TestNormalizeSource` 16→1） | 测试行数减少 50%+ |
+| P1  | 删除框架测试（TypedDict、dict.update、lru\_cache）         | 测试更聚焦       |
+| P2  | 补充关键缺失测试（错误处理路径、并发安全）                            | 真正的覆盖率提升    |
+| P2  | 减少 `test_pipeline.py` 的 mock 层数                  | 测试更有意义      |
+| P2  | 为 `test_agent.py` 的工具函数添加行为测试                    | 测正确的东西      |
 
----
+***
 
 ## 附录：代码行数 Top 20 文件
 
-| 排名 | 文件 | 行数 | 问题标签 |
-|------|------|------|----------|
-| 1 | `src/test_generation/generator.py` | 1,563 | God 类、大量重复 |
-| 2 | `src/app_pages/maintenance.py` | 1,160 | God 文件、God 函数 |
-| 3 | `eval/runner/core.py` | 1,163 | God 函数、重复代码 |
-| 4 | `src/agent/tools.py` | 1,033 | God 文件、模式重复 |
-| 5 | `src/experiment.py` | 1,171 | 重复的 manifest 读写 |
-| 6 | `src/pipeline.py` | 1,059 | 方法过长、职责混杂 |
-| 7 | `eval/evaluators/ragas_evaluator.py` | 677 | 重复分支 |
-| 8 | `eval/reporter/template_variant.py` | 676 | 重复推荐逻辑 |
-| 9 | `src/issue/migrate.py` | 630 | 一次性代码 |
-| 10 | `eval/runner/evaluation.py` | 1,034 | 重复采样逻辑 |
-| 11 | `src/agent/cli.py` | 461 | God 函数 |
-| 12 | `eval/runner/preparation.py` | 618 | 遗留代码 |
-| 13 | `eval/reporter/template_single.py` | 440 | 重复推荐逻辑 |
-| 14 | `eval/runner/comparison.py` | 447 | 重复格式化逻辑 |
-| 15 | `eval/evaluators/builtin_evaluator.py` | 418 | God Method |
-| 16 | `src/test_set_manager.py` | 947 | — |
-| 17 | `src/experiment_reuse.py` | 927 | 过度抽象 |
-| 18 | `src/config_schema.py` | 896 | Pydantic 问题 |
-| 19 | `src/chunker.py` | 734 | — |
-| 20 | `src/agent/graph.py` | 538 | 重复日志构造 |
+| 排名 | 文件                                     | 行数    | 问题标签            |
+| -- | -------------------------------------- | ----- | --------------- |
+| 1  | `src/test_generation/generator.py`     | 1,563 | God 类、大量重复      |
+| 2  | `src/app_pages/maintenance.py`         | 1,160 | God 文件、God 函数   |
+| 3  | `eval/runner/core.py`                  | 1,163 | God 函数、重复代码     |
+| 4  | `src/agent/tools.py`                   | 1,033 | God 文件、模式重复     |
+| 5  | `src/experiment.py`                    | 1,171 | 重复的 manifest 读写 |
+| 6  | `src/pipeline.py`                      | 1,059 | 方法过长、职责混杂       |
+| 7  | `eval/evaluators/ragas_evaluator.py`   | 677   | 重复分支            |
+| 8  | `eval/reporter/template_variant.py`    | 676   | 重复推荐逻辑          |
+| 9  | `src/issue/migrate.py`                 | 630   | 一次性代码           |
+| 10 | `eval/runner/evaluation.py`            | 1,034 | 重复采样逻辑          |
+| 11 | `src/agent/cli.py`                     | 461   | God 函数          |
+| 12 | `eval/runner/preparation.py`           | 618   | 遗留代码            |
+| 13 | `eval/reporter/template_single.py`     | 440   | 重复推荐逻辑          |
+| 14 | `eval/runner/comparison.py`            | 447   | 重复格式化逻辑         |
+| 15 | `eval/evaluators/builtin_evaluator.py` | 418   | God Method      |
+| 16 | `src/test_set_manager.py`              | 947   | —               |
+| 17 | `src/experiment_reuse.py`              | 927   | 过度抽象            |
+| 18 | `src/config_schema.py`                 | 896   | Pydantic 问题     |
+| 19 | `src/chunker.py`                       | 734   | —               |
+| 20 | `src/agent/graph.py`                   | 538   | 重复日志构造          |
 
----
+***
 
 > **总结**：这个项目有 88K 行代码，其中估计有 15-20% 是重复代码或不应存在的代码。最严重的问题是 God 文件/God 函数（6 个文件超过 1000 行）和 Pydantic 模型的滥用（全 `Any` 字段 + 全 `extra="allow"`）。测试虽然行数多，但质量堪忧——存在假测试、框架测试、过度 mock 等问题。建议按 Phase 1-4 路线图逐步修复。
+
