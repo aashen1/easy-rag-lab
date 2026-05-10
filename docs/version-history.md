@@ -2,11 +2,58 @@
 
 <!-- status: active -->
 
-> 最后更新：2026-05-04
+> 最后更新：2026-05-10
 
 本文档记录项目的版本迭代历程，每个版本的关键决策、交付成果和经验教训。
 
 > 说明：因为一直在修LLM合成评测集的质量问题，一直拖着没有发版，东做做西做做积压了几百个commit，于是让LLM帮忙想了个"故事感"，一下子拆了五个版本出来，这个调子，只能说~~很装~~
+
+---
+
+## v0.1.17 (2026-05-10)
+
+### 版本主题
+
+修得好
+
+### 叙事
+
+> v0.1.16 让系统学会了"看病"——Bad Case 从发现到诊断全链路闭环。
+>
+> 这一版让系统拥有了"自主维修"的能力：LangGraph Agent 编排全链路工具调用，Session 持久化让对话不再丢失，经验积累让维修越做越聪明。共享单元层为 Agent 和实验系统架起统一桥梁，Pydantic 配置校验让系统更健壮，Streamlit 维修工页面让 AI 维修触手可及。
+>
+> 不是只会诊断，而是能动手修好。
+
+### 关键决策
+
+- 采用 LangGraph StateGraph 构建 Agent 维修工系统，agent → approval → tools 三节点循环图，支持 interrupt 审批和条件边路由
+- 建立 20+ 个 @tool 覆盖 RAG 全链路操作，安全工具与高风险工具分级管理，FORBIDDEN_OPERATIONS 硬拦截
+- 新建共享单元层（src/core/ops/），将解析、分块、嵌入、索引、评测逻辑从 Pipeline/Meal 中提取为独立函数，为 Agent 和实验系统提供统一接口
+- Session 持久化采用 SQLite（SqliteSaver + SessionManager），支持跨会话状态恢复和孤儿 checkpoint 迁移
+- 经验存储从 InMemoryStore+JSON 迁移到 SqliteStore，旧数据自动迁移（单向不可回退），改为用户手动触发保存
+- 引入 Pydantic 配置校验系统，config.yaml 的 schema 验证、必填项校验、范围校验集成到 load_config()
+- 轻量/全量双模式设计：轻量模式限制 1-2 个 PDF、删除阈值 3 次；全量模式开放 Meal 批量体系、删除阈值 10 次
+- 诊断前置守卫：必须先诊断再修复，防止 Agent 盲目操作
+
+### 交付成果
+
+- **维修工 Agent 系统**：LangGraph StateGraph 编排、20+ 个 @tool（安全/高风险/报告三类）、approval_node 审批机制、FORBIDDEN_OPERATIONS 硬拦截、诊断前置守卫、删除计数阈值、.trashbin 自动备份
+- **维修工 CLI**：`pixi run agent` 交互式入口，支持 :parse/:back/:compare/:report/:history/:status/:review/:mode/:sessions 等指令
+- **Streamlit 维修工页面**：对话历史列表、工具链锁定、模式切换、自动审查、思考过程折叠、经验库管理、Mermaid 架构图
+- **Session 管理系统**：SQLite 持久化 SessionManager、session_id/thread_id 自动生成、auto_title、孤儿 checkpoint 迁移
+- **经验持久化系统**：SqliteStore 领域层包装器、namespace 结构、旧 JSON 自动迁移、手动触发保存
+- **共享单元层**：src/core/ops/ 6 个模块（parse/chunk/embed/index/evaluate/query），parser/chunker/embedder/indexer 全部迁移到 core/ops 调用
+- **Pydantic 配置校验**：config.yaml schema 验证、必填项校验、范围校验、集成到 load_config()
+- **维修/对比报告**：maintenance_report.py（Markdown 维修报告）、comparison_report.py（多方案指标对比）
+- **资源管理增强**：RAGPipeline.close()、Embedder/Reranker/BM25Retriever unload/clear、实验 variant 间共享 Embedder
+- **Web UI 改进**：streamlit-searchbox 集成、公司名标签、思考过程折叠/展开、对话框位置修正、Mermaid 架构图渲染
+- **代码健康**：MaintenanceState dict→TypedDict、Agent 配置集中化、LLM 客户端 lru_cache、废弃 eval/run_eval.py 移除
+
+### 版本验收
+
+- Git tag: `v0.1.17`
+- L1: lint + test-all 全绿（2377 passed, 10 skipped）
+- L2: CHANGELOG + version-history 完整
 
 ---
 
@@ -472,7 +519,16 @@ MVP RAG 基础链路
 
 ## 版本规划
 
-### v0.1.17（计划中）
+### v0.1.17（已发布 2026-05-10）
+
+- ✅ LangGraph Agent 维修工系统
+- ✅ Session 持久化与经验积累
+- ✅ 共享单元层（Phase C 迁移完成）
+- ✅ Pydantic 配置校验
+- 透明版完整实验报告（FEAT-010）→ 推迟到 v0.1.18
+- Baseline 标定与"花头"效果验证 → 推迟到 v0.1.18
+
+### v0.1.18（计划中）
 
 - 透明版完整实验报告（FEAT-010）
 - Baseline 标定与"花头"效果验证

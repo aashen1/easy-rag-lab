@@ -7,7 +7,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_No unreleased changes yet._
+## [0.1.17] - 2026-05-10
+
+Repair well — LangGraph Agent maintenance worker, session persistence, experience accumulation, shared ops layer, Pydantic config validation.
+
+### Added
+
+- LangGraph Agent maintenance worker system: StateGraph orchestration (agent → approval → tools loop), 20+ @tool covering full RAG pipeline operations
+- Approval mechanism with interrupt() for high-risk operations and FORBIDDEN_OPERATIONS hard-block
+- Safety guards: diagnosis-before-fix gate, delete count threshold (light=3, full=10), auto-backup to .trashbin/
+- CLI agent entry (`pixi run agent`) with :parse, :back, :compare, :report, :history, :status, :review, :mode, :sessions commands
+- Streamlit maintenance worker tab with conversation history, tool chain locking, mode toggle, experience management
+- Session management system: SQLite-backed SessionManager with CRUD, auto-title, orphan checkpoint migration
+- Experience persistence system: SqliteStore-backed ExperienceStore with auto-migration from legacy JSON
+- Shared ops layer (src/core/ops/): parse, chunk, embed, index, evaluate modules unifying Agent and experiment system interfaces
+- Pydantic config validation (FEAT-024): config.yaml schema validation, required field checks, range checks, integrated into load_config()
+- Maintenance report generator (Markdown format with metadata, timeline, diagnosis, findings, recommendations)
+- Comparison report generator (multi-variant metric comparison table with auto-recommendation)
+- MealManager.create_meal_manual() for explicit PDF file list or directory search mode
+- VectorIndexer.scroll_by_source() and delete_by_source() for source-level index operations
+- ParserRegistry.get_composite() and get_enhancer() for flexible parser/enhancer combination
+- RAGPipeline.close() for releasing heavy resources (Embedder, Reranker, BM25Retriever, VectorIndexer)
+- Embedder/Reranker/BM25Retriever unload/clear methods for resource management
+- Experiment variant Embedder sharing with proper cleanup between variants
+- LangGraph Mermaid architecture diagram rendering in Streamlit maintenance tab
+- streamlit-searchbox integration for PDF selection with company name tags
+- Agent config section in config.yaml with checkpoint, trashbin, defaults, session, experience sub-sections
+- langgraph, langchain-core, langchain-anthropic, langgraph-checkpoint-sqlite dependencies
+
+### Changed
+
+- ExperienceStore migrated from InMemoryStore+JSON to SqliteStore with domain-layer wrapper
+- Auto experience saving removed from tool_node; now user-triggered via save_experience_tool
+- MaintenanceState migrated from dict subclass to TypedDict for type safety
+- Agent config centralized in src/agent/config.py with lru_cache
+- LLM client factory with lru_cache to avoid repeated creation
+- Deprecated eval/run_eval.py removed
+- Chunker migrated to use core/ops.chunk.chunk_parsed() for all three strategies (fixed, page_aware, semantic)
+- Parser and MealManager migrated to use core/ops.parse.parse_pdf()
+- Meal builders and Pipeline migrated to use core/ops.index.index_chunks()
+- Web UI: chat_input moved to bottom, thinking content display improved, streaming controls enhanced
+- pytest-xdist workers limited to 4 for Windows stability
+
+### Fixed
+
+- VectorIndexer resource leak in agent tools (try/finally for indexer.close())
+- ComparisonReporter recommendation logic for lower-is-better metrics
+- Config key mismatch between agent module and config.yaml
+- Streamlit thinking collapse for list-type AIMessage.content
+- PDF searchbox missing PDFs and company tag display issues
+- generate_test_set @staticmethod decorator causing syntax error
+- Empty text check before semantic chunking to prevent crash
+- Hallucination detection and metric resolution log quality improvements
+- Filter _skip records from serial evaluation path return value
+- Audit record for skipped questions in serial evaluation path
+- Warning for non-irrelevant questions with empty source_files
 
 ## [0.1.16] - 2026-05-04
 
