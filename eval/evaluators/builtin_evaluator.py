@@ -5,6 +5,7 @@ This evaluator provides a unified interface for the project's
 existing evaluation metrics (hit_rate, mrr, ndcg, faithfulness, answer_relevancy).
 """
 
+from dataclasses import dataclass
 from typing import Any
 
 from loguru import logger
@@ -30,6 +31,25 @@ from eval.metrics import (
     normalize_source,
     normalize_source_with_equivalence,
 )
+
+
+@dataclass
+class _SampleData:
+    question_id: str
+    question: str
+    answer: str
+    contexts: list[str]
+    expected_sources: list[str] | None
+    expected_answer: str | None
+    llm_config: dict[str, str] | None
+    retrieval_metrics: list[str]
+    generation_metrics: list[str] | None
+    chunk_ids: list[str] | None
+    expected_chunks: list[str] | None
+    equivalence_groups: dict[str, list[str]] | None
+    expect_retrieval: bool
+    expect_no_answer: bool
+    sources_for_retrieval: list[str]
 
 
 class BuiltinEvaluator(BaseEvaluator):
@@ -279,6 +299,40 @@ class BuiltinEvaluator(BaseEvaluator):
             )
         return results
 
+    def _extract_sample_data(self, sample: EvaluationSample) -> _SampleData:
+        retrieval_metrics = (
+            sample.retrieval_metrics
+            if sample.retrieval_metrics is not None
+            else self._retrieval_metrics
+        )
+        generation_metrics = (
+            sample.generation_metrics
+            if sample.generation_metrics is not None and sample.llm_config
+            else (self._generation_metrics if sample.llm_config else None)
+        )
+        sources_for_retrieval = (
+            sample.retrieved_sources
+            if sample.retrieved_sources is not None
+            else sample.contexts
+        )
+        return _SampleData(
+            question_id=sample.question_id,
+            question=sample.question,
+            answer=sample.answer,
+            contexts=sample.contexts,
+            expected_sources=sample.expected_sources,
+            expected_answer=sample.expected_answer,
+            llm_config=sample.llm_config,
+            retrieval_metrics=retrieval_metrics,
+            generation_metrics=generation_metrics,
+            chunk_ids=sample.chunk_ids,
+            expected_chunks=sample.expected_chunks,
+            equivalence_groups=sample.equivalence_groups,
+            expect_retrieval=sample.expect_retrieval,
+            expect_no_answer=sample.expect_no_answer,
+            sources_for_retrieval=sources_for_retrieval,
+        )
+
     def evaluate_single(self, sample: EvaluationSample) -> EvaluationResult:
         """
         Evaluate a single sample using builtin metrics.
@@ -289,104 +343,102 @@ class BuiltinEvaluator(BaseEvaluator):
         Returns:
             EvaluationResult containing the evaluation scores.
         """
-        question_id = sample.question_id
-        question = sample.question
-        answer = sample.answer
-        contexts = sample.contexts
-        expected_sources = sample.expected_sources
-        expected_answer = sample.expected_answer
-        llm_config = sample.llm_config
-        retrieval_metrics = sample.retrieval_metrics
-        generation_metrics = sample.generation_metrics
-        chunk_ids = sample.chunk_ids
-        expected_chunks = sample.expected_chunks
-        equivalence_groups = sample.equivalence_groups
-        expect_retrieval = sample.expect_retrieval
-        expect_no_answer = sample.expect_no_answer
-        retrieved_sources = sample.retrieved_sources
-        if retrieval_metrics is None:
-            retrieval_metrics = self._retrieval_metrics
-
-        if generation_metrics is None and llm_config:
-            generation_metrics = self._generation_metrics
-
-        sources_for_retrieval = (
-            retrieved_sources if retrieved_sources is not None else contexts
-        )
-
-        retrieval_results = {}
-        generation_results = {}
-        error = None
+        data = self._extract_sample_data(sample)
+        retrieval_results: dict[str, Any] = {}
+        generation_results: dict[str, Any] = {}
+        error: str | None = None
 
         try:
-            if expected_sources and expect_retrieval:
-                retrieval_results.update(
-                    self._compute_basic_retrieval_metrics(
-                        retrieval_metrics, sources_for_retrieval, expected_sources
-                    )
-                )
-
-            if chunk_ids and expected_chunks and expect_retrieval:
-                retrieval_results.update(
-                    self._compute_chunk_metrics(
-                        retrieval_metrics, chunk_ids, expected_chunks
-                    )
-                )
-
-            if expected_sources and expect_retrieval:
-                retrieval_results.update(
-                    self._compute_dedup_metrics(
-                        retrieval_metrics,
-                        sources_for_retrieval,
-                        expected_sources,
-                        equivalence_groups,
-                    )
-                )
-
-            if not expect_retrieval and "false_positive_rate" in retrieval_metrics:
-                retrieval_results["false_positive_rate"] = (
-                    calculate_false_positive_rate(sources_for_retrieval, k=5)
-                )
-
-            if "retrieval_diversity" in retrieval_metrics and sources_for_retrieval:
-                retrieval_results["retrieval_diversity"] = (
-                    calculate_retrieval_diversity(sources_for_retrieval, k=5)
-                )
-
-            if llm_config and contexts and expect_retrieval and expected_answer:
-                self._compute_llm_retrieval_metrics(
-                    retrieval_metrics,
-                    question_id,
-                    question,
-                    expected_answer,
-                    contexts,
-                    llm_config,
-                    retrieval_results,
-                )
-
-            if generation_metrics and llm_config:
-                generation_results = self._compute_generation_metrics(
-                    generation_metrics,
-                    question_id,
-                    question,
-                    answer,
-                    contexts,
-                    llm_config,
-                    expect_no_answer,
-                )
-
+            retrieval_results = self._compute_all_retrieval_metrics(data)
+            generation_results = self._compute_all_generation_metrics(data)
         except Exception as e:
             error = str(e)
-            logger.error(f"Evaluation failed for {question_id}: {error}")
+            logger.error(f"Evaluation failed for {data.question_id}: {error}")
 
         return EvaluationResult(
-            question_id=question_id,
-            question=question,
-            answer=answer,
-            contexts=contexts,
+            question_id=data.question_id,
+            question=data.question,
+            answer=data.answer,
+            contexts=data.contexts,
             retrieval_metrics=retrieval_results,
             generation_metrics=generation_results,
             error=error,
+        )
+
+    def _compute_all_retrieval_metrics(self, data: _SampleData) -> dict[str, Any]:
+        results: dict[str, Any] = {}
+
+        if data.expected_sources and data.expect_retrieval:
+            results.update(
+                self._compute_basic_retrieval_metrics(
+                    data.retrieval_metrics,
+                    data.sources_for_retrieval,
+                    data.expected_sources,
+                )
+            )
+
+        if data.chunk_ids and data.expected_chunks and data.expect_retrieval:
+            results.update(
+                self._compute_chunk_metrics(
+                    data.retrieval_metrics, data.chunk_ids, data.expected_chunks
+                )
+            )
+
+        if data.expected_sources and data.expect_retrieval:
+            results.update(
+                self._compute_dedup_metrics(
+                    data.retrieval_metrics,
+                    data.sources_for_retrieval,
+                    data.expected_sources,
+                    data.equivalence_groups,
+                )
+            )
+
+        if (
+            not data.expect_retrieval
+            and "false_positive_rate" in data.retrieval_metrics
+        ):
+            results["false_positive_rate"] = calculate_false_positive_rate(
+                data.sources_for_retrieval, k=5
+            )
+
+        if (
+            "retrieval_diversity" in data.retrieval_metrics
+            and data.sources_for_retrieval
+        ):
+            results["retrieval_diversity"] = calculate_retrieval_diversity(
+                data.sources_for_retrieval, k=5
+            )
+
+        if (
+            data.llm_config
+            and data.contexts
+            and data.expect_retrieval
+            and data.expected_answer
+        ):
+            self._compute_llm_retrieval_metrics(
+                data.retrieval_metrics,
+                data.question_id,
+                data.question,
+                data.expected_answer,
+                data.contexts,
+                data.llm_config,
+                results,
+            )
+
+        return results
+
+    def _compute_all_generation_metrics(self, data: _SampleData) -> dict[str, Any]:
+        if not data.generation_metrics or not data.llm_config:
+            return {}
+        return self._compute_generation_metrics(
+            data.generation_metrics,
+            data.question_id,
+            data.question,
+            data.answer,
+            data.contexts,
+            data.llm_config,
+            data.expect_no_answer,
         )
 
     def evaluate_batch(
