@@ -636,32 +636,36 @@
 
 **文件**: `src/agent/checkpoint.py:15-28`, `src/agent/session_manager.py:11-24`
 
-- [ ] **创建 `src/agent/db_utils.py` 模块**
+- [x] **创建 `src/agent/db_utils.py` 模块**
   - 新建文件
   - 验收标准: 文件创建完成
   - 优先级: P2
   - 预计耗时: 10分钟
+  - 完成日期: 2026-05-10
 
-- [ ] **移动 `_resolve_db_path` 到 `db_utils.py`**
+- [x] **移动 `_resolve_db_path` 到 `db_utils.py`**
   - 提取函数到新模块
   - 导出函数
   - 验收标准: 函数移动完成
   - 优先级: P2
   - 预计耗时: 30分钟
+  - 完成日期: 2026-05-10
 
-- [ ] **更新 `checkpoint.py` 导入**
+- [x] **更新 `checkpoint.py` 导入**
   - 从 `db_utils` 导入 `_resolve_db_path`
   - 删除本地实现
   - 验收标准: 导入正确，测试通过
   - 优先级: P2
   - 预计耗时: 15分钟
+  - 完成日期: 2026-05-10
 
-- [ ] **更新 `session_manager.py` 导入**
+- [x] **更新 `session_manager.py` 导入**
   - 从 `db_utils` 导入 `_resolve_db_path`
   - 删除本地实现
   - 验收标准: 导入正确，测试通过
   - 优先级: P2
   - 预计耗时: 15分钟
+  - 完成日期: 2026-05-10
 
 ---
 
@@ -669,23 +673,26 @@
 
 **文件**: `src/agent/reporters/comparison_report.py:142-178`, `src/agent/reporters/maintenance_report.py:120-157`
 
-- [ ] **创建 `BaseReporter` 基类**
+- [x] **创建 `BaseReporter` 基类**
   - 提取公共 `save()` 方法
   - 验收标准: 基类创建完成
   - 优先级: P2
   - 预计耗时: 1小时
+  - 完成日期: 2026-05-10
 
-- [ ] **重构 `ComparisonReporter` 继承 `BaseReporter`**
+- [x] **重构 `ComparisonReporter` 继承 `BaseReporter`**
   - 删除重复的 `save()` 方法
   - 验收标准: 继承正确，测试通过
   - 优先级: P2
   - 预计耗时: 30分钟
+  - 完成日期: 2026-05-10
 
-- [ ] **重构 `MaintenanceReporter` 继承 `BaseReporter`**
+- [x] **重构 `MaintenanceReporter` 继承 `BaseReporter`**
   - 删除重复的 `save()` 方法
   - 验收标准: 继承正确，测试通过
   - 优先级: P2
   - 预计耗时: 30分钟
+  - 完成日期: 2026-05-10
 
 ---
 
@@ -693,23 +700,26 @@
 
 **文件**: `src/agent/cli.py` (3处), `src/app_pages/maintenance.py` (3处)
 
-- [ ] **创建 `build_agent_state()` 辅助函数**
+- [x] **创建 `build_agent_state()` 辅助函数**
   - 封装 12+ 个字段的 state 字典构造
   - 验收标准: 函数创建完成，单元测试通过
   - 优先级: P1
   - 预计耗时: 1小时
+  - 完成日期: 2026-05-10
 
-- [ ] **重构 `cli.py` 中的 3 处调用**
+- [x] **重构 `cli.py` 中的 3 处调用**
   - 替换手动构造为函数调用
   - 验收标准: 无重复代码，功能验证通过
   - 优先级: P1
   - 预计耗时: 30分钟
+  - 完成日期: 2026-05-10
 
-- [ ] **重构 `maintenance.py` 中的 3 处调用**
+- [x] **重构 `maintenance.py` 中的 3 处调用**
   - 替换手动构造为函数调用
   - 验收标准: 无重复代码，功能验证通过
   - 优先级: P1
   - 预计耗时: 30分钟
+  - 完成日期: 2026-05-10
 
 ---
 
@@ -717,19 +727,21 @@
 
 **文件**: `src/app_pages/maintenance.py`
 
-- [ ] **分析 `_render_streaming_agent` 和 `_resume_interrupt_streaming` 重复**
+- [x] **分析 `_render_streaming_agent` 和 `_resume_interrupt_streaming` 重复**
   - 识别事件处理代码重复
   - 验收标准: 完成重复分析文档
   - 优先级: P1
   - 预计耗时: 1小时
+  - 完成日期: 2026-05-10
 
-- [ ] **提取 `_handle_streaming_event()` 函数**
+- [x] **提取 `_handle_streaming_event()` 函数**
   - 封装事件处理逻辑
   - 验收标准: 函数提取完成，单元测试通过
   - 优先级: P1
   - 预计耗时: 2小时
+  - 完成日期: 2026-05-10
 
-- [ ] **重构两个函数使用 `_handle_streaming_event()`**
+- [x] **重构两个函数使用 `_handle_streaming_event()`**
   - 更新 `_render_streaming_agent`
   - 更新 `_resume_interrupt_streaming`
   - 验收标准: 无重复代码，功能验证通过
