@@ -15,7 +15,7 @@ def embedder_setup():
         patch("src.embedder.AutoModel") as mock_auto_model,
         patch("src.embedder.torch.cuda.is_available") as mock_cuda_available,
     ):
-        mock_cuda_available.return_value = True
+        mock_cuda_available.return_value = False
 
         mock_model = MagicMock()
         mock_model.config.hidden_size = 1024
@@ -26,7 +26,7 @@ def embedder_setup():
         mock_auto_model.from_pretrained.return_value = mock_model
         mock_auto_tokenizer.from_pretrained.return_value = MagicMock()
 
-        embedder = Embedder(model_name="test-model", device="cuda")
+        embedder = Embedder(model_name="test-model", device="cpu")
 
         yield SimpleNamespace(
             mock_model=mock_model,
@@ -41,7 +41,7 @@ class TestEmbedder:
     @pytest.mark.unit
     def test_embedder_init_success(self, embedder_setup):
         assert embedder_setup.embedder.model_name == "test-model"
-        assert embedder_setup.embedder.device == "cuda"
+        assert embedder_setup.embedder.device == "cpu"
         assert embedder_setup.embedder.embedding_dim == 1024
 
     @pytest.mark.unit
@@ -177,7 +177,7 @@ def _make_embedder(model_name: str = "test-model", query_instruction=None) -> Em
         patch("src.embedder.AutoModel") as mock_auto_model,
         patch("src.embedder.torch.cuda.is_available") as mock_cuda_available,
     ):
-        mock_cuda_available.return_value = True
+        mock_cuda_available.return_value = False
 
         mock_model = MagicMock()
         mock_model.config.hidden_size = 1024
@@ -190,7 +190,7 @@ def _make_embedder(model_name: str = "test-model", query_instruction=None) -> Em
 
         return Embedder(
             model_name=model_name,
-            device="cuda",
+            device="cpu",
             query_instruction=query_instruction,
         )
 
