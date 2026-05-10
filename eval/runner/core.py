@@ -411,6 +411,786 @@ def _rebuild_and_merge_token_tracker(
     experiment_tracker.merge(variant_tracker)
 
 
+def _load_and_validate_config(
+    config_path: str,
+    system_config_path: str,
+    reuse_config: ReportReuseConfig | None,
+    resume_dir: str | None,
+    force_rerun: bool,
+    force_variant: list[str] | None,
+) -> tuple[
+    ExperimentConfig,
+    dict[str, Any],
+    ExperimentManager,
+    ReportReuseConfig,
+    str | None,
+    bool,
+    list[str] | None,
+]:
+    """Load and validate experiment configuration.
+
+    Args:
+        config_path: Path to experiment configuration YAML file.
+        system_config_path: Path to system configuration file.
+        reuse_config: Reuse configuration from CLI.
+        resume_dir: Resume directory from CLI.
+        force_rerun: Force rerun flag from CLI.
+        force_variant: Force variant list from CLI.
+
+    Returns:
+        Tuple of (exp_config, system_config, exp_manager, effective_reuse,
+                  effective_resume_dir, effective_force_rerun, effective_force_variant).
+    """
+    logger.info(f"Loading experiment configuration from {config_path}")
+    exp_config = load_experiment_config(config_path)
+
+    logger.info(f"Experiment: {exp_config.name}")
+    logger.info(f"Description: {exp_config.description}")
+    logger.info(f"Variants: {len(exp_config.variants)}")
+    logger.info(f"Test sets: {len(exp_config.test_sets)}")
+
+    system_config = load_config(system_config_path)
+    setup_logger(system_config)
+
+    exp_manager = ExperimentManager(system_config)
+
+    effective_reuse = reuse_config or exp_config.reuse
+    if reuse_config and reuse_config.is_enabled():
+        effective_reuse = reuse_config
+        logger.info(f"Reuse mode from CLI: {effective_reuse.mode}")
+    elif exp_config.reuse.is_enabled():
+        effective_reuse = exp_config.reuse
+        logger.info(f"Reuse mode from YAML config: {effective_reuse.mode}")
+
+    effective_resume_dir = resume_dir
+    effective_force_rerun = force_rerun
+    effective_force_variant = force_variant
+
+    if exp_config.resume.is_enabled() and not resume_dir:
+        resume_from = exp_config.resume.from_exp
+        if resume_from:
+            resume_path = Path(resume_from)
+            if not resume_path.is_absolute():
+                exp_reports_dir = Path(
+                    system_config.get("experiments", {}).get("dir", "data/exp_reports")
+                )
+                candidate = exp_reports_dir / resume_from
+                if candidate.exists():
+                    resume_path = candidate
+                else:
+                    candidate = Path(resume_from)
+                    if candidate.exists():
+                        resume_path = candidate
+            effective_resume_dir = str(resume_path)
+            logger.info(f"Resume from YAML config: {effective_resume_dir}")
+
+    if exp_config.resume.force_rerun and not force_rerun:
+        effective_force_rerun = True
+        logger.info("force_rerun from YAML config: True")
+
+    if exp_config.resume.force_variants and not force_variant:
+        effective_force_variant = exp_config.resume.force_variants
+        logger.info(f"force_variants from YAML config: {effective_force_variant}")
+
+    return (
+        exp_config,
+        system_config,
+        exp_manager,
+        effective_reuse,
+        effective_resume_dir,
+        effective_force_rerun,
+        effective_force_variant,
+    )
+
+
+def _create_experiment_directory(
+    exp_config: ExperimentConfig,
+    system_config: dict[str, Any],
+    exp_manager: ExperimentManager,
+    effective_reuse: ReportReuseConfig,
+    effective_resume_dir: str | None,
+    effective_force_variant: list[str] | None,
+) -> tuple[Path, list[str] | None]:
+    """Create or resolve experiment directory.
+
+    Handles four scenarios:
+    1. Resume from existing directory
+    2. In-place reuse (append to existing)
+    3. Copy-migrate reuse (copy then append)
+    4. Create new directory
+
+    Args:
+        exp_config: Experiment configuration.
+        system_config: System configuration.
+        exp_manager: Experiment manager.
+        effective_reuse: Resolved reuse configuration.
+        effective_resume_dir: Resolved resume directory.
+        effective_force_variant: Current force variant list (may be modified).
+
+    Returns:
+        Tuple of (exp_dir, updated_force_variant).
+
+    Raises:
+        ValueError: If resume_dir is invalid.
+    """
+    if effective_resume_dir:
+        exp_dir = Path(effective_resume_dir)
+        if not (exp_dir / "manifest.json").exists():
+            raise ValueError(
+                f"Not a valid experiment directory (missing manifest.json): {effective_resume_dir}"
+            )
+        logger.info(f"Resuming experiment from existing directory: {exp_dir}")
+        exp_manager.mark_resumed(exp_dir)
+        return exp_dir, effective_force_variant
+
+    if effective_reuse.is_in_place():
+        target_path = Path(effective_reuse.target_dir)
+        if not target_path.is_absolute():
+            exp_reports_dir = Path(
+                system_config.get("experiments", {}).get("dir", "data/exp_reports")
+            )
+            candidate = exp_reports_dir / effective_reuse.target_dir
+            if candidate.exists():
+                target_path = candidate
+            else:
+                candidate = Path(effective_reuse.target_dir)
+                if candidate.exists():
+                    target_path = candidate
+
+        in_place_handler = InPlaceReuseHandler(
+            target_dir=target_path,
+            backup_before_append=effective_reuse.backup_before_append,
+        )
+        target_manifest = in_place_handler.validate_target_dir()
+
+        backup_snapshot_path = None
+        if effective_reuse.backup_before_append:
+            snapshot = in_place_handler.create_full_snapshot()
+            if snapshot:
+                backup_snapshot_path = str(snapshot)
+
+        stored_hashes = exp_manager.get_variant_config_hashes(target_path)
+        incremental_plan = in_place_handler.compute_incremental_updates(
+            new_variants=exp_config.variants,
+            manifest=target_manifest,
+            stored_hashes=stored_hashes,
+        )
+
+        updated_force_variant = effective_force_variant
+        if incremental_plan.has_conflicts:
+            conflicting = [
+                v.get("name", "unnamed") for v in incremental_plan.to_confirm
+            ]
+            logger.warning(
+                f"Conflicting variants detected: {conflicting}. "
+                f"Use --force-variant to override, or remove conflicting variants from config."
+            )
+            for v in incremental_plan.to_confirm:
+                vname = v.get("name", "unnamed")
+                logger.warning(
+                    f"  Variant '{vname}' exists with different config — will be re-run"
+                )
+            updated_force_variant = list(
+                set((effective_force_variant or []) + conflicting)
+            )
+
+        exp_dir = target_path
+        logger.info(f"In-place reuse mode: appending to {exp_dir}")
+
+        in_place_handler.record_reuse_history(
+            action="in_place_start",
+            backup_snapshot=backup_snapshot_path,
+            details={
+                "new_variants": [
+                    v.get("name", "unnamed") for v in incremental_plan.to_run
+                ],
+                "reuse_variants": [
+                    v.get("name", "unnamed") for v in incremental_plan.to_reuse
+                ],
+                "conflict_variants": [
+                    v.get("name", "unnamed") for v in incremental_plan.to_confirm
+                ],
+            },
+        )
+
+        for v in incremental_plan.to_run:
+            in_place_handler.append_variant_to_manifest(v.get("name", "unnamed"))
+
+        return exp_dir, updated_force_variant
+
+    if effective_reuse.is_copy_migrate():
+        source_path = Path(effective_reuse.source_dir)
+        if not source_path.is_absolute():
+            exp_reports_dir = Path(
+                system_config.get("experiments", {}).get("dir", "data/exp_reports")
+            )
+            candidate = exp_reports_dir / effective_reuse.source_dir
+            if candidate.exists():
+                source_path = candidate
+            else:
+                candidate = Path(effective_reuse.source_dir)
+                if candidate.exists():
+                    source_path = candidate
+
+        migrate_handler = CopyMigrateHandler(
+            source_dir=source_path,
+            exp_dir=Path("placeholder"),
+        )
+
+        source_manifest = migrate_handler.validate_source_dir()
+        source_exp_id = source_manifest.get("experiment_id", source_path.name)
+
+        new_exp_dir = exp_manager.create_experiment_dir(exp_config)
+        migrate_handler = CopyMigrateHandler(
+            source_dir=source_path,
+            exp_dir=new_exp_dir,
+        )
+
+        migrate_handler.copy_experiment()
+
+        new_exp_id = new_exp_dir.name
+        migrate_handler.update_identifiers(new_exp_id, source_exp_id)
+        migrate_handler.verify_migration()
+
+        exp_dir = new_exp_dir
+        logger.info(
+            f"Copy-migrate reuse mode: migrated {source_exp_id} -> {new_exp_id}"
+        )
+        return exp_dir, effective_force_variant
+
+    exp_dir = exp_manager.create_experiment_dir(exp_config)
+    return exp_dir, effective_force_variant
+
+
+def _initialize_profiler(
+    exp_config: ExperimentConfig,
+    system_config: dict[str, Any],
+) -> PipelineProfiler | None:
+    """Initialize performance profiler.
+
+    Args:
+        exp_config: Experiment configuration.
+        system_config: System configuration.
+
+    Returns:
+        PipelineProfiler instance or None if disabled.
+    """
+    profiling_config = system_config.get("experiments", {}).get("profiling", {})
+    profiling_enabled = profiling_config.get("enabled", True)
+
+    if profiling_enabled:
+        profiler = PipelineProfiler(
+            experiment_name=exp_config.name,
+            total_pages=0,
+            total_questions=sum(
+                ts.get("generation", {}).get(
+                    "num_questions", ts.get("num_questions", 10)
+                )
+                for ts in exp_config.test_sets
+            ),
+            monitor_interval=profiling_config.get("monitor_interval", 0.5),
+        )
+        profiler.start_profiling()
+        logger.info("Performance profiling enabled")
+        return profiler
+    else:
+        logger.info("Performance profiling disabled by config")
+        return None
+
+
+def _prepare_evaluation_assets(
+    exp_config: ExperimentConfig,
+    system_config: dict[str, Any],
+    exp_manager: ExperimentManager,
+    exp_dir: Path,
+    skip_preprocessing: bool,
+    effective_resume_dir: str | None,
+    effective_reuse: ReportReuseConfig,
+    profiler: PipelineProfiler | None,
+) -> tuple[
+    dict[str, Any],
+    list[dict[str, Any]],
+    TokenTracker,
+    list[dict[str, Any]],
+    dict[str, Any],
+]:
+    """Prepare evaluation assets: meal, chunks, test sets, and snapshots.
+
+    Args:
+        exp_config: Experiment configuration.
+        system_config: System configuration.
+        exp_manager: Experiment manager.
+        exp_dir: Experiment directory.
+        skip_preprocessing: Skip preprocessing flag.
+        effective_resume_dir: Resolved resume directory.
+        effective_reuse: Resolved reuse configuration.
+        profiler: Optional profiler instance.
+
+    Returns:
+        Tuple of (meal_info, test_sets, test_generation_tracker,
+                  test_set_snapshots, config_snapshot).
+    """
+    force_meal = exp_config.should_force("meal")
+    force_parsed = exp_config.should_force("parsed")
+    force_chunk = exp_config.should_force("chunk")
+    force_testset = exp_config.should_force("testset")
+
+    if exp_config.force_overwrite:
+        stages = (
+            "all"
+            if exp_config.force_overwrite == "all"
+            else ", ".join(exp_config.force_overwrite)
+        )
+        logger.info(f"Force overwrite enabled for: {stages}")
+
+    logger.info("Step 1: Preparing meal...")
+    meal_info = prepare_meal(
+        system_config,
+        exp_config,
+        skip_preprocessing,
+        force_meal=force_meal,
+        force_parse=force_parsed,
+        force_chunk=force_chunk,
+        profiler=profiler,
+    )
+
+    test_generation_tracker = TokenTracker()
+
+    logger.info("Step 2: Preparing variant chunks...")
+    first_chunks_dir = None
+    for i, variant in enumerate(exp_config.variants, 1):
+        variant_name = variant.get("name", f"variant_{i}")
+        merged_config = merge_config(system_config, exp_config, variant)
+        chunks_dir = prepare_variant_chunks(
+            merged_config,
+            meal_info["config"],
+            variant_name,
+            force_chunk=force_chunk,
+        )
+        if first_chunks_dir is None:
+            first_chunks_dir = chunks_dir
+
+    logger.info("Step 3: Preparing test sets...")
+    with profiler.profile_stage("S5") if profiler else contextlib.nullcontext():
+        test_sets = prepare_test_sets(
+            system_config,
+            exp_config,
+            meal_info,
+            skip_preprocessing,
+            token_tracker=test_generation_tracker,
+            chunks_dir=first_chunks_dir,
+            force_testset=force_testset,
+        )
+
+    if profiler:
+        test_gen_total = test_generation_tracker.get_total()
+        profiler.report_stage_tokens(
+            "S5",
+            test_gen_total.input_tokens,
+            test_gen_total.output_tokens,
+        )
+
+    meal_snapshot = meal_info["config"].to_dict()
+
+    test_set_snapshots = []
+    for test_set in test_sets:
+        metadata = test_set.get("metadata", {})
+        generation = metadata.get("generation", {})
+        test_set_snapshots.append(
+            {
+                "name": test_set.get("name") or metadata.get("name"),
+                "strategy": test_set.get("strategy") or generation.get("strategy"),
+                "num_questions": len(test_set.get("questions", [])),
+                "created_at": test_set.get("created_at") or metadata.get("created_at"),
+                "meal_data_id": test_set.get("meal_data_id") or metadata.get("meal_id"),
+                "questions": test_set.get("questions", []),
+            }
+        )
+
+    config_snapshot = {
+        "data": exp_config.data,
+        "test_sets": exp_config.test_sets,
+        "evaluation": exp_config.evaluation,
+        "llm": exp_config.llm,
+        "system_config": sanitize_config(system_config),
+        "environment": collect_environment_info(),
+    }
+
+    if not effective_resume_dir and not effective_reuse.is_enabled():
+        exp_manager.save_snapshots(
+            exp_dir=exp_dir,
+            config=exp_config,
+            meal_snapshot=meal_snapshot,
+            test_set_snapshots=test_set_snapshots,
+            config_snapshot=config_snapshot,
+        )
+    elif effective_reuse.is_in_place():
+        logger.info("In-place reuse: skipping snapshot save (already exists)")
+    elif effective_reuse.is_copy_migrate():
+        logger.info("Copy-migrate reuse: skipping snapshot save (migrated from source)")
+    else:
+        logger.info("Resuming: skipping snapshot save (already exists)")
+
+    return (
+        meal_info,
+        test_sets,
+        test_generation_tracker,
+        test_set_snapshots,
+        config_snapshot,
+    )
+
+
+def _generate_and_save_report(
+    exp_config: ExperimentConfig,
+    system_config: dict[str, Any],
+    exp_dir: Path,
+    all_variant_results: list[dict[str, Any]],
+    meal_info: dict[str, Any],
+    config_snapshot: dict[str, Any],
+    experiment_tracker: TokenTracker,
+    use_llm_report: bool,
+    profiler: PipelineProfiler | None,
+) -> None:
+    """Generate and save experiment report.
+
+    Args:
+        exp_config: Experiment configuration.
+        system_config: System configuration.
+        exp_dir: Experiment directory.
+        all_variant_results: All variant evaluation results.
+        meal_info: Meal information.
+        config_snapshot: Configuration snapshot.
+        experiment_tracker: Token tracker.
+        use_llm_report: Whether to use LLM for report generation.
+        profiler: Optional profiler instance.
+    """
+    logger.info("Step 4: Generating experiment report...")
+
+    with profiler.profile_stage("S8") if profiler else contextlib.nullcontext():
+        if all_variant_results:
+            llm_preset_name = exp_config.evaluation.get("llm_preset", "default")
+            llm_config = get_llm_config(system_config, llm_preset_name)
+
+            reporter = ExperimentReporter(
+                llm_api_key=llm_config.get("api_key"),
+                llm_base_url=llm_config.get("base_url"),
+                llm_model_name=llm_config.get("model_name"),
+                token_tracker=experiment_tracker,
+            )
+
+            reporter.generate_variant_comparison_report(
+                exp_dir=exp_dir,
+                variant_results=all_variant_results,
+                meal_info=meal_info,
+                config_snapshot=config_snapshot,
+                output_filename="experiment_report.md",
+                use_llm=False,
+            )
+
+            if use_llm_report or exp_config.evaluation.get("llm_report", False):
+                has_successful = any(
+                    "retrieval_metrics" in v for v in all_variant_results
+                )
+                if not has_successful:
+                    logger.warning(
+                        "All variants failed — skipping LLM report generation"
+                    )
+                else:
+                    logger.info("Generating LLM-enhanced report...")
+                    try:
+                        reporter.generate_variant_comparison_report(
+                            exp_dir=exp_dir,
+                            variant_results=all_variant_results,
+                            meal_info=meal_info,
+                            config_snapshot=config_snapshot,
+                            output_filename="experiment_report_llm.md",
+                            use_llm=True,
+                        )
+                        logger.success("LLM-enhanced report generated successfully")
+                    except Exception as e:
+                        logger.warning(f"Failed to generate LLM report: {str(e)}")
+
+
+def _save_token_and_profiling_data(
+    exp_dir: Path,
+    experiment_tracker: TokenTracker,
+    system_config: dict[str, Any],
+    profiler: PipelineProfiler | None,
+    meal_info: dict[str, Any],
+) -> dict[str, Any]:
+    """Save token summary and profiling data.
+
+    Args:
+        exp_dir: Experiment directory.
+        experiment_tracker: Token tracker.
+        system_config: System configuration.
+        profiler: Optional profiler instance.
+        meal_info: Meal information.
+
+    Returns:
+        Cost information dictionary.
+    """
+    if profiler:
+        profiler.stop_profiling()
+        if meal_info.get("config") and hasattr(meal_info["config"], "stats"):
+            profiler.total_pages = meal_info["config"].stats.get("total_pages", 0)
+
+        profiling_dir = exp_dir / "profiling"
+        profiler.save_report(profiling_dir, "profile_data.json")
+
+        profile_md = profiler.generate_markdown_report()
+        profile_md_path = profiling_dir / "profile_report.md"
+        profile_md_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(profile_md_path, "w", encoding="utf-8") as f:
+            f.write(profile_md)
+        logger.success(f"Performance profile report saved to: {profile_md_path}")
+
+        profiling_config = system_config.get("experiments", {}).get("profiling", {})
+        if profiling_config.get("generate_charts", True):
+            try:
+                chart_files = generate_profiler_charts(
+                    profiler, profiling_dir / "charts"
+                )
+                if chart_files:
+                    logger.success(f"Generated {len(chart_files)} performance charts")
+            except Exception as e:
+                logger.warning(f"Failed to generate performance charts: {str(e)}")
+
+    experiment_tracker.get_total()
+    token_cost_config = system_config.get("token_cost", {})
+    cost_info = experiment_tracker.estimate_cost(token_cost_config)
+
+    try:
+        token_summary_data = experiment_tracker.to_dict()
+        token_summary_data["estimated_cost"] = cost_info
+        token_summary_path = exp_dir / "token_summary.json"
+        with open(token_summary_path, "w", encoding="utf-8") as f:
+            json.dump(token_summary_data, f, ensure_ascii=False, indent=2)
+        logger.info(f"Token summary saved to {token_summary_path}")
+
+        token_table = experiment_tracker.get_detailed_table()
+        if cost_info["total_cost"] > 0:
+            token_table += f"\n\nEstimated Cost (model: {cost_info['model']}):\n"
+            token_table += f"  Input:  ${cost_info['input_cost']:.4f}\n"
+            token_table += f"  Output: ${cost_info['output_cost']:.4f}\n"
+            token_table += f"  Total:  ${cost_info['total_cost']:.4f}\n"
+        token_table_path = exp_dir / "token_summary.txt"
+        with open(token_table_path, "w", encoding="utf-8") as f:
+            f.write(token_table)
+        logger.info(f"Token summary table saved to {token_table_path}")
+    except Exception as e:
+        logger.warning(f"Failed to save token summary: {str(e)}")
+
+    logger.info("\n" + experiment_tracker.get_detailed_table())
+
+    if cost_info["total_cost"] > 0:
+        logger.info(f"\nEstimated Cost (model: {cost_info['model']}):")
+        logger.info(f"  Input:  ${cost_info['input_cost']:.4f}")
+        logger.info(f"  Output: ${cost_info['output_cost']:.4f}")
+        logger.info(f"  Total:  ${cost_info['total_cost']:.4f}")
+
+    return cost_info
+
+
+def _run_all_variant_evaluations(
+    exp_config: ExperimentConfig,
+    system_config: dict[str, Any],
+    exp_manager: ExperimentManager,
+    exp_dir: Path,
+    meal_info: dict[str, Any],
+    test_sets: list[dict[str, Any]],
+    test_generation_tracker: TokenTracker,
+    profiler: PipelineProfiler | None,
+    effective_force_rerun: bool,
+    effective_force_variant: list[str] | None,
+) -> tuple[list[dict[str, Any]], TokenTracker]:
+    """Run evaluation for all variants.
+
+    Args:
+        exp_config: Experiment configuration.
+        system_config: System configuration.
+        exp_manager: Experiment manager.
+        exp_dir: Experiment directory.
+        meal_info: Meal information.
+        test_sets: Test sets.
+        test_generation_tracker: Token tracker from test generation.
+        profiler: Optional profiler instance.
+        effective_force_rerun: Force rerun flag.
+        effective_force_variant: Force variant list.
+
+    Returns:
+        Tuple of (all_variant_results, experiment_tracker).
+    """
+    logger.info("Step 4: Running variant evaluations...")
+    all_variant_results = []
+    experiment_tracker = TokenTracker()
+
+    completed_variants: set[str] = set()
+    stored_hashes: dict[str, str] = {}
+    if not effective_force_rerun:
+        completed_variants = set(exp_manager.get_completed_variants(exp_dir))
+        stored_hashes = exp_manager.get_variant_config_hashes(exp_dir)
+        if completed_variants:
+            logger.info(
+                f"Checkpoint resume: {len(completed_variants)} variant(s) already completed: "
+                f"{sorted(completed_variants)}"
+            )
+            if stored_hashes:
+                logger.info(
+                    f"Config hash verification enabled ({len(stored_hashes)} hash(es) stored)"
+                )
+            else:
+                logger.warning(
+                    "No config hashes found in manifest — variant reuse will NOT be "
+                    "verified. Re-run without --resume to generate hashes, or use "
+                    "--force-rerun to start fresh."
+                )
+    else:
+        logger.info("Force rerun: ignoring checkpoints, re-running all variants")
+        exp_manager.update_manifest_field(exp_dir, "completed_variants", [])
+        exp_manager.update_manifest_field(exp_dir, "variant_config_hashes", {})
+
+    if effective_force_variant and not effective_force_rerun:
+        for vname in effective_force_variant:
+            if vname in completed_variants:
+                logger.info(
+                    f"Force re-run variant '{vname}' (requested via --force-variant)"
+                )
+                exp_manager.invalidate_variant(exp_dir, vname)
+                completed_variants.discard(vname)
+            else:
+                logger.info(
+                    f"Force variant '{vname}' requested but it was not yet completed "
+                    f"— will run normally"
+                )
+
+    indexer_cache: dict[str, Any] = {}
+
+    from src.embedder import Embedder as _Embedder
+
+    embedding_cfg = system_config.get("embedding", {})
+    shared_embedder = _Embedder(
+        model_name=embedding_cfg.get("model_name", "BAAI/bge-large-zh-v1.5"),
+        device=embedding_cfg.get("device", "cuda"),
+        query_instruction=embedding_cfg.get("query_instruction"),
+    )
+    logger.info("Shared Embedder loaded for all variants")
+
+    for i, variant in enumerate(exp_config.variants, 1):
+        variant_name = variant.get("name", f"variant_{i}")
+
+        if variant_name in completed_variants and not effective_force_rerun:
+            merged = merge_config(system_config, exp_config, variant)
+            current_hash = compute_variant_config_hash(
+                variant=variant,
+                merged_config=sanitize_config(merged),
+                exp_data=exp_config.data,
+                exp_test_sets=exp_config.test_sets,
+                exp_evaluation=exp_config.evaluation,
+            )
+
+            stored_hash = stored_hashes.get(variant_name)
+            hash_match = stored_hash is not None and stored_hash == current_hash
+
+            if hash_match:
+                logger.info(
+                    f"Skipping completed variant {i}/{len(exp_config.variants)}: "
+                    f"{variant_name} (checkpoint, hash={current_hash[:8]}… verified)"
+                )
+                existing_result = exp_manager.load_variant_result(exp_dir, variant_name)
+                if existing_result is not None:
+                    all_variant_results.append(existing_result)
+                    if "token_usage" in existing_result:
+                        _rebuild_and_merge_token_tracker(
+                            existing_result["token_usage"],
+                            variant_name,
+                            experiment_tracker,
+                        )
+                    continue
+                else:
+                    logger.warning(
+                        f"Variant '{variant_name}' marked completed but result file not found, re-running"
+                    )
+                    completed_variants.discard(variant_name)
+            else:
+                if stored_hash is None:
+                    logger.warning(
+                        f"Variant '{variant_name}' has no stored config hash — "
+                        f"cannot verify reuse. Re-running to be safe."
+                    )
+                else:
+                    logger.warning(
+                        f"Variant '{variant_name}' config has changed "
+                        f"(stored={stored_hash[:8]}…, current={current_hash[:8]}…) — "
+                        f"invalidating and re-running"
+                    )
+                exp_manager.invalidate_variant(exp_dir, variant_name)
+                completed_variants.discard(variant_name)
+
+        logger.info(
+            f"Evaluating variant {i}/{len(exp_config.variants)}: {variant_name}"
+        )
+
+        try:
+            variant_result = run_variant_evaluation(
+                system_config=system_config,
+                exp_config=exp_config,
+                variant=variant,
+                meal_info=meal_info,
+                test_sets=test_sets,
+                exp_dir=exp_dir,
+                test_generation_tracker=test_generation_tracker,
+                profiler=profiler,
+                force_index=False,
+                indexer_cache=indexer_cache,
+                shared_embedder=shared_embedder,
+            )
+
+            merged = merge_config(system_config, exp_config, variant)
+            config_hash = compute_variant_config_hash(
+                variant=variant,
+                merged_config=sanitize_config(merged),
+                exp_data=exp_config.data,
+                exp_test_sets=exp_config.test_sets,
+                exp_evaluation=exp_config.evaluation,
+            )
+
+            exp_manager.save_variant_result(exp_dir, variant_name, variant_result)
+            exp_manager.mark_variant_completed(
+                exp_dir, variant_name, config_hash=config_hash
+            )
+            all_variant_results.append(variant_result)
+
+            if "token_usage" in variant_result:
+                _rebuild_and_merge_token_tracker(
+                    variant_result["token_usage"],
+                    variant_name,
+                    experiment_tracker,
+                )
+
+        except Exception as e:
+            logger.error(f"Variant '{variant_name}' failed: {str(e)}")
+            error_result = {
+                "variant_name": variant_name,
+                "error": str(e),
+                "timestamp": datetime.now().isoformat(),
+            }
+            exp_manager.save_variant_result(exp_dir, variant_name, error_result)
+            all_variant_results.append(error_result)
+
+    if shared_embedder is not None:
+        shared_embedder.unload()
+        del shared_embedder
+        import gc
+
+        gc.collect()
+        logger.info("Shared Embedder unloaded after all variants")
+
+    experiment_tracker.merge(test_generation_tracker)
+
+    return all_variant_results, experiment_tracker
+
+
 def run_experiment(
     config_path: str,
     skip_preprocessing: bool = False,
@@ -459,590 +1239,90 @@ def run_experiment(
         ValueError: If configuration is invalid or resume_dir is invalid.
         Exception: If experiment execution fails.
     """
-    logger.info(f"Loading experiment configuration from {config_path}")
-    exp_config = load_experiment_config(config_path)
+    (
+        exp_config,
+        system_config,
+        exp_manager,
+        effective_reuse,
+        effective_resume_dir,
+        effective_force_rerun,
+        effective_force_variant,
+    ) = _load_and_validate_config(
+        config_path,
+        system_config_path,
+        reuse_config,
+        resume_dir,
+        force_rerun,
+        force_variant,
+    )
 
-    logger.info(f"Experiment: {exp_config.name}")
-    logger.info(f"Description: {exp_config.description}")
-    logger.info(f"Variants: {len(exp_config.variants)}")
-    logger.info(f"Test sets: {len(exp_config.test_sets)}")
-
-    system_config = load_config(system_config_path)
-    setup_logger(system_config)
-
-    exp_manager = ExperimentManager(system_config)
-
-    # Resolve reuse settings: CLI args take precedence over YAML config
-    effective_reuse = reuse_config or exp_config.reuse
-    if reuse_config and reuse_config.is_enabled():
-        effective_reuse = reuse_config
-        logger.info(f"Reuse mode from CLI: {effective_reuse.mode}")
-    elif exp_config.reuse.is_enabled():
-        effective_reuse = exp_config.reuse
-        logger.info(f"Reuse mode from YAML config: {effective_reuse.mode}")
-
-    # Resolve resume settings: CLI args take precedence over YAML config
-    effective_resume_dir = resume_dir
-    effective_force_rerun = force_rerun
-    effective_force_variant = force_variant
-
-    if exp_config.resume.is_enabled() and not resume_dir:
-        resume_from = exp_config.resume.from_exp
-        if resume_from:
-            # Resolve path: if not absolute, treat as exp_id or relative path
-            resume_path = Path(resume_from)
-            if not resume_path.is_absolute():
-                # Try as exp_id first
-                exp_reports_dir = Path(
-                    system_config.get("experiments", {}).get("dir", "data/exp_reports")
-                )
-                candidate = exp_reports_dir / resume_from
-                if candidate.exists():
-                    resume_path = candidate
-                else:
-                    # Try as relative path from project root
-                    candidate = Path(resume_from)
-                    if candidate.exists():
-                        resume_path = candidate
-            effective_resume_dir = str(resume_path)
-            logger.info(f"Resume from YAML config: {effective_resume_dir}")
-
-    if exp_config.resume.force_rerun and not force_rerun:
-        effective_force_rerun = True
-        logger.info("force_rerun from YAML config: True")
-
-    if exp_config.resume.force_variants and not force_variant:
-        effective_force_variant = exp_config.resume.force_variants
-        logger.info(f"force_variants from YAML config: {effective_force_variant}")
-
-    if effective_resume_dir:
-        exp_dir = Path(effective_resume_dir)
-        if not (exp_dir / "manifest.json").exists():
-            raise ValueError(
-                f"Not a valid experiment directory (missing manifest.json): {effective_resume_dir}"
-            )
-        logger.info(f"Resuming experiment from existing directory: {exp_dir}")
-        exp_manager.mark_resumed(exp_dir)
-    elif effective_reuse.is_in_place():
-        target_path = Path(effective_reuse.target_dir)
-        if not target_path.is_absolute():
-            exp_reports_dir = Path(
-                system_config.get("experiments", {}).get("dir", "data/exp_reports")
-            )
-            candidate = exp_reports_dir / effective_reuse.target_dir
-            if candidate.exists():
-                target_path = candidate
-            else:
-                candidate = Path(effective_reuse.target_dir)
-                if candidate.exists():
-                    target_path = candidate
-
-        in_place_handler = InPlaceReuseHandler(
-            target_dir=target_path,
-            backup_before_append=effective_reuse.backup_before_append,
-        )
-        target_manifest = in_place_handler.validate_target_dir()
-
-        backup_snapshot_path = None
-        if effective_reuse.backup_before_append:
-            snapshot = in_place_handler.create_full_snapshot()
-            if snapshot:
-                backup_snapshot_path = str(snapshot)
-
-        stored_hashes = exp_manager.get_variant_config_hashes(target_path)
-        incremental_plan = in_place_handler.compute_incremental_updates(
-            new_variants=exp_config.variants,
-            manifest=target_manifest,
-            stored_hashes=stored_hashes,
-        )
-
-        if incremental_plan.has_conflicts:
-            conflicting = [
-                v.get("name", "unnamed") for v in incremental_plan.to_confirm
-            ]
-            logger.warning(
-                f"Conflicting variants detected: {conflicting}. "
-                f"Use --force-variant to override, or remove conflicting variants from config."
-            )
-            for v in incremental_plan.to_confirm:
-                vname = v.get("name", "unnamed")
-                logger.warning(
-                    f"  Variant '{vname}' exists with different config — will be re-run"
-                )
-            effective_force_variant = list(
-                set((effective_force_variant or []) + conflicting)
-            )
-
-        exp_dir = target_path
-        logger.info(f"In-place reuse mode: appending to {exp_dir}")
-
-        in_place_handler.record_reuse_history(
-            action="in_place_start",
-            backup_snapshot=backup_snapshot_path,
-            details={
-                "new_variants": [
-                    v.get("name", "unnamed") for v in incremental_plan.to_run
-                ],
-                "reuse_variants": [
-                    v.get("name", "unnamed") for v in incremental_plan.to_reuse
-                ],
-                "conflict_variants": [
-                    v.get("name", "unnamed") for v in incremental_plan.to_confirm
-                ],
-            },
-        )
-
-        for v in incremental_plan.to_run:
-            in_place_handler.append_variant_to_manifest(v.get("name", "unnamed"))
-    elif effective_reuse.is_copy_migrate():
-        source_path = Path(effective_reuse.source_dir)
-        if not source_path.is_absolute():
-            exp_reports_dir = Path(
-                system_config.get("experiments", {}).get("dir", "data/exp_reports")
-            )
-            candidate = exp_reports_dir / effective_reuse.source_dir
-            if candidate.exists():
-                source_path = candidate
-            else:
-                candidate = Path(effective_reuse.source_dir)
-                if candidate.exists():
-                    source_path = candidate
-
-        migrate_handler = CopyMigrateHandler(
-            source_dir=source_path,
-            exp_dir=Path("placeholder"),
-        )
-
-        source_manifest = migrate_handler.validate_source_dir()
-        source_exp_id = source_manifest.get("experiment_id", source_path.name)
-
-        new_exp_dir = exp_manager.create_experiment_dir(exp_config)
-        migrate_handler = CopyMigrateHandler(
-            source_dir=source_path,
-            exp_dir=new_exp_dir,
-        )
-
-        migrate_handler.copy_experiment()
-
-        new_exp_id = new_exp_dir.name
-        migrate_handler.update_identifiers(new_exp_id, source_exp_id)
-        migrate_handler.verify_migration()
-
-        exp_dir = new_exp_dir
-        logger.info(
-            f"Copy-migrate reuse mode: migrated {source_exp_id} -> {new_exp_id}"
-        )
-    else:
-        exp_dir = exp_manager.create_experiment_dir(exp_config)
+    exp_dir, effective_force_variant = _create_experiment_directory(
+        exp_config,
+        system_config,
+        exp_manager,
+        effective_reuse,
+        effective_resume_dir,
+        effective_force_variant,
+    )
 
     exp_log_handler_id = _add_experiment_log_handler(exp_dir)
 
     logger.info(f"Experiment directory: {exp_dir}")
 
-    profiling_config = system_config.get("experiments", {}).get("profiling", {})
-    profiling_enabled = profiling_config.get("enabled", True)
-
-    if profiling_enabled:
-        profiler = PipelineProfiler(
-            experiment_name=exp_config.name,
-            total_pages=0,
-            total_questions=sum(
-                ts.get("generation", {}).get(
-                    "num_questions", ts.get("num_questions", 10)
-                )
-                for ts in exp_config.test_sets
-            ),
-            monitor_interval=profiling_config.get("monitor_interval", 0.5),
-        )
-        profiler.start_profiling()
-        logger.info("Performance profiling enabled")
-    else:
-        profiler = None
-        logger.info("Performance profiling disabled by config")
+    profiler = _initialize_profiler(exp_config, system_config)
 
     try:
-        force_meal = exp_config.should_force("meal")
-        force_parsed = exp_config.should_force("parsed")
-        force_chunk = exp_config.should_force("chunk")
-        force_vector = exp_config.should_force("vector")
-        force_testset = exp_config.should_force("testset")
-
-        if exp_config.force_overwrite:
-            stages = (
-                "all"
-                if exp_config.force_overwrite == "all"
-                else ", ".join(exp_config.force_overwrite)
-            )
-            logger.info(f"Force overwrite enabled for: {stages}")
-
-        logger.info("Step 1: Preparing meal...")
-        meal_info = prepare_meal(
-            system_config,
+        (
+            meal_info,
+            test_sets,
+            test_generation_tracker,
+            test_set_snapshots,
+            config_snapshot,
+        ) = _prepare_evaluation_assets(
             exp_config,
+            system_config,
+            exp_manager,
+            exp_dir,
             skip_preprocessing,
-            force_meal=force_meal,
-            force_parse=force_parsed,
-            force_chunk=force_chunk,
-            profiler=profiler,
+            effective_resume_dir,
+            effective_reuse,
+            profiler,
         )
 
-        test_generation_tracker = TokenTracker()
-
-        logger.info("Step 2: Preparing variant chunks...")
-        first_chunks_dir = None
-        for i, variant in enumerate(exp_config.variants, 1):
-            variant_name = variant.get("name", f"variant_{i}")
-            merged_config = merge_config(system_config, exp_config, variant)
-            chunks_dir = prepare_variant_chunks(
-                merged_config,
-                meal_info["config"],
-                variant_name,
-                force_chunk=force_chunk,
-            )
-            if first_chunks_dir is None:
-                first_chunks_dir = chunks_dir
-
-        logger.info("Step 3: Preparing test sets...")
-        with profiler.profile_stage("S5"):
-            test_sets = prepare_test_sets(
-                system_config,
-                exp_config,
-                meal_info,
-                skip_preprocessing,
-                token_tracker=test_generation_tracker,
-                chunks_dir=first_chunks_dir,
-                force_testset=force_testset,
-            )
-
-        if profiler:
-            test_gen_total = test_generation_tracker.get_total()
-            profiler.report_stage_tokens(
-                "S5",
-                test_gen_total.input_tokens,
-                test_gen_total.output_tokens,
-            )
-
-        meal_snapshot = meal_info["config"].to_dict()
-
-        test_set_snapshots = []
-        for test_set in test_sets:
-            metadata = test_set.get("metadata", {})
-            generation = metadata.get("generation", {})
-            test_set_snapshots.append(
-                {
-                    "name": test_set.get("name") or metadata.get("name"),
-                    "strategy": test_set.get("strategy") or generation.get("strategy"),
-                    "num_questions": len(test_set.get("questions", [])),
-                    "created_at": test_set.get("created_at")
-                    or metadata.get("created_at"),
-                    "meal_data_id": test_set.get("meal_data_id")
-                    or metadata.get("meal_id"),
-                    "questions": test_set.get("questions", []),
-                }
-            )
-
-        config_snapshot = {
-            "data": exp_config.data,
-            "test_sets": exp_config.test_sets,
-            "evaluation": exp_config.evaluation,
-            "llm": exp_config.llm,
-            "system_config": sanitize_config(system_config),
-            "environment": collect_environment_info(),
-        }
-
-        if not effective_resume_dir and not effective_reuse.is_enabled():
-            exp_manager.save_snapshots(
-                exp_dir=exp_dir,
-                config=exp_config,
-                meal_snapshot=meal_snapshot,
-                test_set_snapshots=test_set_snapshots,
-                config_snapshot=config_snapshot,
-            )
-        elif effective_reuse.is_in_place():
-            logger.info("In-place reuse: skipping snapshot save (already exists)")
-        elif effective_reuse.is_copy_migrate():
-            logger.info(
-                "Copy-migrate reuse: skipping snapshot save (migrated from source)"
-            )
-        else:
-            logger.info("Resuming: skipping snapshot save (already exists)")
-
-        logger.info("Step 4: Running variant evaluations...")
-        all_variant_results = []
-        experiment_tracker = TokenTracker()
-
-        completed_variants: set[str] = set()
-        stored_hashes: dict[str, str] = {}
-        if not effective_force_rerun:
-            completed_variants = set(exp_manager.get_completed_variants(exp_dir))
-            stored_hashes = exp_manager.get_variant_config_hashes(exp_dir)
-            if completed_variants:
-                logger.info(
-                    f"Checkpoint resume: {len(completed_variants)} variant(s) already completed: "
-                    f"{sorted(completed_variants)}"
-                )
-                if stored_hashes:
-                    logger.info(
-                        f"Config hash verification enabled ({len(stored_hashes)} hash(es) stored)"
-                    )
-                else:
-                    logger.warning(
-                        "No config hashes found in manifest — variant reuse will NOT be "
-                        "verified. Re-run without --resume to generate hashes, or use "
-                        "--force-rerun to start fresh."
-                    )
-        else:
-            logger.info("Force rerun: ignoring checkpoints, re-running all variants")
-            exp_manager.update_manifest_field(exp_dir, "completed_variants", [])
-            exp_manager.update_manifest_field(exp_dir, "variant_config_hashes", {})
-
-        if effective_force_variant and not effective_force_rerun:
-            for vname in effective_force_variant:
-                if vname in completed_variants:
-                    logger.info(
-                        f"Force re-run variant '{vname}' (requested via --force-variant)"
-                    )
-                    exp_manager.invalidate_variant(exp_dir, vname)
-                    completed_variants.discard(vname)
-                else:
-                    logger.info(
-                        f"Force variant '{vname}' requested but it was not yet completed "
-                        f"— will run normally"
-                    )
-
-        indexer_cache: dict[str, Any] = {}
-
-        from src.embedder import Embedder as _Embedder
-
-        embedding_cfg = system_config.get("embedding", {})
-        shared_embedder = _Embedder(
-            model_name=embedding_cfg.get("model_name", "BAAI/bge-large-zh-v1.5"),
-            device=embedding_cfg.get("device", "cuda"),
-            query_instruction=embedding_cfg.get("query_instruction"),
+        all_variant_results, experiment_tracker = _run_all_variant_evaluations(
+            exp_config,
+            system_config,
+            exp_manager,
+            exp_dir,
+            meal_info,
+            test_sets,
+            test_generation_tracker,
+            profiler,
+            effective_force_rerun,
+            effective_force_variant,
         )
-        logger.info("Shared Embedder loaded for all variants")
 
-        for i, variant in enumerate(exp_config.variants, 1):
-            variant_name = variant.get("name", f"variant_{i}")
-
-            if variant_name in completed_variants and not effective_force_rerun:
-                merged = merge_config(system_config, exp_config, variant)
-                current_hash = compute_variant_config_hash(
-                    variant=variant,
-                    merged_config=sanitize_config(merged),
-                    exp_data=exp_config.data,
-                    exp_test_sets=exp_config.test_sets,
-                    exp_evaluation=exp_config.evaluation,
-                )
-
-                stored_hash = stored_hashes.get(variant_name)
-                hash_match = stored_hash is not None and stored_hash == current_hash
-
-                if hash_match:
-                    logger.info(
-                        f"Skipping completed variant {i}/{len(exp_config.variants)}: "
-                        f"{variant_name} (checkpoint, hash={current_hash[:8]}… verified)"
-                    )
-                    existing_result = exp_manager.load_variant_result(
-                        exp_dir, variant_name
-                    )
-                    if existing_result is not None:
-                        all_variant_results.append(existing_result)
-                        if "token_usage" in existing_result:
-                            _rebuild_and_merge_token_tracker(
-                                existing_result["token_usage"],
-                                variant_name,
-                                experiment_tracker,
-                            )
-                        continue
-                    else:
-                        logger.warning(
-                            f"Variant '{variant_name}' marked completed but result file not found, re-running"
-                        )
-                        completed_variants.discard(variant_name)
-                else:
-                    if stored_hash is None:
-                        logger.warning(
-                            f"Variant '{variant_name}' has no stored config hash — "
-                            f"cannot verify reuse. Re-running to be safe."
-                        )
-                    else:
-                        logger.warning(
-                            f"Variant '{variant_name}' config has changed "
-                            f"(stored={stored_hash[:8]}…, current={current_hash[:8]}…) — "
-                            f"invalidating and re-running"
-                        )
-                    exp_manager.invalidate_variant(exp_dir, variant_name)
-                    completed_variants.discard(variant_name)
-
-            logger.info(
-                f"Evaluating variant {i}/{len(exp_config.variants)}: {variant_name}"
-            )
-
-            try:
-                variant_result = run_variant_evaluation(
-                    system_config=system_config,
-                    exp_config=exp_config,
-                    variant=variant,
-                    meal_info=meal_info,
-                    test_sets=test_sets,
-                    exp_dir=exp_dir,
-                    test_generation_tracker=test_generation_tracker,
-                    profiler=profiler,
-                    force_index=force_vector,
-                    indexer_cache=indexer_cache,
-                    shared_embedder=shared_embedder,
-                )
-
-                merged = merge_config(system_config, exp_config, variant)
-                config_hash = compute_variant_config_hash(
-                    variant=variant,
-                    merged_config=sanitize_config(merged),
-                    exp_data=exp_config.data,
-                    exp_test_sets=exp_config.test_sets,
-                    exp_evaluation=exp_config.evaluation,
-                )
-
-                exp_manager.save_variant_result(exp_dir, variant_name, variant_result)
-                exp_manager.mark_variant_completed(
-                    exp_dir, variant_name, config_hash=config_hash
-                )
-                all_variant_results.append(variant_result)
-
-                if "token_usage" in variant_result:
-                    _rebuild_and_merge_token_tracker(
-                        variant_result["token_usage"],
-                        variant_name,
-                        experiment_tracker,
-                    )
-
-            except Exception as e:
-                logger.error(f"Variant '{variant_name}' failed: {str(e)}")
-                error_result = {
-                    "variant_name": variant_name,
-                    "error": str(e),
-                    "timestamp": datetime.now().isoformat(),
-                }
-                exp_manager.save_variant_result(exp_dir, variant_name, error_result)
-                all_variant_results.append(error_result)
-
-        if shared_embedder is not None:
-            shared_embedder.unload()
-            del shared_embedder
-            import gc
-
-            gc.collect()
-            logger.info("Shared Embedder unloaded after all variants")
-
-        experiment_tracker.merge(test_generation_tracker)
-
-        logger.info("Step 4: Generating experiment report...")
-
-        with profiler.profile_stage("S8"):
-            if all_variant_results:
-                llm_preset_name = exp_config.evaluation.get("llm_preset", "default")
-                llm_config = get_llm_config(system_config, llm_preset_name)
-
-                reporter = ExperimentReporter(
-                    llm_api_key=llm_config.get("api_key"),
-                    llm_base_url=llm_config.get("base_url"),
-                    llm_model_name=llm_config.get("model_name"),
-                    token_tracker=experiment_tracker,
-                )
-
-                reporter.generate_variant_comparison_report(
-                    exp_dir=exp_dir,
-                    variant_results=all_variant_results,
-                    meal_info=meal_info,
-                    config_snapshot=config_snapshot,
-                    output_filename="experiment_report.md",
-                    use_llm=False,
-                )
-
-                if use_llm_report or exp_config.evaluation.get("llm_report", False):
-                    has_successful = any(
-                        "retrieval_metrics" in v for v in all_variant_results
-                    )
-                    if not has_successful:
-                        logger.warning(
-                            "All variants failed — skipping LLM report generation"
-                        )
-                    else:
-                        logger.info("Generating LLM-enhanced report...")
-                        try:
-                            reporter.generate_variant_comparison_report(
-                                exp_dir=exp_dir,
-                                variant_results=all_variant_results,
-                                meal_info=meal_info,
-                                config_snapshot=config_snapshot,
-                                output_filename="experiment_report_llm.md",
-                                use_llm=True,
-                            )
-                            logger.success("LLM-enhanced report generated successfully")
-                        except Exception as e:
-                            logger.warning(f"Failed to generate LLM report: {str(e)}")
+        _generate_and_save_report(
+            exp_config,
+            system_config,
+            exp_dir,
+            all_variant_results,
+            meal_info,
+            config_snapshot,
+            experiment_tracker,
+            use_llm_report,
+            profiler,
+        )
 
         exp_manager.update_manifest_status(exp_dir, "completed")
 
-        if profiler:
-            profiler.stop_profiling()
-            if meal_info.get("config") and hasattr(meal_info["config"], "stats"):
-                profiler.total_pages = meal_info["config"].stats.get("total_pages", 0)
-
-            profiling_dir = exp_dir / "profiling"
-            profiler.save_report(profiling_dir, "profile_data.json")
-
-            profile_md = profiler.generate_markdown_report()
-            profile_md_path = profiling_dir / "profile_report.md"
-            profile_md_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(profile_md_path, "w", encoding="utf-8") as f:
-                f.write(profile_md)
-            logger.success(f"Performance profile report saved to: {profile_md_path}")
-
-            if profiling_config.get("generate_charts", True):
-                try:
-                    chart_files = generate_profiler_charts(
-                        profiler, profiling_dir / "charts"
-                    )
-                    if chart_files:
-                        logger.success(
-                            f"Generated {len(chart_files)} performance charts"
-                        )
-                except Exception as e:
-                    logger.warning(f"Failed to generate performance charts: {str(e)}")
-
-        experiment_tracker.get_total()
-        token_cost_config = system_config.get("token_cost", {})
-        cost_info = experiment_tracker.estimate_cost(token_cost_config)
-
-        try:
-            token_summary_data = experiment_tracker.to_dict()
-            token_summary_data["estimated_cost"] = cost_info
-            token_summary_path = exp_dir / "token_summary.json"
-            with open(token_summary_path, "w", encoding="utf-8") as f:
-                json.dump(token_summary_data, f, ensure_ascii=False, indent=2)
-            logger.info(f"Token summary saved to {token_summary_path}")
-
-            token_table = experiment_tracker.get_detailed_table()
-            if cost_info["total_cost"] > 0:
-                token_table += f"\n\nEstimated Cost (model: {cost_info['model']}):\n"
-                token_table += f"  Input:  ${cost_info['input_cost']:.4f}\n"
-                token_table += f"  Output: ${cost_info['output_cost']:.4f}\n"
-                token_table += f"  Total:  ${cost_info['total_cost']:.4f}\n"
-            token_table_path = exp_dir / "token_summary.txt"
-            with open(token_table_path, "w", encoding="utf-8") as f:
-                f.write(token_table)
-            logger.info(f"Token summary table saved to {token_table_path}")
-        except Exception as e:
-            logger.warning(f"Failed to save token summary: {str(e)}")
-
-        logger.info("\n" + experiment_tracker.get_detailed_table())
-
-        if cost_info["total_cost"] > 0:
-            logger.info(f"\nEstimated Cost (model: {cost_info['model']}):")
-            logger.info(f"  Input:  ${cost_info['input_cost']:.4f}")
-            logger.info(f"  Output: ${cost_info['output_cost']:.4f}")
-            logger.info(f"  Total:  ${cost_info['total_cost']:.4f}")
+        cost_info = _save_token_and_profiling_data(
+            exp_dir,
+            experiment_tracker,
+            system_config,
+            profiler,
+            meal_info,
+        )
 
         logger.success(f"Experiment completed successfully: {exp_dir}")
 
