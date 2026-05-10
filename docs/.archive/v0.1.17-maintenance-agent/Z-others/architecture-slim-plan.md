@@ -652,4 +652,3 @@ P0（双重接口清理）→ P4（Strategy 简化）→ P5（ParserRegistry 简
 | ParserRegistry 行数 | 385             | \~60               | -84%  |
 | Meal 系统行数         | \~2,565         | \~2,200            | -14%  |
 | 双重接口              | core/ops + src/ | 仅 src/             | 消除    |
-

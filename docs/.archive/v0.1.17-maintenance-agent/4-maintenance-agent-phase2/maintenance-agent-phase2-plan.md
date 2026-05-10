@@ -291,4 +291,3 @@
 3. **delete\_source 备份用 scroll\_by\_source + JSON 导出**：不复制整个 SQLite 文件（528 MB），仅导出将被删除的 points 元数据（几十 KB \~ 几百 KB）。
 4. **Memory Store 用 InMemoryStore**：开发阶段用内存 Store，Phase 3 再迁移到持久化 Store。
 5. **auto\_review 默认关闭**：避免频繁 interrupt 打断 ReAct 工作流，用户按需开启。
-

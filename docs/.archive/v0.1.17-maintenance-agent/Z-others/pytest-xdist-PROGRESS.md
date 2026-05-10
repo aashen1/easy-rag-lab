@@ -332,4 +332,3 @@ cmd = "pytest tests/ --tb=short -q --durations=10 -n auto --dist loadgroup --max
 | 修复计划    | `.trae/documents/pytest-xdist-fix-plan.md`                | 阶段二的修复计划             |
 | 测试分层    | `docs/dev-guides/testing.md`                              | 三层测试体系说明             |
 | **本文档** | `docs/dev-guides/pytest-xdist-PROGRESS.md`                | 完整决策演进记录             |
-

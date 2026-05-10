@@ -205,4 +205,3 @@ def extract_company_name(rel_path: str) -> str | None:
 * [ ] case\_analyzer.py 的 Ground Truth 标注搜索框同样具备公司名标签
 
 * [ ] lint 和 unit test 通过
-

@@ -897,7 +897,7 @@
 - ✅ **状态**: 已完成
 - ✅ **方案**: 采用用户建议，不实现显式模式切换，而是在 prompt 中明确告知 Agent 两种工具的使用场景
 - ✅ **实现**: 在 `prompt.py` 添加了"处理场景选择"部分
-- ✅ **指导**: 
+- ✅ **指导**:
   - 处理单个 PDF: 使用 `parse_pdf_tool → chunk_parsed_tool → embed_chunks_tool → index_chunks_tool` 依次处理
   - 处理一个 Meal: 使用 `create_curated_meal` 创建 Meal，然后使用 `rebuild_index` 重建索引
 
@@ -908,7 +908,7 @@
 
 **任务 5: Phase C 迁移**
 - ✅ **状态**: 已完成（发现已实现）
-- ✅ **验证**: 
+- ✅ **验证**:
   - `parse_all_pdfs_unified()` 已经调用共享单元 `parse_pdf()`
   - `process_parsed_files()` 已经调用共享单元 `chunk_parsed()`
   - `process_parsed_files_page_aware()` 已经调用共享单元 `chunk_parsed()`
@@ -973,7 +973,7 @@
 **P2-2: 测试覆盖率提升**
 - **状态**: ⏸️ 未开始
 - **需求**: 质量保障
-- **问题**: 
+- **问题**:
   - Streamlit UI 集成测试不足
   - CLI 完整测试不足
   - Agent 工具测试覆盖率 < 90%
@@ -1090,7 +1090,7 @@
 
 ---
 
-**修复人**: AI Assistant  
-**修复日期**: 2026-05-09  
-**修复版本**: v0.1.16（诊得明）  
+**修复人**: AI Assistant
+**修复日期**: 2026-05-09
+**修复版本**: v0.1.16（诊得明）
 **修复状态**: 已完成（99%）

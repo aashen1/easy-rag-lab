@@ -203,7 +203,7 @@ from src.config_schema import AppConfig
 
 def load_config(config_path: str = "config.yaml") -> dict[str, Any]:
     # ... 现有逻辑：yaml.safe_load + data_dir 路径重写 ...
-    
+
     # 新增：Pydantic 验证
     try:
         validated = AppConfig(**config)
@@ -211,7 +211,7 @@ def load_config(config_path: str = "config.yaml") -> dict[str, Any]:
     except ValidationError as e:
         logger.error(f"Configuration validation failed:\n{e}")
         raise ConfigurationError(f"Invalid configuration: {e}") from e
-    
+
     # ... 现有逻辑：缓存 + 返回 ...
 ```
 
@@ -252,4 +252,3 @@ def load_config(config_path: str = "config.yaml") -> dict[str, Any]:
 3. **实验配置覆盖**：`deep_merge()` 合并实验配置后产生的 dict 也应通过验证，但这是后续优化
 4. **config.yaml 注释**：Pydantic 验证不涉及 YAML 注释，不影响用户体验
 5. **性能**：Pydantic 验证开销极小（毫秒级），且有缓存机制，不影响性能
-
