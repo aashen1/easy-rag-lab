@@ -420,6 +420,111 @@ def _run_agent_interaction(
             break
 
 
+def _handle_list_sessions_command() -> int:
+    from src.agent.checkpoint import get_session_manager
+
+    session_mgr = get_session_manager()
+    sessions = session_mgr.list_sessions(include_archived=True)
+    if not sessions:
+        print("暂无历史会话")
+    else:
+        print(f"{'会话ID':<20} {'标题':<20} {'更新时间':<20} {'归档'}")
+        print("-" * 70)
+        for s in sessions:
+            archived = "是" if s["is_archived"] else "否"
+            print(
+                f"{s['session_id']:<20} {s['title']:<20} {s['updated_at'][:16]:<20} {archived}"
+            )
+    return 0
+
+
+def _handle_new_session_command(title: str | None) -> str | None:
+    from src.agent.checkpoint import get_session_manager
+
+    session_mgr = get_session_manager()
+    new_sess = session_mgr.create_session(title=title or "新对话")
+    print(f"已创建新会话: {new_sess['session_id']} ({new_sess['title']})")
+    return new_sess["session_id"]
+
+
+def _setup_agent_and_session(
+    args: argparse.Namespace,
+    checkpointer,
+    store: SqliteStore,
+) -> tuple[Any, str, dict, dict[str, Any], str, bool]:
+    from src.agent.graph import compile_agent
+
+    agent = compile_agent(checkpointer=checkpointer, store=store)
+    thread_id, sess = _get_or_create_session(args)
+    config = {"configurable": {"thread_id": thread_id}}
+
+    _print_help()
+    print(f"   会话 ID: {thread_id}")
+
+    auto_review = False
+    current_mode = "full" if args.full else "light"
+    current_state = build_initial_state(
+        current_source=args.pdf,
+        auto_review=auto_review,
+        mode=current_mode,
+    )
+
+    from src.agent.tools import save_experience_tool
+
+    save_experience_tool._store = store
+
+    return agent, thread_id, config, current_state, current_mode, auto_review
+
+
+def _interactive_loop(
+    agent,
+    thread_id: str,
+    config: dict,
+    store: SqliteStore,
+    current_state: dict[str, Any],
+    current_mode: str,
+    auto_review: bool,
+) -> None:
+    while True:
+        try:
+            user_input = input("\n👤 你: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n再见！")
+            break
+
+        if user_input.lower() in ("quit", "exit", "q"):
+            print("再见！")
+            break
+
+        if not user_input:
+            continue
+
+        handled, current_mode = _handle_mode_command(
+            user_input, current_mode, current_state
+        )
+        if handled:
+            continue
+
+        cli_result = _handle_cli_command(user_input, auto_review)
+        handled, thread_id, config = _handle_session_commands(
+            cli_result, thread_id, config, current_state, auto_review, current_mode
+        )
+        if handled:
+            continue
+
+        message_content = cli_result if cli_result is not None else user_input
+        message_content = _sanitize_text(message_content)
+
+        state = build_agent_state(
+            message_content=message_content,
+            current_state=current_state,
+            auto_review=auto_review,
+            mode=current_mode,
+        )
+
+        _run_agent_interaction(agent, state, config, store, current_state)
+
+
 def run_agent(argv: list[str] | None = None):
     """Run the maintenance agent in interactive CLI mode.
 
@@ -430,7 +535,6 @@ def run_agent(argv: list[str] | None = None):
         Exit code (0 for normal exit).
     """
     from src.agent.checkpoint import get_checkpointer
-    from src.agent.graph import compile_agent
     from src.agent.memory.experience_store import ExperienceStore
 
     for stream in (sys.stdin, sys.stdout, sys.stderr):
@@ -441,91 +545,27 @@ def run_agent(argv: list[str] | None = None):
     args = _parse_cli_args(argv)
 
     if args.list_sessions:
-        from src.agent.checkpoint import get_session_manager
-
-        session_mgr = get_session_manager()
-        sessions = session_mgr.list_sessions(include_archived=True)
-        if not sessions:
-            print("暂无历史会话")
-        else:
-            print(f"{'会话ID':<20} {'标题':<20} {'更新时间':<20} {'归档'}")
-            print("-" * 70)
-            for s in sessions:
-                archived = "是" if s["is_archived"] else "否"
-                print(
-                    f"{s['session_id']:<20} {s['title']:<20} {s['updated_at'][:16]:<20} {archived}"
-                )
-        return 0
+        return _handle_list_sessions_command()
 
     if args.new_session is not None:
-        from src.agent.checkpoint import get_session_manager
-
-        session_mgr = get_session_manager()
-        new_sess = session_mgr.create_session(title=args.new_session or "新对话")
-        args.session_id = new_sess["session_id"]
-        print(f"已创建新会话: {new_sess['session_id']} ({new_sess['title']})")
+        args.session_id = _handle_new_session_command(args.new_session)
 
     conn, store = _initialize_database_and_store()
     ExperienceStore._migrate_from_json(store, "data/agent_experience.json")
 
     with get_checkpointer() as checkpointer:
-        agent = compile_agent(checkpointer=checkpointer, store=store)
-        thread_id, sess = _get_or_create_session(args)
-        config = {"configurable": {"thread_id": thread_id}}
+        (
+            agent,
+            thread_id,
+            config,
+            current_state,
+            current_mode,
+            auto_review,
+        ) = _setup_agent_and_session(args, checkpointer, store)
 
-        _print_help()
-        print(f"   会话 ID: {thread_id}")
-
-        auto_review = False
-        current_mode = "full" if args.full else "light"
-        current_state = build_initial_state(
-            current_source=args.pdf,
-            auto_review=auto_review,
-            mode=current_mode,
+        _interactive_loop(
+            agent, thread_id, config, store, current_state, current_mode, auto_review
         )
-
-        from src.agent.tools import save_experience_tool
-
-        save_experience_tool._store = store
-
-        while True:
-            try:
-                user_input = input("\n👤 你: ").strip()
-            except (EOFError, KeyboardInterrupt):
-                print("\n再见！")
-                break
-
-            if user_input.lower() in ("quit", "exit", "q"):
-                print("再见！")
-                break
-
-            if not user_input:
-                continue
-
-            handled, current_mode = _handle_mode_command(
-                user_input, current_mode, current_state
-            )
-            if handled:
-                continue
-
-            cli_result = _handle_cli_command(user_input, auto_review)
-            handled, thread_id, config = _handle_session_commands(
-                cli_result, thread_id, config, current_state, auto_review, current_mode
-            )
-            if handled:
-                continue
-
-            message_content = cli_result if cli_result is not None else user_input
-            message_content = _sanitize_text(message_content)
-
-            state = build_agent_state(
-                message_content=message_content,
-                current_state=current_state,
-                auto_review=auto_review,
-                mode=current_mode,
-            )
-
-            _run_agent_interaction(agent, state, config, store, current_state)
 
     return 0
 
