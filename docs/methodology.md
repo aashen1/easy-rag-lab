@@ -49,6 +49,7 @@
 | **版本演进年轮** | `docs/version-history.md` | 记录所有版本的迭代历程，作为"年轮"的总入口 |
 | **待做事项总表** | `docs/backlog.md` | 项目"卫生情况"的总入口，追踪所有待做事项 |
 | **版本验收报告** | `docs/reviews/vX.X.X/` | 每个版本的代码审查、交付对照、下版本方向 |
+| **功能活文档** | `.trae/specs/<feature>/` | 每个功能的四件套活文档（spec/progress/handoff/checklist），详见 [活文档规范](dev-guides/living-spec.md) |
 
 ### 版本验收报告组成
 
@@ -254,5 +255,6 @@ docs/inbox-processed/ # 已处理的原始文件（定期清理）
 
 - [版本演进年轮](version-history.md)
 - [版本节奏：如何避免发版阻塞与功能堆积](dev-guides/release-cadence.md)
+- [活文档规范：跨 Session 功能追踪方法论](dev-guides/living-spec.md)
 - [待做事项](../.issues/) — 运行 `pixi run issue list` 查看（原 backlog.md 已迁移至 Issue 系统）
 - [版本验收报告](.archive/v0.1.0-v0.1.5-mvp-era/release/v0.1.5/)

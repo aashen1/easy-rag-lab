@@ -54,10 +54,16 @@ When a new session starts, follow this ordered reading sequence:
 
 | Order | File | Purpose |
 |-------|------|---------|
-| 8 | `docs/guides/operations/<topic>.md` | Detailed feature documentation |
-| 9 | `docs/guides/development/<topic>.md` | Development workflow guides |
-| 10 | `docs/architecture.md` | System architecture overview |
-| 11 | `docs/config-reference.md` | Configuration parameter reference |
+| 8 | `.trae/specs/<feature>/progress.md` | Feature completion status (read "当前状态" section FIRST) |
+| 9 | `.trae/specs/<feature>/spec.md` | Feature requirements and design decisions |
+| 10 | `.trae/specs/<feature>/checklist.md` | Feature acceptance checklist |
+| 11 | `.trae/specs/<feature>/handoff.md` | Last session's handoff for this feature |
+| 12 | `docs/guides/operations/<topic>.md` | Detailed feature documentation |
+| 13 | `docs/guides/development/<topic>.md` | Development workflow guides |
+| 14 | `docs/architecture.md` | System architecture overview |
+| 15 | `docs/config-reference.md` | Configuration parameter reference |
+
+> **Living Spec Rule**: Feature specs use the "living document" pattern (4-file set). Read progress.md "当前状态" FIRST — it is the single source of truth. Never read Changelog/Decision Log before Current State. See `docs/dev-guides/living-spec.md` for full methodology.
 
 ### Reading Anti-Patterns
 
@@ -65,6 +71,9 @@ When a new session starts, follow this ordered reading sequence:
 - ❌ Reading only code and ignoring docs when investigating an issue
 - ❌ Assuming you understand the project from the task description alone
 - ❌ Skipping issue context when planning work — you may duplicate or conflict with existing issues
+- ❌ Reading numbered snapshot subdirectories (0-xxx/, 1-xxx/) instead of living spec files
+- ❌ Quoting stale completion status from old snapshots instead of progress.md "当前状态"
+- ❌ Reading Changelog/Decision Log before reading Current State — historical info biases judgment
 
 ## Writing Memory: Session Output Checklist
 
@@ -123,6 +132,8 @@ Before ending a session (or after completing a logical work unit), ensure:
 | Keeping important context only in conversation | Conversation dies when session ends |
 | Creating docs without following naming conventions | Breaks the navigation system |
 | Writing verbose docs when concise would suffice | Wastes future sessions' context budget |
+| Creating numbered snapshot subdirectories in spec dirs | Stale snapshots mislead AI; use living spec pattern instead |
+| Creating new acceptance reports instead of updating checklist.md | Creates conflicting info across files |
 
 ## Relationship to Existing Mechanisms
 

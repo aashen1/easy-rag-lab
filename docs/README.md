@@ -47,6 +47,7 @@
 8. [发版节奏](dev-guides/release-cadence.md) — 版本节奏与流程
 9. [测试分层与时间预算](dev-guides/test-layering-and-time-budgets.md) — 测试架构
 10. [测试集兼容性契约](dev-guides/test-set-compatibility.md) — 字段级兼容约定
+11. [活文档规范](dev-guides/living-spec.md) — 跨 Session 功能追踪方法论
 
 ### 🏛️ 项目博物馆
 
@@ -98,6 +99,7 @@ docs/
 │   ├── commit-conventions.md
 │   ├── ruff-usage-guide.md
 │   ├── release-cadence.md
+│   ├── living-spec.md
 │   └── test-layering-and-time-budgets.md
 │
 └── .archive/                    # 🏛️ 项目博物馆

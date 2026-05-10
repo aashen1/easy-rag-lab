@@ -51,6 +51,10 @@ Marker 说明：`unit`（纯单元测试）、`integration`（外部系统）、
 
 文档系统是跨 session 记忆。新 session 先读 CLAUDE.md + `.issues/context.md` + version-history.md。代码变更须同步更新文档。详见 [docs/methodology.md](docs/methodology.md)。
 
+### 活文档规范
+
+功能 spec 使用活文档范式（四件套：spec.md / progress.md / handoff.md / checklist.md），禁止编号快照子目录。详见 [docs/dev-guides/living-spec.md](docs/dev-guides/living-spec.md)。
+
 ### Issue 系统
 
 通过 CLI 管理：`pixi run issue <command>`。类型/状态流/目录结构详见 [docs/user-guides/issue-system.md](docs/user-guides/issue-system.md)。
