@@ -8,6 +8,7 @@ from eval.reporter.formatters import (
     get_metric_description,
 )
 from eval.reporter.models import ReportExperimentResult
+from eval.reporter.utils import generate_recommendations
 
 
 class TemplateSingleReporter:
@@ -351,33 +352,8 @@ class TemplateSingleReporter:
         lines.append("### Recommendations")
         lines.append("")
 
-        recommendations = []
-        rec_num = 1
-
-        if avg_hr < 0.6:
-            recommendations.append(
-                f"{rec_num}. Consider increasing `top_k` to retrieve more candidates."
-            )
-            rec_num += 1
-            recommendations.append(
-                f"{rec_num}. Evaluate embedding model quality for domain-specific content."
-            )
-            rec_num += 1
-        if avg_mrr < 0.5:
-            recommendations.append(
-                f"{rec_num}. Consider adding a reranker to improve ranking."
-            )
-            rec_num += 1
-            recommendations.append(
-                f"{rec_num}. Review chunking strategy for better context preservation."
-            )
-            rec_num += 1
-        if avg_ndcg < 0.5:
-            recommendations.append(
-                f"{rec_num}. Consider hybrid retrieval (BM25 + vector search)."
-            )
-            rec_num += 1
-
+        avg_faithfulness = None
+        avg_relevancy = None
         if result.generation_metrics:
             avg_faithfulness = (
                 get_generation_metric(result.generation_metrics, "faithfulness") or 0
@@ -387,38 +363,14 @@ class TemplateSingleReporter:
                 or 0
             )
 
-            if avg_faithfulness < 0.6:
-                recommendations.append(
-                    f"{rec_num}. Review prompt engineering to reduce hallucinations."
-                )
-                rec_num += 1
-                recommendations.append(
-                    f"{rec_num}. Ensure retrieved contexts are relevant and complete."
-                )
-                rec_num += 1
-            if avg_relevancy < 0.6:
-                recommendations.append(
-                    f"{rec_num}. Improve question understanding in the generation prompt."
-                )
-                rec_num += 1
-                recommendations.append(
-                    f"{rec_num}. Consider answer validation or filtering."
-                )
-                rec_num += 1
-
-        if not recommendations:
-            recommendations.append(
-                f"{rec_num}. Current performance is satisfactory for baseline."
-            )
-            rec_num += 1
-            recommendations.append(
-                f"{rec_num}. Consider fine-tuning embedding model for domain-specific improvements."
-            )
-            rec_num += 1
-            recommendations.append(
-                f"{rec_num}. Explore advanced retrieval strategies for edge cases."
-            )
-            rec_num += 1
+        recommendations = generate_recommendations(
+            hr=avg_hr,
+            mrr=avg_mrr,
+            ndcg=avg_ndcg,
+            faithfulness=avg_faithfulness,
+            relevancy=avg_relevancy,
+            has_generation_metrics=result.generation_metrics is not None,
+        )
 
         lines.extend(recommendations)
         lines.append("")

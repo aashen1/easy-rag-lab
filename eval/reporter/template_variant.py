@@ -6,6 +6,7 @@ from eval.reporter.formatters import (
     generate_tech_summary,
     get_generation_metric,
 )
+from eval.reporter.utils import generate_recommendations
 
 
 class TemplateVariantReporter:
@@ -591,77 +592,22 @@ class TemplateVariantReporter:
         lines.append("### Optimization Suggestions")
         lines.append("")
 
-        recommendations = []
-        rec_num = 1
-
-        if best_hr < 0.6:
-            recommendations.append(
-                f"{rec_num}. Consider increasing `top_k` to retrieve more candidate documents."
-            )
-            rec_num += 1
-            recommendations.append(
-                f"{rec_num}. Evaluate embedding model quality for domain-specific content."
-            )
-            rec_num += 1
-            recommendations.append(
-                f"{rec_num}. Consider hybrid retrieval (BM25 + vector search)."
-            )
-            rec_num += 1
-
-        if best_mrr < 0.5:
-            recommendations.append(
-                f"{rec_num}. Add a reranker to improve document ranking."
-            )
-            rec_num += 1
-            recommendations.append(
-                f"{rec_num}. Review chunking strategy for better context preservation."
-            )
-            rec_num += 1
-
-        if best_ndcg < 0.5:
-            recommendations.append(
-                f"{rec_num}. Consider semantic chunking for better context boundaries."
-            )
-            rec_num += 1
-
+        best_faithfulness = None
+        best_relevancy = None
         if best.get("generation_metrics"):
             gen_metrics = best["generation_metrics"]
             best_faithfulness = get_generation_metric(gen_metrics, "faithfulness") or 0
             best_relevancy = get_generation_metric(gen_metrics, "answer_relevancy") or 0
 
-            if best_faithfulness < 0.6:
-                recommendations.append(
-                    f"{rec_num}. Review prompt engineering to reduce hallucinations."
-                )
-                rec_num += 1
-                recommendations.append(
-                    f"{rec_num}. Ensure retrieved contexts are relevant and complete."
-                )
-                rec_num += 1
-
-            if best_relevancy < 0.6:
-                recommendations.append(
-                    f"{rec_num}. Improve question understanding in generation prompts."
-                )
-                rec_num += 1
-                recommendations.append(
-                    f"{rec_num}. Consider answer validation or filtering."
-                )
-                rec_num += 1
-
-        if not recommendations:
-            recommendations.append(
-                f"{rec_num}. Current best variant shows satisfactory performance."
-            )
-            rec_num += 1
-            recommendations.append(
-                f"{rec_num}. Consider fine-tuning embedding model for domain-specific improvements."
-            )
-            rec_num += 1
-            recommendations.append(
-                f"{rec_num}. Explore advanced retrieval strategies for edge cases."
-            )
-            rec_num += 1
+        recommendations = generate_recommendations(
+            hr=best_hr,
+            mrr=best_mrr,
+            ndcg=best_ndcg,
+            faithfulness=best_faithfulness,
+            relevancy=best_relevancy,
+            has_generation_metrics=best.get("generation_metrics") is not None,
+            performance_message="Current best variant shows satisfactory performance.",
+        )
 
         lines.extend(recommendations)
         lines.append("")
