@@ -1,6 +1,48 @@
 import math
+from enum import Enum
 
 from eval.metrics.utils import parse_chunk_id
+
+
+class ChunkMatchType(Enum):
+    """Type of chunk match."""
+
+    NONE = 0
+    ADJACENT = 1
+    EXACT = 2
+
+
+def _match_chunk(
+    retrieved_chunk_id: str,
+    expected_chunk_ids: list[str],
+    expected_parsed: list[tuple[str, int]],
+    adjacent_tolerance: int = 1,
+) -> ChunkMatchType:
+    """Check if a retrieved chunk matches any expected chunk.
+
+    Args:
+        retrieved_chunk_id: The retrieved chunk ID to check.
+        expected_chunk_ids: List of expected chunk IDs (for exact match).
+        expected_parsed: List of parsed (stem, index) tuples from expected chunks.
+        adjacent_tolerance: Maximum allowed index difference for adjacent match.
+
+    Returns:
+        ChunkMatchType indicating the type of match found.
+    """
+    if retrieved_chunk_id in expected_chunk_ids:
+        return ChunkMatchType.EXACT
+
+    ret_stem, ret_index = parse_chunk_id(retrieved_chunk_id)
+    if ret_index == -1:
+        return ChunkMatchType.NONE
+
+    for exp_stem, exp_index in expected_parsed:
+        if exp_index == -1:
+            continue
+        if ret_stem == exp_stem and abs(ret_index - exp_index) <= adjacent_tolerance:
+            return ChunkMatchType.ADJACENT
+
+    return ChunkMatchType.NONE
 
 
 def calculate_chunk_hit_rate(
@@ -37,22 +79,13 @@ def calculate_chunk_hit_rate(
         return 0.0
 
     expected_parsed = [parse_chunk_id(cid) for cid in expected_chunk_ids]
-    expected_exact_set = set(expected_chunk_ids)
 
     for chunk_id in retrieved_chunk_ids[:k]:
-        if chunk_id in expected_exact_set:
+        match_type = _match_chunk(
+            chunk_id, expected_chunk_ids, expected_parsed, adjacent_tolerance
+        )
+        if match_type != ChunkMatchType.NONE:
             return 1.0
-        ret_stem, ret_index = parse_chunk_id(chunk_id)
-        if ret_index == -1:
-            continue
-        for exp_stem, exp_index in expected_parsed:
-            if exp_index == -1:
-                continue
-            if (
-                ret_stem == exp_stem
-                and abs(ret_index - exp_index) <= adjacent_tolerance
-            ):
-                return 1.0
 
     return 0.0
 
@@ -85,22 +118,13 @@ def calculate_chunk_mrr(
         return 0.0
 
     expected_parsed = [parse_chunk_id(cid) for cid in expected_chunk_ids]
-    expected_exact_set = set(expected_chunk_ids)
 
     for i, chunk_id in enumerate(retrieved_chunk_ids):
-        if chunk_id in expected_exact_set:
+        match_type = _match_chunk(
+            chunk_id, expected_chunk_ids, expected_parsed, adjacent_tolerance
+        )
+        if match_type != ChunkMatchType.NONE:
             return 1.0 / (i + 1)
-        ret_stem, ret_index = parse_chunk_id(chunk_id)
-        if ret_index == -1:
-            continue
-        for exp_stem, exp_index in expected_parsed:
-            if exp_index == -1:
-                continue
-            if (
-                ret_stem == exp_stem
-                and abs(ret_index - exp_index) <= adjacent_tolerance
-            ):
-                return 1.0 / (i + 1)
 
     return 0.0
 
@@ -138,7 +162,6 @@ def calculate_chunk_ndcg(
     if not expected_chunk_ids:
         return 0.0
 
-    expected_exact_set = set(expected_chunk_ids)
     expected_parsed = [parse_chunk_id(cid) for cid in expected_chunk_ids]
 
     seen: set = set()
@@ -149,19 +172,13 @@ def calculate_chunk_ndcg(
             unique_retrieved.append(chunk_id)
 
     def _get_relevance(chunk_id: str) -> int:
-        if chunk_id in expected_exact_set:
+        match_type = _match_chunk(
+            chunk_id, expected_chunk_ids, expected_parsed, adjacent_tolerance
+        )
+        if match_type == ChunkMatchType.EXACT:
             return 2
-        ret_stem, ret_index = parse_chunk_id(chunk_id)
-        if ret_index == -1:
-            return 0
-        for exp_stem, exp_index in expected_parsed:
-            if exp_index == -1:
-                continue
-            if (
-                ret_stem == exp_stem
-                and abs(ret_index - exp_index) <= adjacent_tolerance
-            ):
-                return 1
+        elif match_type == ChunkMatchType.ADJACENT:
+            return 1
         return 0
 
     dcg = 0.0
