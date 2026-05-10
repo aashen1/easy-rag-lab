@@ -126,35 +126,35 @@
 
 **文件**: `src/test_generation/generator.py`
 
-- [ ] **分析 `TestSetGenerator` 职责边界**
+- [x] **分析 `TestSetGenerator` 职责边界**
   - 识别 10+ 种职责
   - 绘制职责矩阵
   - 验收标准: 完成职责分析文档
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `QuestionGenerator` 类**
+- [x] **提取 `QuestionGenerator` 类**
   - 职责: 核心问题生成逻辑
   - 包含方法: `generate_hybrid_question`, `generate_document_based_questions`, `_post_process_question`
   - 验收标准: 新类创建完成，测试通过
   - 优先级: P1
   - 预计耗时: 2小时
 
-- [ ] **提取 `TestSetOrchestrator` 类**
+- [x] **提取 `TestSetOrchestrator` 类**
   - 职责: 编排逻辑
   - 包含方法: `generate_test_set`, `generate_golden_testset`, `supplement_document_based_questions`
   - 验收标准: 新类创建完成，测试通过
   - 优先级: P1
   - 预计耗时: 2小时
 
-- [ ] **消除 `generate_hybrid_questions` 和 `generate_golden_testset` 重复代码**
+- [x] **消除 `generate_hybrid_questions` 和 `generate_golden_testset` 重复代码**
   - 估计重复行数: 200+ 行
   - 提取公共方法
   - 验收标准: 无重复代码，功能验证通过
   - 优先级: P1
   - 预计耗时: 3小时
 
-- [ ] **更新所有调用点**
+- [x] **更新所有调用点**
   - 搜索 `TestSetGenerator` 的所有使用
   - 更新为新的类结构
   - 验收标准: 所有调用点已更新，测试通过
@@ -167,56 +167,56 @@
 
 **文件**: `eval/runner/core.py`
 
-- [ ] **分析 `run_experiment()` 职责**
+- [x] **分析 `run_experiment()` 职责**
   - 识别 8 种职责
   - 绘制流程图
   - 验收标准: 完成职责分析文档
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_load_and_validate_config()` 函数**
+- [x] **提取 `_load_and_validate_config()` 函数**
   - 职责: 加载配置、解析 resume/reuse 参数
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_create_experiment_directory()` 函数**
+- [x] **提取 `_create_experiment_directory()` 函数**
   - 职责: 创建实验目录（含 3 种分支）
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_initialize_profiler()` 函数**
+- [x] **提取 `_initialize_profiler()` 函数**
   - 职责: 初始化 profiler
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 30分钟
 
-- [ ] **提取 `_prepare_evaluation_assets()` 函数**
+- [x] **提取 `_prepare_evaluation_assets()` 函数**
   - 职责: 准备 meal/chunks/test set
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_run_variant_evaluation()` 函数**
+- [x] **提取 `_run_variant_evaluation()` 函数**
   - 职责: 遍历 variant 执行评估
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 2小时
 
-- [ ] **提取 `_generate_and_save_report()` 函数**
+- [x] **提取 `_generate_and_save_report()` 函数**
   - 职责: 生成报告
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_save_token_and_profiling_data()` 函数**
+- [x] **提取 `_save_token_and_profiling_data()` 函数**
   - 职责: 保存 token 摘要和 profiling 数据
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **重构 `run_experiment()` 为编排函数**
+- [x] **重构 `run_experiment()` 为编排函数**
   - 调用上述提取的子函数
   - 验收标准: 主函数 < 50 行，功能验证通过
   - 优先级: P1
@@ -228,56 +228,56 @@
 
 **文件**: `src/app_pages/maintenance.py`
 
-- [ ] **分析 `render_maintenance()` 职责**
+- [x] **分析 `render_maintenance()` 职责**
   - 识别 15+ 个 session state 变量
   - 绘制渲染流程图
   - 验收标准: 完成职责分析文档
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_initialize_session_state()` 函数**
+- [x] **提取 `_initialize_session_state()` 函数**
   - 职责: 初始化 15+ 个 session state 变量
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_render_sidebar()` 函数**
+- [x] **提取 `_render_sidebar()` 函数**
   - 职责: 侧边栏渲染
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_render_chat_messages()` 函数**
+- [x] **提取 `_render_chat_messages()` 函数**
   - 职责: 聊天消息渲染
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_handle_interruption()` 函数**
+- [x] **提取 `_handle_interruption()` 函数**
   - 职责: 中断处理
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_scan_experiences()` 函数**
+- [x] **提取 `_scan_experiences()` 函数**
   - 职责: 经验扫描
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_download_report()` 函数**
+- [x] **提取 `_download_report()` 函数**
   - 职责: 报告下载
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_render_agent_graph()` 函数**
+- [x] **提取 `_render_agent_graph()` 函数**
   - 职责: Agent 架构图渲染
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **重构 `render_maintenance()` 为编排函数**
+- [x] **重构 `render_maintenance()` 为编排函数**
   - 调用上述提取的子函数
   - 验收标准: 主函数 < 100 行，功能验证通过
   - 优先级: P1
@@ -289,32 +289,32 @@
 
 **文件**: `src/agent/tools.py`
 
-- [ ] **分析重复模式**
+- [x] **分析重复模式**
   - 识别 20+ 个 `@tool` 函数的共同模式
   - 统计 `load_config()`、`json.dumps`、`try/except` 重复次数
   - 验收标准: 完成模式分析文档
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **创建 `tool_with_error_handling` 装饰器**
+- [x] **创建 `tool_with_error_handling` 装饰器**
   - 封装 `try/except` 和 `logger.error` 模式
   - 验收标准: 装饰器创建完成，单元测试通过
   - 优先级: P1
   - 预计耗时: 2小时
 
-- [ ] **创建 `json_response` 辅助函数**
+- [x] **创建 `json_response` 辅助函数**
   - 封装 `json.dumps(result, ensure_ascii=False, indent=2)` 模式
   - 验收标准: 函数创建完成，单元测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **创建 `get_config()` 辅助函数**
+- [x] **创建 `get_config()` 辅助函数**
   - 封装 `from src.utils import load_config; config = load_config()` 模式
   - 验收标准: 函数创建完成，单元测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **重构所有 tool 函数使用新辅助工具**
+- [x] **重构所有 tool 函数使用新辅助工具**
   - 应用装饰器和辅助函数
   - 验收标准: 所有 tool 函数已重构，代码行数减少 30%+
   - 优先级: P1
@@ -326,43 +326,43 @@
 
 **文件**: `src/agent/cli.py`
 
-- [ ] **分析 `run_agent()` 职责**
+- [x] **分析 `run_agent()` 职责**
   - 识别 CLI 参数解析、数据库连接、会话管理、交互循环等职责
   - 验收标准: 完成职责分析文档
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_parse_cli_args()` 函数**
+- [x] **提取 `_parse_cli_args()` 函数**
   - 职责: CLI 参数解析
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_initialize_database()` 函数**
+- [x] **提取 `_initialize_database()` 函数**
   - 职责: 数据库连接初始化
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_manage_session()` 函数**
+- [x] **提取 `_manage_session()` 函数**
   - 职责: 会话管理
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_interactive_loop()` 函数**
+- [x] **提取 `_interactive_loop()` 函数**
   - 职责: 交互式输入循环
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_dispatch_cli_command()` 函数**
+- [x] **提取 `_dispatch_cli_command()` 函数**
   - 职责: CLI 命令分发
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **重构 `run_agent()` 为编排函数**
+- [x] **重构 `run_agent()` 为编排函数**
   - 调用上述提取的子函数
   - 验收标准: 主函数 < 50 行，功能验证通过
   - 优先级: P1
@@ -374,61 +374,61 @@
 
 **文件**: `eval/runner/metrics.py`
 
-- [ ] **分析 `compute_aggregate_metrics()` 职责**
+- [x] **分析 `compute_aggregate_metrics()` 职责**
   - 识别 9 种聚合逻辑
   - 验收标准: 完成职责分析文档
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_compute_document_metrics()` 函数**
+- [x] **提取 `_compute_document_metrics()` 函数**
   - 职责: 文档级检索指标
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_compute_generation_metrics()` 函数**
+- [x] **提取 `_compute_generation_metrics()` 函数**
   - 职责: 生成指标
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_compute_chunk_metrics()` 函数**
+- [x] **提取 `_compute_chunk_metrics()` 函数**
   - 职责: chunk 级指标
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_compute_dedup_metrics()` 函数**
+- [x] **提取 `_compute_dedup_metrics()` 函数**
   - 职责: dedup 指标
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_compute_diversity_metrics()` 函数**
+- [x] **提取 `_compute_diversity_metrics()` 函数**
   - 职责: 多样性指标
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_compute_hallucination_metrics()` 函数**
+- [x] **提取 `_compute_hallucination_metrics()` 函数**
   - 职责: 幻觉率
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_compute_question_type_metrics()` 函数**
+- [x] **提取 `_compute_question_type_metrics()` 函数**
   - 职责: 按问题类型分组
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **提取 `_compute_llm_retrieval_metrics()` 函数**
+- [x] **提取 `_compute_llm_retrieval_metrics()` 函数**
   - 职责: LLM 检索指标
   - 验收标准: 函数提取完成，测试通过
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **重构 `compute_aggregate_metrics()` 为编排函数**
+- [x] **重构 `compute_aggregate_metrics()` 为编排函数**
   - 调用上述提取的子函数
   - 验收标准: 主函数 < 30 行，功能验证通过
   - 优先级: P1
@@ -440,25 +440,25 @@
 
 **文件**: `eval/evaluators/builtin_evaluator.py`
 
-- [ ] **分析 `evaluate_single()` if-chain 结构**
+- [x] **分析 `evaluate_single()` if-chain 结构**
   - 识别所有 metric 判断分支
   - 验收标准: 完成分支分析文档
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **创建 metric 注册表**
+- [x] **创建 metric 注册表**
   - 使用 `dict[str, Callable]` 存储指标计算函数
   - 验收标准: 注册表创建完成
   - 优先级: P1
   - 预计耗时: 1小时
 
-- [ ] **将每个 metric 分支提取为独立函数**
+- [x] **将每个 metric 分支提取为独立函数**
   - 提取所有 metric 计算逻辑
   - 验收标准: 所有 metric 函数提取完成
   - 优先级: P1
   - 预计耗时: 3小时
 
-- [ ] **重构 `evaluate_single()` 使用注册表**
+- [x] **重构 `evaluate_single()` 使用注册表**
   - 替换 if-chain 为字典查找
   - 验收标准: 函数 < 20 行，功能验证通过
   - 优先级: P1
