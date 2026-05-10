@@ -7,6 +7,7 @@ from typing import Any
 import streamlit as st
 from loguru import logger
 
+from src.agent.state_utils import build_agent_state
 from src.app_pages.about import _render_mermaid
 
 
@@ -214,33 +215,12 @@ def _resend_from_message(editing_idx: int, new_content: str):
             {"role": "user", "content": new_content}
         )
 
-        state = {
-            "messages": [{"role": "user", "content": new_content}],
-            "current_meal": st.session_state.maintenance_current_state.get(
-                "current_meal"
-            ),
-            "current_source": st.session_state.maintenance_current_state.get(
-                "current_source"
-            ),
-            "diagnosis": st.session_state.maintenance_current_state.get(
-                "diagnosis", []
-            ),
-            "pending_action": None,
-            "approved": None,
-            "execution_log": st.session_state.maintenance_current_state.get(
-                "execution_log", []
-            ),
-            "stage_history": st.session_state.maintenance_current_state.get(
-                "stage_history", []
-            ),
-            "auto_review": st.session_state.maintenance_auto_review,
-            "locked_tool": None,
-            "locked_tool_args": None,
-            "delete_count": st.session_state.maintenance_current_state.get(
-                "delete_count", 0
-            ),
-            "mode": st.session_state.maintenance_mode,
-        }
+        state = build_agent_state(
+            message_content=new_content,
+            current_state=st.session_state.maintenance_current_state,
+            auto_review=st.session_state.maintenance_auto_review,
+            mode=st.session_state.maintenance_mode,
+        )
 
         with st.chat_message("assistant"):
             _render_streaming_agent(agent, state, config)

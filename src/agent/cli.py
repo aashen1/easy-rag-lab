@@ -8,6 +8,8 @@ from langchain_core.messages import AIMessage
 from langgraph.types import Command
 from loguru import logger
 
+from src.agent.state_utils import build_agent_state, build_initial_state
+
 
 def _sanitize_text(text: str) -> str:
     try:
@@ -235,18 +237,11 @@ def run_agent(argv: list[str] | None = None):
 
         auto_review = False
         current_mode = "full" if args.full else "light"
-        current_state = {
-            "current_meal": None,
-            "current_source": args.pdf,
-            "diagnosis": [],
-            "pending_action": None,
-            "approved": None,
-            "execution_log": [],
-            "stage_history": [],
-            "auto_review": auto_review,
-            "delete_count": 0,
-            "mode": current_mode,
-        }
+        current_state = build_initial_state(
+            current_source=args.pdf,
+            auto_review=auto_review,
+            mode=current_mode,
+        )
 
         from src.agent.tools import save_experience_tool
 
@@ -391,19 +386,12 @@ def run_agent(argv: list[str] | None = None):
             message_content = cli_result if cli_result is not None else user_input
             message_content = _sanitize_text(message_content)
 
-            state = {
-                "messages": [{"role": "user", "content": message_content}],
-                "current_meal": current_state.get("current_meal"),
-                "current_source": current_state.get("current_source"),
-                "diagnosis": current_state.get("diagnosis", []),
-                "pending_action": None,
-                "approved": None,
-                "execution_log": current_state.get("execution_log", []),
-                "stage_history": current_state.get("stage_history", []),
-                "auto_review": auto_review,
-                "delete_count": current_state.get("delete_count", 0),
-                "mode": current_mode,
-            }
+            state = build_agent_state(
+                message_content=message_content,
+                current_state=current_state,
+                auto_review=auto_review,
+                mode=current_mode,
+            )
 
             while True:
                 try:
