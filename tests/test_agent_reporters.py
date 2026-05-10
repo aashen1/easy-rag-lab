@@ -114,7 +114,7 @@ class TestMaintenanceReporter:
 
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr(
-            "src.agent.reporters.maintenance_report.load_config",
+            "src.agent.reporters.base.load_config",
             lambda: {
                 "agent": {
                     "maintenance_reports_dir": str(
@@ -239,7 +239,7 @@ class TestReportTools:
 
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr(
-            "src.agent.reporters.maintenance_report.load_config",
+            "src.agent.reporters.base.load_config",
             lambda: {
                 "agent": {
                     "maintenance_reports_dir": str(
@@ -265,7 +265,7 @@ class TestReportTools:
 
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr(
-            "src.agent.reporters.comparison_report.load_config",
+            "src.agent.reporters.base.load_config",
             lambda: {
                 "agent": {
                     "maintenance_reports_dir": str(

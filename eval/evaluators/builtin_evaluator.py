@@ -104,6 +104,181 @@ class BuiltinEvaluator(BaseEvaluator):
         """
         return self._generation_metrics
 
+    def _compute_basic_retrieval_metrics(
+        self,
+        retrieval_metrics: list[str],
+        sources_for_retrieval: list[str],
+        expected_sources: list[str],
+    ) -> dict[str, float]:
+        """Compute basic retrieval metrics (hit_rate, mrr, ndcg, recall)."""
+        results = {}
+        if "hit_rate" in retrieval_metrics:
+            results["hit_rate"] = calculate_hit_rate(
+                retrieved_sources=sources_for_retrieval,
+                expected_sources=expected_sources,
+            )
+        if "mrr" in retrieval_metrics:
+            results["mrr"] = calculate_mrr(
+                retrieved_sources=sources_for_retrieval,
+                expected_sources=expected_sources,
+            )
+        if "ndcg" in retrieval_metrics:
+            results["ndcg"] = calculate_ndcg(
+                retrieved_sources=sources_for_retrieval,
+                expected_sources=expected_sources,
+            )
+        for _k in (3, 5, 10):
+            _key = f"recall_{_k}"
+            if _key in retrieval_metrics:
+                results[_key] = calculate_hit_rate(
+                    retrieved_sources=sources_for_retrieval,
+                    expected_sources=expected_sources,
+                    k=_k,
+                    mode="recall",
+                )
+        return results
+
+    def _compute_chunk_metrics(
+        self,
+        retrieval_metrics: list[str],
+        chunk_ids: list[str],
+        expected_chunks: list[str],
+    ) -> dict[str, float]:
+        """Compute chunk-level retrieval metrics."""
+        results = {}
+        if "chunk_hit_rate" in retrieval_metrics:
+            results["chunk_hit_rate"] = calculate_chunk_hit_rate(
+                chunk_ids, expected_chunks
+            )
+        if "chunk_mrr" in retrieval_metrics:
+            results["chunk_mrr"] = calculate_chunk_mrr(chunk_ids, expected_chunks)
+        if "chunk_ndcg" in retrieval_metrics:
+            results["chunk_ndcg"] = calculate_chunk_ndcg(
+                chunk_ids, expected_chunks, k=5
+            )
+        return results
+
+    def _compute_dedup_metrics(
+        self,
+        retrieval_metrics: list[str],
+        sources_for_retrieval: list[str],
+        expected_sources: list[str],
+        equivalence_groups: dict[str, list[str]] | None,
+    ) -> dict[str, float]:
+        """Compute deduplicated retrieval metrics."""
+        results = {}
+        if equivalence_groups:
+            norm_retrieved = [
+                normalize_source_with_equivalence(
+                    s, equivalence_groups, include_parent=True
+                )
+                for s in sources_for_retrieval
+            ]
+            norm_expected = [
+                normalize_source_with_equivalence(
+                    s, equivalence_groups, include_parent=True
+                )
+                for s in expected_sources
+            ]
+        else:
+            norm_retrieved = [
+                normalize_source(s, include_parent=True) for s in sources_for_retrieval
+            ]
+            norm_expected = [
+                normalize_source(s, include_parent=True) for s in expected_sources
+            ]
+
+        if "dedup_hit_rate" in retrieval_metrics:
+            results["dedup_hit_rate"] = calculate_dedup_hit_rate(
+                norm_retrieved, norm_expected
+            )
+        if "dedup_mrr" in retrieval_metrics:
+            results["dedup_mrr"] = calculate_dedup_mrr(norm_retrieved, norm_expected)
+        if "dedup_ndcg" in retrieval_metrics:
+            results["dedup_ndcg"] = calculate_dedup_ndcg(norm_retrieved, norm_expected)
+        return results
+
+    def _compute_llm_retrieval_metrics(
+        self,
+        retrieval_metrics: list[str],
+        question_id: str,
+        question: str,
+        expected_answer: str,
+        contexts: list[str],
+        llm_config: dict[str, str],
+        retrieval_results: dict[str, Any],
+    ) -> None:
+        """Compute LLM-based retrieval metrics (context_precision, context_recall)."""
+        if "context_precision" in retrieval_metrics:
+            execute_metric_safely(
+                "context_precision",
+                calculate_context_precision,
+                retrieval_results,
+                question_id,
+                question=question,
+                expected_output=expected_answer,
+                retrieval_context=contexts,
+                api_key=llm_config["api_key"],
+                base_url=llm_config["base_url"],
+                model_name=llm_config["model_name"],
+            )
+
+        if "context_recall" in retrieval_metrics:
+            execute_metric_safely(
+                "context_recall",
+                calculate_context_recall,
+                retrieval_results,
+                question_id,
+                question=question,
+                ground_truth=expected_answer,
+                retrieval_context=contexts,
+                api_key=llm_config["api_key"],
+                base_url=llm_config["base_url"],
+                model_name=llm_config["model_name"],
+            )
+
+    def _compute_generation_metrics(
+        self,
+        generation_metrics: list[str],
+        question_id: str,
+        question: str,
+        answer: str,
+        contexts: list[str],
+        llm_config: dict[str, str],
+        expect_no_answer: bool,
+    ) -> dict[str, Any]:
+        """Compute generation metrics (faithfulness, answer_relevancy)."""
+        results = {}
+        if "faithfulness" in generation_metrics:
+            if expect_no_answer:
+                results["faithfulness"] = None
+            else:
+                execute_metric_safely(
+                    "faithfulness",
+                    calculate_faithfulness,
+                    results,
+                    question_id,
+                    answer=answer,
+                    contexts=contexts,
+                    api_key=llm_config["api_key"],
+                    base_url=llm_config["base_url"],
+                    model_name=llm_config["model_name"],
+                )
+
+        if "answer_relevancy" in generation_metrics:
+            execute_metric_safely(
+                "answer_relevancy",
+                calculate_answer_relevancy,
+                results,
+                question_id,
+                question=question,
+                answer=answer,
+                api_key=llm_config["api_key"],
+                base_url=llm_config["base_url"],
+                model_name=llm_config["model_name"],
+            )
+        return results
+
     def evaluate_single(self, sample: EvaluationSample) -> EvaluationResult:
         """
         Evaluate a single sample using builtin metrics.
@@ -145,81 +320,28 @@ class BuiltinEvaluator(BaseEvaluator):
 
         try:
             if expected_sources and expect_retrieval:
-                if "hit_rate" in retrieval_metrics:
-                    retrieval_results["hit_rate"] = calculate_hit_rate(
-                        retrieved_sources=sources_for_retrieval,
-                        expected_sources=expected_sources,
+                retrieval_results.update(
+                    self._compute_basic_retrieval_metrics(
+                        retrieval_metrics, sources_for_retrieval, expected_sources
                     )
-                if "mrr" in retrieval_metrics:
-                    retrieval_results["mrr"] = calculate_mrr(
-                        retrieved_sources=sources_for_retrieval,
-                        expected_sources=expected_sources,
-                    )
-                if "ndcg" in retrieval_metrics:
-                    retrieval_results["ndcg"] = calculate_ndcg(
-                        retrieved_sources=sources_for_retrieval,
-                        expected_sources=expected_sources,
-                    )
-                for _k in (3, 5, 10):
-                    _key = f"recall_{_k}"
-                    if _key in retrieval_metrics:
-                        retrieval_results[_key] = calculate_hit_rate(
-                            retrieved_sources=sources_for_retrieval,
-                            expected_sources=expected_sources,
-                            k=_k,
-                            mode="recall",
-                        )
+                )
 
             if chunk_ids and expected_chunks and expect_retrieval:
-                if "chunk_hit_rate" in retrieval_metrics:
-                    retrieval_results["chunk_hit_rate"] = calculate_chunk_hit_rate(
-                        chunk_ids, expected_chunks
+                retrieval_results.update(
+                    self._compute_chunk_metrics(
+                        retrieval_metrics, chunk_ids, expected_chunks
                     )
-                if "chunk_mrr" in retrieval_metrics:
-                    retrieval_results["chunk_mrr"] = calculate_chunk_mrr(
-                        chunk_ids, expected_chunks
-                    )
-                if "chunk_ndcg" in retrieval_metrics:
-                    retrieval_results["chunk_ndcg"] = calculate_chunk_ndcg(
-                        chunk_ids, expected_chunks, k=5
-                    )
+                )
 
             if expected_sources and expect_retrieval:
-                if equivalence_groups:
-                    norm_retrieved = [
-                        normalize_source_with_equivalence(
-                            s, equivalence_groups, include_parent=True
-                        )
-                        for s in sources_for_retrieval
-                    ]
-                    norm_expected = [
-                        normalize_source_with_equivalence(
-                            s, equivalence_groups, include_parent=True
-                        )
-                        for s in expected_sources
-                    ]
-                else:
-                    norm_retrieved = [
-                        normalize_source(s, include_parent=True)
-                        for s in sources_for_retrieval
-                    ]
-                    norm_expected = [
-                        normalize_source(s, include_parent=True)
-                        for s in expected_sources
-                    ]
-
-                if "dedup_hit_rate" in retrieval_metrics:
-                    retrieval_results["dedup_hit_rate"] = calculate_dedup_hit_rate(
-                        norm_retrieved, norm_expected
+                retrieval_results.update(
+                    self._compute_dedup_metrics(
+                        retrieval_metrics,
+                        sources_for_retrieval,
+                        expected_sources,
+                        equivalence_groups,
                     )
-                if "dedup_mrr" in retrieval_metrics:
-                    retrieval_results["dedup_mrr"] = calculate_dedup_mrr(
-                        norm_retrieved, norm_expected
-                    )
-                if "dedup_ndcg" in retrieval_metrics:
-                    retrieval_results["dedup_ndcg"] = calculate_dedup_ndcg(
-                        norm_retrieved, norm_expected
-                    )
+                )
 
             if not expect_retrieval and "false_positive_rate" in retrieval_metrics:
                 retrieval_results["false_positive_rate"] = (
@@ -232,63 +354,26 @@ class BuiltinEvaluator(BaseEvaluator):
                 )
 
             if llm_config and contexts and expect_retrieval and expected_answer:
-                if "context_precision" in retrieval_metrics:
-                    execute_metric_safely(
-                        "context_precision",
-                        calculate_context_precision,
-                        retrieval_results,
-                        question_id,
-                        question=question,
-                        expected_output=expected_answer,
-                        retrieval_context=contexts,
-                        api_key=llm_config["api_key"],
-                        base_url=llm_config["base_url"],
-                        model_name=llm_config["model_name"],
-                    )
-
-                if "context_recall" in retrieval_metrics:
-                    execute_metric_safely(
-                        "context_recall",
-                        calculate_context_recall,
-                        retrieval_results,
-                        question_id,
-                        question=question,
-                        ground_truth=expected_answer,
-                        retrieval_context=contexts,
-                        api_key=llm_config["api_key"],
-                        base_url=llm_config["base_url"],
-                        model_name=llm_config["model_name"],
-                    )
+                self._compute_llm_retrieval_metrics(
+                    retrieval_metrics,
+                    question_id,
+                    question,
+                    expected_answer,
+                    contexts,
+                    llm_config,
+                    retrieval_results,
+                )
 
             if generation_metrics and llm_config:
-                if "faithfulness" in generation_metrics:
-                    if expect_no_answer:
-                        generation_results["faithfulness"] = None
-                    else:
-                        execute_metric_safely(
-                            "faithfulness",
-                            calculate_faithfulness,
-                            generation_results,
-                            question_id,
-                            answer=answer,
-                            contexts=contexts,
-                            api_key=llm_config["api_key"],
-                            base_url=llm_config["base_url"],
-                            model_name=llm_config["model_name"],
-                        )
-
-                if "answer_relevancy" in generation_metrics:
-                    execute_metric_safely(
-                        "answer_relevancy",
-                        calculate_answer_relevancy,
-                        generation_results,
-                        question_id,
-                        question=question,
-                        answer=answer,
-                        api_key=llm_config["api_key"],
-                        base_url=llm_config["base_url"],
-                        model_name=llm_config["model_name"],
-                    )
+                generation_results = self._compute_generation_metrics(
+                    generation_metrics,
+                    question_id,
+                    question,
+                    answer,
+                    contexts,
+                    llm_config,
+                    expect_no_answer,
+                )
 
         except Exception as e:
             error = str(e)

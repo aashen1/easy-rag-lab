@@ -77,25 +77,9 @@ def merge_result(target: dict[str, Any], source: dict[str, Any]) -> None:
         target["ragas_error"] = source["ragas_error"]
 
 
-def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
-    """
-    Compute aggregate metrics from evaluation results.
-
-    Supports both retrieval and generation metrics. Includes chunk-level,
-    dedup, FPR, diversity, hallucination rate, and per-question-type breakdown.
-
-    Args:
-        results: List of evaluation result dictionaries.
-
-    Returns:
-        Dictionary containing average metrics including hit_rate, mrr, ndcg,
-        chunk_level_metrics, dedup_metrics, diversity, hallucination_rate,
-        and by_question_type breakdown.
-    """
-    from eval.metrics import calculate_hallucination_rate
-
+def _compute_retrieval_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Compute document-level retrieval metrics."""
     metrics: dict[str, Any] = {}
-
     valid_retrieval = [
         r for r in results if r.get("retrieval", {}).get("hit_rate") is not None
     ]
@@ -115,30 +99,34 @@ def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
         metrics["avg_hit_rate"] = 0.0
         metrics["avg_mrr"] = 0.0
         metrics["avg_ndcg"] = 0.0
-
     metrics["retrieval_applicable_questions"] = len(valid_retrieval)
     metrics["total_questions"] = len(results)
+    return metrics
 
+
+def _compute_generation_metrics(results: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Compute generation metrics aggregate."""
     valid_generation = [r for r in results if "generation" in r and r["generation"]]
-    if valid_generation:
-        generation_metrics_set = set()
-        for r in valid_generation:
-            generation_metrics_set.update(r["generation"].keys())
+    if not valid_generation:
+        return None
+    generation_metrics_set = set()
+    for r in valid_generation:
+        generation_metrics_set.update(r["generation"].keys())
+    generation_aggregate = {}
+    for metric_name in sorted(generation_metrics_set):
+        values = [
+            r["generation"][metric_name]
+            for r in valid_generation
+            if metric_name in r["generation"]
+            and r["generation"][metric_name] is not None
+        ]
+        if values:
+            generation_aggregate[f"avg_{metric_name}"] = sum(values) / len(values)
+    return generation_aggregate if generation_aggregate else None
 
-        generation_aggregate = {}
-        for metric_name in sorted(generation_metrics_set):
-            values = [
-                r["generation"][metric_name]
-                for r in valid_generation
-                if metric_name in r["generation"]
-                and r["generation"][metric_name] is not None
-            ]
-            if values:
-                generation_aggregate[f"avg_{metric_name}"] = sum(values) / len(values)
 
-        if generation_aggregate:
-            metrics["generation_metrics"] = generation_aggregate
-
+def _compute_chunk_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Compute chunk-level retrieval metrics."""
     chunk_results = [
         r
         for r in results
@@ -158,7 +146,16 @@ def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
         avg_chunk_hit_rate = None
         avg_chunk_mrr = None
         avg_chunk_ndcg = None
+    return {
+        "avg_hit_rate": avg_chunk_hit_rate,
+        "avg_mrr": avg_chunk_mrr,
+        "avg_ndcg": avg_chunk_ndcg,
+        "retrieval_applicable_questions": len(chunk_results),
+    }
 
+
+def _compute_dedup_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Compute deduplicated retrieval metrics."""
     dedup_results = [
         r
         for r in results
@@ -178,50 +175,53 @@ def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
         avg_dedup_hit_rate = None
         avg_dedup_mrr = None
         avg_dedup_ndcg = None
-
-    fpr_results = [r for r in results if r.get("false_positive_rate") is not None]
-    avg_false_positive_rate = (
-        sum(r["false_positive_rate"] for r in fpr_results) / len(fpr_results)
-        if fpr_results
-        else None
-    )
-
-    metrics["chunk_level_metrics"] = {
-        "avg_hit_rate": avg_chunk_hit_rate,
-        "avg_mrr": avg_chunk_mrr,
-        "avg_ndcg": avg_chunk_ndcg,
-        "retrieval_applicable_questions": len(chunk_results),
-    }
-    metrics["dedup_metrics"] = {
+    return {
         "avg_hit_rate": avg_dedup_hit_rate,
         "avg_mrr": avg_dedup_mrr,
         "avg_ndcg": avg_dedup_ndcg,
     }
-    metrics["avg_false_positive_rate"] = avg_false_positive_rate
-    metrics["irrelevant_questions_count"] = len(fpr_results)
 
+
+def _compute_diversity_metrics(
+    results: list[dict[str, Any]],
+) -> float | None:
+    """Compute retrieval diversity metric."""
+    valid_retrieval = [
+        r for r in results if r.get("retrieval", {}).get("hit_rate") is not None
+    ]
     diversity_values = [
         r["retrieval"]["retrieval_diversity"]
         for r in valid_retrieval
         if "retrieval_diversity" in r.get("retrieval", {})
         and r["retrieval"]["retrieval_diversity"] is not None
     ]
-    metrics["avg_retrieval_diversity"] = (
-        sum(diversity_values) / len(diversity_values) if diversity_values else None
-    )
+    return sum(diversity_values) / len(diversity_values) if diversity_values else None
 
+
+def _compute_hallucination_metrics(
+    results: list[dict[str, Any]],
+) -> float | None:
+    """Compute hallucination rate from faithfulness values."""
+    from eval.metrics import calculate_hallucination_rate
+
+    valid_generation = [r for r in results if "generation" in r and r["generation"]]
     faithfulness_values = [
         r["generation"]["faithfulness"]
         for r in valid_generation
         if "faithfulness" in r.get("generation", {})
         and r["generation"]["faithfulness"] is not None
     ]
-    metrics["hallucination_rate"] = (
+    return (
         calculate_hallucination_rate(faithfulness_values)
         if faithfulness_values
         else None
     )
 
+
+def _compute_question_type_metrics(
+    results: list[dict[str, Any]],
+) -> dict[str, dict[str, Any]] | None:
+    """Compute metrics grouped by question type."""
     type_groups: dict[str, list[dict[str, Any]]] = {}
     for r in results:
         qtype = r.get("question_type", "unknown")
@@ -263,9 +263,13 @@ def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
 
         type_metrics[qtype] = type_entry
 
-    if type_metrics:
-        metrics["by_question_type"] = type_metrics
+    return type_metrics if type_metrics else None
 
+
+def _compute_llm_retrieval_metrics(
+    results: list[dict[str, Any]],
+) -> dict[str, float]:
+    """Compute LLM-based retrieval metrics (context_precision, context_recall)."""
     llm_retrieval_results = [
         r for r in results if "llm_retrieval" in r and r["llm_retrieval"]
     ]
@@ -286,6 +290,7 @@ def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
         all_llm_retrieval.append(r["llm_retrieval"])
     all_llm_retrieval.extend(llm_retrieval_from_generation)
 
+    metrics: dict[str, float] = {}
     if all_llm_retrieval:
         cp_values = [
             lr["context_precision"]
@@ -302,5 +307,50 @@ def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
         ]
         if cr_values:
             metrics["avg_context_recall"] = sum(cr_values) / len(cr_values)
+
+    return metrics
+
+
+def compute_aggregate_metrics(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """
+    Compute aggregate metrics from evaluation results.
+
+    Supports both retrieval and generation metrics. Includes chunk-level,
+    dedup, FPR, diversity, hallucination rate, and per-question-type breakdown.
+
+    Args:
+        results: List of evaluation result dictionaries.
+
+    Returns:
+        Dictionary containing average metrics including hit_rate, mrr, ndcg,
+        chunk_level_metrics, dedup_metrics, diversity, hallucination_rate,
+        and by_question_type breakdown.
+    """
+    metrics = _compute_retrieval_metrics(results)
+
+    generation_metrics = _compute_generation_metrics(results)
+    if generation_metrics:
+        metrics["generation_metrics"] = generation_metrics
+
+    metrics["chunk_level_metrics"] = _compute_chunk_metrics(results)
+    metrics["dedup_metrics"] = _compute_dedup_metrics(results)
+
+    fpr_results = [r for r in results if r.get("false_positive_rate") is not None]
+    metrics["avg_false_positive_rate"] = (
+        sum(r["false_positive_rate"] for r in fpr_results) / len(fpr_results)
+        if fpr_results
+        else None
+    )
+    metrics["irrelevant_questions_count"] = len(fpr_results)
+
+    metrics["avg_retrieval_diversity"] = _compute_diversity_metrics(results)
+    metrics["hallucination_rate"] = _compute_hallucination_metrics(results)
+
+    type_metrics = _compute_question_type_metrics(results)
+    if type_metrics:
+        metrics["by_question_type"] = type_metrics
+
+    llm_retrieval_metrics = _compute_llm_retrieval_metrics(results)
+    metrics.update(llm_retrieval_metrics)
 
     return metrics
