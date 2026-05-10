@@ -519,25 +519,28 @@
 
 **文件**: `eval/evaluators/ragas_evaluator.py:551-599, 601-649`
 
-- [ ] **分析两个分支的重复逻辑**
+- [x] **分析两个分支的重复逻辑**
   - 识别 RAGAS evaluate + 结果解析逻辑
   - 验收标准: 完成重复分析文档
   - 优先级: P1
   - 预计耗时: 1小时
+  - 完成日期: 2026-05-10
 
-- [ ] **提取 `_run_ragas_evaluation()` 函数**
+- [x] **提取 `_run_ragas_evaluation()` 函数**
   - 封装 RAGAS evaluate 调用和结果解析
-  - 参数: `samples`, `has_ref`
+  - 参数: `samples`, `indices`, `metric_names`, `run_config`, `log_message`
   - 验收标准: 函数提取完成，单元测试通过
   - 优先级: P1
   - 预计耗时: 2小时
+  - 完成日期: 2026-05-10
 
-- [ ] **重构两个分支使用新函数**
+- [x] **重构两个分支使用新函数**
   - 更新 `samples_with_ref` 分支
   - 更新 `samples_without_ref` 分支
   - 验收标准: 无重复代码，功能验证通过
   - 优先级: P1
   - 预计耗时: 1小时
+  - 完成日期: 2026-05-10
 
 ---
 
@@ -545,25 +548,28 @@
 
 **文件**: `eval/metrics/llm_retrieval.py`, `eval/metrics/generation.py`
 
-- [ ] **分析 4+ 处重复模式**
+- [x] **分析 4+ 处重复模式**
   - 识别: 创建 client → 构建 prompt → call_with_retry → 正则提取 JSON → 判断 verdict
   - 验收标准: 完成重复分析文档
   - 优先级: P1
   - 预计耗时: 1小时
+  - 完成日期: 2026-05-10
 
-- [ ] **提取 `_llm_judge()` 辅助函数**
-  - 参数: `prompt`, `client`, `json_pattern`
+- [x] **提取 `llm_judge()` 辅助函数**
+  - 参数: `client`, `prompt`, `model_name`, `max_tokens`, `temperature`, `json_pattern`
   - 返回: `dict` (解析后的 JSON)
   - 验收标准: 函数提取完成，单元测试通过
   - 优先级: P1
   - 预计耗时: 2小时
+  - 完成日期: 2026-05-10
 
-- [ ] **重构所有调用点使用 `_llm_judge()`**
+- [x] **重构所有调用点使用 `llm_judge()`**
   - 更新 `llm_retrieval.py`
   - 更新 `generation.py`
   - 验收标准: 无重复代码，功能验证通过
   - 优先级: P1
   - 预计耗时: 2小时
+  - 完成日期: 2026-05-10
 
 ---
 
@@ -571,27 +577,30 @@
 
 **文件**: `eval/metrics/chunk.py`
 
-- [ ] **分析三个函数的匹配逻辑重复**
+- [x] **分析三个函数的匹配逻辑重复**
   - `calculate_chunk_hit_rate()`
   - `calculate_chunk_mrr()`
   - `calculate_chunk_ndcg()`
   - 验收标准: 完成重复分析文档
   - 优先级: P1
   - 预计耗时: 1小时
+  - 完成日期: 2026-05-10
 
-- [ ] **提取 `_match_chunks()` 函数**
+- [x] **提取 `_match_chunk()` 函数**
   - 封装 exact match + adjacent tolerance 逻辑
   - 验收标准: 函数提取完成，单元测试通过
   - 优先级: P1
   - 预计耗时: 2小时
+  - 完成日期: 2026-05-10
 
-- [ ] **重构三个函数使用 `_match_chunks()`**
+- [x] **重构三个函数使用 `_match_chunk()`**
   - 更新 `calculate_chunk_hit_rate()`
   - 更新 `calculate_chunk_mrr()`
   - 更新 `calculate_chunk_ndcg()`
   - 验收标准: 无重复代码，功能验证通过
   - 优先级: P1
   - 预计耗时: 1小时
+  - 完成日期: 2026-05-10
 
 ---
 
@@ -599,24 +608,27 @@
 
 **文件**: `eval/reporter/template_single.py`, `eval/reporter/template_variant.py`
 
-- [ ] **分析两个文件的推荐逻辑重复**
+- [x] **分析两个文件的推荐逻辑重复**
   - 阈值判断 + 建议文本
   - 验收标准: 完成重复分析文档
   - 优先级: P1
   - 预计耗时: 1小时
+  - 完成日期: 2026-05-10
 
-- [ ] **提取 `_generate_recommendation()` 函数**
+- [x] **提取 `generate_recommendations()` 函数**
   - 封装阈值判断和建议生成逻辑
   - 验收标准: 函数提取完成，单元测试通过
   - 优先级: P1
   - 预计耗时: 2小时
+  - 完成日期: 2026-05-10
 
-- [ ] **重构两个文件使用新函数**
+- [x] **重构两个文件使用新函数**
   - 更新 `template_single.py`
   - 更新 `template_variant.py`
   - 验收标准: 无重复代码，功能验证通过
   - 优先级: P1
   - 预计耗时: 1小时
+  - 完成日期: 2026-05-10
 
 ---
 
