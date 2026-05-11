@@ -754,86 +754,81 @@ class TestRagasEvaluator:
 class TestRagasEvaluatorConfigReading:
     """Tests for RagasEvaluator configuration reading (Task 3.4)."""
 
-    def test_ragas_config_stored_from_init(self):
+    @pytest.mark.parametrize(
+        "config,expected_ragas_config,expected_run_config,expected_embedding_config",
+        [
+            (
+                {
+                    "ragas": {
+                        "run_config": {
+                            "max_workers": 3,
+                            "timeout": 45,
+                            "max_retries": 1,
+                        },
+                        "embedding": {"model_name": "custom-model", "device": "cpu"},
+                        "embedding_model": "override-model",
+                        "device": "mps",
+                    }
+                },
+                {
+                    "run_config": {"max_workers": 3, "timeout": 45, "max_retries": 1},
+                    "embedding": {"model_name": "custom-model", "device": "cpu"},
+                    "embedding_model": "override-model",
+                    "device": "mps",
+                },
+                {"max_workers": 3, "timeout": 45, "max_retries": 1},
+                {"model_name": "custom-model", "device": "cpu"},
+            ),
+            (None, {}, {}, {}),
+            ({"ragas": {}}, {}, {}, {}),
+        ],
+    )
+    def test_ragas_config_initialization(
+        self,
+        config,
+        expected_ragas_config,
+        expected_run_config,
+        expected_embedding_config,
+    ):
         """Test that ragas config is correctly stored during initialization."""
-        config = {
-            "ragas": {
-                "run_config": {"max_workers": 3, "timeout": 45, "max_retries": 1},
-                "embedding": {"model_name": "custom-model", "device": "cpu"},
-                "embedding_model": "override-model",
-                "device": "mps",
-            }
-        }
         evaluator = RagasEvaluator(config=config)
 
-        assert evaluator._ragas_config == config["ragas"]
-        assert evaluator._run_config == {
-            "max_workers": 3,
-            "timeout": 45,
-            "max_retries": 1,
-        }
-        assert evaluator._embedding_config == {
-            "model_name": "custom-model",
-            "device": "cpu",
-        }
+        assert evaluator._ragas_config == expected_ragas_config
+        assert evaluator._run_config == expected_run_config
+        assert evaluator._embedding_config == expected_embedding_config
 
-    def test_ragas_config_defaults_when_no_config(self):
-        """Test that defaults are used when no config is provided."""
-        evaluator = RagasEvaluator(config=None)
-
-        assert evaluator._ragas_config == {}
-        assert evaluator._run_config == {}
-        assert evaluator._embedding_config == {}
-
-    def test_ragas_config_defaults_when_empty_ragas_section(self):
-        """Test that defaults are used when ragas section is empty."""
-        evaluator = RagasEvaluator(config={"ragas": {}})
-
-        assert evaluator._ragas_config == {}
-        assert evaluator._run_config == {}
-        assert evaluator._embedding_config == {}
-
-    def test_build_run_config_uses_configured_values(self):
+    @pytest.mark.parametrize(
+        "config,expected_kwargs",
+        [
+            (
+                {
+                    "ragas": {
+                        "run_config": {
+                            "max_workers": 10,
+                            "timeout": 120,
+                            "max_retries": 5,
+                        }
+                    }
+                },
+                {"max_workers": 10, "timeout": 120, "max_retries": 5},
+            ),
+            ({}, {"max_workers": 5, "timeout": 60, "max_retries": 3}),
+            (
+                {"ragas": {"run_config": {"max_workers": 8}}},
+                {"max_workers": 8, "timeout": 60, "max_retries": 3},
+            ),
+        ],
+    )
+    def test_build_run_config(self, config, expected_kwargs):
         """Test that _build_run_config uses values from config."""
-        config = {
-            "ragas": {
-                "run_config": {"max_workers": 10, "timeout": 120, "max_retries": 5},
-            }
-        }
         evaluator = RagasEvaluator(config=config)
 
         mock_run_config = MagicMock()
         with patch("ragas.RunConfig", return_value=mock_run_config) as mock_cls:
             result = evaluator._build_run_config()
 
-            mock_cls.assert_called_once_with(max_workers=10, timeout=120, max_retries=5)
+            mock_cls.assert_called_once_with(**expected_kwargs)
             assert result == mock_run_config
-
-    def test_build_run_config_uses_defaults_when_missing(self):
-        """Test that _build_run_config uses defaults when config is empty."""
-        evaluator = RagasEvaluator(config={})
-
-        mock_run_config = MagicMock()
-        with patch("ragas.RunConfig", return_value=mock_run_config) as mock_cls:
-            result = evaluator._build_run_config()
-
-            mock_cls.assert_called_once_with(max_workers=5, timeout=60, max_retries=3)
-            assert result == mock_run_config
-
-    def test_build_run_config_partial_override(self):
-        """Test that _build_run_config allows partial overrides with defaults."""
-        config = {
-            "ragas": {
-                "run_config": {"max_workers": 8},
-            }
-        }
-        evaluator = RagasEvaluator(config=config)
-
-        mock_run_config = MagicMock()
-        with patch("ragas.RunConfig", return_value=mock_run_config) as mock_cls:
-            _ = evaluator._build_run_config()
-
-            mock_cls.assert_called_once_with(max_workers=8, timeout=60, max_retries=3)
 
     def test_build_run_config_returns_none_on_import_error(self):
         """Test that _build_run_config returns None when RunConfig is not available."""
@@ -844,107 +839,61 @@ class TestRagasEvaluatorConfigReading:
 
             assert result is None
 
-    def test_create_embeddings_uses_ragas_config_embedding_model(self):
-        """Test that _create_embeddings uses embedding_model from ragas config."""
-        config = {
-            "ragas": {
-                "embedding_model": "custom-bge-model",
-                "device": "cpu",
-            }
-        }
+    @pytest.mark.parametrize(
+        "ragas_config,system_config,expected_model,expected_device",
+        [
+            (
+                {"embedding_model": "custom-bge-model", "device": "cpu"},
+                {},
+                "custom-bge-model",
+                "cpu",
+            ),
+            (
+                {"embedding": {"model_name": "fallback-model", "device": "mps"}},
+                {},
+                "fallback-model",
+                "mps",
+            ),
+            (
+                {
+                    "embedding_model": "top-level-model",
+                    "device": "cuda:1",
+                    "embedding": {"model_name": "sub-model", "device": "cpu"},
+                },
+                {},
+                "top-level-model",
+                "cuda:1",
+            ),
+            ({}, {}, "BAAI/bge-large-zh-v1.5", "cuda"),
+            (
+                {},
+                {"embedding": {"model_name": "system-model", "device": "cpu"}},
+                "system-model",
+                "cpu",
+            ),
+        ],
+    )
+    def test_create_embeddings(
+        self, ragas_config, system_config, expected_model, expected_device
+    ):
+        """Test that _create_embeddings uses correct configuration."""
+        config = {"ragas": ragas_config} if ragas_config else {}
         evaluator = RagasEvaluator(config=config)
 
         mock_ragas_embeddings = MagicMock()
         with patch(
             "ragas.embeddings.HuggingFaceEmbeddings", return_value=mock_ragas_embeddings
         ) as mock_cls:
-            result = evaluator._create_embeddings(config)
+            result = evaluator._create_embeddings(
+                system_config if system_config else config
+            )
 
             mock_cls.assert_called_once_with(
-                model="custom-bge-model",
-                device="cpu",
+                model=expected_model,
+                device=expected_device,
             )
             assert hasattr(result, "embed_query")
             assert hasattr(result, "embed_documents")
-
-    def test_create_embeddings_uses_embedding_subconfig_as_fallback(self):
-        """Test that _create_embeddings falls back to embedding sub-config."""
-        config = {
-            "ragas": {
-                "embedding": {"model_name": "fallback-model", "device": "mps"},
-            }
-        }
-        evaluator = RagasEvaluator(config=config)
-
-        mock_ragas_embeddings = MagicMock()
-        with patch(
-            "ragas.embeddings.HuggingFaceEmbeddings", return_value=mock_ragas_embeddings
-        ) as mock_cls:
-            result = evaluator._create_embeddings(config)
-
-            mock_cls.assert_called_once_with(
-                model="fallback-model",
-                device="mps",
-            )
-            assert hasattr(result, "embed_query")
-
-    def test_create_embeddings_ragas_config_overrides_subconfig(self):
-        """Test that top-level ragas config keys override embedding sub-config."""
-        config = {
-            "ragas": {
-                "embedding_model": "top-level-model",
-                "device": "cuda:1",
-                "embedding": {"model_name": "sub-model", "device": "cpu"},
-            }
-        }
-        evaluator = RagasEvaluator(config=config)
-
-        mock_ragas_embeddings = MagicMock()
-        with patch(
-            "ragas.embeddings.HuggingFaceEmbeddings", return_value=mock_ragas_embeddings
-        ) as mock_cls:
-            result = evaluator._create_embeddings(config)
-
-            mock_cls.assert_called_once_with(
-                model="top-level-model",
-                device="cuda:1",
-            )
-            assert hasattr(result, "embed_query")
-
-    def test_create_embeddings_uses_defaults_when_no_config(self):
-        """Test that _create_embeddings uses defaults when no config is provided."""
-        evaluator = RagasEvaluator(config={})
-
-        mock_ragas_embeddings = MagicMock()
-        with patch(
-            "ragas.embeddings.HuggingFaceEmbeddings", return_value=mock_ragas_embeddings
-        ) as mock_cls:
-            result = evaluator._create_embeddings({})
-
-            mock_cls.assert_called_once_with(
-                model="BAAI/bge-large-zh-v1.5",
-                device="cuda",
-            )
-            assert hasattr(result, "embed_query")
-
-    def test_create_embeddings_uses_config_embedding_key_as_fallback(self):
-        """Test that _create_embeddings falls back to config['embedding'] when no ragas config."""
-        evaluator = RagasEvaluator(config={})
-        system_config = {
-            "embedding": {"model_name": "system-model", "device": "cpu"},
-        }
-
-        mock_ragas_embeddings = MagicMock()
-        with patch(
-            "ragas.embeddings.HuggingFaceEmbeddings", return_value=mock_ragas_embeddings
-        ) as mock_cls:
-            result = evaluator._create_embeddings(system_config)
-
-            mock_cls.assert_called_once_with(
-                model="system-model",
-                device="cpu",
-            )
-            assert hasattr(result, "embed_query")
 
 
 @pytest.mark.slow

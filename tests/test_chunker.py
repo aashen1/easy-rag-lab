@@ -1147,11 +1147,37 @@ class TestBuildTokenCharOffsets:
 
 
 class TestChunkTextChineseRoundtrip:
-    def test_chinese_text_is_substring_of_original(self):
-        text = "地产开发投资同比增长百分之十五，其中住宅投资增长百分之二十。商业地产投资增速放缓，办公楼投资同比下降百分之五。"
-        result = chunk_text(text, chunk_size=20, overlap=0, encoding_name="cl100k_base")
-        for chunk in result:
-            assert chunk["text"] in text
+    @pytest.mark.parametrize(
+        "text,chunk_size,overlap",
+        [
+            (
+                "地产开发投资同比增长百分之十五，其中住宅投资增长百分之二十。商业地产投资增速放缓，办公楼投资同比下降百分之五。",
+                20,
+                0,
+            ),
+            (
+                "中国证券市场在二零二三年经历了显著的结构性变化。注册制改革全面推进，IPO数量创历史新高。同时，退市制度也在不断完善。",
+                25,
+                5,
+            ),
+            (
+                "OpenAI发布了GPT-4模型，该模型在中文理解能力上有了显著提升。根据MIT的研究报告，GPT-4在中文问答任务上的准确率达到了百分之八十五。",
+                30,
+                0,
+            ),
+        ],
+    )
+    def test_chinese_text_chunks_are_substrings(self, text, chunk_size, overlap):
+        result = chunk_text(
+            text, chunk_size=chunk_size, overlap=overlap, encoding_name="cl100k_base"
+        )
+        if overlap == 0:
+            for chunk in result:
+                assert chunk["text"] in text
+        else:
+            assert len(result) > 1
+            for chunk in result:
+                assert chunk["text"] in text
 
     def test_chinese_text_no_garbled_characters(self):
         text = "万科企业股份有限公司二零二三年年度报告。公司实现营业收入四千六百五十五亿元，归属于上市公司股东的净利润一百二十亿元。"
@@ -1167,19 +1193,6 @@ class TestChunkTextChineseRoundtrip:
         for chunk in result[1:]:
             reconstructed += chunk["text"]
         assert reconstructed == text
-
-    def test_chinese_text_with_overlap_covers_entire_text(self):
-        text = "中国证券市场在二零二三年经历了显著的结构性变化。注册制改革全面推进，IPO数量创历史新高。同时，退市制度也在不断完善。"
-        result = chunk_text(text, chunk_size=25, overlap=5, encoding_name="cl100k_base")
-        assert len(result) > 1
-        for chunk in result:
-            assert chunk["text"] in text
-
-    def test_mixed_chinese_english_text(self):
-        text = "OpenAI发布了GPT-4模型，该模型在中文理解能力上有了显著提升。根据MIT的研究报告，GPT-4在中文问答任务上的准确率达到了百分之八十五。"
-        result = chunk_text(text, chunk_size=30, overlap=0, encoding_name="cl100k_base")
-        for chunk in result:
-            assert chunk["text"] in text
 
     def test_single_chunk_equals_original_text(self):
         text = "这是一段短文本。"

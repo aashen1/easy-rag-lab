@@ -54,46 +54,45 @@ class TestForbiddenOperations:
 
 
 class TestToolFunctions:
-    def test_list_meals_tool_exists(self):
-        from src.agent.tools import list_meals
+    @pytest.mark.parametrize(
+        "tool_name,expected_description",
+        [
+            ("list_meals", "List all available meals"),
+            ("get_meal_detail", None),
+            ("query_rag_tool", None),
+            ("parse_pdf_tool", None),
+            ("enhance_page_tool", None),
+            ("chunk_parsed_tool", None),
+            ("evaluate_answer_tool", None),
+            ("get_index_info", None),
+        ],
+    )
+    def test_tool_exists(self, tool_name, expected_description):
+        from src.agent.tools import (
+            chunk_parsed_tool,
+            enhance_page_tool,
+            evaluate_answer_tool,
+            get_index_info,
+            get_meal_detail,
+            list_meals,
+            parse_pdf_tool,
+            query_rag_tool,
+        )
 
-        assert list_meals.name == "list_meals"
-        assert "List all available meals" in list_meals.description
-
-    def test_get_meal_detail_tool_exists(self):
-        from src.agent.tools import get_meal_detail
-
-        assert get_meal_detail.name == "get_meal_detail"
-
-    def test_query_rag_tool_exists(self):
-        from src.agent.tools import query_rag_tool
-
-        assert query_rag_tool.name == "query_rag_tool"
-
-    def test_parse_pdf_tool_exists(self):
-        from src.agent.tools import parse_pdf_tool
-
-        assert parse_pdf_tool.name == "parse_pdf_tool"
-
-    def test_enhance_page_tool_exists(self):
-        from src.agent.tools import enhance_page_tool
-
-        assert enhance_page_tool.name == "enhance_page_tool"
-
-    def test_chunk_parsed_tool_exists(self):
-        from src.agent.tools import chunk_parsed_tool
-
-        assert chunk_parsed_tool.name == "chunk_parsed_tool"
-
-    def test_evaluate_answer_tool_exists(self):
-        from src.agent.tools import evaluate_answer_tool
-
-        assert evaluate_answer_tool.name == "evaluate_answer_tool"
-
-    def test_get_index_info_tool_exists(self):
-        from src.agent.tools import get_index_info
-
-        assert get_index_info.name == "get_index_info"
+        tools_map = {
+            "list_meals": list_meals,
+            "get_meal_detail": get_meal_detail,
+            "query_rag_tool": query_rag_tool,
+            "parse_pdf_tool": parse_pdf_tool,
+            "enhance_page_tool": enhance_page_tool,
+            "chunk_parsed_tool": chunk_parsed_tool,
+            "evaluate_answer_tool": evaluate_answer_tool,
+            "get_index_info": get_index_info,
+        }
+        tool = tools_map[tool_name]
+        assert tool.name == tool_name
+        if expected_description:
+            assert expected_description in tool.description
 
     def test_list_meals_error_handling(self):
         from src.agent.tools import list_meals
@@ -403,94 +402,87 @@ class TestAgentConfig:
 
 
 class TestNewTools:
-    def test_embed_chunks_tool_exists(self):
-        from src.agent.tools import embed_chunks_tool
+    @pytest.mark.parametrize(
+        "tool_name",
+        [
+            "embed_chunks_tool",
+            "index_chunks_tool",
+            "delete_and_reindex_tool",
+            "create_curated_meal",
+            "list_pdfs",
+            "create_issue",
+            "list_issues",
+            "close_issue",
+        ],
+    )
+    def test_tool_exists(self, tool_name):
+        from src.agent.tools import (
+            close_issue,
+            create_curated_meal,
+            create_issue,
+            delete_and_reindex_tool,
+            embed_chunks_tool,
+            index_chunks_tool,
+            list_issues,
+            list_pdfs,
+        )
 
-        assert embed_chunks_tool.name == "embed_chunks_tool"
-
-    def test_index_chunks_tool_exists(self):
-        from src.agent.tools import index_chunks_tool
-
-        assert index_chunks_tool.name == "index_chunks_tool"
-
-    def test_delete_and_reindex_tool_exists(self):
-        from src.agent.tools import delete_and_reindex_tool
-
-        assert delete_and_reindex_tool.name == "delete_and_reindex_tool"
+        tools_map = {
+            "embed_chunks_tool": embed_chunks_tool,
+            "index_chunks_tool": index_chunks_tool,
+            "delete_and_reindex_tool": delete_and_reindex_tool,
+            "create_curated_meal": create_curated_meal,
+            "list_pdfs": list_pdfs,
+            "create_issue": create_issue,
+            "list_issues": list_issues,
+            "close_issue": close_issue,
+        }
+        tool = tools_map[tool_name]
+        assert tool.name == tool_name
 
     def test_delete_and_reindex_is_high_risk(self):
         from src.agent.tools import HIGH_RISK_TOOLS
 
         assert "delete_and_reindex_tool" in HIGH_RISK_TOOLS
 
-    def test_create_curated_meal_exists(self):
-        from src.agent.tools import create_curated_meal
-
-        assert create_curated_meal.name == "create_curated_meal"
-
-    def test_list_pdfs_exists(self):
-        from src.agent.tools import list_pdfs
-
-        assert list_pdfs.name == "list_pdfs"
-
-    def test_create_issue_exists(self):
-        from src.agent.tools import create_issue
-
-        assert create_issue.name == "create_issue"
-
-    def test_list_issues_exists(self):
-        from src.agent.tools import list_issues
-
-        assert list_issues.name == "list_issues"
-
-    def test_close_issue_exists(self):
-        from src.agent.tools import close_issue
-
-        assert close_issue.name == "close_issue"
-
-    def test_create_issue_with_mock_subprocess(self):
+    @pytest.mark.parametrize(
+        "tool_name,invoke_args,expected_in_result",
+        [
+            (
+                "create_issue",
+                {"title": "Test bug", "issue_type": "bug", "priority": "high"},
+                "created",
+            ),
+            ("list_issues", {"status": "todo"}, "ok"),
+            ("close_issue", {"issue_id": "BUG-20260504-001-wt1"}, "closed"),
+        ],
+    )
+    def test_issue_tools_with_mock_subprocess(
+        self, tool_name, invoke_args, expected_in_result
+    ):
         from unittest.mock import MagicMock, patch
 
-        from src.agent.tools import create_issue
+        from src.agent.tools import close_issue, create_issue, list_issues
+
+        tools_map = {
+            "create_issue": create_issue,
+            "list_issues": list_issues,
+            "close_issue": close_issue,
+        }
+        tool = tools_map[tool_name]
 
         mock_result = MagicMock()
         mock_result.returncode = 0
-        mock_result.stdout = "✓ Issue created successfully!"
+        mock_result.stdout = (
+            f"✓ Issue {expected_in_result} successfully!"
+            if expected_in_result != "ok"
+            else "No issues found."
+        )
         mock_result.stderr = ""
 
         with patch("src.agent.tools.subprocess.run", return_value=mock_result):
-            result = create_issue.invoke(
-                {"title": "Test bug", "issue_type": "bug", "priority": "high"}
-            )
-            assert "created" in result
-
-    def test_list_issues_with_mock_subprocess(self):
-        from unittest.mock import MagicMock, patch
-
-        from src.agent.tools import list_issues
-
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "No issues found."
-        mock_result.stderr = ""
-
-        with patch("src.agent.tools.subprocess.run", return_value=mock_result):
-            result = list_issues.invoke({"status": "todo"})
-            assert "ok" in result
-
-    def test_close_issue_with_mock_subprocess(self):
-        from unittest.mock import MagicMock, patch
-
-        from src.agent.tools import close_issue
-
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "✓ Issue done successfully!"
-        mock_result.stderr = ""
-
-        with patch("src.agent.tools.subprocess.run", return_value=mock_result):
-            result = close_issue.invoke({"issue_id": "BUG-20260504-001-wt1"})
-            assert "closed" in result
+            result = tool.invoke(invoke_args)
+            assert expected_in_result in result
 
     def test_get_tools_returns_all_22_tools(self):
         from src.agent.graph import _get_tools
@@ -540,12 +532,27 @@ class TestToolNodeStageHistory:
 
 
 class TestBuildSystemPrompt:
-    def test_base_prompt_contains_workflow(self):
+    @pytest.mark.parametrize(
+        "expected_substring",
+        [
+            "诊断",
+            "修复",
+            "工具选择示例",
+            "解析器选择",
+            "分块策略选择",
+            "约束规则",
+            "不要连续调用同一工具超过 3 次",
+            "错误处理指导",
+            "先分析错误原因",
+            "Issue",
+            "回退",
+        ],
+    )
+    def test_base_prompt_contains_expected_strings(self, expected_substring):
         from src.agent.prompt import build_system_prompt
 
         prompt = build_system_prompt()
-        assert "诊断" in prompt
-        assert "修复" in prompt
+        assert expected_substring in prompt
 
     def test_prompt_with_stage_history(self):
         from src.agent.prompt import build_system_prompt
@@ -579,40 +586,6 @@ class TestBuildSystemPrompt:
 
         prompt = build_system_prompt()
         assert "已执行步骤" not in prompt
-
-    def test_prompt_contains_tool_selection_examples(self):
-        from src.agent.prompt import build_system_prompt
-
-        prompt = build_system_prompt()
-        assert "工具选择示例" in prompt
-        assert "解析器选择" in prompt
-        assert "分块策略选择" in prompt
-
-    def test_prompt_contains_constraint_rules(self):
-        from src.agent.prompt import build_system_prompt
-
-        prompt = build_system_prompt()
-        assert "约束规则" in prompt
-        assert "不要连续调用同一工具超过 3 次" in prompt
-
-    def test_prompt_contains_error_handling(self):
-        from src.agent.prompt import build_system_prompt
-
-        prompt = build_system_prompt()
-        assert "错误处理指导" in prompt
-        assert "先分析错误原因" in prompt
-
-    def test_prompt_contains_issue_rules(self):
-        from src.agent.prompt import build_system_prompt
-
-        prompt = build_system_prompt()
-        assert "Issue" in prompt
-
-    def test_prompt_contains_rollback_instructions(self):
-        from src.agent.prompt import build_system_prompt
-
-        prompt = build_system_prompt()
-        assert "回退" in prompt
 
     def test_system_prompt_backward_compat(self):
         from src.agent.prompt import SYSTEM_PROMPT
@@ -1109,59 +1082,25 @@ class TestLockedTool:
 
 
 class TestCLICommands:
-    def test_parse_command(self):
+    @pytest.mark.parametrize(
+        "command,expected",
+        [
+            (":parse pymupdf4llm", "请用 pymupdf4llm 解析当前 PDF"),
+            (":back chunk", "回到chunk阶段重新做"),
+            (":compare", "生成对比报告"),
+            (":report", "生成维修报告"),
+            (":history", "__show_history__"),
+            (":status", "__show_status__"),
+            ("hello", None),
+            (":unknown", None),
+            (":mode", "__set_mode__"),
+        ],
+    )
+    def test_cli_commands(self, command, expected):
         from src.agent.cli import _handle_cli_command
 
-        result = _handle_cli_command(":parse pymupdf4llm", False)
-        assert result == "请用 pymupdf4llm 解析当前 PDF"
-
-    def test_back_command(self):
-        from src.agent.cli import _handle_cli_command
-
-        result = _handle_cli_command(":back chunk", False)
-        assert result == "回到chunk阶段重新做"
-
-    def test_compare_command(self):
-        from src.agent.cli import _handle_cli_command
-
-        result = _handle_cli_command(":compare", False)
-        assert result == "生成对比报告"
-
-    def test_report_command(self):
-        from src.agent.cli import _handle_cli_command
-
-        result = _handle_cli_command(":report", False)
-        assert result == "生成维修报告"
-
-    def test_history_command(self):
-        from src.agent.cli import _handle_cli_command
-
-        result = _handle_cli_command(":history", False)
-        assert result == "__show_history__"
-
-    def test_status_command(self):
-        from src.agent.cli import _handle_cli_command
-
-        result = _handle_cli_command(":status", False)
-        assert result == "__show_status__"
-
-    def test_non_command_returns_none(self):
-        from src.agent.cli import _handle_cli_command
-
-        result = _handle_cli_command("hello", False)
-        assert result is None
-
-    def test_unknown_command_returns_none(self):
-        from src.agent.cli import _handle_cli_command
-
-        result = _handle_cli_command(":unknown", False)
-        assert result is None
-
-    def test_mode_command(self):
-        from src.agent.cli import _handle_cli_command
-
-        result = _handle_cli_command(":mode", False)
-        assert result == "__set_mode__"
+        result = _handle_cli_command(command, False)
+        assert result == expected
 
 
 class TestDeleteCountSafety:
