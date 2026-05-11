@@ -1794,7 +1794,7 @@
 ### Phase 4: 测试质量（P5 测试问题）
 
 - [x] 开始日期: 2026-05-10
-- [ ] 完成日期: ___
+- [x] 完成日期: 2026-05-11
 - [x] 删除框架测试: 5/7 完成
   - ✅ TestMaintenanceState
   - ✅ TestLLMClientCaching
@@ -1803,9 +1803,15 @@
   - ✅ TestEvaluationResult
   - ❓ test_to_dict (experiment.py) - 建议保留
   - ❓ test_to_dict (meal.py) - 建议保留
-- [x] 参数化重构: 1/6 完成
+- [x] 参数化重构: 6/6 完成
   - ✅ TestNormalizeSource (16→5)
-- [ ] 完成百分比: ~30%
+  - ✅ TestCLICommands (9→1)
+  - ✅ TestBuildSystemPrompt (10→5)
+  - ✅ TestChunkTextChineseRoundtrip (7→5)
+  - ✅ TestRagasEvaluatorConfigReading (12→4)
+  - ✅ TestToolFunctions + TestNewTools (23→10)
+- [x] 完成百分比: 100%
+- [x] 最终验证: test ✅, lint ✅
 
 ### Phase 5: 清理（P4-P6 其他问题）
 
