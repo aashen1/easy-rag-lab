@@ -1146,7 +1146,7 @@ class TestDocumentBasedQuestionsSourceFiles:
                 "evidence": [
                     {
                         "quote": "光模块行业内容" * 10,
-                        "source_segment": 0,
+                        "segment_index": 0,
                         "match_type": "exact",
                     }
                 ],
@@ -1253,7 +1253,7 @@ class TestGenerateDocumentBasedQuestionsSupplemental:
                     "answer_sources": [],
                     "evidence": [
                         {
-                            "quote": f"文档内容营收增长数据分析{a_text}",
+                            "quote": "文档A内容文档A内容文档A内容文档A内容",
                             "segment_index": 0,
                             "match_type": "exact",
                         }
