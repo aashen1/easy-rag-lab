@@ -178,24 +178,24 @@ class ExperimentFingerprint:
         )
 
     def matches(self, other: ExperimentFingerprint) -> bool:
-        """Check if two fingerprints match on all mandatory fields.
+        """Check if two fingerprints are identical on all fields.
 
-        Mandatory fields (must be identical):
-        - meal_name (same data source)
-        - chunker_config_hash (same chunking strategy)
-        - embedding_config_hash (same embedding model)
-        - retrieval_method (same retrieval approach)
-        - test_set_strategy (same evaluation strategy)
+        All 9 fields must match for two fingerprints to be considered
+        the same experiment configuration.
 
         Returns:
-            True if all mandatory fields match.
+            True if all fields match.
         """
         return (
             self.meal_name == other.meal_name
             and self.chunker_config_hash == other.chunker_config_hash
             and self.embedding_config_hash == other.embedding_config_hash
             and self.retrieval_method == other.retrieval_method
+            and self.retrieval_top_k == other.retrieval_top_k
+            and self.reranker_enabled == other.reranker_enabled
+            and self.query_rewrite_enabled == other.query_rewrite_enabled
             and self.test_set_strategy == other.test_set_strategy
+            and self.test_set_count == other.test_set_count
         )
 
     def diff(self, other: ExperimentFingerprint) -> dict[str, tuple[str, str]]:
