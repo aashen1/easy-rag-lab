@@ -158,6 +158,27 @@ class RAGPipeline:
 
         logger.success("RAG Pipeline initialized successfully")
 
+    def _get_hybrid_retriever_config(
+        self, retrieval_config: dict[str, Any], top_k: int
+    ) -> dict[str, Any]:
+        """Extract hybrid retriever configuration with defaults.
+
+        Args:
+            retrieval_config: The retrieval section of the config.
+            top_k: The top_k value to use.
+
+        Returns:
+            Dict with hybrid retriever parameters.
+        """
+        hybrid_config = retrieval_config.get("hybrid", {})
+        return {
+            "fusion_method": hybrid_config.get("fusion", "rrf"),
+            "rrf_k": hybrid_config.get("rrf_k", 60),
+            "vector_weight": hybrid_config.get("vector_weight", 0.7),
+            "bm25_weight": hybrid_config.get("bm25_weight", 0.3),
+            "top_k": top_k,
+        }
+
     def _setup_retrievers(self) -> None:
         """Set up retrievers based on the current retrieval config.
 
@@ -187,15 +208,15 @@ class RAGPipeline:
         )
 
         if retrieval_method == "hybrid":
-            hybrid_config = retrieval_config.get("hybrid", {})
+            hybrid_cfg = self._get_hybrid_retriever_config(retrieval_config, top_k)
             self.hybrid_retriever = HybridRetriever(
                 vector_retriever=self.retriever,
                 bm25_retriever=self.bm25_retriever,
-                fusion_method=hybrid_config.get("fusion", "rrf"),
-                rrf_k=hybrid_config.get("rrf_k", 60),
-                vector_weight=hybrid_config.get("vector_weight", 0.7),
-                bm25_weight=hybrid_config.get("bm25_weight", 0.3),
-                top_k=top_k,
+                fusion_method=hybrid_cfg["fusion_method"],
+                rrf_k=hybrid_cfg["rrf_k"],
+                vector_weight=hybrid_cfg["vector_weight"],
+                bm25_weight=hybrid_cfg["bm25_weight"],
+                top_k=hybrid_cfg["top_k"],
             )
 
         self.reranker: Reranker | None = None
@@ -609,20 +630,17 @@ class RAGPipeline:
                 logger.warning(f"Chunks dir not found for BM25: {chunks_dir}")
 
             if self.retrieval_method == "hybrid" and self.hybrid_retriever is not None:
+                retrieval_config = self.config["retrieval"]
+                top_k = retrieval_config["top_k"]
+                hybrid_cfg = self._get_hybrid_retriever_config(retrieval_config, top_k)
                 self.hybrid_retriever = HybridRetriever(
                     vector_retriever=self.retriever,
                     bm25_retriever=self.bm25_retriever,
-                    fusion_method=self.config["retrieval"]
-                    .get("hybrid", {})
-                    .get("fusion", "rrf"),
-                    rrf_k=self.config["retrieval"].get("hybrid", {}).get("rrf_k", 60),
-                    vector_weight=self.config["retrieval"]
-                    .get("hybrid", {})
-                    .get("vector_weight", 0.7),
-                    bm25_weight=self.config["retrieval"]
-                    .get("hybrid", {})
-                    .get("bm25_weight", 0.3),
-                    top_k=self.config["retrieval"]["top_k"],
+                    fusion_method=hybrid_cfg["fusion_method"],
+                    rrf_k=hybrid_cfg["rrf_k"],
+                    vector_weight=hybrid_cfg["vector_weight"],
+                    bm25_weight=hybrid_cfg["bm25_weight"],
+                    top_k=hybrid_cfg["top_k"],
                 )
 
         logger.info(
