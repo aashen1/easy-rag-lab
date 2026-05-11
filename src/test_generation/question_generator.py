@@ -159,9 +159,11 @@ class QuestionGenerator:
             )
 
             if not validation["valid"]:
+                invalid_quotes = validation.get("invalid_quotes", [])
+                reasons = [iq.get("reason", "unknown") for iq in invalid_quotes]
                 logger.debug(
                     f"Evidence validation failed for question type {question_type}: "
-                    f"{validation['reason']}"
+                    f"{'; '.join(reasons)}"
                 )
                 continue
 
@@ -195,9 +197,7 @@ class QuestionGenerator:
                     continue
 
             if qa.get("answer"):
-                numerical_valid = validate_numerical_accuracy(
-                    qa["answer"], evidence_list
-                )
+                numerical_valid, _ = validate_numerical_accuracy(qa)
                 if not numerical_valid:
                     logger.debug(
                         f"Numerical accuracy check failed for {question_type} question"
