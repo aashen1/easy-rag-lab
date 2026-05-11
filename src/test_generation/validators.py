@@ -710,6 +710,9 @@ def verify_excerpt_in_document(
     if not excerpt:
         return False
 
+    if not document_content or not isinstance(document_content, str):
+        return False
+
     excerpt_clean = re.sub(r"\s+", "", excerpt)
     doc_clean = re.sub(r"\s+", "", document_content)
 
