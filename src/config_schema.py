@@ -523,6 +523,22 @@ class LLMEvaluatorConfig(BaseModel):
     )
 
 
+class EvaluationRagasRunConfig(BaseModel):
+    """RAGAS run configuration.
+
+    Attributes:
+        max_workers: Maximum number of parallel workers
+        timeout: Timeout in seconds for each evaluation
+        max_retries: Maximum number of retries on failure
+    """
+
+    model_config = {"extra": "allow"}
+
+    max_workers: int = Field(default=10, gt=0)
+    timeout: int = Field(default=180, gt=0)
+    max_retries: int = Field(default=3, ge=0)
+
+
 class EvaluationRagasConfig(BaseModel):
     """RAGAS evaluation backend configuration.
 
@@ -540,12 +556,8 @@ class EvaluationRagasConfig(BaseModel):
     llm_backend: str = Field(default="anthropic")
     embeddings_backend: str = Field(default="local")
     max_tokens: int = Field(default=8192, gt=0)
-    run_config: dict = Field(
-        default_factory=lambda: {
-            "max_workers": 10,
-            "timeout": 180,
-            "max_retries": 3,
-        }
+    run_config: EvaluationRagasRunConfig = Field(
+        default_factory=EvaluationRagasRunConfig
     )
 
 
@@ -604,6 +616,18 @@ class LLMRetryConfig(BaseModel):
                 f"base_delay ({self.base_delay}) must not exceed max_delay ({self.max_delay})"
             )
         return self
+
+
+class TestGenerationValidationConfig(BaseModel):
+    """Validation configuration for test generation.
+
+    Attributes:
+        check_proper_nouns: Whether to validate proper nouns in questions
+    """
+
+    model_config = {"extra": "allow"}
+
+    check_proper_nouns: bool = Field(default=False)
 
 
 class TestGenerationHybridConfig(BaseModel):
@@ -704,7 +728,9 @@ class TestGenerationConfig(BaseModel):
     supplement_max_tokens: int = Field(default=1024, gt=0)
     initial_max_tokens: int = Field(default=512, gt=0)
     concurrent_generation: int = Field(default=5, gt=0)
-    validation: dict = Field(default_factory=lambda: {"check_proper_nouns": False})
+    validation: TestGenerationValidationConfig = Field(
+        default_factory=TestGenerationValidationConfig
+    )
     hybrid: TestGenerationHybridConfig = Field(
         default_factory=TestGenerationHybridConfig
     )
@@ -779,6 +805,18 @@ class LoggingConfig(BaseModel):
     retention: str = Field(default="7 days")
 
 
+class AgentCheckpointConfig(BaseModel):
+    """Agent checkpoint configuration.
+
+    Attributes:
+        db_path: Path to the checkpoint database file
+    """
+
+    model_config = {"extra": "allow"}
+
+    db_path: str = Field(default="data/agent_checkpoints.db")
+
+
 class AgentDefaultsConfig(BaseModel):
     """Default values for agent operations.
 
@@ -821,9 +859,7 @@ class AgentConfig(BaseModel):
 
     model_config = {"extra": "allow"}
 
-    checkpoint: dict = Field(
-        default_factory=lambda: {"db_path": "data/agent_checkpoints.db"}
-    )
+    checkpoint: AgentCheckpointConfig = Field(default_factory=AgentCheckpointConfig)
     trashbin_dir: str = Field(default=".trashbin")
     maintenance_reports_dir: str = Field(default="data/maintenance_reports")
     subprocess_timeout: int = Field(default=30, gt=0)
