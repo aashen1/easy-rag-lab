@@ -869,7 +869,7 @@ class TestBackwardCompatibility:
 
     @pytest.mark.unit
     def test_experiment_result_backward_compatibility(self):
-        from eval.experiment_reporter import ReportExperimentResult
+        from eval.reporter import ReportExperimentResult
 
         legacy_data = {
             "timestamp": "2026-04-16T10:00:00",
@@ -902,7 +902,7 @@ class TestBackwardCompatibility:
 
     @pytest.mark.unit
     def test_variant_result_backward_compatibility(self):
-        from eval.experiment_reporter import VariantResult
+        from eval.reporter import VariantResult
 
         legacy_data = {
             "variant_name": "baseline",

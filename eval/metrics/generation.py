@@ -13,11 +13,11 @@ if TYPE_CHECKING:
 
 from eval.metrics.utils import (
     DEFAULT_EVAL_BASE_CONFIG,
-    create_llm_client,
     get_eval_config,
     llm_judge,
 )
 from src.exceptions import EvaluationError
+from src.utils import create_llm_client
 
 DEFAULT_EVAL_CONFIG = {
     **DEFAULT_EVAL_BASE_CONFIG,
@@ -308,7 +308,10 @@ def calculate_faithfulness(
     )
 
     try:
-        client = create_llm_client(api_key=api_key, base_url=base_url)
+        client = create_llm_client(
+            llm_config={"api_key": api_key, "base_url": base_url, "model_name": ""},
+            mode="sdk",
+        )
 
         logger.info("Extracting statements from answer")
         statements = extract_statements(
@@ -455,7 +458,10 @@ def calculate_answer_relevancy(
     )
 
     try:
-        client = create_llm_client(api_key=api_key, base_url=base_url)
+        client = create_llm_client(
+            llm_config={"api_key": api_key, "base_url": base_url, "model_name": ""},
+            mode="sdk",
+        )
 
         prompt = ANSWER_RELEVANCY_PROMPT.format(question=question, answer=answer)
 

@@ -10,8 +10,8 @@ from typing import Any
 
 from loguru import logger
 
-from eval.experiment_reporter import ExperimentReporter
 from eval.pipeline_profiler import PipelineProfiler
+from eval.reporter import ExperimentReporter
 from eval.runner.asset_verifier import collect_environment_info, sanitize_config
 from eval.runner.evaluation import evaluate_test_set
 from eval.runner.metrics import compute_aggregate_metrics

@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
-from eval.experiment_reporter import (
+from eval.reporter import (
     LLM_REPORT_PROMPT_TEMPLATE,
     ExperimentReporter,
     ReportExperimentResult,

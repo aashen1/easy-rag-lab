@@ -24,7 +24,6 @@ from eval.metrics.retrieval import (
     calculate_retrieval_diversity,
 )
 from eval.metrics.utils import (
-    create_llm_client,
     normalize_source,
     normalize_source_with_equivalence,
     parse_chunk_id,
@@ -83,6 +82,5 @@ __all__ = [
     "can_infer_from_context",
     "judge_context_relevance",
     "split_into_sentences",
-    "create_llm_client",
     "parse_chunk_id",
 ]

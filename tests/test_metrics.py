@@ -18,7 +18,6 @@ from eval.metrics import (
     calculate_mrr,
     calculate_ndcg,
     calculate_retrieval_diversity,
-    create_llm_client,
     deduplicate_by_document,
     extract_statements,
     normalize_source,
@@ -751,34 +750,6 @@ class TestCalculateAnswerRelevancy:
 
 
 @pytest.mark.unit
-class TestCreateLLMClient:
-    """Tests for create_llm_client function."""
-
-    @patch("src.utils.create_llm_client")
-    def test_create_client_success(self, mockcreate_llm_client):
-        mock_client = MagicMock()
-        mockcreate_llm_client.return_value = mock_client
-
-        client = create_llm_client(
-            api_key="test-api-key", base_url="https://api.test.com/anthropic"
-        )
-
-        assert client == mock_client
-        mockcreate_llm_client.assert_called_once()
-
-    @patch("src.utils.create_llm_client")
-    def test_create_client_with_custom_url(self, mockcreate_llm_client):
-        mock_client = MagicMock()
-        mockcreate_llm_client.return_value = mock_client
-
-        create_llm_client(api_key="test-key", base_url="https://custom.url/api")
-
-        mockcreate_llm_client.assert_called_once()
-        call_kwargs = mockcreate_llm_client.call_args[1]
-        assert call_kwargs["llm_config"]["base_url"] == "https://custom.url/api"
-
-
-@pytest.mark.unit
 class TestExtractStatements:
     """Tests for extract_statements function."""
 
@@ -1101,7 +1072,12 @@ class TestCalculateFaithfulness:
         )
 
         mock_create_client.assert_called_once_with(
-            api_key="test-api-key", base_url="https://custom.api.url/anthropic"
+            llm_config={
+                "api_key": "test-api-key",
+                "base_url": "https://custom.api.url/anthropic",
+                "model_name": "",
+            },
+            mode="sdk",
         )
         mock_extract.assert_called_once_with(
             mock_client,

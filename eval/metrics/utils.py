@@ -193,27 +193,6 @@ def parse_chunk_id(chunk_id: str) -> tuple:
         return (chunk_id, -1)
 
 
-def create_llm_client(
-    api_key: str,
-    base_url: str,
-) -> Any:
-    """Create an Anthropic LLM client with LongCat API adaptation.
-
-    Args:
-        api_key: API key for authentication.
-        base_url: Base URL for the API endpoint.
-
-    Returns:
-        Anthropic client instance.
-    """
-    from src.utils import create_llm_client
-
-    return create_llm_client(
-        llm_config={"api_key": api_key, "base_url": base_url, "model_name": ""},
-        mode="sdk",
-    )
-
-
 def llm_judge(
     client: Any,
     prompt: str,

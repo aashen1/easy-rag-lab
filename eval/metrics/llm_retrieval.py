@@ -5,10 +5,10 @@ from loguru import logger
 
 from eval.metrics.utils import (
     DEFAULT_EVAL_BASE_CONFIG,
-    create_llm_client,
     get_eval_config,
     llm_judge,
 )
+from src.utils import create_llm_client
 
 DEFAULT_EVAL_CONFIG = {
     **DEFAULT_EVAL_BASE_CONFIG,
@@ -78,7 +78,10 @@ def judge_context_relevance(
     Raises:
         Exception: If LLM call fails.
     """
-    client = create_llm_client(api_key=api_key, base_url=base_url)
+    client = create_llm_client(
+        llm_config={"api_key": api_key, "base_url": base_url, "model_name": ""},
+        mode="sdk",
+    )
 
     prompt = CONTEXT_PRECISION_PROMPT.format(
         question=question,
@@ -241,7 +244,10 @@ def can_infer_from_context(
     Raises:
         Exception: If LLM call fails.
     """
-    client = create_llm_client(api_key=api_key, base_url=base_url)
+    client = create_llm_client(
+        llm_config={"api_key": api_key, "base_url": base_url, "model_name": ""},
+        mode="sdk",
+    )
 
     prompt = CONTEXT_RECALL_SENTENCE_PROMPT.format(
         context=context,

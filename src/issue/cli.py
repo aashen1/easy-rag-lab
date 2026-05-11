@@ -1337,7 +1337,7 @@ def migrate(
     """
     from pathlib import Path
 
-    from src.issue.migrate import BacklogMigrator, run_verification
+    from scripts.migrate_issues import BacklogMigrator, run_verification
 
     backlog_path = Path(backlog_file)
     issues_dir = Path(".issues")
