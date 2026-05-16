@@ -744,23 +744,25 @@ def evaluate_with_builtin(
         if not expected_answer and sample.get("expect_retrieval", True):
             expected_answer = sample.get("expected_answer")
 
-        eval_sample = EvaluationSample(
-            question_id=question_id,
-            question=sample["question"],
-            answer=sample["answer"],
-            contexts=sample.get("contexts", []),
-            expected_sources=sample.get("expected_sources"),
-            expected_answer=expected_answer,
-            llm_config=llm_config,
-            retrieval_metrics=retrieval_metrics,
-            generation_metrics=generation_metrics,
-            chunk_ids=sample.get("chunk_ids"),
-            expected_chunks=sample.get("expected_chunks"),
-            equivalence_groups=sample.get("equivalence_groups"),
-            expect_retrieval=sample.get("expect_retrieval", True),
-            expect_no_answer=sample.get("expect_no_answer", False),
-            retrieved_sources=sample.get("retrieved_sources", []),
-            question_type=sample.get("question_type"),
+        eval_sample = (
+            EvaluationSample.builder()
+            .question_id(question_id)
+            .question(sample["question"])
+            .answer(sample["answer"])
+            .contexts(sample.get("contexts", []))
+            .expected_sources(sample.get("expected_sources"))
+            .expected_answer(expected_answer)
+            .llm_config(llm_config)
+            .retrieval_metrics(retrieval_metrics)
+            .generation_metrics(generation_metrics)
+            .chunk_ids(sample.get("chunk_ids"))
+            .expected_chunks(sample.get("expected_chunks"))
+            .equivalence_groups(sample.get("equivalence_groups"))
+            .expect_retrieval(sample.get("expect_retrieval", True))
+            .expect_no_answer(sample.get("expect_no_answer", False))
+            .retrieved_sources(sample.get("retrieved_sources", []))
+            .question_type(sample.get("question_type"))
+            .build()
         )
         valid_entries.append((idx, sample, eval_sample))
 
@@ -823,14 +825,16 @@ def evaluate_with_ragas(
     logger.info(f"Running RAGAS evaluation on {len(valid_samples)} samples...")
 
     ragas_samples = [
-        EvaluationSample(
-            question_id=s.get("question_id", ""),
-            question=s.get("question", ""),
-            answer=s.get("answer", ""),
-            contexts=s.get("contexts", []),
-            expected_sources=s.get("expected_sources"),
-            expected_answer=s.get("expected_answer"),
-            expect_retrieval=s.get("expect_retrieval", True),
+        (
+            EvaluationSample.builder()
+            .question_id(s.get("question_id", ""))
+            .question(s.get("question", ""))
+            .answer(s.get("answer", ""))
+            .contexts(s.get("contexts", []))
+            .expected_sources(s.get("expected_sources"))
+            .expected_answer(s.get("expected_answer"))
+            .expect_retrieval(s.get("expect_retrieval", True))
+            .build()
         )
         for s in valid_samples
     ]
