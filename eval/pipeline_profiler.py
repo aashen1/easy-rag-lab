@@ -537,38 +537,36 @@ class PipelineProfiler:
             "S1" in self._stages
             and self._stages["S1"].duration_seconds > total_duration * 0.3
         ):
-            suggestions.append("1. **PDF解析优化**: 考虑使用并行解析或更快的解析算法")
+            suggestions.append("**PDF解析优化**: 考虑使用并行解析或更快的解析算法")
         if (
             "S3" in self._stages
             and self._stages["S3"].duration_seconds > total_duration * 0.3
         ):
-            suggestions.append("1. **向量嵌入优化**: 考虑增大批处理大小或使用GPU加速")
+            suggestions.append("**向量嵌入优化**: 考虑增大批处理大小或使用GPU加速")
         if (
             "S7" in self._stages
             and self._stages["S7"].duration_seconds > total_duration * 0.3
         ):
-            suggestions.append("1. **答案生成优化**: 考虑使用更快的LLM或减少上下文长度")
+            suggestions.append("**答案生成优化**: 考虑使用更快的LLM或减少上下文长度")
         if (
             "S6" in self._stages
             and self._stages["S6"].duration_seconds > total_duration * 0.3
         ):
-            suggestions.append(
-                "1. **检索优化**: 检索耗时偏高，检查向量索引规模和检索参数"
-            )
+            suggestions.append("**检索优化**: 检索耗时偏高，检查向量索引规模和检索参数")
         if (
             "S9" in self._stages
             and self._stages["S9"].duration_seconds > total_duration * 0.3
         ):
             suggestions.append(
-                "1. **评估计算优化**: 评估阶段耗时偏高，考虑增大 builtin_concurrent_workers 或使用更快的评估模型"
+                "**评估计算优化**: 评估阶段耗时偏高，考虑增大 builtin_concurrent_workers 或使用更快的评估模型"
             )
         if untracked_time > total_duration * 0.1:
             suggestions.append(
-                "1. **未追踪时间**: 存在较多未追踪时间，检查是否有新阶段未纳入 profiling"
+                "**未追踪时间**: 存在较多未追踪时间，检查是否有新阶段未纳入 profiling"
             )
 
         for i, s in enumerate(suggestions, 1):
-            lines.append(f"{i}. {s[3:]}")
+            lines.append(f"{i}. {s}")
 
         lines.append("")
         lines.append("---")

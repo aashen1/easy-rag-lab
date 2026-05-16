@@ -71,8 +71,6 @@ def _cleanup_pipeline(
     embedder is never unloaded here — its lifetime is managed by the
     experiment loop.
     """
-    import gc
-
     if pipeline is None:
         return
     with contextlib.suppress(Exception):
@@ -89,9 +87,6 @@ def _cleanup_pipeline(
             if pipeline.embedder is not None and shared_embedder is None:
                 pipeline.embedder.unload()
             pipeline.embedder = None
-    with contextlib.suppress(Exception):
-        del pipeline
-    gc.collect()
 
 
 def run_variant_evaluation(
@@ -1180,10 +1175,6 @@ def _run_all_variant_evaluations(
 
     if shared_embedder is not None:
         shared_embedder.unload()
-        del shared_embedder
-        import gc
-
-        gc.collect()
         logger.info("Shared Embedder unloaded after all variants")
 
     experiment_tracker.merge(test_generation_tracker)
