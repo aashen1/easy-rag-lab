@@ -1791,10 +1791,13 @@
 
 ### Phase 3: 治本（P2-P3 架构问题）
 
-- [ ] 开始日期: ___
+- [x] 开始日期: 2026-05-16
 - [ ] 完成日期: ___
-- [ ] 完成任务: 0/78
-- [ ] 完成百分比: 0%
+- [x] 完成任务: 3/78 (本次迭代)
+  - ✅ 3.2.2 删除 `eval/metrics/utils.py` 不必要的间接层 - 已确认不存在此问题
+  - ✅ 3.2.3 删除 `eval/experiment_reporter.py` 纯转发模块 - 文件不存在
+  - ✅ 3.2.4 移除 `src/issue/migrate.py` 到 scripts/ - 已完成
+- [x] 完成百分比: 部分完成（本次迭代任务 100%）
 
 ### Phase 4: 测试质量（P5 测试问题）
 
@@ -1822,10 +1825,14 @@
 
 - [x] 开始日期: 2026-05-16
 - [ ] 完成日期: ___
-- [x] 完成任务: 4/4 (本次迭代)
+- [x] 完成任务: 8/8 (累计)
   - ✅ 删除 `del pipeline` + `gc.collect()` 反模式
   - ✅ 修复 `asset_verifier.py` 使用已废弃的 `pkg_resources`
   - ✅ 修复 `pipeline_profiler.py` 编号逻辑 bug
+  - ✅ 删除 `_save_experience_legacy` 方法
+  - ✅ 标记 `prepare_legacy_test_set()` 为待移除
+  - ✅ 统一 JSON 提取正则
+  - ✅ 修复 `eval/visualize.py` 死代码（使用正确的字段名）
 - [x] 完成百分比: 部分完成（本次迭代任务 100%）
 
 ---

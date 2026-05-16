@@ -610,23 +610,6 @@ class TestExperienceStore:
         )
         assert key.startswith("exp_")
 
-    def test_save_experience_legacy_compat(self):
-        from langgraph.store.memory import InMemoryStore
-
-        from src.agent.memory.experience_store import ExperienceStore
-
-        store = InMemoryStore()
-        exp_store = ExperienceStore(store)
-        namespace = ("default", "maintenance_experience", "annual_report")
-        key = exp_store.save_experience(
-            namespace=namespace,
-            experience={
-                "pdf_type": "annual_report",
-                "best_parser": "pymupdf4llm+pdfplumber",
-            },
-        )
-        assert key.startswith("exp_")
-
     def test_get_relevant_experiences(self):
         from langgraph.store.memory import InMemoryStore
 

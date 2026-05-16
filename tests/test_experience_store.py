@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import patch
 
 import pytest
 from langgraph.store.memory import InMemoryStore
@@ -73,33 +72,6 @@ class TestSaveExperienceNewAPI:
         assert item.value["summary"] == ""
         assert item.value["category"] == ""
         assert item.value["details"] == ""
-
-
-class TestSaveExperienceLegacyAPI:
-    def test_legacy_save_emits_deprecation_log(self, experience_store, store):
-        ns = ("maintenance", "experience", "research_report")
-        exp = {"best_parser": "pymupdf4llm", "reason": "表格少"}
-        with patch("src.agent.memory.experience_store.logger.warning") as mock_warn:
-            experience_store.save_experience(namespace=ns, experience=exp)
-            mock_warn.assert_called_once()
-            assert "deprecated" in mock_warn.call_args[0][0].lower()
-
-    def test_legacy_save_stores_data(self, experience_store, store):
-        ns = ("maintenance", "experience", "research_report")
-        exp = {"best_parser": "pymupdf4llm", "reason": "表格少"}
-        with patch("src.agent.memory.experience_store.logger.warning"):
-            key = experience_store.save_experience(namespace=ns, experience=exp)
-        item = store.get(ns, key)
-        assert item is not None
-        assert item.value["best_parser"] == "pymupdf4llm"
-        assert "timestamp" in item.value
-
-    def test_legacy_key_format(self, experience_store):
-        ns = ("maintenance", "experience", "test")
-        exp = {"data": "value"}
-        with patch("src.agent.memory.experience_store.logger.warning"):
-            key = experience_store.save_experience(namespace=ns, experience=exp)
-        assert key.startswith("exp_")
 
 
 class TestGetRelevantExperiences:

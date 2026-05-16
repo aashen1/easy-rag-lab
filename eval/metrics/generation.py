@@ -374,7 +374,7 @@ def parse_relevancy_response(response_text: str) -> dict[str, Any]:
     Raises:
         ValueError: If response cannot be parsed as JSON.
     """
-    json_match = re.search(r"\{[^{}]*\}", response_text, re.DOTALL)
+    json_match = re.search(r"\{[\s\S]*\}", response_text, re.DOTALL)
     if json_match:
         try:
             return json.loads(json_match.group(), strict=False)

@@ -223,6 +223,13 @@ def prepare_legacy_test_set(
     """
     Legacy test set preparation for old format configs.
 
+    .. deprecated:: v0.2.0
+        This function handles deprecated test set configuration format.
+        Use :func:`prepare_test_sets` instead, which supports the new format.
+        This function will be removed in v0.3.0.
+
+    TODO: Remove in v0.3.0 after all experiments migrated to new config format.
+
     Args:
         system_config: System configuration dictionary.
         meal_name: Name of the meal.
@@ -239,6 +246,14 @@ def prepare_legacy_test_set(
     Raises:
         FileNotFoundError: If test set doesn't exist and skip_preprocessing is True.
     """
+    import warnings
+
+    warnings.warn(
+        "prepare_legacy_test_set is deprecated and will be removed in v0.3.0. "
+        "Use prepare_test_sets with the new config format instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     meal_dir = meal_manager.get_meal_dir(meal_name)
     test_sets_dir = meal_dir / "test_sets"
 
