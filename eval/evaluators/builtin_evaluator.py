@@ -471,23 +471,12 @@ class BuiltinEvaluator(BaseEvaluator):
                 logger.info(
                     f"Evaluating sample {i + 1}/{len(samples)}: {sample.question_id}"
                 )
-                merged = EvaluationSample(
-                    question_id=sample.question_id,
-                    question=sample.question,
-                    answer=sample.answer,
-                    contexts=sample.contexts,
-                    expected_sources=sample.expected_sources,
-                    expected_answer=sample.expected_answer,
-                    llm_config=llm_config or sample.llm_config,
-                    retrieval_metrics=retrieval_metrics or sample.retrieval_metrics,
-                    generation_metrics=generation_metrics or sample.generation_metrics,
-                    chunk_ids=sample.chunk_ids,
-                    expected_chunks=sample.expected_chunks,
-                    equivalence_groups=sample.equivalence_groups,
-                    expect_retrieval=sample.expect_retrieval,
-                    expect_no_answer=sample.expect_no_answer,
-                    retrieved_sources=sample.retrieved_sources,
-                    question_type=sample.question_type,
+                merged = (
+                    sample.to_builder()
+                    .llm_config(llm_config or sample.llm_config)
+                    .retrieval_metrics(retrieval_metrics or sample.retrieval_metrics)
+                    .generation_metrics(generation_metrics or sample.generation_metrics)
+                    .build()
                 )
                 result = self.evaluate_single(merged)
                 results.append(result)
@@ -501,23 +490,12 @@ class BuiltinEvaluator(BaseEvaluator):
 
         merged_samples = []
         for sample in samples:
-            merged = EvaluationSample(
-                question_id=sample.question_id,
-                question=sample.question,
-                answer=sample.answer,
-                contexts=sample.contexts,
-                expected_sources=sample.expected_sources,
-                expected_answer=sample.expected_answer,
-                llm_config=llm_config or sample.llm_config,
-                retrieval_metrics=retrieval_metrics or sample.retrieval_metrics,
-                generation_metrics=generation_metrics or sample.generation_metrics,
-                chunk_ids=sample.chunk_ids,
-                expected_chunks=sample.expected_chunks,
-                equivalence_groups=sample.equivalence_groups,
-                expect_retrieval=sample.expect_retrieval,
-                expect_no_answer=sample.expect_no_answer,
-                retrieved_sources=sample.retrieved_sources,
-                question_type=sample.question_type,
+            merged = (
+                sample.to_builder()
+                .llm_config(llm_config or sample.llm_config)
+                .retrieval_metrics(retrieval_metrics or sample.retrieval_metrics)
+                .generation_metrics(generation_metrics or sample.generation_metrics)
+                .build()
             )
             merged_samples.append(merged)
 

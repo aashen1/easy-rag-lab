@@ -58,6 +58,25 @@ class EvaluationSample:
     retrieved_sources: list[str] | None = None
     question_type: str | None = None
 
+    def to_builder(self) -> "EvaluationSampleBuilder":
+        """
+        Convert current instance to a Builder for modification.
+
+        Returns:
+            EvaluationSampleBuilder initialized with current values.
+        """
+        return EvaluationSampleBuilder(self)
+
+    @classmethod
+    def builder(cls) -> "EvaluationSampleBuilder":
+        """
+        Create a new Builder instance.
+
+        Returns:
+            Empty EvaluationSampleBuilder instance.
+        """
+        return EvaluationSampleBuilder()
+
 
 @dataclass
 class EvaluationResult:
@@ -264,3 +283,141 @@ class BaseEvaluator(ABC):
                 )
 
         return errors
+
+
+class EvaluationSampleBuilder:
+    """
+    Builder pattern for constructing EvaluationSample objects.
+
+    Provides a fluent API for creating and modifying EvaluationSample
+    instances, reducing code duplication and improving maintainability.
+
+    Args:
+        base: Optional EvaluationSample to initialize the builder with.
+
+    Returns:
+        EvaluationSampleBuilder instance.
+
+    Example:
+        >>> sample = (EvaluationSample.builder()
+        ...     .question_id("q1")
+        ...     .question("What is RAG?")
+        ...     .answer("RAG is Retrieval-Augmented Generation")
+        ...     .contexts(["context1", "context2"])
+        ...     .build())
+    """
+
+    def __init__(self, base: EvaluationSample | None = None):
+        """Initialize builder with optional base sample."""
+        if base is not None:
+            self._data = {
+                "question_id": base.question_id,
+                "question": base.question,
+                "answer": base.answer,
+                "contexts": base.contexts.copy() if base.contexts else [],
+                "expected_sources": base.expected_sources,
+                "expected_answer": base.expected_answer,
+                "llm_config": base.llm_config,
+                "retrieval_metrics": base.retrieval_metrics,
+                "generation_metrics": base.generation_metrics,
+                "chunk_ids": base.chunk_ids,
+                "expected_chunks": base.expected_chunks,
+                "equivalence_groups": base.equivalence_groups,
+                "expect_retrieval": base.expect_retrieval,
+                "expect_no_answer": base.expect_no_answer,
+                "retrieved_sources": base.retrieved_sources,
+                "question_type": base.question_type,
+            }
+        else:
+            self._data: dict[str, Any] = {}
+
+    def question_id(self, value: str) -> "EvaluationSampleBuilder":
+        """Set question_id field."""
+        self._data["question_id"] = value
+        return self
+
+    def question(self, value: str) -> "EvaluationSampleBuilder":
+        """Set question field."""
+        self._data["question"] = value
+        return self
+
+    def answer(self, value: str) -> "EvaluationSampleBuilder":
+        """Set answer field."""
+        self._data["answer"] = value
+        return self
+
+    def contexts(self, value: list[str]) -> "EvaluationSampleBuilder":
+        """Set contexts field."""
+        self._data["contexts"] = value
+        return self
+
+    def expected_sources(self, value: list[str] | None) -> "EvaluationSampleBuilder":
+        """Set expected_sources field."""
+        self._data["expected_sources"] = value
+        return self
+
+    def expected_answer(self, value: str | None) -> "EvaluationSampleBuilder":
+        """Set expected_answer field."""
+        self._data["expected_answer"] = value
+        return self
+
+    def llm_config(self, value: dict[str, str] | None) -> "EvaluationSampleBuilder":
+        """Set llm_config field."""
+        self._data["llm_config"] = value
+        return self
+
+    def retrieval_metrics(self, value: list[str] | None) -> "EvaluationSampleBuilder":
+        """Set retrieval_metrics field."""
+        self._data["retrieval_metrics"] = value
+        return self
+
+    def generation_metrics(self, value: list[str] | None) -> "EvaluationSampleBuilder":
+        """Set generation_metrics field."""
+        self._data["generation_metrics"] = value
+        return self
+
+    def chunk_ids(self, value: list[str] | None) -> "EvaluationSampleBuilder":
+        """Set chunk_ids field."""
+        self._data["chunk_ids"] = value
+        return self
+
+    def expected_chunks(self, value: list[str] | None) -> "EvaluationSampleBuilder":
+        """Set expected_chunks field."""
+        self._data["expected_chunks"] = value
+        return self
+
+    def equivalence_groups(
+        self, value: dict[str, list[str]] | None
+    ) -> "EvaluationSampleBuilder":
+        """Set equivalence_groups field."""
+        self._data["equivalence_groups"] = value
+        return self
+
+    def expect_retrieval(self, value: bool) -> "EvaluationSampleBuilder":
+        """Set expect_retrieval field."""
+        self._data["expect_retrieval"] = value
+        return self
+
+    def expect_no_answer(self, value: bool) -> "EvaluationSampleBuilder":
+        """Set expect_no_answer field."""
+        self._data["expect_no_answer"] = value
+        return self
+
+    def retrieved_sources(self, value: list[str] | None) -> "EvaluationSampleBuilder":
+        """Set retrieved_sources field."""
+        self._data["retrieved_sources"] = value
+        return self
+
+    def question_type(self, value: str | None) -> "EvaluationSampleBuilder":
+        """Set question_type field."""
+        self._data["question_type"] = value
+        return self
+
+    def build(self) -> EvaluationSample:
+        """
+        Build the final EvaluationSample object.
+
+        Returns:
+            EvaluationSample instance with all configured values.
+        """
+        return EvaluationSample(**self._data)
