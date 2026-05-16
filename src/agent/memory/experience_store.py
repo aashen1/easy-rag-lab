@@ -23,17 +23,7 @@ class ExperienceStore:
         session_id: str | None = None,
         pdf_type: str | None = None,
         source_path: str | None = None,
-        *,
-        namespace: tuple[str, ...] | None = None,
-        experience: dict[str, Any] | None = None,
     ) -> str:
-        if namespace is not None and experience is not None:
-            logger.warning(
-                "save_experience(namespace, experience) is deprecated. "
-                "Use save_experience(summary, category, details, ...) instead."
-            )
-            return self._save_experience_legacy(namespace, experience)
-
         key = f"exp_{uuid.uuid4().hex[:12]}"
         ns = self.NAMESPACE_PREFIX + ((pdf_type,) if pdf_type else ("generic",))
         value: dict[str, Any] = {
@@ -51,19 +41,6 @@ class ExperienceStore:
             return key
         except Exception as e:
             logger.error(f"Failed to save experience: {e}")
-            raise
-
-    def _save_experience_legacy(
-        self, namespace: tuple[str, ...], experience: dict[str, Any]
-    ) -> str:
-        key = f"exp_{uuid.uuid4().hex[:12]}"
-        experience["timestamp"] = datetime.now().isoformat()
-        try:
-            self._store.put(namespace, key, experience)
-            logger.info(f"Saved experience (legacy) to {namespace}/{key}")
-            return key
-        except Exception as e:
-            logger.error(f"Failed to save experience (legacy): {e}")
             raise
 
     def get_relevant_experiences(self, pdf_type: str | None = None) -> list[dict]:

@@ -9,35 +9,6 @@ import pytest
 
 from src.meal.models import MealConfig, MealFile
 
-_TORCH_DEP_FILES = frozenset(
-    {
-        "test_reranker",
-        "test_embedder",
-        "test_pipeline",
-        "test_indexer",
-        "test_retriever",
-        "test_hybrid_retriever",
-        "test_interactive_qa",
-        "test_run_eval",
-        "test_checkpoint_resume",
-        "test_regression",
-        "test_agent",
-        "test_e2e_experiment",
-    }
-)
-
-
-def pytest_collection_modifyitems(items):
-    for item in items:
-        module_name = Path(item.module.__file__).stem
-        if module_name in _TORCH_DEP_FILES:
-            item.add_marker(pytest.mark.xdist_group("torch"))
-        if module_name == "test_indexer_extensions" or module_name == "test_index":
-            rel = str(Path(item.module.__file__))
-            if "test_core_ops" in rel:
-                item.add_marker(pytest.mark.xdist_group("torch"))
-
-
 warnings.simplefilter("always", DeprecationWarning)
 
 

@@ -26,13 +26,13 @@ cmd = "pre-commit run --all-files"
 cmd = "pytest tests/test_app_smoke.py -m \"unit\" --tb=short -q --durations=5"
 
 [tasks.test-unit]
-cmd = "pytest tests/ -m \"unit\" --tb=short -q --durations=5 -n auto --dist loadgroup --max-worker-restart=2"
+cmd = "pytest tests/ -m \"unit\" --tb=short -q --durations=5"
 
 [tasks.test]
-cmd = "pytest tests/ -m \"not integration and not slow\" --tb=short -q --durations=10 -n auto --dist loadgroup --max-worker-restart=2"
+cmd = "pytest tests/ -m \"not integration and not slow\" --tb=short -q --durations=10"
 
 [tasks.test-all]
-cmd = "pytest tests/ --tb=short -q --durations=10 -n auto --dist loadgroup --max-worker-restart=2"
+cmd = "pytest tests/ --tb=short -q --durations=10"
 
 [tasks.interactive]
 cmd = "python main.py --interactive"

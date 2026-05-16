@@ -1,4 +1,3 @@
-import json
 import re
 from typing import Any
 
@@ -6,10 +5,10 @@ from loguru import logger
 
 from eval.metrics.utils import (
     DEFAULT_EVAL_BASE_CONFIG,
-    create_llm_client,
     get_eval_config,
+    llm_judge,
 )
-from src.llm_retry import call_with_retry
+from src.utils import create_llm_client
 
 DEFAULT_EVAL_CONFIG = {
     **DEFAULT_EVAL_BASE_CONFIG,
@@ -79,7 +78,10 @@ def judge_context_relevance(
     Raises:
         Exception: If LLM call fails.
     """
-    client = create_llm_client(api_key=api_key, base_url=base_url)
+    client = create_llm_client(
+        llm_config={"api_key": api_key, "base_url": base_url, "model_name": ""},
+        mode="sdk",
+    )
 
     prompt = CONTEXT_PRECISION_PROMPT.format(
         question=question,
@@ -88,19 +90,15 @@ def judge_context_relevance(
     )
 
     try:
-        message = call_with_retry(
-            client.messages.create,
-            model=model_name,
+        result = llm_judge(
+            client=client,
+            prompt=prompt,
+            model_name=model_name,
             max_tokens=256,
             temperature=0.0,
-            messages=[{"role": "user", "content": prompt}],
         )
 
-        response_text = message.content[0].text.strip()
-
-        json_match = re.search(r"\{[\s\S]*\}", response_text)
-        if json_match:
-            result = json.loads(json_match.group(), strict=False)
+        if result:
             verdict = result.get("verdict", "否")
             return verdict.strip() == "是"
 
@@ -246,7 +244,10 @@ def can_infer_from_context(
     Raises:
         Exception: If LLM call fails.
     """
-    client = create_llm_client(api_key=api_key, base_url=base_url)
+    client = create_llm_client(
+        llm_config={"api_key": api_key, "base_url": base_url, "model_name": ""},
+        mode="sdk",
+    )
 
     prompt = CONTEXT_RECALL_SENTENCE_PROMPT.format(
         context=context,
@@ -254,19 +255,15 @@ def can_infer_from_context(
     )
 
     try:
-        message = call_with_retry(
-            client.messages.create,
-            model=model_name,
+        result = llm_judge(
+            client=client,
+            prompt=prompt,
+            model_name=model_name,
             max_tokens=64,
             temperature=0.0,
-            messages=[{"role": "user", "content": prompt}],
         )
 
-        response_text = message.content[0].text.strip()
-
-        json_match = re.search(r"\{[\s\S]*\}", response_text)
-        if json_match:
-            result = json.loads(json_match.group(), strict=False)
+        if result:
             verdict = result.get("verdict", "否")
             return verdict.strip() == "是"
 

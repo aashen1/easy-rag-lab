@@ -40,6 +40,7 @@ from src.test_generation.models import (
     TYPE_DISTRIBUTION,
     VALIDATION_STRICTNESS,
 )
+from src.test_generation.question_generator import QuestionGenerator
 from src.test_generation.segment_builder import (
     build_segments_from_pages,
     compact_segments,
@@ -114,6 +115,15 @@ class TestSetGenerator:
         validation_config = tg_config.get("validation", {})
         self.check_proper_nouns = validation_config.get("check_proper_nouns", True)
         self._doc_truncate_cache: dict[str, str] = {}
+
+        self._question_generator = QuestionGenerator(
+            config=config,
+            max_retries=self.max_retries,
+            multi_hop_candidate_count=self.multi_hop_candidate_count,
+            segment_sampling_strategy=self.segment_sampling_strategy,
+            compact_segment_max_chars=self.compact_segment_max_chars,
+            quote_fuzzy_match_threshold=self.quote_fuzzy_match_threshold,
+        )
 
     def generate_test_set(
         self,
@@ -403,6 +413,129 @@ class TestSetGenerator:
         test_set_manager = TestSetManager(self.config)
         return test_set_manager.save_test_set(meal_name, test_set)
 
+    def _prepare_document_segments(
+        self,
+        doc_name: str,
+        doc_data: dict,
+        doc_pages_map: dict,
+    ) -> list[dict[str, Any]]:
+        """Prepare segments for a document from pages or content.
+
+        Args:
+            doc_name: Document name.
+            doc_data: Document data dict with 'content' key.
+            doc_pages_map: Map of doc names to page lists.
+
+        Returns:
+            List of segment dictionaries.
+        """
+        pages = doc_pages_map.get(doc_name, [])
+        if pages:
+            return build_segments_from_pages(pages, self.segment_size)
+        else:
+            segments = segment_document(doc_data["content"], self.segment_size)
+            for seg in segments:
+                seg["page_numbers"] = []
+                seg["source_type"] = "fallback"
+            return segments
+
+    def _create_question_metadata(
+        self,
+        qa: dict,
+        q_type: str,
+        source_path: str,
+        doc_name: str,
+        question_id: int,
+        category: str,
+    ) -> dict:
+        """Add standard metadata fields to a question dict.
+
+        Args:
+            qa: Question-answer dictionary to update.
+            q_type: Question type.
+            source_path: Source file path.
+            doc_name: Document name.
+            question_id: Question ID number.
+            category: Category label (e.g., 'hybrid', 'golden').
+
+        Returns:
+            Updated question dictionary.
+        """
+        qa["id"] = (
+            f"{category}_{question_id:03d}"
+            if category == "golden"
+            else f"q{question_id:03d}"
+        )
+        qa["source_document"] = doc_name
+        qa["category"] = category
+
+        if q_type == "irrelevant":
+            qa["source_files"] = []
+            qa["source_chunks"] = []
+            qa["expect_retrieval"] = False
+        elif q_type == "missing":
+            qa["source_files"] = [source_path]
+            qa["source_chunks"] = []
+            qa["expect_no_answer"] = True
+            qa["expect_retrieval"] = False
+        else:
+            qa["source_files"] = [source_path]
+
+        return qa
+
+    def _build_weighted_type_selector(
+        self, type_distribution: dict[str, float]
+    ) -> list[tuple[str, float]]:
+        """Build a weighted type selector for random type selection.
+
+        Args:
+            type_distribution: Dict mapping type names to weights.
+
+        Returns:
+            List of (type, cumulative_threshold) tuples.
+        """
+        all_types = list(type_distribution.keys())
+        type_weights = [type_distribution[t] for t in all_types]
+        total_weight = sum(type_weights)
+
+        if total_weight > 0:
+            cumulative = 0.0
+            weighted_types = []
+            for t, w in zip(all_types, type_weights, strict=False):
+                cumulative += w / total_weight
+                weighted_types.append((t, cumulative))
+            return weighted_types
+        else:
+            step = 1.0 / len(all_types)
+            return [(t, (i + 1) * step) for i, t in enumerate(all_types)]
+
+    def _select_weighted_type(
+        self,
+        weighted_types: list[tuple[str, float]],
+        type_deficits: dict[str, int] | None = None,
+        attempt_index: int = 0,
+    ) -> str:
+        """Select a question type using weighted distribution or deficit priority.
+
+        Args:
+            weighted_types: List of (type, cumulative_threshold) tuples.
+            type_deficits: Optional dict of type deficits to prioritize.
+            attempt_index: Index for round-robin selection from deficit types.
+
+        Returns:
+            Selected question type string.
+        """
+        if type_deficits:
+            max_deficit = max(type_deficits.values())
+            deficit_types = [t for t, d in type_deficits.items() if d == max_deficit]
+            return deficit_types[attempt_index % len(deficit_types)]
+
+        r = random.random()
+        for t, threshold in weighted_types:
+            if r <= threshold:
+                return t
+        return weighted_types[0][0]
+
     def generate_hybrid_questions(
         self,
         meal_name: str,
@@ -518,7 +651,7 @@ class TestSetGenerator:
             segments, doc_chunks, q_type, source_path, doc_name, doc_content
         ):
             gen = assign_generator()
-            qa = self._generate_hybrid_question(
+            qa = self._question_generator.generate_hybrid_question(
                 segments=segments,
                 doc_chunks=doc_chunks,
                 question_type=q_type,
@@ -538,14 +671,9 @@ class TestSetGenerator:
             source_path = doc_data["source_path"]
             doc_chunks = doc_chunks_map.get(doc_name, [])
 
-            pages = doc_pages_map.get(doc_name, [])
-            if pages:
-                segments = build_segments_from_pages(pages, self.segment_size)
-            else:
-                segments = segment_document(doc_content, self.segment_size)
-                for seg in segments:
-                    seg["page_numbers"] = []
-                    seg["source_type"] = "fallback"
+            segments = self._prepare_document_segments(
+                doc_name, doc_data, doc_pages_map
+            )
             if not segments:
                 logger.warning(f"No segments generated for document: {doc_name}")
                 continue
@@ -598,7 +726,7 @@ class TestSetGenerator:
                                 qa["source_files"] = [src_path]
 
                             with _list_lock:
-                                if self._post_process_question(
+                                if self._question_generator.post_process_question(
                                     qa, doc_content, seen_questions
                                 ):
                                     questions.append(qa)
@@ -619,7 +747,7 @@ class TestSetGenerator:
                         f"(type={q_type}, doc={doc_name})..."
                     )
 
-                    qa = self._generate_hybrid_question(
+                    qa = self._question_generator.generate_hybrid_question(
                         segments=segments,
                         doc_chunks=doc_chunks,
                         question_type=q_type,
@@ -646,7 +774,9 @@ class TestSetGenerator:
                         else:
                             qa["source_files"] = [source_path]
 
-                        if self._post_process_question(qa, doc_content, seen_questions):
+                        if self._question_generator.post_process_question(
+                            qa, doc_content, seen_questions
+                        ):
                             questions.append(qa)
                             question_id += 1
                         else:
@@ -665,43 +795,22 @@ class TestSetGenerator:
                 f"Supplementing {deficit} more questions..."
             )
             doc_names = list(document_contents.keys())
-            all_types = list(type_distribution.keys())
-            type_weights = [type_distribution[t] for t in all_types]
-            total_weight = sum(type_weights)
-            weighted_types = []
-            if total_weight > 0:
-                cumulative = 0.0
-                for t, w in zip(all_types, type_weights, strict=False):
-                    cumulative += w / total_weight
-                    weighted_types.append((t, cumulative))
-            else:
-                step = 1.0 / len(all_types)
-                weighted_types = [(t, (i + 1) * step) for i, t in enumerate(all_types)]
+            weighted_types = self._build_weighted_type_selector(type_distribution)
             extra_attempt = 0
             max_extra_attempts = deficit * 3
 
             while len(questions) < num_questions and extra_attempt < max_extra_attempts:
                 extra_attempt += 1
                 doc_name = doc_names[extra_attempt % len(doc_names)]
-                r = random.random()
-                q_type = all_types[0]
-                for t, threshold in weighted_types:
-                    if r <= threshold:
-                        q_type = t
-                        break
+                q_type = self._select_weighted_type(weighted_types)
                 doc_data = document_contents[doc_name]
                 doc_content = doc_data["content"]
                 source_path = doc_data["source_path"]
                 doc_chunks = doc_chunks_map.get(doc_name, [])
 
-                pages = doc_pages_map.get(doc_name, [])
-                if pages:
-                    segments = build_segments_from_pages(pages, self.segment_size)
-                else:
-                    segments = segment_document(doc_content, self.segment_size)
-                    for seg in segments:
-                        seg["page_numbers"] = []
-                        seg["source_type"] = "fallback"
+                segments = self._prepare_document_segments(
+                    doc_name, doc_data, doc_pages_map
+                )
                 if not segments:
                     continue
 
@@ -710,7 +819,7 @@ class TestSetGenerator:
                     f"(type={q_type}, doc={doc_name})..."
                 )
 
-                qa = self._generate_hybrid_question(
+                qa = self._question_generator.generate_hybrid_question(
                     segments=segments,
                     doc_chunks=doc_chunks,
                     question_type=q_type,
@@ -721,23 +830,12 @@ class TestSetGenerator:
                 )
 
                 if qa is not None:
-                    qa["id"] = f"q{question_id:03d}"
-                    qa["source_document"] = doc_name
-                    qa["category"] = "hybrid"
-
-                    if q_type == "irrelevant":
-                        qa["source_files"] = []
-                        qa["source_chunks"] = []
-                        qa["expect_retrieval"] = False
-                    elif q_type == "missing":
-                        qa["source_files"] = [source_path]
-                        qa["source_chunks"] = []
-                        qa["expect_no_answer"] = True
-                        qa["expect_retrieval"] = False
-                    else:
-                        qa["source_files"] = [source_path]
-
-                    if self._post_process_question(qa, doc_content, seen_questions):
+                    self._create_question_metadata(
+                        qa, q_type, source_path, doc_name, question_id, "hybrid"
+                    )
+                    if self._question_generator.post_process_question(
+                        qa, doc_content, seen_questions
+                    ):
                         questions.append(qa)
                         question_id += 1
                     else:
@@ -907,14 +1005,9 @@ class TestSetGenerator:
             source_path = doc_data["source_path"]
             doc_chunks = doc_chunks_map.get(doc_name, [])
 
-            pages = doc_pages_map.get(doc_name, [])
-            if pages:
-                segments = build_segments_from_pages(pages, self.segment_size)
-            else:
-                segments = segment_document(doc_content, self.segment_size)
-                for seg in segments:
-                    seg["page_numbers"] = []
-                    seg["source_type"] = "fallback"
+            segments = self._prepare_document_segments(
+                doc_name, doc_data, doc_pages_map
+            )
             if not segments:
                 logger.warning(f"No segments for document: {doc_name}")
                 continue
@@ -928,7 +1021,7 @@ class TestSetGenerator:
                     f"(type={q_type}, doc={doc_name})..."
                 )
 
-                qa = self._generate_hybrid_question(
+                qa = self._question_generator.generate_hybrid_question(
                     segments=segments,
                     doc_chunks=doc_chunks,
                     question_type=q_type,
@@ -939,28 +1032,17 @@ class TestSetGenerator:
                 )
 
                 if qa is not None:
-                    qa["id"] = f"golden_{question_id:03d}"
-                    qa["source_document"] = doc_name
-                    qa["category"] = "golden"
-
-                    if q_type == "irrelevant":
-                        qa["source_files"] = []
-                        qa["source_chunks"] = []
-                        qa["expect_retrieval"] = False
-                    elif q_type == "missing":
-                        qa["source_files"] = [source_path]
-                        qa["source_chunks"] = []
-                        qa["expect_no_answer"] = True
-                        qa["expect_retrieval"] = False
-                    else:
-                        qa["source_files"] = [source_path]
-
-                    if self._post_process_question(
+                    self._create_question_metadata(
+                        qa, q_type, source_path, doc_name, question_id, "golden"
+                    )
+                    if self._question_generator.post_process_question(
                         qa,
                         doc_content,
                         seen_questions,
                         check_answer_consistency=True,
                         golden_metadata={},
+                        validation_strictness=self.VALIDATION_STRICTNESS,
+                        check_proper_nouns=self.check_proper_nouns,
                     ):
                         questions.append(qa)
                         question_id += 1
@@ -998,18 +1080,7 @@ class TestSetGenerator:
                 logger.info(f"Type deficits after main loop: {type_deficits}")
 
             doc_names = list(filtered_contents.keys())
-            all_types = list(type_distribution.keys())
-            type_weights = [type_distribution[t] for t in all_types]
-            total_weight = sum(type_weights)
-            weighted_types = []
-            if total_weight > 0:
-                cumulative = 0.0
-                for t, w in zip(all_types, type_weights, strict=False):
-                    cumulative += w / total_weight
-                    weighted_types.append((t, cumulative))
-            else:
-                step = 1.0 / len(all_types)
-                weighted_types = [(t, (i + 1) * step) for i, t in enumerate(all_types)]
+            weighted_types = self._build_weighted_type_selector(type_distribution)
             extra_attempt = 0
             max_extra_attempts = deficit * 3
 
@@ -1017,32 +1088,19 @@ class TestSetGenerator:
                 extra_attempt += 1
                 doc_name = doc_names[extra_attempt % len(doc_names)]
 
-                if type_deficits:
-                    max_deficit = max(type_deficits.values())
-                    deficit_types = [
-                        t for t, d in type_deficits.items() if d == max_deficit
-                    ]
-                    q_type = deficit_types[extra_attempt % len(deficit_types)]
-                else:
-                    r = random.random()
-                    q_type = all_types[0]
-                    for t, threshold in weighted_types:
-                        if r <= threshold:
-                            q_type = t
-                            break
+                q_type = self._select_weighted_type(
+                    weighted_types,
+                    type_deficits if type_deficits else None,
+                    extra_attempt,
+                )
                 doc_data = filtered_contents[doc_name]
                 doc_content = doc_data["content"]
                 source_path = doc_data["source_path"]
                 doc_chunks = doc_chunks_map.get(doc_name, [])
 
-                pages = doc_pages_map.get(doc_name, [])
-                if pages:
-                    segments = build_segments_from_pages(pages, self.segment_size)
-                else:
-                    segments = segment_document(doc_content, self.segment_size)
-                    for seg in segments:
-                        seg["page_numbers"] = []
-                        seg["source_type"] = "fallback"
+                segments = self._prepare_document_segments(
+                    doc_name, doc_data, doc_pages_map
+                )
                 if not segments:
                     continue
 
@@ -1051,7 +1109,7 @@ class TestSetGenerator:
                     f"(type={q_type}, doc={doc_name})..."
                 )
 
-                qa = self._generate_hybrid_question(
+                qa = self._question_generator.generate_hybrid_question(
                     segments=segments,
                     doc_chunks=doc_chunks,
                     question_type=q_type,
@@ -1062,28 +1120,18 @@ class TestSetGenerator:
                 )
 
                 if qa is not None:
-                    qa["id"] = f"golden_{question_id:03d}"
-                    qa["source_document"] = doc_name
-                    qa["category"] = "golden"
+                    self._create_question_metadata(
+                        qa, q_type, source_path, doc_name, question_id, "golden"
+                    )
 
-                    if q_type == "irrelevant":
-                        qa["source_files"] = []
-                        qa["source_chunks"] = []
-                        qa["expect_retrieval"] = False
-                    elif q_type == "missing":
-                        qa["source_files"] = [source_path]
-                        qa["source_chunks"] = []
-                        qa["expect_no_answer"] = True
-                        qa["expect_retrieval"] = False
-                    else:
-                        qa["source_files"] = [source_path]
-
-                    if self._post_process_question(
+                    if self._question_generator.post_process_question(
                         qa,
                         doc_content,
                         seen_questions,
                         check_answer_consistency=True,
                         golden_metadata={},
+                        validation_strictness=self.VALIDATION_STRICTNESS,
+                        check_proper_nouns=self.check_proper_nouns,
                     ):
                         questions.append(qa)
                         question_id += 1

@@ -18,7 +18,6 @@ from eval.metrics import (
     calculate_mrr,
     calculate_ndcg,
     calculate_retrieval_diversity,
-    create_llm_client,
     deduplicate_by_document,
     extract_statements,
     normalize_source,
@@ -32,66 +31,45 @@ from src.exceptions import EvaluationError
 
 @pytest.mark.unit
 class TestNormalizeSource:
-    def test_md_path_with_directory(self):
-        assert (
-            normalize_source("annual_report/贵州茅台2023年年度报告.md")
-            == "贵州茅台2023年年度报告"
-        )
-
-    def test_pdf_filename(self):
-        assert (
-            normalize_source("贵州茅台2023年年度报告.pdf") == "贵州茅台2023年年度报告"
-        )
-
-    def test_plain_name_no_extension(self):
-        assert normalize_source("贵州茅台2023年年度报告") == "贵州茅台2023年年度报告"
-
-    def test_nested_path(self):
-        assert normalize_source("a/b/c/report.md") == "report"
-
-    def test_dot_in_stem(self):
-        assert (
-            normalize_source("贵州茅台2023年年度报告_英文版_.pdf")
-            == "贵州茅台2023年年度报告_英文版_"
-        )
+    @pytest.mark.parametrize(
+        "input_path,kwargs,expected",
+        [
+            ("annual_report/贵州茅台2023年年度报告.md", {}, "贵州茅台2023年年度报告"),
+            ("贵州茅台2023年年度报告.pdf", {}, "贵州茅台2023年年度报告"),
+            ("贵州茅台2023年年度报告", {}, "贵州茅台2023年年度报告"),
+            ("a/b/c/report.md", {}, "report"),
+            (
+                "贵州茅台2023年年度报告_英文版_.pdf",
+                {},
+                "贵州茅台2023年年度报告_英文版_",
+            ),
+            (
+                "annual_reports/2025/贵州茅台.md",
+                {"include_parent": True},
+                "2025/贵州茅台",
+            ),
+            ("annual_reports/2025/贵州茅台.md", {"include_parent": False}, "贵州茅台"),
+            ("贵州茅台.md", {"include_parent": True}, "贵州茅台"),
+            ("./贵州茅台.md", {"include_parent": True}, "贵州茅台"),
+            ("a/b/c/report.md", {"include_parent": True}, "c/report"),
+            (
+                "annual_report\\贵州茅台2023年年度报告.md",
+                {"include_parent": True},
+                "annual_report/贵州茅台2023年年度报告",
+            ),
+        ],
+    )
+    def test_normalize_source(self, input_path, kwargs, expected):
+        assert normalize_source(input_path, **kwargs) == expected
 
     def test_both_formats_produce_same_stem(self):
         md_result = normalize_source("annual_report/贵州茅台2023年年度报告.md")
         pdf_result = normalize_source("贵州茅台2023年年度报告.pdf")
         assert md_result == pdf_result
 
-    def test_path_with_parent_include_parent(self):
-        assert (
-            normalize_source("annual_reports/2025/贵州茅台.md", include_parent=True)
-            == "2025/贵州茅台"
-        )
-
-    def test_path_with_parent_exclude_parent(self):
-        assert (
-            normalize_source("annual_reports/2025/贵州茅台.md", include_parent=False)
-            == "贵州茅台"
-        )
-
-    def test_no_parent_include_parent(self):
-        assert normalize_source("贵州茅台.md", include_parent=True) == "贵州茅台"
-
-    def test_current_dir_parent(self):
-        assert normalize_source("./贵州茅台.md", include_parent=True) == "贵州茅台"
-
-    def test_deeply_nested_path(self):
-        assert normalize_source("a/b/c/report.md", include_parent=True) == "c/report"
-
     def test_windows_backslash_normalizes_to_posix(self):
         assert normalize_source("some\\path\\file.pdf") == normalize_source(
             "some/path/file.pdf"
-        )
-
-    def test_windows_backslash_include_parent(self):
-        assert (
-            normalize_source(
-                "annual_report\\贵州茅台2023年年度报告.md", include_parent=True
-            )
-            == "annual_report/贵州茅台2023年年度报告"
         )
 
     def test_mixed_separators_normalize_consistently(self):
@@ -772,34 +750,6 @@ class TestCalculateAnswerRelevancy:
 
 
 @pytest.mark.unit
-class TestCreateLLMClient:
-    """Tests for create_llm_client function."""
-
-    @patch("src.utils.create_llm_client")
-    def test_create_client_success(self, mockcreate_llm_client):
-        mock_client = MagicMock()
-        mockcreate_llm_client.return_value = mock_client
-
-        client = create_llm_client(
-            api_key="test-api-key", base_url="https://api.test.com/anthropic"
-        )
-
-        assert client == mock_client
-        mockcreate_llm_client.assert_called_once()
-
-    @patch("src.utils.create_llm_client")
-    def test_create_client_with_custom_url(self, mockcreate_llm_client):
-        mock_client = MagicMock()
-        mockcreate_llm_client.return_value = mock_client
-
-        create_llm_client(api_key="test-key", base_url="https://custom.url/api")
-
-        mockcreate_llm_client.assert_called_once()
-        call_kwargs = mockcreate_llm_client.call_args[1]
-        assert call_kwargs["llm_config"]["base_url"] == "https://custom.url/api"
-
-
-@pytest.mark.unit
 class TestExtractStatements:
     """Tests for extract_statements function."""
 
@@ -1122,7 +1072,12 @@ class TestCalculateFaithfulness:
         )
 
         mock_create_client.assert_called_once_with(
-            api_key="test-api-key", base_url="https://custom.api.url/anthropic"
+            llm_config={
+                "api_key": "test-api-key",
+                "base_url": "https://custom.api.url/anthropic",
+                "model_name": "",
+            },
+            mode="sdk",
         )
         mock_extract.assert_called_once_with(
             mock_client,

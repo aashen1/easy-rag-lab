@@ -6,7 +6,7 @@ from pathlib import Path
 import yaml
 from loguru import logger
 
-from eval.experiment_reporter import ExperimentReporter
+from eval.reporter import ExperimentReporter
 from src.exceptions import ConfigurationError, EvaluationError
 from src.experiment import ExperimentManager
 from src.token_tracker import TokenTracker

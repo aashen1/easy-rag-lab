@@ -422,7 +422,7 @@ class TestSmoke03FingerprintSystem:
         config_b["retrieval"]["top_k"] = 10
         fp1 = compute_experiment_fingerprint(config_a, {})
         fp2 = compute_experiment_fingerprint(config_b, {})
-        assert fp1.matches(fp2)
+        assert not fp1.matches(fp2)
         diff = fp1.diff(fp2)
         assert "retrieval_top_k" in diff
 
@@ -432,7 +432,7 @@ class TestSmoke03FingerprintSystem:
         config_b["retrieval"]["reranker"]["enabled"] = True
         fp1 = compute_experiment_fingerprint(config_a, {})
         fp2 = compute_experiment_fingerprint(config_b, {})
-        assert fp1.matches(fp2)
+        assert not fp1.matches(fp2)
         diff = fp1.diff(fp2)
         assert "reranker_enabled" in diff
 

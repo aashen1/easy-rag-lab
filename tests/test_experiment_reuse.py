@@ -99,7 +99,22 @@ class TestExperimentFingerprint:
     def test_matches_different_top_k(self):
         fp1 = self._make_fingerprint(retrieval_top_k=5)
         fp2 = self._make_fingerprint(retrieval_top_k=10)
-        assert fp1.matches(fp2)
+        assert not fp1.matches(fp2)
+
+    def test_matches_different_reranker(self):
+        fp1 = self._make_fingerprint(reranker_enabled=False)
+        fp2 = self._make_fingerprint(reranker_enabled=True)
+        assert not fp1.matches(fp2)
+
+    def test_matches_different_query_rewrite(self):
+        fp1 = self._make_fingerprint(query_rewrite_enabled=False)
+        fp2 = self._make_fingerprint(query_rewrite_enabled=True)
+        assert not fp1.matches(fp2)
+
+    def test_matches_different_test_set_count(self):
+        fp1 = self._make_fingerprint(test_set_count=20)
+        fp2 = self._make_fingerprint(test_set_count=30)
+        assert not fp1.matches(fp2)
 
     def test_no_match_different_meal(self):
         fp1 = self._make_fingerprint(meal_name="meal_a")

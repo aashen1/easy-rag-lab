@@ -5,7 +5,12 @@ This module provides a unified interface for multiple evaluation backends,
 including the builtin evaluator and RAGAS evaluator.
 """
 
-from eval.evaluators.base import BaseEvaluator, EvaluationResult, EvaluationSample
+from eval.evaluators.base import (
+    BaseEvaluator,
+    EvaluationResult,
+    EvaluationSample,
+    EvaluationSampleBuilder,
+)
 from eval.evaluators.builtin_evaluator import BuiltinEvaluator
 from eval.evaluators.ragas_evaluator import RagasEvaluator
 
@@ -13,6 +18,7 @@ __all__ = [
     "BaseEvaluator",
     "EvaluationResult",
     "EvaluationSample",
+    "EvaluationSampleBuilder",
     "BuiltinEvaluator",
     "RagasEvaluator",
 ]

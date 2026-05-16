@@ -2,26 +2,11 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import UTC, datetime
-from pathlib import Path
 from uuid import uuid4
 
 from loguru import logger
 
-
-def _resolve_db_path(db_path: str | None = None) -> Path:
-    if db_path is None:
-        from src.agent.config import get_checkpoint_config
-
-        ckpt_config = get_checkpoint_config()
-        db_path = ckpt_config.get("db_path", "data/agent_checkpoints.db")
-
-    db_path_obj = Path(db_path)
-    try:
-        db_path_obj.parent.mkdir(parents=True, exist_ok=True)
-    except OSError as e:
-        logger.error(f"Failed to create database directory {db_path_obj.parent}: {e}")
-        raise
-    return db_path_obj
+from src.agent.db_utils import resolve_db_path
 
 
 class SessionManager:
@@ -40,7 +25,7 @@ class SessionManager:
     """
 
     def __init__(self, db_path: str | None = None) -> None:
-        db_path_obj = _resolve_db_path(db_path)
+        db_path_obj = resolve_db_path(db_path)
         logger.info(f"Initializing SessionManager at {db_path_obj}")
         try:
             self._conn = sqlite3.connect(str(db_path_obj), check_same_thread=False)

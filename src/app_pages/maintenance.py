@@ -7,6 +7,7 @@ from typing import Any
 import streamlit as st
 from loguru import logger
 
+from src.agent.state_utils import build_agent_state
 from src.app_pages.about import _render_mermaid
 
 
@@ -214,33 +215,12 @@ def _resend_from_message(editing_idx: int, new_content: str):
             {"role": "user", "content": new_content}
         )
 
-        state = {
-            "messages": [{"role": "user", "content": new_content}],
-            "current_meal": st.session_state.maintenance_current_state.get(
-                "current_meal"
-            ),
-            "current_source": st.session_state.maintenance_current_state.get(
-                "current_source"
-            ),
-            "diagnosis": st.session_state.maintenance_current_state.get(
-                "diagnosis", []
-            ),
-            "pending_action": None,
-            "approved": None,
-            "execution_log": st.session_state.maintenance_current_state.get(
-                "execution_log", []
-            ),
-            "stage_history": st.session_state.maintenance_current_state.get(
-                "stage_history", []
-            ),
-            "auto_review": st.session_state.maintenance_auto_review,
-            "locked_tool": None,
-            "locked_tool_args": None,
-            "delete_count": st.session_state.maintenance_current_state.get(
-                "delete_count", 0
-            ),
-            "mode": st.session_state.maintenance_mode,
-        }
+        state = build_agent_state(
+            message_content=new_content,
+            current_state=st.session_state.maintenance_current_state,
+            auto_review=st.session_state.maintenance_auto_review,
+            mode=st.session_state.maintenance_mode,
+        )
 
         with st.chat_message("assistant"):
             _render_streaming_agent(agent, state, config)
@@ -252,9 +232,56 @@ def _resend_from_message(editing_idx: int, new_content: str):
         st.rerun()
 
 
-def _render_streaming_agent(agent, state: dict, config: dict) -> dict | None:
+def _handle_streaming_event(
+    node_name: str,
+    node_output: dict[str, Any],
+    thinking_parts: list[dict[str, Any]],
+) -> None:
     from langchain_core.messages import AIMessage, ToolMessage
 
+    if node_name == "agent":
+        messages = node_output.get("messages", [])
+        for msg in messages:
+            if isinstance(msg, AIMessage):
+                if msg.content and msg.tool_calls:
+                    text = _extract_text_from_content(msg.content)
+                    if text:
+                        thinking_parts.append({"type": "thinking", "content": text})
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                    for tc in msg.tool_calls:
+                        thinking_parts.append(
+                            {
+                                "type": "tool_call",
+                                "tool": tc["name"],
+                                "args": tc.get("args", {}),
+                            }
+                        )
+
+    elif node_name == "tools":
+        messages = node_output.get("messages", [])
+        for msg in messages:
+            if isinstance(msg, ToolMessage):
+                content_preview = str(msg.content)[:300]
+                thinking_parts.append(
+                    {
+                        "type": "tool_result",
+                        "tool_id": msg.tool_call_id,
+                        "content": content_preview,
+                    }
+                )
+        for key in (
+            "execution_log",
+            "stage_history",
+        ):
+            if key in node_output:
+                st.session_state.maintenance_current_state[key] = node_output[key]
+        if "delete_count" in node_output:
+            st.session_state.maintenance_current_state["delete_count"] = node_output[
+                "delete_count"
+            ]
+
+
+def _render_streaming_agent(agent, state: dict, config: dict) -> dict | None:
     collapse = st.session_state.get("maintenance_collapse_thinking", True)
     st.session_state.maintenance_streaming = True
     st.session_state.maintenance_thinking_parts = []
@@ -266,53 +293,7 @@ def _render_streaming_agent(agent, state: dict, config: dict) -> dict | None:
 
     for event in agent.stream(state, config=config, stream_mode="updates"):
         for node_name, node_output in event.items():
-            if node_name == "agent":
-                messages = node_output.get("messages", [])
-                for msg in messages:
-                    if isinstance(msg, AIMessage):
-                        if msg.content and msg.tool_calls:
-                            text = _extract_text_from_content(msg.content)
-                            if text:
-                                thinking_parts.append(
-                                    {"type": "thinking", "content": text}
-                                )
-                        if hasattr(msg, "tool_calls") and msg.tool_calls:
-                            for tc in msg.tool_calls:
-                                thinking_parts.append(
-                                    {
-                                        "type": "tool_call",
-                                        "tool": tc["name"],
-                                        "args": tc.get("args", {}),
-                                    }
-                                )
-
-            elif node_name == "tools":
-                messages = node_output.get("messages", [])
-                for msg in messages:
-                    if isinstance(msg, ToolMessage):
-                        content_preview = str(msg.content)[:300]
-                        thinking_parts.append(
-                            {
-                                "type": "tool_result",
-                                "tool_id": msg.tool_call_id,
-                                "content": content_preview,
-                            }
-                        )
-                for key in (
-                    "execution_log",
-                    "stage_history",
-                ):
-                    if key in node_output:
-                        st.session_state.maintenance_current_state[key] = node_output[
-                            key
-                        ]
-                if "delete_count" in node_output:
-                    st.session_state.maintenance_current_state["delete_count"] = (
-                        node_output["delete_count"]
-                    )
-
-            elif node_name == "approval":
-                pass
+            _handle_streaming_event(node_name, node_output, thinking_parts)
 
         with thinking_container:
             thinking_container.empty()
@@ -406,16 +387,293 @@ def _on_chat_submit():
     st.session_state.maintenance_streaming = True
 
 
-def render_maintenance():
-    st.subheader("🔧 RAG 维修工")
+def _initialize_session_state() -> None:
+    """Initialize all session state variables for maintenance page."""
+    defaults = {
+        "maintenance_messages": [],
+        "maintenance_auto_review": False,
+        "maintenance_locked_tool": None,
+        "maintenance_current_state": {
+            "current_meal": None,
+            "current_source": None,
+            "diagnosis": [],
+            "execution_log": [],
+            "stage_history": [],
+            "delete_count": 0,
+        },
+        "maintenance_mode": "light",
+        "maintenance_interrupted": False,
+        "maintenance_interrupt_payload": None,
+        "maintenance_session_id": None,
+        "maintenance_editing_msg_idx": None,
+        "maintenance_show_archived": False,
+        "maintenance_collapse_thinking": True,
+        "maintenance_thinking_parts": [],
+        "maintenance_streaming": False,
+        "maintenance_pending_prompt": None,
+        "maintenance_scan_pending": False,
+        "maintenance_scan_candidates": [],
+    }
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
 
-    if "maintenance_messages" not in st.session_state:
-        st.session_state.maintenance_messages = []
-    if "maintenance_auto_review" not in st.session_state:
-        st.session_state.maintenance_auto_review = False
-    if "maintenance_locked_tool" not in st.session_state:
+    if (
+        "maintenance_thread_id" not in st.session_state
+        or st.session_state.maintenance_session_id is None
+    ):
+        _initialize_session()
+
+
+def _restore_interrupt_state() -> None:
+    """Restore interrupt state from checkpointer if needed."""
+    if st.session_state.maintenance_interrupted:
+        return
+
+    try:
+        agent = _get_compiled_agent()
+        config = {"configurable": {"thread_id": st.session_state.maintenance_thread_id}}
+        graph_state = agent.get_state(config)
+        if (
+            graph_state
+            and graph_state.values
+            and graph_state.values.get("__interrupt__")
+        ):
+            for interrupt_info in graph_state.values.get("__interrupt__", []):
+                payload = interrupt_info.value
+                if isinstance(payload, dict) and "question" in payload:
+                    st.session_state.maintenance_interrupted = True
+                    st.session_state.maintenance_interrupt_payload = payload
+                    for key in (
+                        "current_meal",
+                        "current_source",
+                        "diagnosis",
+                        "execution_log",
+                        "stage_history",
+                        "delete_count",
+                    ):
+                        if key in graph_state.values:
+                            st.session_state.maintenance_current_state[key] = (
+                                graph_state.values[key]
+                            )
+                    break
+    except Exception as e:
+        logger.warning(f"Failed to restore interrupt state from checkpointer: {e}")
+
+
+def _render_sidebar(is_streaming: bool) -> None:
+    """Render the sidebar with session history and controls."""
+    st.markdown("### 💬 对话历史")
+
+    if st.button(
+        "➕ 新对话",
+        key="btn_new_session",
+        use_container_width=True,
+        disabled=is_streaming,
+    ):
+        session_mgr = _get_session_manager()
+        new_sess = session_mgr.create_session()
+        _switch_to_session(new_sess["session_id"])
+        st.rerun()
+
+    session_mgr = _get_session_manager()
+    sessions = session_mgr.list_sessions(
+        include_archived=st.session_state.maintenance_show_archived
+    )
+
+    for sess in sessions:
+        _render_session_item(sess, session_mgr, is_streaming)
+
+    show_archived = st.toggle(
+        "显示已归档",
+        value=st.session_state.maintenance_show_archived,
+        key="maintenance_show_archived_toggle",
+        disabled=is_streaming,
+    )
+    st.session_state.maintenance_show_archived = show_archived
+
+    _render_session_rename_ui(session_mgr, is_streaming)
+
+    st.markdown("---")
+    _render_control_panel(is_streaming)
+    _render_quick_actions(is_streaming)
+    _render_experience_library(is_streaming)
+
+
+def _render_session_item(sess: dict, session_mgr, is_streaming: bool) -> None:
+    """Render a single session item in the sidebar."""
+    is_current = sess["session_id"] == st.session_state.maintenance_session_id
+    col_title, col_menu = st.columns([5, 1])
+    with col_title:
+        label = f"{'▶ ' if is_current else ''}{sess['title']}"
+        btn_type = "primary" if is_current else "secondary"
+        if (
+            st.button(
+                label,
+                key=f"sess_{sess['session_id']}",
+                type=btn_type,
+                use_container_width=True,
+                disabled=is_streaming,
+            )
+            and not is_current
+        ):
+            _switch_to_session(sess["session_id"])
+            st.rerun()
+    with col_menu:
+        menu = st.popover("⋯", key=f"menu_{sess['session_id']}")
+        if menu.button(
+            "📋 复制",
+            key=f"dup_{sess['session_id']}",
+            disabled=is_streaming,
+        ):
+            new_sess = session_mgr.duplicate_session(sess["session_id"])
+            if new_sess:
+                _switch_to_session(new_sess["session_id"])
+                st.rerun()
+        if sess["is_archived"]:
+            if menu.button(
+                "📤 取消归档",
+                key=f"unarch_{sess['session_id']}",
+                disabled=is_streaming,
+            ):
+                session_mgr.unarchive_session(sess["session_id"])
+                st.rerun()
+        else:
+            if menu.button(
+                "📦 归档",
+                key=f"arch_{sess['session_id']}",
+                disabled=is_streaming,
+            ):
+                session_mgr.archive_session(sess["session_id"])
+                st.rerun()
+        if menu.button(
+            "✏️ 改标题",
+            key=f"rename_{sess['session_id']}",
+            disabled=is_streaming,
+        ):
+            st.session_state.maintenance_editing_session_id = sess["session_id"]
+            st.rerun()
+
+
+def _render_session_rename_ui(session_mgr, is_streaming: bool) -> None:
+    """Render the session rename UI if active."""
+    editing_sess_id = st.session_state.get("maintenance_editing_session_id")
+    if not editing_sess_id:
+        return
+
+    sess = session_mgr.get_session(editing_sess_id)
+    if not sess:
+        return
+
+    new_title = st.text_input(
+        "新标题",
+        value=sess["title"],
+        key=f"rename_input_{editing_sess_id}",
+    )
+    col_save, col_cancel = st.columns(2)
+    with col_save:
+        if st.button("💾 保存", key=f"save_title_{editing_sess_id}"):
+            session_mgr.update_session(editing_sess_id, title=new_title)
+            st.session_state.maintenance_editing_session_id = None
+            st.rerun()
+    with col_cancel:
+        if st.button("取消", key=f"cancel_title_{editing_sess_id}"):
+            st.session_state.maintenance_editing_session_id = None
+            st.rerun()
+
+
+def _render_control_panel(is_streaming: bool) -> None:
+    """Render the maintenance control panel."""
+    st.markdown("### 🔧 维修工控制面板")
+
+    if is_streaming:
+        st.caption("⏳ Agent 正在思考中，控件暂时禁用...")
+
+    st.session_state.maintenance_mode = st.selectbox(
+        "模式",
+        options=["light", "full"],
+        format_func=lambda x: "轻量模式" if x == "light" else "全量模式",
+        index=0 if st.session_state.maintenance_mode == "light" else 1,
+        disabled=is_streaming,
+    )
+
+    tool_names = _get_tool_names()
+    selected_tool = st.selectbox(
+        "工具链锁定",
+        tool_names,
+        index=0,
+        key="maintenance_tool_lock",
+        disabled=is_streaming,
+    )
+    if selected_tool == "自动":
         st.session_state.maintenance_locked_tool = None
-    if "maintenance_current_state" not in st.session_state:
+    else:
+        st.session_state.maintenance_locked_tool = selected_tool
+
+    auto_review = st.toggle(
+        "自动审查",
+        value=st.session_state.maintenance_auto_review,
+        key="maintenance_auto_review_toggle",
+        disabled=is_streaming,
+    )
+    st.session_state.maintenance_auto_review = auto_review
+
+    collapse_thinking = st.toggle(
+        "折叠思考过程",
+        value=st.session_state.maintenance_collapse_thinking,
+        key="maintenance_collapse_toggle",
+        disabled=is_streaming,
+    )
+    st.session_state.maintenance_collapse_thinking = collapse_thinking
+
+    col_expand, col_collapse = st.columns(2)
+    with col_expand:
+        if st.button(
+            "📂 展开所有", key="btn_expand_all_thinking", disabled=is_streaming
+        ):
+            for msg in st.session_state.maintenance_messages:
+                if msg["role"] == "assistant" and msg.get("thinking_parts"):
+                    msg["thinking_expanded"] = True
+            keys_to_clear = [
+                k for k in st.session_state if k.startswith("thinking_expander_")
+            ]
+            for k in keys_to_clear:
+                del st.session_state[k]
+            st.rerun()
+    with col_collapse:
+        if st.button(
+            "📁 折叠所有", key="btn_collapse_all_thinking", disabled=is_streaming
+        ):
+            for msg in st.session_state.maintenance_messages:
+                if msg["role"] == "assistant" and msg.get("thinking_parts"):
+                    msg["thinking_expanded"] = False
+            keys_to_clear = [
+                k for k in st.session_state if k.startswith("thinking_expander_")
+            ]
+            for k in keys_to_clear:
+                del st.session_state[k]
+            st.rerun()
+
+
+def _render_quick_actions(is_streaming: bool) -> None:
+    """Render quick action buttons."""
+    st.markdown("#### 快捷操作")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("📋 生成维修报告", key="btn_maint_report", disabled=is_streaming):
+            st.session_state.maintenance_messages.append(
+                {"role": "user", "content": "生成维修报告"}
+            )
+            st.rerun()
+    with col2:
+        if st.button("📊 生成对比报告", key="btn_comp_report", disabled=is_streaming):
+            st.session_state.maintenance_messages.append(
+                {"role": "user", "content": "生成对比报告"}
+            )
+            st.rerun()
+
+    if st.button("🗑️ 清空对话", key="btn_clear_chat", disabled=is_streaming):
+        st.session_state.maintenance_messages = []
         st.session_state.maintenance_current_state = {
             "current_meal": None,
             "current_source": None,
@@ -424,314 +682,54 @@ def render_maintenance():
             "stage_history": [],
             "delete_count": 0,
         }
-    if "maintenance_mode" not in st.session_state:
-        st.session_state.maintenance_mode = "light"
-    if "maintenance_interrupted" not in st.session_state:
         st.session_state.maintenance_interrupted = False
-    if "maintenance_interrupt_payload" not in st.session_state:
         st.session_state.maintenance_interrupt_payload = None
-    if "maintenance_session_id" not in st.session_state:
-        st.session_state.maintenance_session_id = None
-    if "maintenance_editing_msg_idx" not in st.session_state:
-        st.session_state.maintenance_editing_msg_idx = None
-    if "maintenance_show_archived" not in st.session_state:
-        st.session_state.maintenance_show_archived = False
-    if (
-        "maintenance_thread_id" not in st.session_state
-        or st.session_state.maintenance_session_id is None
-    ):
-        _initialize_session()
-    if "maintenance_collapse_thinking" not in st.session_state:
-        st.session_state.maintenance_collapse_thinking = True
-    if "maintenance_thinking_parts" not in st.session_state:
-        st.session_state.maintenance_thinking_parts = []
-    if "maintenance_streaming" not in st.session_state:
-        st.session_state.maintenance_streaming = False
-    if "maintenance_pending_prompt" not in st.session_state:
-        st.session_state.maintenance_pending_prompt = None
-    if "maintenance_scan_pending" not in st.session_state:
-        st.session_state.maintenance_scan_pending = False
-    if "maintenance_scan_candidates" not in st.session_state:
-        st.session_state.maintenance_scan_candidates = []
+        st.rerun()
 
-    is_streaming = st.session_state.get("maintenance_streaming", False)
 
-    if not st.session_state.maintenance_interrupted:
-        try:
-            agent = _get_compiled_agent()
-            config = {
-                "configurable": {"thread_id": st.session_state.maintenance_thread_id}
-            }
-            graph_state = agent.get_state(config)
-            if (
-                graph_state
-                and graph_state.values
-                and graph_state.values.get("__interrupt__")
-            ):
-                for interrupt_info in graph_state.values.get("__interrupt__", []):
-                    payload = interrupt_info.value
-                    if isinstance(payload, dict) and "question" in payload:
-                        st.session_state.maintenance_interrupted = True
-                        st.session_state.maintenance_interrupt_payload = payload
-                        for key in (
-                            "current_meal",
-                            "current_source",
-                            "diagnosis",
-                            "execution_log",
-                            "stage_history",
-                            "delete_count",
-                        ):
-                            if key in graph_state.values:
-                                st.session_state.maintenance_current_state[key] = (
-                                    graph_state.values[key]
-                                )
-                        break
-        except Exception as e:
-            logger.warning(f"Failed to restore interrupt state from checkpointer: {e}")
+def _render_experience_library(is_streaming: bool) -> None:
+    """Render the experience library section."""
+    st.markdown("---")
+    st.markdown("### 🧠 经验库")
 
-    with st.sidebar:
-        st.markdown("### 💬 对话历史")
+    if st.button("🔍 扫描经验", key="btn_scan_experience", disabled=is_streaming):
+        st.session_state.maintenance_scan_pending = True
+        st.rerun()
 
-        if st.button(
-            "➕ 新对话",
-            key="btn_new_session",
-            use_container_width=True,
-            disabled=is_streaming,
-        ):
-            session_mgr = _get_session_manager()
-            new_sess = session_mgr.create_session()
-            _switch_to_session(new_sess["session_id"])
+    try:
+        from src.agent.memory.experience_store import ExperienceStore
+
+        agent = _get_compiled_agent()
+        if hasattr(agent, "store") and agent.store is not None:
+            exp_store = ExperienceStore(agent.store)
+            experiences = exp_store.list_experiences(limit=20)
+            for exp in experiences:
+                _render_experience_item(exp, exp_store)
+    except Exception as e:
+        logger.warning(f"Failed to render experience list: {e}")
+
+
+def _render_experience_item(exp: dict, exp_store) -> None:
+    """Render a single experience item."""
+    value = exp.get("value", exp)
+    summary = value.get("summary", "未知经验")
+    category = value.get("category", "")
+    details = value.get("details", "")
+    namespace = exp.get("namespace", ())
+    key = exp.get("key", "")
+    with st.expander(f"💡 {summary}", expanded=False):
+        st.markdown(f"**类别**: {category}")
+        st.markdown(details)
+        if st.button("🗑️ 删除", key=f"del_exp_{key}") and namespace and key:
+            exp_store.delete_experience(
+                tuple(namespace) if isinstance(namespace, list) else namespace,
+                key,
+            )
             st.rerun()
 
-        session_mgr = _get_session_manager()
-        sessions = session_mgr.list_sessions(
-            include_archived=st.session_state.maintenance_show_archived
-        )
 
-        for sess in sessions:
-            is_current = sess["session_id"] == st.session_state.maintenance_session_id
-            col_title, col_menu = st.columns([5, 1])
-            with col_title:
-                label = f"{'▶ ' if is_current else ''}{sess['title']}"
-                btn_type = "primary" if is_current else "secondary"
-                if (
-                    st.button(
-                        label,
-                        key=f"sess_{sess['session_id']}",
-                        type=btn_type,
-                        use_container_width=True,
-                        disabled=is_streaming,
-                    )
-                    and not is_current
-                ):
-                    _switch_to_session(sess["session_id"])
-                    st.rerun()
-            with col_menu:
-                menu = st.popover("⋯", key=f"menu_{sess['session_id']}")
-                if menu.button(
-                    "📋 复制",
-                    key=f"dup_{sess['session_id']}",
-                    disabled=is_streaming,
-                ):
-                    new_sess = session_mgr.duplicate_session(sess["session_id"])
-                    if new_sess:
-                        _switch_to_session(new_sess["session_id"])
-                        st.rerun()
-                if sess["is_archived"]:
-                    if menu.button(
-                        "📤 取消归档",
-                        key=f"unarch_{sess['session_id']}",
-                        disabled=is_streaming,
-                    ):
-                        session_mgr.unarchive_session(sess["session_id"])
-                        st.rerun()
-                else:
-                    if menu.button(
-                        "📦 归档",
-                        key=f"arch_{sess['session_id']}",
-                        disabled=is_streaming,
-                    ):
-                        session_mgr.archive_session(sess["session_id"])
-                        st.rerun()
-                if menu.button(
-                    "✏️ 改标题",
-                    key=f"rename_{sess['session_id']}",
-                    disabled=is_streaming,
-                ):
-                    st.session_state.maintenance_editing_session_id = sess["session_id"]
-                    st.rerun()
-
-        show_archived = st.toggle(
-            "显示已归档",
-            value=st.session_state.maintenance_show_archived,
-            key="maintenance_show_archived_toggle",
-            disabled=is_streaming,
-        )
-        st.session_state.maintenance_show_archived = show_archived
-
-        editing_sess_id = st.session_state.get("maintenance_editing_session_id")
-        if editing_sess_id:
-            sess = session_mgr.get_session(editing_sess_id)
-            if sess:
-                new_title = st.text_input(
-                    "新标题",
-                    value=sess["title"],
-                    key=f"rename_input_{editing_sess_id}",
-                )
-                col_save, col_cancel = st.columns(2)
-                with col_save:
-                    if st.button("💾 保存", key=f"save_title_{editing_sess_id}"):
-                        session_mgr.update_session(editing_sess_id, title=new_title)
-                        st.session_state.maintenance_editing_session_id = None
-                        st.rerun()
-                with col_cancel:
-                    if st.button("取消", key=f"cancel_title_{editing_sess_id}"):
-                        st.session_state.maintenance_editing_session_id = None
-                        st.rerun()
-
-        st.markdown("---")
-        st.markdown("### 🔧 维修工控制面板")
-
-        if is_streaming:
-            st.caption("⏳ Agent 正在思考中，控件暂时禁用...")
-
-        st.session_state.maintenance_mode = st.selectbox(
-            "模式",
-            options=["light", "full"],
-            format_func=lambda x: "轻量模式" if x == "light" else "全量模式",
-            index=0 if st.session_state.maintenance_mode == "light" else 1,
-            disabled=is_streaming,
-        )
-
-        tool_names = _get_tool_names()
-        selected_tool = st.selectbox(
-            "工具链锁定",
-            tool_names,
-            index=0,
-            key="maintenance_tool_lock",
-            disabled=is_streaming,
-        )
-        if selected_tool == "自动":
-            st.session_state.maintenance_locked_tool = None
-        else:
-            st.session_state.maintenance_locked_tool = selected_tool
-
-        auto_review = st.toggle(
-            "自动审查",
-            value=st.session_state.maintenance_auto_review,
-            key="maintenance_auto_review_toggle",
-            disabled=is_streaming,
-        )
-        st.session_state.maintenance_auto_review = auto_review
-
-        collapse_thinking = st.toggle(
-            "折叠思考过程",
-            value=st.session_state.maintenance_collapse_thinking,
-            key="maintenance_collapse_toggle",
-            disabled=is_streaming,
-        )
-        st.session_state.maintenance_collapse_thinking = collapse_thinking
-
-        col_expand, col_collapse = st.columns(2)
-        with col_expand:
-            if st.button(
-                "📂 展开所有", key="btn_expand_all_thinking", disabled=is_streaming
-            ):
-                for msg in st.session_state.maintenance_messages:
-                    if msg["role"] == "assistant" and msg.get("thinking_parts"):
-                        msg["thinking_expanded"] = True
-                keys_to_clear = [
-                    k for k in st.session_state if k.startswith("thinking_expander_")
-                ]
-                for k in keys_to_clear:
-                    del st.session_state[k]
-                st.rerun()
-        with col_collapse:
-            if st.button(
-                "📁 折叠所有", key="btn_collapse_all_thinking", disabled=is_streaming
-            ):
-                for msg in st.session_state.maintenance_messages:
-                    if msg["role"] == "assistant" and msg.get("thinking_parts"):
-                        msg["thinking_expanded"] = False
-                keys_to_clear = [
-                    k for k in st.session_state if k.startswith("thinking_expander_")
-                ]
-                for k in keys_to_clear:
-                    del st.session_state[k]
-                st.rerun()
-
-        st.markdown("#### 快捷操作")
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button(
-                "📋 生成维修报告", key="btn_maint_report", disabled=is_streaming
-            ):
-                st.session_state.maintenance_messages.append(
-                    {"role": "user", "content": "生成维修报告"}
-                )
-                st.rerun()
-        with col2:
-            if st.button(
-                "📊 生成对比报告", key="btn_comp_report", disabled=is_streaming
-            ):
-                st.session_state.maintenance_messages.append(
-                    {"role": "user", "content": "生成对比报告"}
-                )
-                st.rerun()
-
-        if st.button("🗑️ 清空对话", key="btn_clear_chat", disabled=is_streaming):
-            st.session_state.maintenance_messages = []
-            st.session_state.maintenance_current_state = {
-                "current_meal": None,
-                "current_source": None,
-                "diagnosis": [],
-                "execution_log": [],
-                "stage_history": [],
-                "delete_count": 0,
-            }
-            st.session_state.maintenance_interrupted = False
-            st.session_state.maintenance_interrupt_payload = None
-            st.rerun()
-
-        st.markdown("---")
-        st.markdown("### 🧠 经验库")
-
-        if st.button("🔍 扫描经验", key="btn_scan_experience", disabled=is_streaming):
-            st.session_state.maintenance_scan_pending = True
-            st.rerun()
-
-        try:
-            from src.agent.memory.experience_store import ExperienceStore
-
-            agent = _get_compiled_agent()
-            if hasattr(agent, "store") and agent.store is not None:
-                exp_store = ExperienceStore(agent.store)
-                experiences = exp_store.list_experiences(limit=20)
-                for exp in experiences:
-                    value = exp.get("value", exp)
-                    summary = value.get("summary", "未知经验")
-                    category = value.get("category", "")
-                    details = value.get("details", "")
-                    namespace = exp.get("namespace", ())
-                    key = exp.get("key", "")
-                    with st.expander(f"💡 {summary}", expanded=False):
-                        st.markdown(f"**类别**: {category}")
-                        st.markdown(details)
-                        if (
-                            st.button("🗑️ 删除", key=f"del_exp_{key}")
-                            and namespace
-                            and key
-                        ):
-                            exp_store.delete_experience(
-                                tuple(namespace)
-                                if isinstance(namespace, list)
-                                else namespace,
-                                key,
-                            )
-                            st.rerun()
-        except Exception as e:
-            logger.warning(f"Failed to render experience list: {e}")
-
+def _render_state_info() -> None:
+    """Render execution log and stage history."""
     current = st.session_state.maintenance_current_state
     col_log, col_hist = st.columns(2)
     with col_log, st.expander("📋 执行日志", expanded=False):
@@ -749,36 +747,33 @@ def render_maintenance():
         else:
             st.text("暂无阶段历史")
 
-    latest_report = st.session_state.get("maintenance_latest_report")
-    if latest_report:
-        with st.expander("📄 维修报告", expanded=True):
-            st.markdown(latest_report["report_content"])
-            report_path = latest_report.get("report_path", "report.md")
-            filename = Path(report_path).name if report_path else "report.md"
-            st.download_button(
-                "⬇️ 下载报告",
-                data=latest_report["report_content"],
-                file_name=filename,
-                mime="text/markdown",
-                key="download_maintenance_report",
-            )
 
+def _render_report_download() -> None:
+    """Render the latest report download section."""
+    latest_report = st.session_state.get("maintenance_latest_report")
+    if not latest_report:
+        return
+
+    with st.expander("📄 维修报告", expanded=True):
+        st.markdown(latest_report["report_content"])
+        report_path = latest_report.get("report_path", "report.md")
+        filename = Path(report_path).name if report_path else "report.md"
+        st.download_button(
+            "⬇️ 下载报告",
+            data=latest_report["report_content"],
+            file_name=filename,
+            mime="text/markdown",
+            key="download_maintenance_report",
+        )
+
+
+def _render_messages(is_streaming: bool) -> None:
+    """Render the chat message list."""
     editing_idx = st.session_state.get("maintenance_editing_msg_idx")
 
     for i, msg in enumerate(st.session_state.maintenance_messages):
         if editing_idx is not None and editing_idx == i:
-            with st.chat_message(msg["role"]):
-                new_content = st.text_area(
-                    "编辑消息", value=msg["content"], key=f"edit_area_{i}"
-                )
-                col_save, col_cancel = st.columns(2)
-                with col_save:
-                    if st.button("🔄 重发", key=f"resend_msg_{i}"):
-                        _resend_from_message(i, new_content)
-                with col_cancel:
-                    if st.button("取消", key=f"cancel_edit_{i}"):
-                        st.session_state.maintenance_editing_msg_idx = None
-                        st.rerun()
+            _render_editing_message(i, msg)
             continue
 
         with st.chat_message(msg["role"]):
@@ -802,231 +797,254 @@ def render_maintenance():
             else:
                 st.markdown(msg["content"])
 
-    if (
+
+def _render_editing_message(idx: int, msg: dict) -> None:
+    """Render a message being edited."""
+    with st.chat_message(msg["role"]):
+        new_content = st.text_area(
+            "编辑消息", value=msg["content"], key=f"edit_area_{idx}"
+        )
+        col_save, col_cancel = st.columns(2)
+        with col_save:
+            if st.button("🔄 重发", key=f"resend_msg_{idx}"):
+                _resend_from_message(idx, new_content)
+        with col_cancel:
+            if st.button("取消", key=f"cancel_edit_{idx}"):
+                st.session_state.maintenance_editing_msg_idx = None
+                st.rerun()
+
+
+def _handle_interrupt_ui(is_streaming: bool) -> None:
+    """Render interrupt confirmation UI if needed."""
+    if not (
         st.session_state.maintenance_interrupted
         and st.session_state.maintenance_interrupt_payload is not None
     ):
-        payload = st.session_state.maintenance_interrupt_payload
-        with st.chat_message("assistant"):
-            st.warning(f"⚠️ {payload.get('question', '等待确认')}")
-            tool_info = payload.get("tool_call", {})
-            if tool_info:
-                st.info(
-                    f"工具: {tool_info.get('name')} | 参数: {tool_info.get('args', {})}"
-                )
-            col_a, col_b = st.columns(2)
-            with col_a:
-                if st.button("✅ 批准", key="approve_btn_persist"):
-                    agent = _get_compiled_agent()
-                    config = {
-                        "configurable": {
-                            "thread_id": st.session_state.maintenance_thread_id
-                        }
-                    }
-                    _resume_interrupt_streaming(agent, True, config)
-            with col_b:
-                if st.button("❌ 拒绝", key="reject_btn_persist"):
-                    agent = _get_compiled_agent()
-                    config = {
-                        "configurable": {
-                            "thread_id": st.session_state.maintenance_thread_id
-                        }
-                    }
-                    _resume_interrupt_streaming(agent, False, config)
+        return
 
-    if st.session_state.get("maintenance_scan_pending"):
-        st.session_state.maintenance_scan_pending = False
-        try:
-            agent = _get_compiled_agent()
-            from src.agent.config import get_experience_config
-
-            exp_config = get_experience_config()
-            max_candidates = exp_config.get("scan_max_candidates", 5)
-
-            scan_prompt = (
-                f"请扫描以下对话，提取可能有价值的维修经验。每条经验包含 summary、category、details。"
-                f"只提取真正有价值的技巧性知识，不要提取临时性信息。最多提取 {max_candidates} 条。"
-                f'请用 JSON 数组格式返回，每条格式为: {{"summary": "...", "category": "...", "details": "..."}}'
+    payload = st.session_state.maintenance_interrupt_payload
+    with st.chat_message("assistant"):
+        st.warning(f"⚠️ {payload.get('question', '等待确认')}")
+        tool_info = payload.get("tool_call", {})
+        if tool_info:
+            st.info(
+                f"工具: {tool_info.get('name')} | 参数: {tool_info.get('args', {})}"
             )
-
-            messages_text = []
-            for msg in st.session_state.maintenance_messages:
-                role = msg["role"]
-                content = msg.get("content", "")
-                messages_text.append(f"{role}: {content}")
-
-            scan_input = scan_prompt + "\n\n对话内容:\n" + "\n".join(messages_text)
-
-            config = {
-                "configurable": {"thread_id": st.session_state.maintenance_thread_id}
-            }
-            state = {
-                "messages": [{"role": "user", "content": scan_input}],
-                "current_meal": st.session_state.maintenance_current_state.get(
-                    "current_meal"
-                ),
-                "current_source": st.session_state.maintenance_current_state.get(
-                    "current_source"
-                ),
-                "diagnosis": st.session_state.maintenance_current_state.get(
-                    "diagnosis", []
-                ),
-                "pending_action": None,
-                "approved": None,
-                "execution_log": st.session_state.maintenance_current_state.get(
-                    "execution_log", []
-                ),
-                "stage_history": st.session_state.maintenance_current_state.get(
-                    "stage_history", []
-                ),
-                "auto_review": False,
-                "locked_tool": None,
-                "locked_tool_args": None,
-                "delete_count": st.session_state.maintenance_current_state.get(
-                    "delete_count", 0
-                ),
-                "mode": st.session_state.maintenance_mode,
-            }
-
-            with st.spinner("🔍 正在扫描经验..."):
-                result = agent.invoke(state, config)
-
-            response_text = ""
-            if result and "messages" in result:
-                from langchain_core.messages import AIMessage
-
-                for msg in reversed(result["messages"]):
-                    if isinstance(msg, AIMessage) and msg.content:
-                        response_text = _extract_text_from_content(msg.content)
-                        break
-
-            import re
-
-            json_match = re.search(r"\[.*\]", response_text, re.DOTALL)
-            if json_match:
-                candidates = json.loads(json_match.group())
-                st.session_state.maintenance_scan_candidates = candidates
-            else:
-                st.session_state.maintenance_scan_candidates = []
-                st.info("未发现可提取的经验")
-
-        except Exception as e:
-            logger.error(f"Experience scan error: {e}")
-            st.error(f"扫描经验出错: {e}")
-            st.session_state.maintenance_scan_candidates = []
-
-    scan_candidates = st.session_state.get("maintenance_scan_candidates", [])
-    if scan_candidates:
-        st.markdown("### 🔍 候选经验")
-        confirmed = []
-        for idx, cand in enumerate(scan_candidates):
-            col_info, col_action = st.columns([4, 1])
-            with col_info:
-                st.markdown(
-                    f"**{cand.get('summary', '')}** ({cand.get('category', '')})"
-                )
-                st.caption(cand.get("details", "")[:200])
-            with col_action:
-                if st.button("✅", key=f"confirm_exp_{idx}"):
-                    confirmed.append(cand)
-                if st.button("❌", key=f"reject_exp_{idx}"):
-                    scan_candidates.pop(idx)
-                    st.session_state.maintenance_scan_candidates = scan_candidates
-                    st.rerun()
-
-        for cand in confirmed:
-            try:
-                from src.agent.memory.experience_store import ExperienceStore
-
-                agent = _get_compiled_agent()
-                if hasattr(agent, "store") and agent.store is not None:
-                    exp_store = ExperienceStore(agent.store)
-                    exp_store.save_experience(
-                        summary=cand.get("summary", ""),
-                        category=cand.get("category", "other"),
-                        details=cand.get("details", ""),
-                        session_id=st.session_state.maintenance_session_id,
-                    )
-                    scan_candidates.remove(cand)
-                    st.session_state.maintenance_scan_candidates = scan_candidates
-                    st.rerun()
-            except Exception as e:
-                logger.error(f"Failed to save confirmed experience: {e}")
-
-        if st.button("清除候选", key="btn_clear_candidates"):
-            st.session_state.maintenance_scan_candidates = []
-            st.rerun()
-
-    pending = st.session_state.pop("maintenance_pending_prompt", None)
-    if pending:
-        st.session_state.maintenance_messages.append(
-            {"role": "user", "content": pending}
-        )
-
-        session_mgr = _get_session_manager()
-        sess = session_mgr.get_session(st.session_state.maintenance_session_id)
-        if sess and sess["title"] == "新对话" and sess["message_count"] == 0:
-            session_mgr.auto_title(st.session_state.maintenance_session_id, pending)
-        session_mgr.touch_session(st.session_state.maintenance_session_id)
-
-        with st.chat_message("user"):
-            st.markdown(pending)
-
-        with st.chat_message("assistant"):
-            try:
+        col_a, col_b = st.columns(2)
+        with col_a:
+            if st.button("✅ 批准", key="approve_btn_persist"):
                 agent = _get_compiled_agent()
                 config = {
                     "configurable": {
                         "thread_id": st.session_state.maintenance_thread_id
                     }
                 }
-                current = st.session_state.maintenance_current_state
-                state = {
-                    "messages": [{"role": "user", "content": pending}],
-                    "current_meal": current.get("current_meal"),
-                    "current_source": current.get("current_source"),
-                    "diagnosis": current.get("diagnosis", []),
-                    "pending_action": None,
-                    "approved": None,
-                    "execution_log": current.get("execution_log", []),
-                    "stage_history": current.get("stage_history", []),
-                    "auto_review": st.session_state.maintenance_auto_review,
-                    "locked_tool": st.session_state.maintenance_locked_tool,
-                    "locked_tool_args": None,
-                    "delete_count": current.get("delete_count", 0),
-                    "mode": st.session_state.maintenance_mode,
+                _resume_interrupt_streaming(agent, True, config)
+        with col_b:
+            if st.button("❌ 拒绝", key="reject_btn_persist"):
+                agent = _get_compiled_agent()
+                config = {
+                    "configurable": {
+                        "thread_id": st.session_state.maintenance_thread_id
+                    }
                 }
+                _resume_interrupt_streaming(agent, False, config)
 
-                from src.agent.tools import save_experience_tool
 
-                save_experience_tool._session_id = (
-                    st.session_state.maintenance_session_id
+def _handle_experience_scan() -> None:
+    """Handle the experience scanning process."""
+    if not st.session_state.get("maintenance_scan_pending"):
+        return
+
+    st.session_state.maintenance_scan_pending = False
+    try:
+        agent = _get_compiled_agent()
+        from src.agent.config import get_experience_config
+
+        exp_config = get_experience_config()
+        max_candidates = exp_config.get("scan_max_candidates", 5)
+
+        scan_prompt = (
+            f"请扫描以下对话，提取可能有价值的维修经验。每条经验包含 summary、category、details。"
+            f"只提取真正有价值的技巧性知识，不要提取临时性信息。最多提取 {max_candidates} 条。"
+            f'请用 JSON 数组格式返回，每条格式为: {{"summary": "...", "category": "...", "details": "..."}}'
+        )
+
+        messages_text = []
+        for msg in st.session_state.maintenance_messages:
+            role = msg["role"]
+            content = msg.get("content", "")
+            messages_text.append(f"{role}: {content}")
+
+        scan_input = scan_prompt + "\n\n对话内容:\n" + "\n".join(messages_text)
+
+        config = {"configurable": {"thread_id": st.session_state.maintenance_thread_id}}
+        state = {
+            "messages": [{"role": "user", "content": scan_input}],
+            "current_meal": st.session_state.maintenance_current_state.get(
+                "current_meal"
+            ),
+            "current_source": st.session_state.maintenance_current_state.get(
+                "current_source"
+            ),
+            "diagnosis": st.session_state.maintenance_current_state.get(
+                "diagnosis", []
+            ),
+            "pending_action": None,
+            "approved": None,
+            "execution_log": st.session_state.maintenance_current_state.get(
+                "execution_log", []
+            ),
+            "stage_history": st.session_state.maintenance_current_state.get(
+                "stage_history", []
+            ),
+            "auto_review": False,
+            "locked_tool": None,
+            "locked_tool_args": None,
+            "delete_count": st.session_state.maintenance_current_state.get(
+                "delete_count", 0
+            ),
+            "mode": st.session_state.maintenance_mode,
+        }
+
+        with st.spinner("🔍 正在扫描经验..."):
+            result = agent.invoke(state, config)
+
+        response_text = ""
+        if result and "messages" in result:
+            from langchain_core.messages import AIMessage
+
+            for msg in reversed(result["messages"]):
+                if isinstance(msg, AIMessage) and msg.content:
+                    response_text = _extract_text_from_content(msg.content)
+                    break
+
+        import re
+
+        json_match = re.search(r"\[.*\]", response_text, re.DOTALL)
+        if json_match:
+            candidates = json.loads(json_match.group())
+            st.session_state.maintenance_scan_candidates = candidates
+        else:
+            st.session_state.maintenance_scan_candidates = []
+            st.info("未发现可提取的经验")
+
+    except Exception as e:
+        logger.error(f"Experience scan error: {e}")
+        st.error(f"扫描经验出错: {e}")
+        st.session_state.maintenance_scan_candidates = []
+
+
+def _render_scan_candidates() -> None:
+    """Render the experience scan candidates UI."""
+    scan_candidates = st.session_state.get("maintenance_scan_candidates", [])
+    if not scan_candidates:
+        return
+
+    st.markdown("### 🔍 候选经验")
+    confirmed = []
+    for idx, cand in enumerate(scan_candidates):
+        col_info, col_action = st.columns([4, 1])
+        with col_info:
+            st.markdown(f"**{cand.get('summary', '')}** ({cand.get('category', '')})")
+            st.caption(cand.get("details", "")[:200])
+        with col_action:
+            if st.button("✅", key=f"confirm_exp_{idx}"):
+                confirmed.append(cand)
+            if st.button("❌", key=f"reject_exp_{idx}"):
+                scan_candidates.pop(idx)
+                st.session_state.maintenance_scan_candidates = scan_candidates
+                st.rerun()
+
+    for cand in confirmed:
+        try:
+            from src.agent.memory.experience_store import ExperienceStore
+
+            agent = _get_compiled_agent()
+            if hasattr(agent, "store") and agent.store is not None:
+                exp_store = ExperienceStore(agent.store)
+                exp_store.save_experience(
+                    summary=cand.get("summary", ""),
+                    category=cand.get("category", "other"),
+                    details=cand.get("details", ""),
+                    session_id=st.session_state.maintenance_session_id,
                 )
-                save_experience_tool._source_path = (
-                    st.session_state.maintenance_current_state.get("current_source")
-                )
-                from src.agent.graph import _infer_pdf_type
+                scan_candidates.remove(cand)
+                st.session_state.maintenance_scan_candidates = scan_candidates
+                st.rerun()
+        except Exception as e:
+            logger.error(f"Failed to save confirmed experience: {e}")
 
-                current_source = st.session_state.maintenance_current_state.get(
-                    "current_source"
-                )
-                save_experience_tool._pdf_type = (
-                    _infer_pdf_type(current_source) if current_source else None
-                )
+    if st.button("清除候选", key="btn_clear_candidates"):
+        st.session_state.maintenance_scan_candidates = []
+        st.rerun()
 
-                _render_streaming_agent(agent, state, config)
 
-            except Exception as e:
-                logger.error(f"Maintenance agent error: {e}")
-                st.session_state.maintenance_streaming = False
-                st.error(f"维修工出错: {e}")
+def _handle_pending_prompt() -> None:
+    """Handle the pending user prompt."""
+    pending = st.session_state.pop("maintenance_pending_prompt", None)
+    if not pending:
+        return
 
-    st.chat_input(
-        "输入问题进行诊断...",
-        key="maintenance_chat_input",
-        on_submit=_on_chat_submit,
-    )
+    st.session_state.maintenance_messages.append({"role": "user", "content": pending})
 
+    session_mgr = _get_session_manager()
+    sess = session_mgr.get_session(st.session_state.maintenance_session_id)
+    if sess and sess["title"] == "新对话" and sess["message_count"] == 0:
+        session_mgr.auto_title(st.session_state.maintenance_session_id, pending)
+    session_mgr.touch_session(st.session_state.maintenance_session_id)
+
+    with st.chat_message("user"):
+        st.markdown(pending)
+
+    with st.chat_message("assistant"):
+        try:
+            agent = _get_compiled_agent()
+            config = {
+                "configurable": {"thread_id": st.session_state.maintenance_thread_id}
+            }
+            current = st.session_state.maintenance_current_state
+            state = {
+                "messages": [{"role": "user", "content": pending}],
+                "current_meal": current.get("current_meal"),
+                "current_source": current.get("current_source"),
+                "diagnosis": current.get("diagnosis", []),
+                "pending_action": None,
+                "approved": None,
+                "execution_log": current.get("execution_log", []),
+                "stage_history": current.get("stage_history", []),
+                "auto_review": st.session_state.maintenance_auto_review,
+                "locked_tool": st.session_state.maintenance_locked_tool,
+                "locked_tool_args": None,
+                "delete_count": current.get("delete_count", 0),
+                "mode": st.session_state.maintenance_mode,
+            }
+
+            from src.agent.tools import save_experience_tool
+
+            save_experience_tool._session_id = st.session_state.maintenance_session_id
+            save_experience_tool._source_path = (
+                st.session_state.maintenance_current_state.get("current_source")
+            )
+            from src.agent.graph import _infer_pdf_type
+
+            current_source = st.session_state.maintenance_current_state.get(
+                "current_source"
+            )
+            save_experience_tool._pdf_type = (
+                _infer_pdf_type(current_source) if current_source else None
+            )
+
+            _render_streaming_agent(agent, state, config)
+
+        except Exception as e:
+            logger.error(f"Maintenance agent error: {e}")
+            st.session_state.maintenance_streaming = False
+            st.error(f"维修工出错: {e}")
+
+
+def _render_agent_graph() -> None:
+    """Render the agent architecture graph."""
     st.markdown("---")
     st.markdown("### 🗺️ 维修工架构图")
     st.caption("由 LangGraph 自动生成，修改 graph.py 后重启应用即可更新")
@@ -1038,8 +1056,36 @@ def render_maintenance():
         st.info("架构图渲染失败，请检查 LangGraph 依赖是否完整")
 
 
+def render_maintenance():
+    st.subheader("🔧 RAG 维修工")
+
+    _initialize_session_state()
+
+    is_streaming = st.session_state.get("maintenance_streaming", False)
+
+    _restore_interrupt_state()
+
+    with st.sidebar:
+        _render_sidebar(is_streaming)
+
+    _render_state_info()
+    _render_report_download()
+    _render_messages(is_streaming)
+    _handle_interrupt_ui(is_streaming)
+    _handle_experience_scan()
+    _render_scan_candidates()
+    _handle_pending_prompt()
+
+    st.chat_input(
+        "输入问题进行诊断...",
+        key="maintenance_chat_input",
+        on_submit=_on_chat_submit,
+    )
+
+    _render_agent_graph()
+
+
 def _resume_interrupt_streaming(agent, decision, config):
-    from langchain_core.messages import AIMessage
     from langgraph.types import Command
 
     collapse = st.session_state.get("maintenance_collapse_thinking", True)
@@ -1052,48 +1098,7 @@ def _resume_interrupt_streaming(agent, decision, config):
             Command(resume=decision), config=config, stream_mode="updates"
         ):
             for node_name, node_output in event.items():
-                if node_name == "agent":
-                    messages = node_output.get("messages", [])
-                    for msg in messages:
-                        if isinstance(msg, AIMessage):
-                            if msg.content and msg.tool_calls:
-                                text = _extract_text_from_content(msg.content)
-                                if text:
-                                    thinking_parts.append(
-                                        {"type": "thinking", "content": text}
-                                    )
-                            if hasattr(msg, "tool_calls") and msg.tool_calls:
-                                for tc in msg.tool_calls:
-                                    thinking_parts.append(
-                                        {
-                                            "type": "tool_call",
-                                            "tool": tc["name"],
-                                            "args": tc.get("args", {}),
-                                        }
-                                    )
-                elif node_name == "tools":
-                    from langchain_core.messages import ToolMessage
-
-                    messages = node_output.get("messages", [])
-                    for msg in messages:
-                        if isinstance(msg, ToolMessage):
-                            content_preview = str(msg.content)[:300]
-                            thinking_parts.append(
-                                {
-                                    "type": "tool_result",
-                                    "tool_id": msg.tool_call_id,
-                                    "content": content_preview,
-                                }
-                            )
-                    for key in ("execution_log", "stage_history"):
-                        if key in node_output:
-                            st.session_state.maintenance_current_state[key] = (
-                                node_output[key]
-                            )
-                    if "delete_count" in node_output:
-                        st.session_state.maintenance_current_state["delete_count"] = (
-                            node_output["delete_count"]
-                        )
+                _handle_streaming_event(node_name, node_output, thinking_parts)
 
         result = agent.get_state(config)
         final_values = result.values if result else {}

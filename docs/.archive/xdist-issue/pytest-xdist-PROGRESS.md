@@ -8,8 +8,8 @@
 ## 时间线总览
 
 ```
-串行时代        阶段一：-n auto     阶段二：-n 4        阶段三：-n auto + loadgroup + xdist_group
-(稳定但慢)  →  (快但崩)  →       (凑合)  →         (快且稳 ✅)
+串行时代        阶段一：-n auto     阶段二：-n 4        阶段三：-n auto + loadgroup   阶段四：放弃并行
+(稳定但慢)  →  (快但崩)  →       (凑合)  →         (仍崩溃)  →              (稳定 ✅)
 ```
 
 | 阶段  | 时间             | 配置                                                                | 结果           | 问题                       |
@@ -17,7 +17,8 @@
 | 串行  | \~2026-04-22 前 | 无 `-n` 参数                                                         | 稳定，\~710s    | 太慢                       |
 | 阶段一 | 2026-05-02     | `-n auto`                                                         | \~200s，但频繁崩溃 | MemoryError、worker crash |
 | 阶段二 | 2026-05-09     | `-n 4 --max-worker-restart=2`                                     | 偶尔稳定         | 4 worker 仍可能 OOM         |
-| 阶段三 | 2026-05-10     | `-n auto --dist loadgroup` + `xdist_group("torch")` + CPU fixture | \~55s，稳定     | 无已知问题                    |
+| 阶段三 | 2026-05-10     | `-n auto --dist loadgroup` + `xdist_group("torch")` + CPU fixture | \~55s，**仍崩溃** | RAGAS 未分组，内存耗尽       |
+| 阶段四 | 2026-05-11     | 移除所有 xdist 参数，回到串行                                              | 稳定，\~30s     | 无问题，反而更快               |
 
 ***
 
@@ -332,3 +333,75 @@ cmd = "pytest tests/ --tb=short -q --durations=10 -n auto --dist loadgroup --max
 | 修复计划    | `.trae/documents/pytest-xdist-fix-plan.md`                | 阶段二的修复计划             |
 | 测试分层    | `docs/dev-guides/testing.md`                              | 三层测试体系说明             |
 | **本文档** | `docs/dev-guides/pytest-xdist-PROGRESS.md`                | 完整决策演进记录             |
+
+***
+
+## 阶段四：放弃并行化（2026-05-11）
+
+### 背景
+
+阶段三方案（`-n auto + loadgroup + xdist_group`）实施后，仍频繁出现 MemoryError，甚至导致整个电脑其他应用卡崩。问题严重性超出预期，继续并行化的收益不足以抵消其成本。
+
+### 最新问题
+
+2026-05-11 的调查报告（`.trae/documents/memory-error-investigation-260511.md`）发现：
+
+1. **RAGAS 测试未纳入分组**：`test_evaluators.py` 加载 RAGAS（torch + transformers），但未被 `xdist_group("torch")` 覆盖
+2. **内存耗尽触发点**：错误发生在 pytest 的错误报告机制（`ast.parse`），说明内存已经耗尽到连 AST 解析都无法完成
+3. **非确定性问题**：崩溃点随机，取决于系统当前内存状态
+
+### 决策
+
+**放弃 pytest-xdist 并行化，回到串行测试。**
+
+### 理由
+
+1. **问题严重性**：内存错误不仅影响测试，还卡崩其他应用，这是不可接受的
+2. **实际加速存疑**：PROGRESS.md 中提到"沙箱让 pytest 极其缓慢"，并行加速可能被抵消
+3. **维护成本高**：需要持续维护分组逻辑，且仍不稳定
+4. **开发体验差**：反复崩溃比慢更糟糕
+
+### 验证结果
+
+回到串行后的测试结果：
+
+| 命令 | 结果 | 耗时 | 对比 |
+|------|------|------|------|
+| `pixi run test-unit` | 1103 passed | 29.99s | 比并行（37.68s）更快！ |
+
+**结论**：在沙箱环境下，串行测试反而比并行更快，且 100% 稳定。
+
+### 变更
+
+**pixi.toml**：
+
+```toml
+[tasks.test-unit]
+cmd = "pytest tests/ -m 'unit' --tb=short -q --durations=5"
+
+[tasks.test]
+cmd = "pytest tests/ -m 'not integration and not slow' --tb=short -q --durations=10"
+
+[tasks.test-all]
+cmd = "pytest tests/ --tb=short -q --durations=10"
+```
+
+**conftest.py**：
+
+移除了 `_TORCH_DEP_FILES` 和 `pytest_collection_modifyitems` 钩子，不再需要 `xdist_group` marker。
+
+### 后续建议
+
+如果未来需要重新考虑并行化，需满足以下条件：
+
+1. 确认非沙箱环境串行耗时 > 300s
+2. 有足够的内存（>= 32GB）
+3. 完成了测试本身的优化（减少重导入）
+4. 在 Linux 环境开发（内存管理更健壮）
+
+### 教训
+
+1. **不要盲目追求并行**：在沙箱等特殊环境下，并行可能适得其反
+2. **稳定性 > 速度**：反复崩溃比慢更糟糕
+3. **环境差异**：沙箱 vs 原生环境性能差异巨大，需实际验证
+4. **问题严重性评估**：当问题影响到其他应用时，应立即停止并回退

@@ -193,22 +193,63 @@ def parse_chunk_id(chunk_id: str) -> tuple:
         return (chunk_id, -1)
 
 
-def create_llm_client(
-    api_key: str,
-    base_url: str,
-) -> Any:
-    """Create an Anthropic LLM client with LongCat API adaptation.
+def llm_judge(
+    client: Any,
+    prompt: str,
+    model_name: str,
+    max_tokens: int = 1024,
+    temperature: float = 0.0,
+    json_pattern: str = r"\{[\s\S]*\}",
+) -> dict[str, Any] | None:
+    """Call LLM with prompt and parse JSON response.
+
+    This is a helper function that encapsulates the common pattern of:
+    1. Calling LLM with retry
+    2. Extracting JSON from response using regex
+    3. Parsing JSON and returning the result
 
     Args:
-        api_key: API key for authentication.
-        base_url: Base URL for the API endpoint.
+        client: Anthropic client instance.
+        prompt: The prompt to send to the LLM.
+        model_name: Name of the LLM model to use.
+        max_tokens: Maximum tokens in the LLM response. Defaults to 1024.
+        temperature: Sampling temperature for LLM generation. Defaults to 0.0.
+        json_pattern: Regex pattern to extract JSON from response.
+            Defaults to r"\\{[\\s\\S]*\\}" which matches JSON objects.
 
     Returns:
-        Anthropic client instance.
-    """
-    from src.utils import create_llm_client
+        Parsed JSON dictionary, or None if parsing fails.
 
-    return create_llm_client(
-        llm_config={"api_key": api_key, "base_url": base_url, "model_name": ""},
-        mode="sdk",
-    )
+    Raises:
+        Exception: If LLM call fails.
+    """
+    import json
+    import re
+
+    from src.llm_retry import call_with_retry
+
+    try:
+        message = call_with_retry(
+            client.messages.create,
+            model=model_name,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        response_text = message.content[0].text.strip()
+
+        json_match = re.search(json_pattern, response_text)
+        if json_match:
+            result = json.loads(json_match.group(), strict=False)
+            return result
+
+        logger.warning(f"Could not parse JSON from response: {response_text[:100]}")
+        return None
+
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse JSON response: {str(e)}")
+        return None
+    except Exception as e:
+        logger.error(f"LLM call failed: {str(e)}")
+        raise

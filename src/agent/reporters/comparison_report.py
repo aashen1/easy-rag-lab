@@ -5,12 +5,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from loguru import logger
-
-from src.utils import load_config
+from src.agent.reporters.base import BaseReporter
 
 
-class ComparisonReporter:
+class ComparisonReporter(BaseReporter):
     """Generate comparison reports for multiple experiment results."""
 
     LOWER_IS_BETTER_KEYS = {
@@ -142,38 +140,4 @@ class ComparisonReporter:
     def save(
         self, report: str, session_id: str, reports_dir: str | Path | None = None
     ) -> Path:
-        """Save the comparison report to the configured maintenance reports directory.
-
-        Args:
-            report: Markdown report content.
-            session_id: Session identifier for filename.
-            reports_dir: Override directory for saving. Defaults to config value.
-
-        Returns:
-            Path to the saved report file.
-        """
-        if reports_dir is None:
-            reports_dir = Path(
-                load_config()
-                .get("agent", {})
-                .get("maintenance_reports_dir", "data/maintenance_reports")
-            )
-        else:
-            reports_dir = Path(reports_dir)
-        try:
-            reports_dir.mkdir(parents=True, exist_ok=True)
-        except OSError as e:
-            logger.error(f"Failed to create reports directory {reports_dir}: {e}")
-            raise
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"comparison_{session_id}_{timestamp}.md"
-        filepath = reports_dir / filename
-
-        try:
-            filepath.write_text(report, encoding="utf-8")
-        except OSError as e:
-            logger.error(f"Failed to write comparison report to {filepath}: {e}")
-            raise
-        logger.info(f"Comparison report saved to {filepath}")
-        return filepath
+        return self._save_report(report, session_id, "comparison", reports_dir)

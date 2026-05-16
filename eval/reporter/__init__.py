@@ -115,34 +115,6 @@ class ExperimentReporter:
 
         return report
 
-    @staticmethod
-    def _get_generation_metric(
-        gen_metrics: dict[str, float], metric_name: str
-    ) -> float | None:
-        return get_generation_metric(gen_metrics, metric_name)
-
-    @staticmethod
-    def _get_all_generation_metrics(
-        gen_metrics: dict[str, float], metric_name: str
-    ) -> dict[str, float]:
-        return get_all_generation_metrics(gen_metrics, metric_name)
-
-    @staticmethod
-    def _dict_to_yaml_lines(data: Any, indent: int = 0) -> list[str]:
-        return dict_to_yaml_lines(data, indent)
-
-    @staticmethod
-    def _generate_tech_summary(merged_config: dict[str, Any]) -> list[str]:
-        return generate_tech_summary(merged_config)
-
-    @staticmethod
-    def _get_metric_description(metric: str) -> str:
-        return get_metric_description(metric)
-
-    @staticmethod
-    def _get_generation_metric_description(metric: str) -> str:
-        return get_generation_metric_description(metric)
-
     def _generate_template_report(self, result: ReportExperimentResult) -> str:
         return self._template_single.generate(result)
 

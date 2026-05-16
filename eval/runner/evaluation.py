@@ -245,6 +245,78 @@ def _get_concurrent_workers(pipeline: RAGPipeline, remaining: int) -> int:
     return min(concurrent_cfg, remaining)
 
 
+def _build_sample(
+    question_data: dict[str, Any],
+    question_idx: int,
+    response: dict[str, Any] | None,
+    case_time: float,
+    test_set_name: str,
+    equivalence_groups: dict[str, list[str]] | None,
+    error: str | None = None,
+) -> dict[str, Any]:
+    """
+    Build a sample dictionary from question data and response.
+
+    Args:
+        question_data: Question dictionary.
+        question_idx: Question index (0-based).
+        response: Pipeline response dictionary (None if failed).
+        case_time: Time taken to process the question.
+        test_set_name: Name of the test set.
+        equivalence_groups: Optional equivalence groups for dedup.
+        error: Error message if query failed.
+
+    Returns:
+        Sample dictionary.
+    """
+    question_id = question_data.get("id", f"q{question_idx + 1}")
+    question_text = question_data.get("question", "")
+
+    if error:
+        return {
+            "question_id": question_id,
+            "question": question_text,
+            "answer": "",
+            "contexts": [],
+            "expected_sources": question_data.get("source_files", []),
+            "expected_answer": question_data.get("answer"),
+            "ground_truth_excerpt": question_data.get("ground_truth_excerpt"),
+            "retrieved_sources": [],
+            "chunk_ids": [],
+            "expected_chunks": question_data.get("source_chunks", []),
+            "equivalence_groups": equivalence_groups,
+            "question_type": question_data.get("question_type", "factual"),
+            "expect_retrieval": question_data.get("expect_retrieval", True),
+            "expect_no_answer": question_data.get("expect_no_answer", False),
+            "time_seconds": case_time,
+            "test_set": test_set_name,
+            "category": question_data.get("category"),
+            "error": error,
+        }
+
+    return {
+        "question_id": question_id,
+        "question": question_text,
+        "answer": response.get("answer", ""),
+        "contexts": response.get("contexts", []),
+        "expected_sources": question_data.get("source_files", []),
+        "expected_answer": question_data.get("answer"),
+        "ground_truth_excerpt": question_data.get("ground_truth_excerpt"),
+        "retrieved_sources": response.get("sources", []),
+        "chunk_ids": response.get("chunk_ids", []),
+        "expected_chunks": question_data.get("source_chunks", []),
+        "equivalence_groups": equivalence_groups,
+        "question_type": question_data.get("question_type", "factual"),
+        "time_seconds": case_time,
+        "test_set": test_set_name,
+        "category": question_data.get("category"),
+        "difficulty": question_data.get("difficulty"),
+        "token_usage": response.get("token_usage"),
+        "expect_retrieval": question_data.get("expect_retrieval", True),
+        "expect_no_answer": question_data.get("expect_no_answer", False),
+    }
+
+
 def _query_single_question(
     pipeline: RAGPipeline,
     question_data: dict[str, Any],
@@ -289,27 +361,14 @@ def _query_single_question(
         response = pipeline.query(question_text)
         case_time = time.time() - case_start_time
 
-        sample = {
-            "question_id": question_id,
-            "question": question_text,
-            "answer": response.get("answer", ""),
-            "contexts": response.get("contexts", []),
-            "expected_sources": question_data.get("source_files", []),
-            "expected_answer": question_data.get("answer"),
-            "ground_truth_excerpt": question_data.get("ground_truth_excerpt"),
-            "retrieved_sources": response.get("sources", []),
-            "chunk_ids": response.get("chunk_ids", []),
-            "expected_chunks": question_data.get("source_chunks", []),
-            "equivalence_groups": equivalence_groups,
-            "question_type": question_data.get("question_type", "factual"),
-            "time_seconds": case_time,
-            "test_set": test_set_name,
-            "category": question_data.get("category"),
-            "difficulty": question_data.get("difficulty"),
-            "token_usage": response.get("token_usage"),
-            "expect_retrieval": question_data.get("expect_retrieval", True),
-            "expect_no_answer": question_data.get("expect_no_answer", False),
-        }
+        sample = _build_sample(
+            question_data=question_data,
+            question_idx=question_idx,
+            response=response,
+            case_time=case_time,
+            test_set_name=test_set_name,
+            equivalence_groups=equivalence_groups,
+        )
 
         logger.success(f"Question {question_id}: collected result ({case_time:.2f}s)")
         return sample
@@ -317,26 +376,15 @@ def _query_single_question(
     except Exception as e:
         case_time = time.time() - case_start_time
         logger.error(f"Question {question_id} failed: {str(e)}")
-        return {
-            "question_id": question_id,
-            "question": question_text,
-            "answer": "",
-            "contexts": [],
-            "expected_sources": question_data.get("source_files", []),
-            "expected_answer": question_data.get("answer"),
-            "ground_truth_excerpt": question_data.get("ground_truth_excerpt"),
-            "retrieved_sources": [],
-            "chunk_ids": [],
-            "expected_chunks": question_data.get("source_chunks", []),
-            "equivalence_groups": equivalence_groups,
-            "question_type": question_data.get("question_type", "factual"),
-            "expect_retrieval": question_data.get("expect_retrieval", True),
-            "expect_no_answer": question_data.get("expect_no_answer", False),
-            "time_seconds": case_time,
-            "test_set": test_set_name,
-            "category": question_data.get("category"),
-            "error": str(e),
-        }
+        return _build_sample(
+            question_data=question_data,
+            question_idx=question_idx,
+            response=None,
+            case_time=case_time,
+            test_set_name=test_set_name,
+            equivalence_groups=equivalence_groups,
+            error=str(e),
+        )
 
 
 def _collect_rag_samples_serial(
@@ -394,27 +442,14 @@ def _collect_rag_samples_serial(
             response = pipeline.query(question_text)
             case_time = time.time() - case_start_time
 
-            sample = {
-                "question_id": question_id,
-                "question": question_text,
-                "answer": response.get("answer", ""),
-                "contexts": response.get("contexts", []),
-                "expected_sources": question_data.get("source_files", []),
-                "expected_answer": question_data.get("answer"),
-                "ground_truth_excerpt": question_data.get("ground_truth_excerpt"),
-                "retrieved_sources": response.get("sources", []),
-                "chunk_ids": response.get("chunk_ids", []),
-                "expected_chunks": question_data.get("source_chunks", []),
-                "equivalence_groups": equivalence_groups,
-                "question_type": question_data.get("question_type", "factual"),
-                "time_seconds": case_time,
-                "test_set": test_set_name,
-                "category": question_data.get("category"),
-                "difficulty": question_data.get("difficulty"),
-                "token_usage": response.get("token_usage"),
-                "expect_retrieval": question_data.get("expect_retrieval", True),
-                "expect_no_answer": question_data.get("expect_no_answer", False),
-            }
+            sample = _build_sample(
+                question_data=question_data,
+                question_idx=i,
+                response=response,
+                case_time=case_time,
+                test_set_name=test_set_name,
+                equivalence_groups=equivalence_groups,
+            )
 
             logger.success(
                 f"Question {question_id}: collected result ({case_time:.2f}s)"
@@ -423,26 +458,15 @@ def _collect_rag_samples_serial(
         except Exception as e:
             case_time = time.time() - case_start_time
             logger.error(f"Question {question_id} failed: {str(e)}")
-            sample = {
-                "question_id": question_id,
-                "question": question_text,
-                "answer": "",
-                "contexts": [],
-                "expected_sources": question_data.get("source_files", []),
-                "expected_answer": question_data.get("answer"),
-                "ground_truth_excerpt": question_data.get("ground_truth_excerpt"),
-                "retrieved_sources": [],
-                "chunk_ids": [],
-                "expected_chunks": question_data.get("source_chunks", []),
-                "equivalence_groups": equivalence_groups,
-                "question_type": question_data.get("question_type", "factual"),
-                "expect_retrieval": question_data.get("expect_retrieval", True),
-                "expect_no_answer": question_data.get("expect_no_answer", False),
-                "time_seconds": case_time,
-                "test_set": test_set_name,
-                "category": question_data.get("category"),
-                "error": str(e),
-            }
+            sample = _build_sample(
+                question_data=question_data,
+                question_idx=i,
+                response=None,
+                case_time=case_time,
+                test_set_name=test_set_name,
+                equivalence_groups=equivalence_groups,
+                error=str(e),
+            )
 
         samples.append(sample)
 
@@ -720,23 +744,25 @@ def evaluate_with_builtin(
         if not expected_answer and sample.get("expect_retrieval", True):
             expected_answer = sample.get("expected_answer")
 
-        eval_sample = EvaluationSample(
-            question_id=question_id,
-            question=sample["question"],
-            answer=sample["answer"],
-            contexts=sample.get("contexts", []),
-            expected_sources=sample.get("expected_sources"),
-            expected_answer=expected_answer,
-            llm_config=llm_config,
-            retrieval_metrics=retrieval_metrics,
-            generation_metrics=generation_metrics,
-            chunk_ids=sample.get("chunk_ids"),
-            expected_chunks=sample.get("expected_chunks"),
-            equivalence_groups=sample.get("equivalence_groups"),
-            expect_retrieval=sample.get("expect_retrieval", True),
-            expect_no_answer=sample.get("expect_no_answer", False),
-            retrieved_sources=sample.get("retrieved_sources", []),
-            question_type=sample.get("question_type"),
+        eval_sample = (
+            EvaluationSample.builder()
+            .question_id(question_id)
+            .question(sample["question"])
+            .answer(sample["answer"])
+            .contexts(sample.get("contexts", []))
+            .expected_sources(sample.get("expected_sources"))
+            .expected_answer(expected_answer)
+            .llm_config(llm_config)
+            .retrieval_metrics(retrieval_metrics)
+            .generation_metrics(generation_metrics)
+            .chunk_ids(sample.get("chunk_ids"))
+            .expected_chunks(sample.get("expected_chunks"))
+            .equivalence_groups(sample.get("equivalence_groups"))
+            .expect_retrieval(sample.get("expect_retrieval", True))
+            .expect_no_answer(sample.get("expect_no_answer", False))
+            .retrieved_sources(sample.get("retrieved_sources", []))
+            .question_type(sample.get("question_type"))
+            .build()
         )
         valid_entries.append((idx, sample, eval_sample))
 
@@ -799,14 +825,16 @@ def evaluate_with_ragas(
     logger.info(f"Running RAGAS evaluation on {len(valid_samples)} samples...")
 
     ragas_samples = [
-        EvaluationSample(
-            question_id=s.get("question_id", ""),
-            question=s.get("question", ""),
-            answer=s.get("answer", ""),
-            contexts=s.get("contexts", []),
-            expected_sources=s.get("expected_sources"),
-            expected_answer=s.get("expected_answer"),
-            expect_retrieval=s.get("expect_retrieval", True),
+        (
+            EvaluationSample.builder()
+            .question_id(s.get("question_id", ""))
+            .question(s.get("question", ""))
+            .answer(s.get("answer", ""))
+            .contexts(s.get("contexts", []))
+            .expected_sources(s.get("expected_sources"))
+            .expected_answer(s.get("expected_answer"))
+            .expect_retrieval(s.get("expect_retrieval", True))
+            .build()
         )
         for s in valid_samples
     ]

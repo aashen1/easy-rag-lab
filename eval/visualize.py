@@ -63,7 +63,7 @@ def load_experiment_results(exp_dir: str) -> dict[str, Any]:
 def extract_metrics(variants: dict[str, Any]) -> dict[str, dict[str, list[tuple]]]:
     """Extract metrics from variant results for visualization.
 
-    Parses each variant's aggregated metrics and organizes them by
+    Parses each variant's metrics and organizes them by
     metric category and name.
 
     Args:
@@ -77,17 +77,23 @@ def extract_metrics(variants: dict[str, Any]) -> dict[str, dict[str, list[tuple]
     metrics: dict[str, dict[str, list[tuple]]] = {}
 
     for variant_name, result in variants.items():
-        agg = result.get("aggregated_metrics", {})
+        retrieval_metrics = result.get("retrieval_metrics", {})
+        generation_metrics = result.get("generation_metrics", {})
 
-        for category in ("retrieval", "generation"):
-            cat_metrics = agg.get(category, {})
+        for category, cat_data in [
+            ("retrieval", retrieval_metrics),
+            ("generation", generation_metrics),
+        ]:
+            if not cat_data:
+                continue
             if category not in metrics:
                 metrics[category] = {}
 
-            for metric_name, value in cat_metrics.items():
+            for metric_name, value in cat_data.items():
                 if metric_name not in metrics[category]:
                     metrics[category][metric_name] = []
-                metrics[category][metric_name].append((variant_name, value))
+                if isinstance(value, int | float):
+                    metrics[category][metric_name].append((variant_name, value))
 
     return metrics
 

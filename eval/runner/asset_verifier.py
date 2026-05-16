@@ -232,7 +232,7 @@ def collect_environment_info() -> dict[str, Any]:
         pass
 
     try:
-        import pkg_resources
+        from importlib.metadata import distributions
 
         key_packages = [
             "torch",
@@ -241,15 +241,16 @@ def collect_environment_info() -> dict[str, Any]:
             "langchain",
             "langchain-community",
             "pymupdf",
-            "pymupdf4llllm",
+            "pymupdf4llm",
             "sentence-transformers",
             "rank-bm25",
             "loguru",
         ]
         installed = {}
-        for pkg in pkg_resources.working_set:
-            if pkg.key.lower() in key_packages:
-                installed[pkg.key] = pkg.version
+        for dist in distributions():
+            name = dist.metadata.get("Name", "")
+            if name.lower().replace("_", "-") in key_packages:
+                installed[name] = dist.version
         if installed:
             env_info["key_packages"] = installed
     except Exception:
