@@ -1,6 +1,9 @@
 import json
+import sys
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from scripts.pdf_viewer import PDFViewer
 
@@ -48,6 +51,10 @@ class TestPDFViewerOpenAtPage:
         assert "5" in cmd
         assert "-reuse-instance" in cmd
 
+    @pytest.mark.skipif(
+        sys.platform != "win32",
+        reason="TODO: Add Linux/macOS PDF viewer support (see FEAT-20260517-001-ash)",
+    )
     @patch("subprocess.Popen")
     def test_open_edge(self, mock_popen):
         viewer = PDFViewer(data_dir="data")
