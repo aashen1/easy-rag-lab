@@ -73,19 +73,19 @@ pymupdf4llm = ">=1.27.2.2, <2" # PDF to LLM-friendly format
 qdrant-client = ">=1.17.1, <2" # Qdrant vector DB client
 
 # ==============================
-# Evaluation & Testing
+# Evaluation 
 # ==============================
-pytest = ">=9.0.3, <10" # Testing framework
-pytest-xdist = ">=3.6.1, <4" # Parallel test execution
 ragas = ">=0.4.3, <0.5" # RAG evaluation
 langchain-anthropic = ">=1.4.0, <2"
 langchain-community = ">=0.4.1, <0.5"
 sentence-transformers = ">=5.4.1, <6"
 
 # ==============================
-# Web & Hugging Face
+# Testing
 # ==============================
-huggingface-hub = ">=1.10.2, <2"
+pytest = ">=9.0.3, <10" # Testing framework
+pytest-xdist = ">=3.6.1, <4" # Parallel test execution
+mutmut = ">=3.5.0, <4"
 
 # ==============================
 # Code Quality
@@ -98,6 +98,11 @@ pre-commit = ">=4.0.0, <5"       # Git hook manager
 # ==============================
 psutil = ">=7.2.2, <8"
 matplotlib = ">=3.10.9, <4"
+
+# ==============================
+# Web & Hugging Face
+# ==============================
+huggingface-hub = ">=1.10.2, <2"
 
 # ==============================
 # Streamlit
