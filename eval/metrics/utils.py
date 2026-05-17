@@ -107,7 +107,8 @@ def normalize_source(source: str, include_parent: bool = False) -> str:
         "{parent}/{stem}" when include_parent is True and a parent
         directory exists.
     """
-    p = Path(Path(source).as_posix())
+    normalized_path = source.replace("\\", "/")
+    p = Path(normalized_path)
     stem = p.stem
     if include_parent and p.parent != Path("."):
         parent_name = p.parent.name
