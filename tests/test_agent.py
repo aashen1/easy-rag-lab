@@ -370,8 +370,9 @@ class TestAgentConfig:
     def test_get_agent_default_returns_configured_value(self):
         from unittest.mock import patch
 
-        from src.agent.config import get_agent_default
+        from src.agent.config import get_agent_config, get_agent_default
 
+        get_agent_config.cache_clear()
         with patch(
             "src.utils.load_config",
             return_value={"agent": {"defaults": {"parser_name": "fitz"}}},

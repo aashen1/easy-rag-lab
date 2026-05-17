@@ -4,10 +4,30 @@ import warnings
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import numpy as np
-import pytest
+import mutmut.__main__ as _mutmut_main
 
-from src.meal.models import MealConfig, MealFile
+# ---------------------------------------------------------------------------
+# Monkey-patch mutmut's record_trampoline_hit for src-layout compatibility.
+# mutmut 3.x trampoline assert rejects module names starting with "src.",
+# but src-layout projects produce __module__ values like "src.agent.prompt".
+# This patch strips the "src." prefix before passing to the original function,
+# which is consistent with mutmut's own get_mutant_name() that also strips it.
+# ---------------------------------------------------------------------------
+_original_record_trampoline_hit = _mutmut_main.record_trampoline_hit
+
+
+def _patched_record_trampoline_hit(name):
+    if name.startswith("src."):
+        name = name.removeprefix("src.")
+    _original_record_trampoline_hit(name)
+
+
+_mutmut_main.record_trampoline_hit = _patched_record_trampoline_hit
+
+import numpy as np  # noqa: E402
+import pytest  # noqa: E402
+
+from src.meal.models import MealConfig, MealFile  # noqa: E402
 
 warnings.simplefilter("always", DeprecationWarning)
 
