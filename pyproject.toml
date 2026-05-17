@@ -149,3 +149,66 @@ markers = [
 addopts = "--basetemp=.pytest_tmp"
 tmp_path_retention_count = 0
 tmp_path_retention_policy = "failed"
+
+
+# ---------------------------------------------------------------------------
+# mutmut 配置
+# ---------------------------------------------------------------------------
+#
+# 【mutmut 是什么？】
+# 变异测试工具，用于检测"样子货测试"。
+# 它会故意修改你的代码（比如把 > 改成 >=），然后跑测试。
+# 如果测试通过了，说明测试没发现这个 bug → 测试质量有问题。
+#
+# 【src/ 布局兼容】
+# 本项目使用 src/ 布局，mutmut 3.x 的 trampoline 机制会报错：
+# "Module name starts with `src.`, which is invalid"
+# 较老版本（2.x）有 use_patch=true 选项可以绕过，但 3.5.0 已移除该选项。
+# 当前修复方式：tests/conftest.py 中的 monkey-patch 自动剥离 src. 前缀。
+#
+# 【变异范围限制（mutmut 3.5.0 已知问题）】
+# `mutmut run <pattern>` 的参数只用于筛选测试哪些 mutant，不限定变异范围。
+# paths_to_mutate 同时承担了"源码路径"和"变异范围"两个职责：
+#   - 必须包含所有被测试引用的源码目录（否则测试跑不起来）
+#   - 其中的每个 .py 都会被变异生成 mutant
+# 所以无法做到"只变异 src/utils.py 但测试能导入 src/agent/ 等"。
+#
+# plgd/mutmut_docs.txt 描述的是 readthedocs 的 latest（main 分支）内容，
+# 包含 only_mutate / source_paths 等未发布功能。当前 3.5.0 没有这些配置。
+# 后续 mutmut 升级后可改用 only_mutate 实现按文件变异。
+#
+# 【日常使用】
+#   pixi run mutmut run                          — 全量变异测试
+#   pixi run mutmut run "utils.*"                — 只跑 utils 相关的 mutant（变异仍是全量）
+#   pixi run mutmut run --max-children 1         — 限制并行数
+#   pixi run mutmut results                      — 查看结果摘要
+#   pixi run mutmut show <id>                    — 查看具体变异内容
+#   pixi run mutmut browse                       — 交互界面
+# ---------------------------------------------------------------------------
+
+[tool.mutmut]
+# 必须指定：要变异的源码路径
+paths_to_mutate = ["src/", "scripts/", "eval/"]
+# 可选：测试目录（帮助 mutmut 定位测试代码，避免变异测试本身）
+tests_dir = ["tests"]
+# 必须指定：运行测试的命令（返回非零=测试失败，零=测试通过）
+runner = "pytest -x -q --tb=short -m 'not integration and not slow'"
+# paths_to_mutate 指定的是需要被变异的源代码，
+# 而 also_copy 指定的是不变异但运行测试必需的支撑文件。
+also_copy = [
+    "config.yaml",
+    "main.py",
+]
+
+# # 可选：只变异有测试覆盖的代码（大幅加速，避免无效变异）
+# # 需要先运行 coverage 生成 .coverage 文件
+# use_coverage = true
+
+# # 可选：字典同义词（用于 Dict/NamedTuple 等构造器的变异）
+# dict_synonyms = ["Dict", "NamedTuple"]
+
+# # 可选：排除特定文件/目录不变异（使用 gitignore 风格语法）
+# exclude = ["*/migrations/*", "*/__init__.py"]
+
+
+

@@ -213,6 +213,10 @@ __marimo__/
 data/*
 !data/README.md
 
+# mutmut
+mutants/
+
+
 # custom dev settings
 plgd/
 .trashbin/
