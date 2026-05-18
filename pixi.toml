@@ -11,7 +11,14 @@ cuda = "12"
 [dependencies]
 python = "3.12.*"
 # this might report "WARN The package `fsspec==2026.2.0` does not have an extra named `http`"
-fsspec = ">=2023.1.0,<=2026.2.0"
+fsspec = ">=2023.1.0,<=2026.2.0" # Resolve dependency conflicts
+
+# === Core scientific computing stack (migrated from PyPI) ===
+numpy = ">=2.4,<3"
+scipy = ">=1.17,<2"          # Dependencies for scikit-learn and ragas
+pandas = ">=2.3,<3"          # Core dependency for datasets and llama-index
+scikit-learn = ">=1.8,<2"
+
 
 [target.win-64.dependencies]
 pytorch-gpu = "2.10.*"
@@ -31,6 +38,8 @@ pytorch-cpu = "2.10.*"
 
 
 [pypi-dependencies]
+# some commented libs in this part means migrated to [dependencies] (conda channel)
+
 # ==============================
 # Core & Utilities
 # ==============================
@@ -86,7 +95,7 @@ python-frontmatter = ">=1.1.0, <2" # Frontmatter parsing for markdown files
 anthropic = ">=0.95.0, <0.96"         # Anthropic Claude API
 tiktoken = ">=0.12.0, <0.13"          # OpenAI token counting
 transformers = ">=5.5.4, <6"          # Hugging Face transformers for BGE models
-scikit-learn = ">=1.8.0, <2"          # For BM25 retriever and evaluation metrics
+# scikit-learn = ">=1.8.0, <2"          # For BM25 retriever and evaluation metrics
 
 # ==============================
 # LlamaIndex Ecosystem
@@ -109,7 +118,7 @@ pymupdf4llm = ">=1.27.2.2, <2" # PDF to LLM-friendly format
 qdrant-client = ">=1.17.1, <2" # Qdrant vector DB client
 
 # ==============================
-# Evaluation 
+# Evaluation
 # ==============================
 ragas = ">=0.4.3, <0.5" # RAG evaluation
 langchain-anthropic = ">=1.4.0, <2"
