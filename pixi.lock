@@ -64,6 +64,7 @@ environments:
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/18/67/36e9267722cc04a6b9f15c7f3441c2363321a3ea07da7ae0c0707beb2a9c/typing_extensions-4.15.0-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/18/79/1b8fa1bb3568781e84c9200f951c735f3f157429f44be0495da55894d620/filetype-1.2.0-py2.py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/1a/39/47f9197bdd44df24d67ac8893641e16f386c984a0619ef2ee4c51fbbc019/beautifulsoup4-4.14.3-py3-none-any.whl
+      - pypi: https://mirrors.ustc.edu.cn/pypi/packages/1c/b1/ec12e3e746234006b77dec69d53878253b1da09dbb55fa3cb456083d9069/python_frontmatter-1.2.0-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/1d/77/928ea2e70641ca177a11140062cc5840d421795f2e82749d408d0cce900a/narwhals-2.21.2-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/1d/7a/9c97a7b9cbe4c5dc6a44cdb1545450c28f0c8ce89b9c1f0ee7fbad896263/langchain_protocol-0.0.15-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/1e/77/dc8c558f7593132cf8fefec57c4f60c83b16941c574ac5f619abb3ae7933/dill-0.4.1-py3-none-any.whl
@@ -99,7 +100,6 @@ environments:
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/48/83/06582913e2af0cf498cc478350070490b019c6f6b523cb8b6cfafd32f009/bm25s-0.3.9-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/49/4d/103f76b04310e5e57656696cc184690d20c466af0bca3ca88f8c8ea5d4f3/hf_xet-1.5.0-cp37-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/49/60/7b6497946d74bcf1de852a21824d63baad12cd417db4195fc1bfe59db953/nvidia_cuda_cupti_cu12-12.6.80-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
-      - pypi: https://mirrors.ustc.edu.cn/pypi/packages/49/87/3c8da047b3ec5f99511d1b4d7a5bc72d4b98751c7e78492d14dc736319c5/python_frontmatter-1.1.0-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/4b/a6/38c8e2f318bf67d338f4d629e93b0b4b9af331f455f0390ea8ce4a099b26/portalocker-3.2.0-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/4b/f8/d0118a2f5f23b02cd166fa385c60f9b0d4f9194f574e2b31cef350ad7223/charset_normalizer-3.4.7-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/4d/e0/1fecd22c93d3ed66453cbbdefd05528331af4d33b2b76a370d751231912c/ragas-0.4.3-py3-none-any.whl
@@ -162,6 +162,7 @@ environments:
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/8b/c8/cdbc975f5b634e249cfa6597e37c50f3078412474f21c015e508bfbfe3c3/pdfplumber-0.11.9-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/8d/34/b67e48e111916a6f09fe29a971a9716c14f78525e0ab7c46e6a6538cf2f6/scikit_network-0.33.5-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/8f/16/73727675941ab8e6ffd86ca3a4b7b47065edcca7a997920b831f8147c99d/nvidia_cufft_cu12-11.3.0.4-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
+      - pypi: https://mirrors.ustc.edu.cn/pypi/packages/8f/cb/769cfc37177252872a45a71f3fbdde9d51b471a3f3c14bfe95dde3407386/python_multipart-0.0.29-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/90/ad/cba91b3bcf04073e4d1655a5c1710ef3f457f56f7d1b79dcc3d72f4dd912/plotly-6.7.0-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/93/74/d3be2b41955e20ccd624dba5f6fe9d38dcee385ba470a6e13ed86732fc86/langgraph_checkpoint-4.1.0-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/94/84/d9273cd09688070a6523c4aee4663a8538721b2b755c4962aafae0011e72/identify-2.6.19-py2.py3-none-any.whl
@@ -253,7 +254,6 @@ environments:
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/f0/6e/c2cf12c9ff8b872e92b4a5740701e51ff17689c4d726fca91875b07f655d/nvidia_cusolver_cu12-11.7.1.2-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/f0/a4/c4fde67f193401512337456cabc2148f2c43316e445f5decd9f8806e2992/langchain_community-0.4.1-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/f3/8d/5e5be3ced1d12966fefb5c4ea3b2a5b480afcea36406559442c6e31d4a48/multidict-6.7.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
-      - pypi: https://mirrors.ustc.edu.cn/pypi/packages/f3/a2/43bbc5860b5034e2af4ef99a0e04d726ff329c43e192ef3abaa8d7ecfce5/python_multipart-0.0.28-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/f4/34/a9dbe051de88a63eb7408ea66630bac38e72f7f6077d4be58737106860d9/virtualenv-21.3.3-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/f4/7e/a72dd26f3b0f4f2bf1dd8923c85f7ceb43172af56d63c7383eb62b332364/pygments-2.20.0-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/f4/90/3dae6cc5436137ebd38944d396b5849e167896fc2073da643a49f372dc4f/tiktoken-0.12.0-cp312-cp312-manylinux_2_28_x86_64.whl
@@ -310,6 +310,7 @@ environments:
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/19/95/6195171e385007300f0f5574592e467c568becce2d937a0b6804f218bc49/pydantic_core-2.46.4-cp312-cp312-macosx_11_0_arm64.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/1a/39/47f9197bdd44df24d67ac8893641e16f386c984a0619ef2ee4c51fbbc019/beautifulsoup4-4.14.3-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/1b/9e/f748cd64161213adeef83d0cb16cb8ace1e62fa501033acdd9f9341fff57/onnxruntime-1.23.2-cp312-cp312-macosx_13_0_arm64.whl
+      - pypi: https://mirrors.ustc.edu.cn/pypi/packages/1c/b1/ec12e3e746234006b77dec69d53878253b1da09dbb55fa3cb456083d9069/python_frontmatter-1.2.0-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/1d/77/928ea2e70641ca177a11140062cc5840d421795f2e82749d408d0cce900a/narwhals-2.21.2-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/1d/7a/9c97a7b9cbe4c5dc6a44cdb1545450c28f0c8ce89b9c1f0ee7fbad896263/langchain_protocol-0.0.15-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/1d/cb/7530940e6ac50c6dd6022349721074e19309eb6aa296e942ede2213c1a19/libcst-1.8.6-cp312-cp312-macosx_11_0_arm64.whl
@@ -344,7 +345,6 @@ environments:
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/46/2c/1462b1d0a634697ae9e55b3cecdcb64788e8b7d63f54d923fcd0bb140aed/soupsieve-2.8.3-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/48/30/47d0bf6072f7252e6521f3447ccfa40b421b6824517f82854703d0f5a98b/hyperframe-6.1.0-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/48/83/06582913e2af0cf498cc478350070490b019c6f6b523cb8b6cfafd32f009/bm25s-0.3.9-py3-none-any.whl
-      - pypi: https://mirrors.ustc.edu.cn/pypi/packages/49/87/3c8da047b3ec5f99511d1b4d7a5bc72d4b98751c7e78492d14dc736319c5/python_frontmatter-1.1.0-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/49/b3/2de412451330756aaaa72d27131db6dde23995efe62c941184e15242a5fa/sqlalchemy-2.0.49-cp312-cp312-macosx_11_0_arm64.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/49/d8/9be608c6024d021041c7f0b3928d4749a706f4e2c3832bbede4fb4f58c95/scikit_learn-1.8.0-cp312-cp312-macosx_12_0_arm64.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/4a/42/6573e9129bc55c9bf7300b3a35bef2c6b9117018acca0dc760ac2d93dffe/tiktoken-0.12.0-cp312-cp312-macosx_11_0_arm64.whl
@@ -394,6 +394,7 @@ environments:
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/88/b2/d0896bdcdc8d28a7fc5717c305f1a861c26e18c05047949fb371034d98bd/nodeenv-1.10.0-py2.py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/89/a0/6cf41a19a1f2f3feab0e9c0b74134aa2ce6849093d5517a0c550fe37a648/pyyaml-6.0.3-cp312-cp312-macosx_11_0_arm64.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/8b/c8/cdbc975f5b634e249cfa6597e37c50f3078412474f21c015e508bfbfe3c3/pdfplumber-0.11.9-py3-none-any.whl
+      - pypi: https://mirrors.ustc.edu.cn/pypi/packages/8f/cb/769cfc37177252872a45a71f3fbdde9d51b471a3f3c14bfe95dde3407386/python_multipart-0.0.29-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/90/ad/cba91b3bcf04073e4d1655a5c1710ef3f457f56f7d1b79dcc3d72f4dd912/plotly-6.7.0-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/93/74/d3be2b41955e20ccd624dba5f6fe9d38dcee385ba470a6e13ed86732fc86/langgraph_checkpoint-4.1.0-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/94/84/d9273cd09688070a6523c4aee4663a8538721b2b755c4962aafae0011e72/identify-2.6.19-py2.py3-none-any.whl
@@ -482,7 +483,6 @@ environments:
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/f0/0f/310fb31e39e2d734ccaa2c0fb981ee41f7bd5056ce9bc29b2248bd569169/humanfriendly-10.0-py2.py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/f0/a4/c4fde67f193401512337456cabc2148f2c43316e445f5decd9f8806e2992/langchain_community-0.4.1-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/f0/b4/50940504466689cda65680c9e9a1e518e5750c10490639fa687489ac7013/setproctitle-1.3.7-cp312-cp312-macosx_11_0_arm64.whl
-      - pypi: https://mirrors.ustc.edu.cn/pypi/packages/f3/a2/43bbc5860b5034e2af4ef99a0e04d726ff329c43e192ef3abaa8d7ecfce5/python_multipart-0.0.28-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/f4/34/a9dbe051de88a63eb7408ea66630bac38e72f7f6077d4be58737106860d9/virtualenv-21.3.3-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/f4/7e/a72dd26f3b0f4f2bf1dd8923c85f7ceb43172af56d63c7383eb62b332364/pygments-2.20.0-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/f5/78/2d9980d028ff0523eea503a77c200e2ff252a3a75eb6e7842bcf5f9c979b/langchain_classic-1.0.7-py3-none-any.whl
@@ -536,6 +536,7 @@ environments:
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/19/55/da7223d4202b2461f4f889b0baf10dddec3db7f88e6fd8c52db4a516eecd/pypdfium2-5.8.0-py3-none-win_amd64.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/19/e8/6026ed58a64563186a9ee3f29f41261fd1828f527dd93d33b60feca63352/contourpy-1.3.3-cp312-cp312-win_amd64.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/1a/39/47f9197bdd44df24d67ac8893641e16f386c984a0619ef2ee4c51fbbc019/beautifulsoup4-4.14.3-py3-none-any.whl
+      - pypi: https://mirrors.ustc.edu.cn/pypi/packages/1c/b1/ec12e3e746234006b77dec69d53878253b1da09dbb55fa3cb456083d9069/python_frontmatter-1.2.0-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/1d/77/928ea2e70641ca177a11140062cc5840d421795f2e82749d408d0cce900a/narwhals-2.21.2-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/1d/7a/9c97a7b9cbe4c5dc6a44cdb1545450c28f0c8ce89b9c1f0ee7fbad896263/langchain_protocol-0.0.15-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/1e/77/dc8c558f7593132cf8fefec57c4f60c83b16941c574ac5f619abb3ae7933/dill-0.4.1-py3-none-any.whl
@@ -571,7 +572,6 @@ environments:
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/47/9e/fd90114059175cac64e4fafa9bf3ac20584384d66de40793ae2e2f26f3bb/sqlalchemy-2.0.49-cp312-cp312-win_amd64.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/48/30/47d0bf6072f7252e6521f3447ccfa40b421b6824517f82854703d0f5a98b/hyperframe-6.1.0-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/48/83/06582913e2af0cf498cc478350070490b019c6f6b523cb8b6cfafd32f009/bm25s-0.3.9-py3-none-any.whl
-      - pypi: https://mirrors.ustc.edu.cn/pypi/packages/49/87/3c8da047b3ec5f99511d1b4d7a5bc72d4b98751c7e78492d14dc736319c5/python_frontmatter-1.1.0-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/4b/a6/38c8e2f318bf67d338f4d629e93b0b4b9af331f455f0390ea8ce4a099b26/portalocker-3.2.0-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/4c/fe/4fb3a0805bd5165da5ebf858da7cc01cce8061674106d2cf5bdab32cbfde/greenlet-3.5.0-cp312-cp312-win_amd64.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/4d/87/cb5e585192a22b8bd457df5a2c16a75ea0db9674c3a0a39fc9347d84e075/protobuf-7.34.1-cp310-abi3-win_amd64.whl
@@ -627,6 +627,7 @@ environments:
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/88/b2/d0896bdcdc8d28a7fc5717c305f1a861c26e18c05047949fb371034d98bd/nodeenv-1.10.0-py2.py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/8b/c8/cdbc975f5b634e249cfa6597e37c50f3078412474f21c015e508bfbfe3c3/pdfplumber-0.11.9-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/8e/b2/feecfe29f28483d888d76a48f03c4c4d8afea944dbee2b0cd3380f9df032/wrapt-2.1.2-cp312-cp312-win_amd64.whl
+      - pypi: https://mirrors.ustc.edu.cn/pypi/packages/8f/cb/769cfc37177252872a45a71f3fbdde9d51b471a3f3c14bfe95dde3407386/python_multipart-0.0.29-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/90/ad/cba91b3bcf04073e4d1655a5c1710ef3f457f56f7d1b79dcc3d72f4dd912/plotly-6.7.0-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/93/74/d3be2b41955e20ccd624dba5f6fe9d38dcee385ba470a6e13ed86732fc86/langgraph_checkpoint-4.1.0-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/94/84/d9273cd09688070a6523c4aee4663a8538721b2b755c4962aafae0011e72/identify-2.6.19-py2.py3-none-any.whl
@@ -709,7 +710,6 @@ environments:
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/ed/4c/bce61680d0699a78a405fd9a67989b175ba020590428831aab2ab1d2be7c/openai-2.37.0-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/ee/ae/8e92f8058baf87f6c7d86ee7e457668690195cc77efedb8d3797a06e3940/click-8.4.0-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/f0/a4/c4fde67f193401512337456cabc2148f2c43316e445f5decd9f8806e2992/langchain_community-0.4.1-py3-none-any.whl
-      - pypi: https://mirrors.ustc.edu.cn/pypi/packages/f3/a2/43bbc5860b5034e2af4ef99a0e04d726ff329c43e192ef3abaa8d7ecfce5/python_multipart-0.0.28-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/f4/34/a9dbe051de88a63eb7408ea66630bac38e72f7f6077d4be58737106860d9/virtualenv-21.3.3-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/f4/7e/a72dd26f3b0f4f2bf1dd8923c85f7ceb43172af56d63c7383eb62b332364/pygments-2.20.0-py3-none-any.whl
       - pypi: https://mirrors.ustc.edu.cn/pypi/packages/f4/ac/8ac51b4a5fc5932eb7ee5c517ba7dc8cd834f0048962b6b352f00f41ebf9/cryptography-48.0.0-cp311-abi3-win_amd64.whl
@@ -1297,7 +1297,7 @@ packages:
   name: torch
   version: 2.10.0
   sha256: 358bd7125cbec6e692d60618a5eec7f55a51b29e3652a849fd42af021d818023
-  index: https://mirror.sjtu.edu.cn/pytorch-wheels/cpu
+  index: https://download.pytorch.org/whl/cpu
   requires_dist:
   - filelock
   - typing-extensions>=4.10.0
@@ -1314,14 +1314,14 @@ packages:
   name: torchaudio
   version: 2.10.0
   sha256: 085f1b72339e4321005b9aacd7d06b1c64e5f3a2e3ff9fc6ad598bfb6fdecec4
-  index: https://mirror.sjtu.edu.cn/pytorch-wheels/cpu
+  index: https://download.pytorch.org/whl/cpu
   requires_dist:
   - torch==2.10.0
 - pypi: https://download-r2.pytorch.org/whl/cpu/torchvision-0.25.0-cp312-cp312-macosx_11_0_arm64.whl
   name: torchvision
   version: 0.25.0
   sha256: 724f212a58a0d0d758649ce288601056b5f46a01de545702f42bccc5b25cb0cc
-  index: https://mirror.sjtu.edu.cn/pytorch-wheels/cpu
+  index: https://download.pytorch.org/whl/cpu
   requires_dist:
   - numpy
   - torch==2.10.0
@@ -1333,7 +1333,7 @@ packages:
   name: torch
   version: 2.10.0+cu126
   sha256: 2a7a569206f07965eff69b28e147676540bb0ba6e1a39410802b6e4708cb8356
-  index: https://mirror.sjtu.edu.cn/pytorch-wheels/cu126
+  index: https://download.pytorch.org/whl/cu126
   requires_dist:
   - filelock
   - typing-extensions>=4.10.0
@@ -1367,7 +1367,7 @@ packages:
   name: torch
   version: 2.10.0+cu126
   sha256: 95d8409b8a15191de4c2958e86ca47f3ea8f9739b994ee4ca0e7586f37336413
-  index: https://mirror.sjtu.edu.cn/pytorch-wheels/cu126
+  index: https://download.pytorch.org/whl/cu126
   requires_dist:
   - filelock
   - typing-extensions>=4.10.0
@@ -1384,21 +1384,21 @@ packages:
   name: torchaudio
   version: 2.10.0+cu126
   sha256: 2e376d2daece155023279b5baa625c74caf5b013f098e0970284c1f31c5d7651
-  index: https://mirror.sjtu.edu.cn/pytorch-wheels/cu126
+  index: https://download.pytorch.org/whl/cu126
   requires_dist:
   - torch==2.10.0
 - pypi: https://download-r2.pytorch.org/whl/cu126/torchaudio-2.10.0%2Bcu126-cp312-cp312-win_amd64.whl
   name: torchaudio
   version: 2.10.0+cu126
   sha256: 65bc0759c3154ab49282a91b5cec2cd3d9cd2335b19a213cfed2e00fbee9036a
-  index: https://mirror.sjtu.edu.cn/pytorch-wheels/cu126
+  index: https://download.pytorch.org/whl/cu126
   requires_dist:
   - torch==2.10.0
 - pypi: https://download-r2.pytorch.org/whl/cu126/torchvision-0.25.0%2Bcu126-cp312-cp312-manylinux_2_28_x86_64.whl
   name: torchvision
   version: 0.25.0+cu126
   sha256: 5831326b6710366b44c0124ce197b416b7b896efa27340c235081cc7f52870e5
-  index: https://mirror.sjtu.edu.cn/pytorch-wheels/cu126
+  index: https://download.pytorch.org/whl/cu126
   requires_dist:
   - numpy
   - torch==2.10.0
@@ -1410,7 +1410,7 @@ packages:
   name: torchvision
   version: 0.25.0+cu126
   sha256: 57a8a103814c344d91c32425ba38a53daac4bf4aab074aaaea7b6bab4c22fb7b
-  index: https://mirror.sjtu.edu.cn/pytorch-wheels/cu126
+  index: https://download.pytorch.org/whl/cu126
   requires_dist:
   - numpy
   - torch==2.10.0
@@ -1914,6 +1914,20 @@ packages:
   - protobuf
   - sympy
   requires_python: '>=3.10'
+- pypi: https://mirrors.ustc.edu.cn/pypi/packages/1c/b1/ec12e3e746234006b77dec69d53878253b1da09dbb55fa3cb456083d9069/python_frontmatter-1.2.0-py3-none-any.whl
+  name: python-frontmatter
+  version: 1.2.0
+  sha256: e1ee1d4300450a2f84e778eb4f70edf573da6cd7d463801066f05edc4e819c78
+  index: https://pypi.mirrors.ustc.edu.cn/simple
+  requires_dist:
+  - pyyaml
+  - pytest ; extra == 'test'
+  - toml ; extra == 'test'
+  - pyaml ; extra == 'test'
+  - mypy ; extra == 'test'
+  - types-pyyaml ; extra == 'test'
+  - types-toml ; extra == 'test'
+  - sphinx ; extra == 'docs'
 - pypi: https://mirrors.ustc.edu.cn/pypi/packages/1d/77/928ea2e70641ca177a11140062cc5840d421795f2e82749d408d0cce900a/narwhals-2.21.2-py3-none-any.whl
   name: narwhals
   version: 2.21.2
@@ -2584,20 +2598,6 @@ packages:
   sha256: 6768bad6cab4f19e8292125e5f1ac8aa7d1718704012a0e3272a6f61c4bce132
   index: https://pypi.mirrors.ustc.edu.cn/simple
   requires_python: '>=3'
-- pypi: https://mirrors.ustc.edu.cn/pypi/packages/49/87/3c8da047b3ec5f99511d1b4d7a5bc72d4b98751c7e78492d14dc736319c5/python_frontmatter-1.1.0-py3-none-any.whl
-  name: python-frontmatter
-  version: 1.1.0
-  sha256: 335465556358d9d0e6c98bbeb69b1c969f2a4a21360587b9873bfc3b213407c1
-  index: https://pypi.mirrors.ustc.edu.cn/simple
-  requires_dist:
-  - pyyaml
-  - sphinx ; extra == 'docs'
-  - pytest ; extra == 'test'
-  - toml ; extra == 'test'
-  - pyaml ; extra == 'test'
-  - mypy ; extra == 'test'
-  - types-pyyaml ; extra == 'test'
-  - types-toml ; extra == 'test'
 - pypi: https://mirrors.ustc.edu.cn/pypi/packages/49/b3/2de412451330756aaaa72d27131db6dde23995efe62c941184e15242a5fa/sqlalchemy-2.0.49-cp312-cp312-macosx_11_0_arm64.whl
   name: sqlalchemy
   version: 2.0.49
@@ -4186,6 +4186,12 @@ packages:
   requires_dist:
   - nvidia-nvjitlink-cu12
   requires_python: '>=3'
+- pypi: https://mirrors.ustc.edu.cn/pypi/packages/8f/cb/769cfc37177252872a45a71f3fbdde9d51b471a3f3c14bfe95dde3407386/python_multipart-0.0.29-py3-none-any.whl
+  name: python-multipart
+  version: 0.0.29
+  sha256: 2ddcc971cef266225f54f552d8fa10bcfbb1f14446caec199060daac59ff2d69
+  index: https://pypi.mirrors.ustc.edu.cn/simple
+  requires_python: '>=3.10'
 - pypi: https://mirrors.ustc.edu.cn/pypi/packages/90/ad/cba91b3bcf04073e4d1655a5c1710ef3f457f56f7d1b79dcc3d72f4dd912/plotly-6.7.0-py3-none-any.whl
   name: plotly
   version: 6.7.0
@@ -6298,12 +6304,6 @@ packages:
   requires_dist:
   - typing-extensions>=4.1.0 ; python_full_version < '3.11'
   requires_python: '>=3.9'
-- pypi: https://mirrors.ustc.edu.cn/pypi/packages/f3/a2/43bbc5860b5034e2af4ef99a0e04d726ff329c43e192ef3abaa8d7ecfce5/python_multipart-0.0.28-py3-none-any.whl
-  name: python-multipart
-  version: 0.0.28
-  sha256: 10faac07eb966c3f48dc415f9dee46c04cb10d58d30a35677db8027c825ed9b6
-  index: https://pypi.mirrors.ustc.edu.cn/simple
-  requires_python: '>=3.10'
 - pypi: https://mirrors.ustc.edu.cn/pypi/packages/f4/34/a9dbe051de88a63eb7408ea66630bac38e72f7f6077d4be58737106860d9/virtualenv-21.3.3-py3-none-any.whl
   name: virtualenv
   version: 21.3.3
