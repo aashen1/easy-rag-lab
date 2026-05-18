@@ -320,3 +320,124 @@ pre-commit 默认只检查你 staged（git add 了）的文件，不会检查整
 例如不想检查行长度，就加 `"E501"`。
 
 也可以在代码中用 `# noqa: E501` 忽略某一行的特定规则。
+
+---
+
+## 6. 进阶：pre-commit 在 Git Worktree 下的行为与陷阱
+
+> 本节记录了一次真实的 pre-commit 失效事件的调查过程与源码级分析结论。
+
+### 6.1 事件背景
+
+项目使用三个 git worktree 共享一个仓库：
+
+| worktree | 路径 | 用途 |
+|----------|------|------|
+| 主 worktree | `B:\project\ash-easy-rag\` | 日常开发 |
+| w0 | `B:\project\w0-easy-rag\` | 辅助分支 |
+| w1 | `B:\project\w1-easy-rag\` | 辅助分支 |
+
+某次在 w1 里执行 `pixi run pre-commit install` 后，回到主 worktree 执行 `git commit` 时报错：
+
+```
+`pre-commit` not found.  Did you forget to activate your virtualenv?
+```
+
+检查发现 `.git/hooks/pre-commit` 中的 `INSTALL_PYTHON` 被改写为 w1 的路径：
+
+```bash
+INSTALL_PYTHON='B:\project\w1-easy-rag\.pixi\envs\default\python.exe'
+```
+
+而 w1 并没有 `.pixi/` 环境，该路径不存在，导致 hook 找不到 Python 解释器。
+
+### 6.2 根因：pre-commit 使用 `--git-common-dir` 写入 hook
+
+通过阅读 pre-commit 源码（`pre_commit/commands/install_uninstall.py`），发现关键代码：
+
+```python
+def _hook_paths(hook_type, git_dir=None):
+    git_dir = git_dir if git_dir is not None else git.get_git_common_dir()
+    #                                               ^^^^^^^^^^^^^^^^^^^^
+    pth = os.path.join(git_dir, 'hooks', hook_type)
+    return pth, f'{pth}.legacy'
+```
+
+pre-commit 使用 `get_git_common_dir()`（即 `git rev-parse --git-common-dir`）来确定 hook 写入位置，而非 `get_git_dir()`（即 `git rev-parse --git-dir`）。
+
+在 worktree 环境下，这两个路径含义完全不同：
+
+| 命令 | 在 w1 中执行的结果 | 含义 |
+|------|-------------------|------|
+| `git rev-parse --git-dir` | `B:/project/ash-easy-rag/.git/worktrees/w1-easy-rag` | 该 worktree 自己的 git 目录 |
+| `git rev-parse --git-common-dir` | `B:/project/ash-easy-rag/.git` | 所有 worktree 共享的公共 git 目录 |
+
+**因此，在任何 worktree 中执行 `pre-commit install`，hook 都会写入同一个位置：主 `.git/hooks/`。** 后安装的会覆盖先安装的，包括 `INSTALL_PYTHON` 路径。
+
+### 6.3 INSTALL_PYTHON 硬编码机制
+
+`_install_hook_script` 函数在生成 hook 脚本时，将当前 Python 解释器的绝对路径硬编码：
+
+```python
+hook_file.write(f'INSTALL_PYTHON={shlex.quote(sys.executable)}\n')
+```
+
+生成的 hook 脚本执行逻辑：
+
+```bash
+if [ -x "$INSTALL_PYTHON" ]; then
+    exec "$INSTALL_PYTHON" -mpre_commit "${ARGS[@]}"
+elif command -v pre-commit > /dev/null; then
+    exec pre-commit "${ARGS[@]}"
+else
+    echo '`pre-commit` not found.  Did you forget to activate your virtualenv?' 1>&2
+    exit 1
+fi
+```
+
+1. 优先使用硬编码的 `INSTALL_PYTHON` 路径
+2. 找不到则 fallback 到 PATH 中的 `pre-commit`
+3. 都找不到则报错退出
+
+### 6.4 为什么以前没出问题？
+
+以前三个 worktree "各跑各的"能正常工作，是因为：
+
+1. 只有主 worktree 执行过 `pre-commit install`，hook 的 `INSTALL_PYTHON` 指向主 worktree 的 `.pixi/`
+2. git 在任何 worktree 中执行 hook 时，如果该 worktree 自己的 hooks 目录没有 hook 文件，会 fallback 到 common dir 的 hooks
+3. 三个 worktree 共享同一份 hook，路径恰好指向主 worktree 的环境，一切正常
+
+一旦在 w1 中执行了 `pre-commit install`，它就覆盖了主 `.git/hooks/pre-commit`，把 `INSTALL_PYTHON` 改成了 w1 的路径。
+
+### 6.5 跨团队协作不受影响
+
+对于正常的团队协作场景（每人各自 `git clone`），这个问题**不会出现**：
+
+- 每个人的 `.git/` 是完全独立的本地目录，不进入版本控制
+- 被版本控制共享的只有 `.pre-commit-config.yaml`（声明"跑哪些检查"）
+- 每人各自 `pre-commit install`，写入各自的 `.git/hooks/`，互不干扰
+
+**问题只出现在同一台机器上多个 worktree 共享一个 `.git/` 的场景。**
+
+### 6.6 最佳实践
+
+| 规则 | 说明 |
+|------|------|
+| **只在主 worktree 执行 `pre-commit install`** | 避免辅 worktree 覆盖主 worktree 的 hook |
+| **辅 worktree 不需要单独安装 hook** | 它们会自动使用 common dir 的 hook |
+| **如果 hook 坏了** | 在主 worktree 重新 `pixi run pre-commit install` 即可修复 |
+| **WSL2 + Windows 共享文件系统** | 如果 WSL2 通过 `/mnt/` 访问 Windows 的 `.git/`，在 WSL2 中执行 `pre-commit install` 也会覆盖 Windows 端的 hook，且路径格式不兼容。建议 commit 操作只在一个系统中进行 |
+| **`pixi install` 后无需重新安装 hook** | 只要 `.pixi/envs/default/python.exe` 路径不变，hook 继续有效 |
+
+### 6.7 修复方法
+
+如果遇到 `pre-commit not found` 错误：
+
+```bash
+# 在主 worktree 中重新安装
+pixi run pre-commit install && pixi run pre-commit install --hook-type post-merge
+
+# 验证 hook 路径正确
+cat .git/hooks/pre-commit | grep INSTALL_PYTHON
+# 应输出类似：INSTALL_PYTHON='B:\project\ash-easy-rag\.pixi\envs\default\python.exe'
+```
