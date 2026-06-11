@@ -691,23 +691,6 @@ def save_experience_tool(
 save_experience_tool._store = None
 
 
-HIGH_RISK_TOOLS = {
-    "rebuild_index",
-    "delete_source",
-    "update_meal",
-    "delete_and_reindex_tool",
-}
-
-FORBIDDEN_OPERATIONS = {
-    "delete_collection",
-    "drop_collection",
-    "delete_all",
-    "drop_all",
-    "delete_meal",
-    "remove_meal",
-}
-
-
 @tool
 def embed_chunks_tool(chunks: list[dict], collection_name: str | None = None) -> str:
     """Embed a list of text chunks using the configured embedder.

@@ -8,7 +8,7 @@ import pytest
 from langchain_core.messages import AIMessage
 
 from src.agent.state import MaintenanceState
-from src.agent.tools import FORBIDDEN_OPERATIONS, HIGH_RISK_TOOLS
+from src.agent.tool_registry import FORBIDDEN_OPERATIONS, HIGH_RISK_TOOLS
 
 pytestmark = pytest.mark.agent
 
@@ -442,7 +442,7 @@ class TestNewTools:
         assert tool.name == tool_name
 
     def test_delete_and_reindex_is_high_risk(self):
-        from src.agent.tools import HIGH_RISK_TOOLS
+        from src.agent.tool_registry import HIGH_RISK_TOOLS
 
         assert "delete_and_reindex_tool" in HIGH_RISK_TOOLS
 
@@ -1289,7 +1289,7 @@ class TestStageGuard:
         assert any("被拒绝" in str(m.content) for m in result["messages"])
 
     def test_diagnosis_tools_not_blocked(self):
-        from src.agent.graph import DIAGNOSIS_TOOLS
+        from src.agent.tool_registry import DIAGNOSIS_TOOLS
 
         assert "list_meals" in DIAGNOSIS_TOOLS
         assert "get_meal_detail" in DIAGNOSIS_TOOLS

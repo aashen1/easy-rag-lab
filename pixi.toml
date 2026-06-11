@@ -113,7 +113,6 @@ sentence-transformers = ">=5.4.1, <6"
 # ==============================
 pytest = ">=9.0.3, <10" # Testing framework
 pytest-xdist = ">=3.6.1, <4" # Parallel test execution
-mutmut = ">=3.5.0, <4"
 
 # ==============================
 # Code Quality
@@ -154,6 +153,9 @@ streamlit-searchbox = ">=0.1.24, <0.2"
 torch = { version = "==2.10.0" }
 torchvision = { version = "==0.25.0" }
 torchaudio = { version = "==2.10.0" }
+
+[target.linux.pypi-dependencies]
+mutmut = ">=3.5.0, <4"
 
 [pypi-options]
 index-url = "https://pypi.mirrors.ustc.edu.cn/simple"

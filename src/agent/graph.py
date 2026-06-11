@@ -13,24 +13,12 @@ from loguru import logger
 from src.agent.config import get_delete_count_threshold
 from src.agent.prompt import build_system_prompt
 from src.agent.state import MaintenanceState
-from src.agent.tools import FORBIDDEN_OPERATIONS, HIGH_RISK_TOOLS
-
-DIAGNOSIS_TOOLS = {
-    "list_meals",
-    "get_meal_detail",
-    "query_rag_tool",
-    "get_index_info",
-    "evaluate_answer_tool",
-    "list_pdfs",
-    "list_issues",
-}
-
-REPAIR_TOOLS = {
-    "rebuild_index",
-    "delete_source",
-    "delete_and_reindex_tool",
-    "update_meal",
-}
+from src.agent.tool_registry import (
+    DIAGNOSIS_TOOLS,
+    FORBIDDEN_OPERATIONS,
+    HIGH_RISK_TOOLS,
+    REPAIR_TOOLS,
+)
 
 
 @functools.lru_cache(maxsize=1)
